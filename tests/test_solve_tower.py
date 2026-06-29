@@ -73,11 +73,37 @@ def test_all_requirements_met_yields_no_needs():
     assert solution.needs == []
 
 
-def test_needs_sorted_by_item():
+def test_item_needed_at_two_levels_is_listed_for_each():
+    # Flying Machine is required at 201 (50k) and 205 (100k); with progress
+    # below both, each level is reported separately in tower order.
+    state = make_state(**{"Flying Machine": 21953})
+    solution = solve_tower(state, REQS, target_level=205)
+    flying = [need for need in solution.needs if need.item == "Flying Machine"]
+    assert [(n.level, n.target, n.extra) for n in flying] == [
+        (201, 50000, 28047),
+        (205, 100000, 78047),
+    ]
+
+
+def test_met_level_requirement_dropped_independently():
+    # 60k progress satisfies the 201 requirement (50k) but not the 205 one
+    # (100k), so only the still-unmet level is listed.
+    state = make_state(**{"Flying Machine": 60000})
+    solution = solve_tower(state, REQS, target_level=205)
+    flying = [need for need in solution.needs if need.item == "Flying Machine"]
+    assert [(n.level, n.extra) for n in flying] == [(205, 40000)]
+
+
+def test_needs_sorted_by_level():
     state = make_state()
     solution = solve_tower(state, REQS)
-    items = [need.item for need in solution.needs]
-    assert items == sorted(items)
+    # Each (level, item) requirement appears, ordered by level then item.
+    assert [(need.level, need.item) for need in solution.needs] == [
+        (201, "Flying Machine"),
+        (201, "Gainite"),
+        (205, "Flying Machine"),
+        (210, "Board"),
+    ]
 
 
 def test_mastery_matched_case_insensitively():

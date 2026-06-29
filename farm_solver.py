@@ -104,28 +104,34 @@ class TowerRequirements:
     def max_level(self) -> int:
         return max(self.levels, default=0)
 
-    def requirements_up_to(self, level: int) -> dict[str, int]:
-        """Mastery required for each item to climb to ``level``.
+    def requirements_through(self, level: int) -> list[tuple[int, str, int]]:
+        """Every ``(level, item, quantity)`` requirement up to ``level``.
 
-        Climbing the tower means satisfying every level up to ``level``. Mastery
-        is a single cumulative count per item, so an item's binding requirement
-        is the largest amount demanded by any level at or below the target.
+        Returned in tower order (by level, then item). An item demanded at
+        several levels appears once per level, so each distinct requirement is
+        listed separately rather than collapsed into one.
         """
-        required: dict[str, int] = {}
-        for lvl, items in self.levels.items():
-            if lvl <= level:
-                for item, quantity in items.items():
-                    required[item] = max(required.get(item, 0), quantity)
-        return required
+        result: list[tuple[int, str, int]] = []
+        for lvl in sorted(self.levels):
+            if lvl > level:
+                continue
+            for item in sorted(self.levels[lvl]):
+                result.append((lvl, item, self.levels[lvl][item]))
+        return result
 
 
 @dataclass
 class ItemNeed:
-    """How an item stands against a goal: how many are held vs. wanted."""
+    """How an item stands against a goal: how many are held vs. wanted.
+
+    ``level`` is the tower level that imposes the requirement, or None for the
+    ``-m``/``-i`` goals which are not tied to a tower level.
+    """
 
     item: str
     have: int
     target: int
+    level: int | None = None
 
     @property
     def extra(self) -> int:
@@ -219,15 +225,15 @@ def solve_tower(
         target_level = requirements.max_level
 
     needs = []
-    for item, quantity in requirements.requirements_up_to(target_level).items():
+    for level, item, quantity in requirements.requirements_through(target_level):
         mastery = state.mastery(item)
         have = mastery.progress if mastery is not None else 0
         name = mastery.item if mastery is not None else item
-        need = ItemNeed(item=name, have=have, target=quantity)
+        need = ItemNeed(item=name, have=have, target=quantity, level=level)
         if need.extra > 0:
             needs.append(need)
 
-    needs.sort(key=lambda need: need.item)
+    needs.sort(key=lambda need: (need.level, need.item))
     return Solution(needs=needs)
 
 

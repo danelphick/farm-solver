@@ -78,13 +78,17 @@ def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameSt
 
 def print_solution(solution: farm_solver.Solution) -> None:
     for need in solution.needs:
+        prefix = f"T{need.level}: " if need.level is not None else ""
         if need.extra > 0:
             print(
-                f"{need.item}: need {need.extra:,} more "
+                f"{prefix}{need.item}: need {need.extra:,} more "
                 f"(have {need.have:,} of {need.target:,})"
             )
         else:
-            print(f"{need.item}: already have {need.have:,} of {need.target:,}")
+            print(
+                f"{prefix}{need.item}: already have "
+                f"{need.have:,} of {need.target:,}"
+            )
 
     for note in solution.notes:
         print(note)

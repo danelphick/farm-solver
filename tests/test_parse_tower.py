@@ -46,27 +46,28 @@ def test_max_level():
     assert parse_tower_requirements(SAMPLE).max_level == 210
 
 
-def test_requirements_up_to_takes_max_per_item():
+def test_requirements_through_lists_each_level_in_order():
     reqs = parse_tower_requirements(SAMPLE)
-    # Flying Machine appears at 201 (50k) and 205 (100k); the binding amount is
-    # the largest at or below the target level.
-    assert reqs.requirements_up_to(205) == {
-        "Flying Machine": 100000,
-        "Gainite": 10000,
-    }
+    # Flying Machine appears at both 201 (50k) and 205 (100k); each is kept as a
+    # separate requirement, in tower order (by level, then item).
+    assert reqs.requirements_through(205) == [
+        (201, "Flying Machine", 50000),
+        (201, "Gainite", 10000),
+        (205, "Flying Machine", 100000),
+    ]
 
 
-def test_requirements_up_to_excludes_higher_levels():
+def test_requirements_through_excludes_higher_levels():
     reqs = parse_tower_requirements(SAMPLE)
-    assert reqs.requirements_up_to(201) == {
-        "Flying Machine": 50000,
-        "Gainite": 10000,
-    }
+    assert reqs.requirements_through(201) == [
+        (201, "Flying Machine", 50000),
+        (201, "Gainite", 10000),
+    ]
 
 
 def test_requirements_below_201_is_empty():
     reqs = parse_tower_requirements(SAMPLE)
-    assert reqs.requirements_up_to(200) == {}
+    assert reqs.requirements_through(200) == []
 
 
 def test_empty_input():
