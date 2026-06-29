@@ -217,15 +217,27 @@ def load_workshop(path: Path | None = None) -> Workshop:
     return parse_workshop(source.read_text())
 
 
+DEFAULT_CRAFTING_BONUS = 1.45
+
+
+def _round_to_nearest(value: float) -> int:
+    """Round a non-negative value to the nearest integer (ties round up)."""
+    return int(value + 0.5)
+
+
 def required_materials(
-    needs: list[ItemNeed], workshop: Workshop
+    needs: list[ItemNeed],
+    workshop: Workshop,
+    crafting_bonus: float = DEFAULT_CRAFTING_BONUS,
 ) -> dict[str, int]:
     """Total materials to craft the shortfall of each needed, craftable item.
 
-    Each unit of shortfall is one craft, so an item's material cost scales with
-    how many more are needed. An item required at several tower levels is only
-    counted once, at its largest shortfall, since crafting is cumulative. Items
-    with no workshop recipe (gathered, not crafted) are skipped.
+    The crafting bonus is the average output per craft, so reaching a shortfall
+    of ``n`` items takes ``n / crafting_bonus`` crafts. Any non-integer stage of
+    the calculation is rounded to the nearest whole number. An item required at
+    several tower levels is only counted once, at its largest shortfall, since
+    crafting is cumulative. Items with no workshop recipe (gathered, not
+    crafted) are skipped.
     """
     craft_counts: dict[str, int] = {}
     for need in needs:
@@ -236,8 +248,9 @@ def required_materials(
         recipe = workshop.get(item)
         if recipe is None:
             continue
+        crafts = _round_to_nearest(count / crafting_bonus)
         for material, quantity in recipe.materials.items():
-            materials[material] = materials.get(material, 0) + count * quantity
+            materials[material] = materials.get(material, 0) + crafts * quantity
     return materials
 
 

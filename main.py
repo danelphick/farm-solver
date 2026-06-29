@@ -50,6 +50,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="target tower level (default: highest reachable level)",
     )
+    parser.add_argument(
+        "--crafting-bonus",
+        type=float,
+        default=farm_solver.DEFAULT_CRAFTING_BONUS,
+        metavar="NUM",
+        help=(
+            "average items produced per craft, reducing the materials needed "
+            f"(default: {farm_solver.DEFAULT_CRAFTING_BONUS})"
+        ),
+    )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
     # or acquire items.
@@ -118,7 +128,10 @@ def run(args: argparse.Namespace) -> int:
     print_solution(solution)
 
     workshop = farm_solver.load_workshop()
-    print_materials(farm_solver.required_materials(solution.needs, workshop))
+    materials = farm_solver.required_materials(
+        solution.needs, workshop, args.crafting_bonus
+    )
+    print_materials(materials)
     return 0
 
 
