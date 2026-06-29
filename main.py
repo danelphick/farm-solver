@@ -100,12 +100,7 @@ def run(args: argparse.Namespace) -> int:
         goals = farm_solver.parse_item_amounts(args.items)
         solution = farm_solver.solve_acquire(state, goals)
     else:
-        if args.tower is not None:
-            requirements = farm_solver.parse_tower_requirements(
-                args.tower.read_text()
-            )
-        else:
-            requirements = farm_solver.DEFAULT_TOWER_REQUIREMENTS
+        requirements = farm_solver.load_tower_requirements(args.tower)
         solution = farm_solver.solve_tower(state, requirements, args.level)
 
     print_solution(solution)

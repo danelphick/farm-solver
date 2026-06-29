@@ -10,7 +10,10 @@ currently skeletons: they parse/validate their inputs and raise
 
 from __future__ import annotations
 
+import csv
+import io
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -87,6 +90,20 @@ class TowerRequirements:
     def max_level(self) -> int:
         return max(self.levels, default=0)
 
+    def requirements_up_to(self, level: int) -> dict[str, int]:
+        """Mastery required for each item to climb to ``level``.
+
+        Climbing the tower means satisfying every level up to ``level``. Mastery
+        is a single cumulative count per item, so an item's binding requirement
+        is the largest amount demanded by any level at or below the target.
+        """
+        required: dict[str, int] = {}
+        for lvl, items in self.levels.items():
+            if lvl <= level:
+                for item, quantity in items.items():
+                    required[item] = max(required.get(item, 0), quantity)
+        return required
+
 
 @dataclass
 class ItemNeed:
@@ -112,13 +129,45 @@ class Solution:
     notes: list[str] = field(default_factory=list)
 
 
-# Built-in tower requirements. Populate this with the real FarmRPG values.
-DEFAULT_TOWER_REQUIREMENTS = TowerRequirements(levels={})
+# Bundled tower requirements, used when the user does not supply their own file.
+DEFAULT_TOWER_PATH = Path(__file__).with_name("tower.csv")
 
 
 def parse_tower_requirements(text: str) -> TowerRequirements:
-    """Parse a tower-requirements file into a TowerRequirements."""
-    raise NotImplementedError("parse_tower_requirements is not implemented yet")
+    """Parse a tower-requirements CSV into a TowerRequirements.
+
+    Each row is ``level, item, mastery quantity``. The first line may be an
+    optional header. Mastery requirements only start at level 201, so rows
+    without an item and quantity (e.g. lower levels) are ignored.
+    """
+    rows = list(csv.reader(io.StringIO(text)))
+    # Drop an optional header: a first row whose level column isn't a number.
+    if rows and rows[0] and not rows[0][0].strip().isdigit():
+        rows = rows[1:]
+
+    levels: dict[int, dict[str, int]] = {}
+    for row in rows:
+        if not row or not row[0].strip():
+            continue
+        if len(row) < 3:
+            continue  # no mastery requirement on this row
+        item = row[1].strip()
+        # A comma-grouped quantity (e.g. 1,000,000) is split across the trailing
+        # columns by the CSV reader; rejoin them before stripping the commas.
+        quantity_str = "".join(cell.strip() for cell in row[2:]).replace(",", "")
+        if not item or not quantity_str:
+            continue
+        level = int(row[0].strip())
+        quantity = int(quantity_str)
+        levels.setdefault(level, {})[item] = quantity
+
+    return TowerRequirements(levels=levels)
+
+
+def load_tower_requirements(path: Path | None = None) -> TowerRequirements:
+    """Load tower requirements from ``path``, or the bundled file if None."""
+    source = path if path is not None else DEFAULT_TOWER_PATH
+    return parse_tower_requirements(source.read_text())
 
 
 def parse_item_amounts(spec: str) -> dict[str, int]:
@@ -148,9 +197,23 @@ def solve_tower(
 ) -> Solution:
     """Solve for the resources needed to reach ``target_level`` on the tower.
 
-    If ``target_level`` is ``None`` the highest reachable level is targeted.
+    If ``target_level`` is ``None`` the highest level in ``requirements`` is
+    targeted. For now this reports how much more mastery each item still needs,
+    skipping items whose requirement is already met.
     """
-    raise NotImplementedError("solve_tower is not implemented yet")
+    if target_level is None:
+        target_level = requirements.max_level
+
+    needs = []
+    for item, quantity in requirements.requirements_up_to(target_level).items():
+        mastery = state.masteries.get(item)
+        have = mastery.progress if mastery is not None else 0
+        need = ItemNeed(item=item, have=have, target=quantity)
+        if need.extra > 0:
+            needs.append(need)
+
+    needs.sort(key=lambda need: need.item)
+    return Solution(needs=needs)
 
 
 def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
