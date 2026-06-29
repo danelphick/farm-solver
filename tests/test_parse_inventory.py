@@ -43,12 +43,13 @@ SAMPLE = textwrap.dedent(
 
 def test_parses_all_items():
     inv = parse_inventory(SAMPLE)
+    # Entries are keyed by the lower-cased item name.
     assert set(inv.items) == {
-        "Bone Broth",
-        "Gravy Boat",
-        "Fish and Chips",
-        "Board",
-        "Iron",
+        "bone broth",
+        "gravy boat",
+        "fish and chips",
+        "board",
+        "iron",
     }
 
 
@@ -61,7 +62,7 @@ def test_quantity_strips_comma_grouping():
 
 def test_simple_two_line_item():
     inv = parse_inventory(SAMPLE)
-    assert inv.items["Gravy Boat"] == InventoryItem(
+    assert inv.items["gravy boat"] == InventoryItem(
         name="Gravy Boat", quantity=26, category="Meals"
     )
 
@@ -70,24 +71,24 @@ def test_ignores_lines_between_name_and_quantity():
     # "Board" has a description, MAX ON HAND and a mastery-status line that must
     # all be skipped, leaving just name + quantity.
     inv = parse_inventory(SAMPLE)
-    assert inv.items["Board"] == InventoryItem(
+    assert inv.items["board"] == InventoryItem(
         name="Board", quantity=49_420, category="Items"
     )
 
 
 def test_leading_category_assigned():
     inv = parse_inventory(SAMPLE)
-    assert inv.items["Bone Broth"].category == "Meals"
-    assert inv.items["Fish and Chips"].category == "Meals"
+    assert inv.items["bone broth"].category == "Meals"
+    assert inv.items["fish and chips"].category == "Meals"
 
 
 def test_trailing_category_applies_to_following_items_not_its_own_block():
     # "Items chevron_down" trails Fish and Chips' block but belongs to the items
     # after it (Board, Iron), not to Fish and Chips.
     inv = parse_inventory(SAMPLE)
-    assert inv.items["Fish and Chips"].category == "Meals"
-    assert inv.items["Board"].category == "Items"
-    assert inv.items["Iron"].category == "Items"
+    assert inv.items["fish and chips"].category == "Meals"
+    assert inv.items["board"].category == "Items"
+    assert inv.items["iron"].category == "Items"
 
 
 def test_category_marker_is_not_an_item():
@@ -104,7 +105,7 @@ def test_empty_input():
 def test_item_before_any_category_has_none():
     text = "Mystery\nsome flavour text\n7\n"
     inv = parse_inventory(text)
-    assert inv.items["Mystery"] == InventoryItem(
+    assert inv.items["mystery"] == InventoryItem(
         name="Mystery", quantity=7, category=None
     )
 
@@ -118,3 +119,9 @@ def test_missing_quantity_raises():
 def test_amount_of_unknown_item_is_zero():
     inv = parse_inventory(SAMPLE)
     assert inv.amount("Nonexistent") == 0
+
+
+def test_lookup_is_case_insensitive():
+    inv = parse_inventory(SAMPLE)
+    assert inv.amount("BONE BROTH") == 23_805
+    assert inv.get("fish AND chips").name == "Fish and Chips"

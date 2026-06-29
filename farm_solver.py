@@ -15,6 +15,11 @@ import io
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Item names differ in capitalisation between FarmRPG screens and tower.csv
+# (e.g. "Essence of Slime" vs "Essence Of Slime"). To match them reliably,
+# masteries and inventory are always keyed by the lower-cased name, and lookups
+# go through the helpers below which lower-case the query.
+
 
 @dataclass
 class Mastery:
@@ -61,10 +66,14 @@ class InventoryItem:
 class Inventory:
     """Items currently held, keyed by item name."""
 
+    # Keyed by the lower-cased item name; values keep the original-case name.
     items: dict[str, InventoryItem] = field(default_factory=dict)
 
+    def get(self, item: str) -> InventoryItem | None:
+        return self.items.get(item.lower())
+
     def amount(self, item: str) -> int:
-        entry = self.items.get(item)
+        entry = self.get(item)
         return entry.quantity if entry is not None else 0
 
 
@@ -72,8 +81,13 @@ class Inventory:
 class GameState:
     """Snapshot of the player's masteries and inventory."""
 
+    # ``masteries`` is keyed by the lower-cased item name; values keep the
+    # original-case name.
     masteries: dict[str, Mastery] = field(default_factory=dict)
     inventory: Inventory = field(default_factory=Inventory)
+
+    def mastery(self, item: str) -> Mastery | None:
+        return self.masteries.get(item.lower())
 
 
 @dataclass
@@ -206,9 +220,10 @@ def solve_tower(
 
     needs = []
     for item, quantity in requirements.requirements_up_to(target_level).items():
-        mastery = state.masteries.get(item)
+        mastery = state.mastery(item)
         have = mastery.progress if mastery is not None else 0
-        need = ItemNeed(item=item, have=have, target=quantity)
+        name = mastery.item if mastery is not None else item
+        need = ItemNeed(item=name, have=have, target=quantity)
         if need.extra > 0:
             needs.append(need)
 
@@ -225,9 +240,10 @@ def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
     """
     needs = []
     for item, target in goals.items():
-        mastery = state.masteries.get(item)
+        mastery = state.mastery(item)
         have = mastery.progress if mastery is not None else 0
-        needs.append(ItemNeed(item=item, have=have, target=target))
+        name = mastery.item if mastery is not None else item
+        needs.append(ItemNeed(item=name, have=have, target=target))
     return Solution(needs=needs)
 
 
@@ -238,8 +254,10 @@ def solve_acquire(state: GameState, goals: dict[str, int]) -> Solution:
     given what is already in the inventory. Turning that shortfall into the
     Arnold Palmers and Large Nets required is still to come.
     """
-    needs = [
-        ItemNeed(item=item, have=state.inventory.amount(item), target=target)
-        for item, target in goals.items()
-    ]
+    needs = []
+    for item, target in goals.items():
+        entry = state.inventory.get(item)
+        have = entry.quantity if entry is not None else 0
+        name = entry.name if entry is not None else item
+        needs.append(ItemNeed(item=name, have=have, target=target))
     return Solution(needs=needs)

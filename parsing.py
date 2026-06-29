@@ -66,12 +66,15 @@ def parse_masteries(text: str) -> dict[str, Mastery]:
     The pasted text is a header followed by blank-line separated blocks. Each
     block holds an item name, a ``"<progress> / <required> Progress"`` line, a
     percentage line, and optionally a trailing tier header which is ignored.
+
+    Entries are keyed by the lower-cased item name so they can be matched
+    against tower requirements regardless of capitalisation.
     """
     masteries: dict[str, Mastery] = {}
     for block in _split_blocks(text):
         mastery = _parse_mastery_block(block)
         if mastery is not None:
-            masteries[mastery.item] = mastery
+            masteries[mastery.item.lower()] = mastery
     return masteries
 
 
@@ -105,6 +108,8 @@ def parse_inventory(text: str) -> Inventory:
     chevron_down"``) either stands alone on its own block or trails the last
     item of the previous block; in both cases it names the category for the
     items that *follow* it, not the item it shares a block with.
+
+    Entries are keyed by the lower-cased item name; values keep the original.
     """
     inventory = Inventory()
     category: str | None = None
@@ -117,7 +122,7 @@ def parse_inventory(text: str) -> Inventory:
 
         if block:
             item = _parse_inventory_block(block, category)
-            inventory.items[item.name] = item
+            inventory.items[item.name.lower()] = item
 
         if next_category is not None:
             category = next_category

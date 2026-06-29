@@ -9,7 +9,10 @@ from farm_solver import (
 
 def make_state(**held: int) -> GameState:
     inventory = Inventory(
-        items={name: InventoryItem(name=name, quantity=qty) for name, qty in held.items()}
+        items={
+            name.lower(): InventoryItem(name=name, quantity=qty)
+            for name, qty in held.items()
+        }
     )
     return GameState(inventory=inventory)
 

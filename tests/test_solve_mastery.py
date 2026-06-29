@@ -3,7 +3,8 @@ from farm_solver import GameState, ItemNeed, Mastery, solve_mastery
 
 def make_state(**progress: int) -> GameState:
     masteries = {
-        name: Mastery(item=name, progress=prog) for name, prog in progress.items()
+        name.lower(): Mastery(item=name, progress=prog)
+        for name, prog in progress.items()
     }
     return GameState(masteries=masteries)
 

@@ -9,7 +9,8 @@ from farm_solver import (
 
 def make_state(**progress: int) -> GameState:
     masteries = {
-        name: Mastery(item=name, progress=prog) for name, prog in progress.items()
+        name.lower(): Mastery(item=name, progress=prog)
+        for name, prog in progress.items()
     }
     return GameState(masteries=masteries)
 
@@ -77,3 +78,13 @@ def test_needs_sorted_by_item():
     solution = solve_tower(state, REQS)
     items = [need.item for need in solution.needs]
     assert items == sorted(items)
+
+
+def test_mastery_matched_case_insensitively():
+    # tower.csv title-cases connector words ("Essence Of Slime") while the
+    # mastery screen keeps them lowercase ("Essence of Slime"); a met
+    # requirement must still be recognised despite the casing difference.
+    reqs = TowerRequirements(levels={298: {"Essence Of Slime": 1_000_000}})
+    state = make_state(**{"Essence of Slime": 1_165_352})
+    solution = solve_tower(state, reqs)
+    assert solution.needs == []

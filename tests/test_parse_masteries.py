@@ -49,14 +49,15 @@ SAMPLE = textwrap.dedent(
 
 def test_parses_all_items():
     masteries = parse_masteries(SAMPLE)
+    # Entries are keyed by the lower-cased item name.
     assert set(masteries) == {
-        "Steel Plate",
-        "Pumpkin",
-        "Frost Shield",
-        "Lucky Potato",
-        "11th Leaf Centerpiece",
-        "Lobster",
-        "Board",
+        "steel plate",
+        "pumpkin",
+        "frost shield",
+        "lucky potato",
+        "11th leaf centerpiece",
+        "lobster",
+        "board",
     }
 
 
@@ -68,7 +69,7 @@ def test_skips_header():
 
 def test_strips_comma_grouping():
     masteries = parse_masteries(SAMPLE)
-    assert masteries["Steel Plate"] == Mastery(
+    assert masteries["steel plate"] == Mastery(
         item="Steel Plate", progress=976_311, required=1_000_000
     )
 
@@ -77,14 +78,14 @@ def test_trailing_tier_header_line_is_ignored():
     # "Pumpkin" has a 4th line ("Tier IV (GM) chevron_down") that must not leak
     # into the parsed item or create a spurious entry.
     masteries = parse_masteries(SAMPLE)
-    assert masteries["Pumpkin"] == Mastery(
+    assert masteries["pumpkin"] == Mastery(
         item="Pumpkin", progress=914_704, required=1_000_000
     )
     assert "Tier IV (GM) chevron_down" not in masteries
 
 
 def test_infinity_denominator_marks_item_mastered():
-    board = parse_masteries(SAMPLE)["Board"]
+    board = parse_masteries(SAMPLE)["board"]
     assert board.progress == 832_681_556
     assert board.required is None
     assert board.mastered is True
@@ -102,11 +103,11 @@ def test_infinity_denominator_marks_item_mastered():
     ],
 )
 def test_tier_derived_from_threshold(item, expected_tier):
-    assert parse_masteries(SAMPLE)[item].tier == expected_tier
+    assert parse_masteries(SAMPLE)[item.lower()].tier == expected_tier
 
 
 def test_not_mastered_items():
-    assert parse_masteries(SAMPLE)["Steel Plate"].mastered is False
+    assert parse_masteries(SAMPLE)["steel plate"].mastered is False
 
 
 def test_empty_input_yields_no_masteries():
@@ -116,7 +117,7 @@ def test_empty_input_yields_no_masteries():
 def test_input_without_header():
     text = "Hops\n940,162 / 1,000,000 Progress\n94.0162% Track\n"
     masteries = parse_masteries(text)
-    assert masteries["Hops"] == Mastery(
+    assert masteries["hops"] == Mastery(
         item="Hops", progress=940_162, required=1_000_000
     )
 
