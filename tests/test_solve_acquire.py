@@ -30,6 +30,12 @@ def test_extra_needed_counts_existing_inventory():
     assert need.extra == 15
 
 
+def test_needs_are_not_mastery_shortfalls():
+    state = make_state(Gainite=5)
+    solution = solve_acquire(state, {"Gainite": 20})
+    assert all(not need.is_mastery for need in solution.needs)
+
+
 def test_item_not_in_inventory_needs_full_target():
     state = make_state()
     solution = solve_acquire(state, {"Flying Machine": 2000})

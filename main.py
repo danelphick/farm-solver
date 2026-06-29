@@ -60,6 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
             f"(default: {farm_solver.DEFAULT_CRAFTING_BONUS})"
         ),
     )
+    parser.add_argument(
+        "--mastery-bonus",
+        type=float,
+        default=farm_solver.DEFAULT_MASTERY_BONUS,
+        metavar="NUM",
+        help=(
+            "mastery gained per crafted item, reducing the crafts needed for "
+            f"mastery goals (default: {farm_solver.DEFAULT_MASTERY_BONUS})"
+        ),
+    )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
     # or acquire items.
@@ -129,7 +139,7 @@ def run(args: argparse.Namespace) -> int:
 
     workshop = farm_solver.load_workshop()
     materials = farm_solver.required_materials(
-        solution.needs, workshop, args.crafting_bonus
+        solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
     )
     print_materials(materials)
     return 0

@@ -143,13 +143,16 @@ class ItemNeed:
     """How an item stands against a goal: how many are held vs. wanted.
 
     ``level`` is the tower level that imposes the requirement, or None for the
-    ``-m``/``-i`` goals which are not tied to a tower level.
+    ``-m``/``-i`` goals which are not tied to a tower level. ``is_mastery`` marks
+    whether the shortfall is measured in mastery (tower, ``-m``) rather than a
+    plain item count (``-i``); only mastery shortfalls earn the mastery bonus.
     """
 
     item: str
     have: int
     target: int
     level: int | None = None
+    is_mastery: bool = False
 
     @property
     def extra(self) -> int:
@@ -218,6 +221,7 @@ def load_workshop(path: Path | None = None) -> Workshop:
 
 
 DEFAULT_CRAFTING_BONUS = 1.45
+DEFAULT_MASTERY_BONUS = 1.1
 
 
 def _round_to_nearest(value: float) -> int:
@@ -229,26 +233,31 @@ def required_materials(
     needs: list[ItemNeed],
     workshop: Workshop,
     crafting_bonus: float = DEFAULT_CRAFTING_BONUS,
+    mastery_bonus: float = DEFAULT_MASTERY_BONUS,
 ) -> dict[str, int]:
     """Total materials to craft the shortfall of each needed, craftable item.
 
-    The crafting bonus is the average output per craft, so reaching a shortfall
-    of ``n`` items takes ``n / crafting_bonus`` crafts. Any non-integer stage of
-    the calculation is rounded to the nearest whole number. An item required at
-    several tower levels is only counted once, at its largest shortfall, since
-    crafting is cumulative. Items with no workshop recipe (gathered, not
-    crafted) are skipped.
+    The crafting bonus is the average output per craft. For a mastery shortfall
+    each crafted item also grants the mastery bonus, so reaching a shortfall of
+    ``n`` takes ``n / crafting_bonus / mastery_bonus`` crafts; a plain item-count
+    shortfall (``-i``) takes ``n / crafting_bonus``. Any non-integer stage is
+    rounded to the nearest whole number. An item required at several tower levels
+    is only counted once, at its largest shortfall, since crafting is cumulative.
+    Items with no workshop recipe (gathered, not crafted) are skipped.
     """
-    craft_counts: dict[str, int] = {}
+    # Each item's largest shortfall, plus whether it is a mastery shortfall.
+    shortfalls: dict[str, tuple[int, bool]] = {}
     for need in needs:
-        craft_counts[need.item] = max(craft_counts.get(need.item, 0), need.extra)
+        previous = shortfalls.get(need.item, (0, need.is_mastery))
+        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
 
     materials: dict[str, int] = {}
-    for item, count in craft_counts.items():
+    for item, (count, is_mastery) in shortfalls.items():
         recipe = workshop.get(item)
         if recipe is None:
             continue
-        crafts = _round_to_nearest(count / crafting_bonus)
+        divisor = crafting_bonus * mastery_bonus if is_mastery else crafting_bonus
+        crafts = _round_to_nearest(count / divisor)
         for material, quantity in recipe.materials.items():
             materials[material] = materials.get(material, 0) + crafts * quantity
     return materials
@@ -293,7 +302,9 @@ def solve_tower(
         mastery = state.mastery(item)
         have = mastery.progress if mastery is not None else 0
         name = mastery.item if mastery is not None else item
-        need = ItemNeed(item=name, have=have, target=quantity, level=level)
+        need = ItemNeed(
+            item=name, have=have, target=quantity, level=level, is_mastery=True
+        )
         if need.extra > 0:
             needs.append(need)
 
@@ -313,7 +324,9 @@ def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
         mastery = state.mastery(item)
         have = mastery.progress if mastery is not None else 0
         name = mastery.item if mastery is not None else item
-        needs.append(ItemNeed(item=name, have=have, target=target))
+        needs.append(
+            ItemNeed(item=name, have=have, target=target, is_mastery=True)
+        )
     return Solution(needs=needs)
 
 

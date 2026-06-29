@@ -106,6 +106,12 @@ def test_needs_sorted_by_level():
     ]
 
 
+def test_needs_are_mastery_shortfalls():
+    state = make_state()
+    solution = solve_tower(state, REQS)
+    assert all(need.is_mastery for need in solution.needs)
+
+
 def test_mastery_matched_case_insensitively():
     # tower.csv title-cases connector words ("Essence Of Slime") while the
     # mastery screen keeps them lowercase ("Essence of Slime"); a met

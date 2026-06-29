@@ -72,4 +72,26 @@ def test_crafting_bonus_rounds_crafts_to_nearest():
 def test_default_crafting_bonus_is_1_45():
     # 145 / 1.45 = 100 crafts -> 500 Wood, when no bonus is passed.
     needs = [ItemNeed(item="Board", have=0, target=145)]
-    assert required_materials(needs, WORKSHOP) == {"Wood": 500}
+    assert required_materials(needs, WORKSHOP, mastery_bonus=1.0) == {"Wood": 500}
+
+
+def test_mastery_shortfall_applies_mastery_bonus():
+    # 1000 / 1.45 / 1.1 = 626.96 -> 627 crafts -> 3135 Wood.
+    needs = [ItemNeed(item="Board", have=0, target=1000, is_mastery=True)]
+    assert required_materials(
+        needs, WORKSHOP, crafting_bonus=1.45, mastery_bonus=1.1
+    ) == {"Wood": 3135}
+
+
+def test_default_mastery_bonus_is_1_1():
+    # 1595 / 1.0 / 1.1 = 1450 crafts -> 7250 Wood, when no mastery bonus passed.
+    needs = [ItemNeed(item="Board", have=0, target=1595, is_mastery=True)]
+    assert required_materials(needs, WORKSHOP, crafting_bonus=1.0) == {"Wood": 7250}
+
+
+def test_acquire_shortfall_ignores_mastery_bonus():
+    # is_mastery=False, so only the crafting bonus applies: 10 / 1.0 = 10.
+    needs = [ItemNeed(item="Board", have=0, target=10, is_mastery=False)]
+    assert required_materials(
+        needs, WORKSHOP, crafting_bonus=1.0, mastery_bonus=2.0
+    ) == {"Wood": 50}
