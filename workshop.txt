@@ -1,0 +1,2513 @@
+Your Crafting Level is 99.
+Jump to items at your Crafting Level
+
+Board
+Visible in Workshop
+5x Wood
+1 Silver
+Crafting XP: 25
+Crafting Lv 1
+
+Bucket
+Visible in Workshop
+5x Board
+1x Iron
+5 Silver
+Crafting XP: 250
+Crafting Lv 1
+
+Grape Juice
+Visible in Workshop
+1x Glass Bottle
+200x Grapes
+500 Silver
+Crafting XP: 100
+Crafting Lv 1
+
+Iron Cup
+Visible in Workshop
+3x Iron
+1x Stone
+15 Silver
+Crafting XP: 100
+Crafting Lv 1
+
+Leather
+Visible in Workshop
+2x Hide
+25 Silver
+Crafting XP: 250
+Crafting Lv 1
+
+Nailed Board
+Visible in Workshop
+1x Board
+1x Nails
+1 Silver
+Crafting XP: 1
+Crafting Lv 1
+
+Wine
+Visible in Workshop
+1x Glass Bottle
+100x Grapes
+250 Silver
+Crafting XP: 2,000
+Crafting Lv 1
+
+Wooden Box
+Visible in Workshop
+6x Nails
+6x Wooden Plank
+10 Silver
+Crafting XP: 200
+Crafting Lv 1
+
+Wooden Plank
+Visible in Workshop
+4x Board
+4x Nails
+2 Silver
+Crafting XP: 50
+Crafting Lv 1
+
+Green Parchment
+Visible in Workshop
+3x Fern Leaf
+2 Silver
+Crafting XP: 100
+Crafting Lv 2
+
+Hammer
+Visible in Workshop
+1x Board
+1x Iron
+1x Mushroom Paste
+10 Silver
+Crafting XP: 350
+Crafting Lv 2
+
+Purple Parchment
+Visible in Workshop
+3x Purple Flower
+2 Silver
+Crafting XP: 100
+Crafting Lv 2
+
+White Parchment
+Visible in Workshop
+3x Feathers
+2 Silver
+Crafting XP: 100
+Crafting Lv 2
+
+Axe
+Visible in Workshop
+1x Board
+1x Iron
+1x Mushroom Paste
+2x Nails
+1x Stone
+25 Silver
+Crafting XP: 450
+Crafting Lv 3
+
+Broom
+Visible in Workshop
+1x Board
+1x Straw
+15 Silver
+Crafting XP: 250
+Crafting Lv 3
+
+Mushroom Paste
+Visible in Workshop
+3x Mushroom
+2 Silver
+Crafting XP: 25
+Crafting Lv 3
+
+Pickaxe
+Visible in Workshop
+1x Board
+2x Iron
+1x Mushroom Paste
+1x Stone
+15 Silver
+Crafting XP: 350
+Crafting Lv 3
+
+Iron Ring
+Visible in Workshop
+2x Iron
+1x Stone
+10 Silver
+Crafting XP: 25
+Crafting Lv 4
+
+Shimmer Stone
+Visible in Workshop
+2x Unpolished Shimmer Stone
+5 Silver
+Crafting XP: 250
+Crafting Lv 4
+
+Shovel
+Visible in Workshop
+1x Board
+2x Iron
+1x Mushroom Paste
+1x Stone
+45 Silver
+Crafting XP: 550
+Crafting Lv 4
+
+Amethyst Necklace
+Visible in Workshop
+1x Amethyst
+2x Iron Ring
+50 Silver
+Crafting XP: 1,000
+Crafting Lv 5
+
+Aquamarine Ring
+Visible in Workshop
+1x Aquamarine
+1x Iron Ring
+1x Mushroom Paste
+50 Silver
+Crafting XP: 1,000
+Crafting Lv 5
+
+Glass Bottle
+Visible in Workshop
+1x Glass Orb
+1x Stone
+25 Silver
+Crafting XP: 150
+Crafting Lv 5
+
+Glass Orb
+Visible in Workshop
+2x Shimmer Stone
+1x Stone
+10 Silver
+Crafting XP: 300
+Crafting Lv 5
+
+Green Dye
+Visible in Workshop
+6x Fern Leaf
+1x Glass Bottle
+2 Silver
+Crafting XP: 500
+Crafting Lv 5
+
+Lemonade
+Visible in Workshop
+1x Glass Bottle
+6x Lemon
+2 Silver
+Crafting XP: 500
+Crafting Lv 5
+
+Orange Juice
+Visible in Workshop
+1x Glass Bottle
+6x Orange
+2 Silver
+Crafting XP: 500
+Crafting Lv 5
+
+Twine
+Visible in Workshop
+2x Straw
+1x Wood
+10 Silver
+Crafting XP: 250
+Crafting Lv 5
+
+Green Diary
+Visible in Workshop
+1x Green Parchment
+1x Mushroom Paste
+1x White Parchment
+10 Silver
+Crafting XP: 200
+Crafting Lv 6
+
+Purple Diary
+Visible in Workshop
+1x Mushroom Paste
+1x Purple Parchment
+1x White Parchment
+10 Silver
+Crafting XP: 200
+Crafting Lv 6
+
+Lemon Quartz Ring
+Visible in Workshop
+1x Iron Ring
+1x Lemon Quartz
+1x Mushroom Paste
+75 Silver
+Crafting XP: 1,000
+Crafting Lv 7
+
+Sturdy Box
+Visible in Workshop
+2x Iron
+6x Nails
+6x Wooden Plank
+15 Silver
+Crafting XP: 500
+Crafting Lv 7
+
+Coin Purse
+Visible in Workshop
+1x Iron Ring
+2x Leather
+25 Silver
+Crafting XP: 750
+Crafting Lv 8
+
+Leather Diary
+Visible in Workshop
+1x Leather
+1x Mushroom Paste
+1x White Parchment
+25 Silver
+Crafting XP: 250
+Crafting Lv 8
+
+Looking Glass
+Visible in Workshop
+3x Board
+1x Glass Orb
+1x Iron
+50 Silver
+Crafting XP: 2,500
+Crafting Lv 8
+
+Ruby
+Visible in Workshop
+1x Stone
+2x Unpolished Ruby
+50 Silver
+Crafting XP: 350
+Crafting Lv 8
+
+Wooden Table
+Visible in Workshop
+8x Board
+12x Nails
+1x Wooden Plank
+10 Silver
+Crafting XP: 225
+Crafting Lv 8
+
+Ladder
+Visible in Workshop
+6x Board
+8x Nails
+10 Silver
+Crafting XP: 500
+Crafting Lv 9
+
+Bouquet of Flowers
+Visible in Workshop
+2x Blue Flowers
+2x Orange Flowers
+2x Red Flowers
+1x Twine
+2x White Flowers
+1x White Parchment
+2x Yellow Flowers
+25 Silver
+Crafting XP: 225
+Crafting Lv 10
+
+Emerald
+Visible in Workshop
+2x Stone
+2x Unpolished Emerald
+100 Silver
+Crafting XP: 450
+Crafting Lv 10
+
+Ruby Ring
+Visible in Workshop
+1x Iron Ring
+1x Mushroom Paste
+1x Ruby
+100 Silver
+Crafting XP: 1,500
+Crafting Lv 10
+
+Wooden Barrel
+Visible in Workshop
+10x Board
+4x Iron
+10x Nails
+25 Silver
+Crafting XP: 350
+Crafting Lv 10
+
+Awl
+Visible in Workshop
+1x Iron
+2x Iron Ring
+1x Wood
+50 Silver
+Crafting XP: 500
+Crafting Lv 11
+
+Wooden Button
+Visible in Workshop
+1x Awl
+1x Wood
+10 Silver
+Crafting XP: 250
+Crafting Lv 11
+
+Black Powder
+Visible in Workshop
+3x Coal
+50 Silver
+Crafting XP: 1,500
+Crafting Lv 12
+
+Bottle Rocket
+Visible in Workshop
+1x Black Powder
+2x Feathers
+3x Wood
+100 Silver
+Crafting XP: 300
+Crafting Lv 12
+
+Wooden Shield
+Visible in Workshop
+1x Iron
+4x Nails
+1x Wooden Plank
+75 Silver
+Crafting XP: 450
+Crafting Lv 13
+
+Explosive
+Visible in Workshop
+2x Black Powder
+3x Board
+1x Feathers
+6x Nails
+100 Silver
+Crafting XP: 350
+Crafting Lv 14
+
+Bone Pickaxe
+Hidden in Workshop
+1x Bone
+1x Mushroom Paste
+1x Pickaxe
+150 Silver
+Crafting XP: 350
+Crafting Lv 15
+
+Emerald Ring
+Visible in Workshop
+1x Emerald
+1x Iron Ring
+1x Mushroom Paste
+300 Silver
+Crafting XP: 2,500
+Crafting Lv 15
+
+Steel
+Visible in Workshop
+1x Carbon Sphere
+1x Glass Orb
+10x Iron
+250 Silver
+Crafting XP: 100
+Crafting Lv 15
+
+Horn Canteen
+Hidden in Workshop
+1x Horn
+2x Iron Ring
+1x Twine
+1x Wood
+150 Silver
+Crafting XP: 2,500
+Crafting Lv 16
+
+Pearl Necklace
+Visible in Workshop
+1x Iron Ring
+1x Pearl
+1x Twine
+100 Silver
+Crafting XP: 1,000
+Crafting Lv 16
+
+Leather Bag
+Visible in Workshop
+4x Iron Ring
+2x Leather
+2x Twine
+250 Silver
+Crafting XP: 3,000
+Crafting Lv 17
+
+Wizard Hat
+Visible in Workshop
+2x Leather
+10x Purple Flower
+3x Twine
+300 Silver
+Crafting XP: 3,300
+Crafting Lv 17
+
+Leather Waterskin
+Visible in Workshop
+1x Iron Ring
+2x Leather
+2x Twine
+275 Silver
+Crafting XP: 3,250
+Crafting Lv 18
+
+Rope
+Visible in Workshop
+3x Twine
+50 Silver
+Crafting XP: 1,500
+Crafting Lv 18
+
+Fishing Net
+Visible in Workshop
+1x Antler
+4x Iron
+2x Rope
+100 Silver
+Crafting XP: 1,500
+Crafting Lv 19
+
+Shimmer Topaz
+Visible in Workshop
+3x Shimmer Quartz
+500 Silver
+Crafting XP: 2,500
+Crafting Lv 19
+
+Sturdy Shield
+Visible in Workshop
+6x Iron
+6x Nails
+1x Wooden Plank
+500 Silver
+Crafting XP: 4,000
+Crafting Lv 20
+
+Magicite
+Visible in Workshop
+3x Prism Shard
+5000 Silver
+Crafting XP: 3,000
+Crafting Lv 21
+
+Inferno Sphere
+Visible in Workshop
+1x Runestone 01
+1x Runestone 02
+1x Runestone 03
+1x Runestone 04
+1x Runestone 05
+1x Runestone 06
+1x Runestone 07
+1x Runestone 08
+1x Runestone 09
+1x Runestone 10
+1000000 Silver
+Crafting XP: 50,000
+Crafting Lv 22
+
+Mystic Ring
+Visible in Workshop
+1x Aquamarine
+2x Emerald
+1x Iron Ring
+3x Mushroom Paste
+1x Stone
+600 Silver
+Crafting XP: 5,000
+Crafting Lv 23
+
+Horseshoe
+Visible in Workshop
+5x Iron
+7x Nails
+2x Stone
+100 Silver
+Crafting XP: 1,000
+Crafting Lv 24
+
+Crystal Pickaxe
+Visible in Workshop
+1x Fairy Crystal
+1x Lapis Lazuli
+1x Mushroom Paste
+1x Pickaxe
+1x Stone
+300 Silver
+Crafting XP: 750
+Crafting Lv 25
+
+Leather Belt
+Visible in Workshop
+1x Awl
+3x Leather
+1x Steel Buckle
+150 Silver
+Crafting XP: 4,000
+Crafting Lv 25
+
+Magnifying Glass
+Visible in Workshop
+1x Board
+1x Glass Orb
+3x Iron
+1x Iron Ring
+300 Silver
+Crafting XP: 5,250
+Crafting Lv 25
+
+Pitchfork
+Visible in Workshop
+1x Board
+1x Emberstone
+1x Iron Ring
+1x Mushroom Paste
+2x Steel
+500 Silver
+Crafting XP: 450
+Crafting Lv 25
+
+Steel Buckle
+Visible in Workshop
+2x Emberstone
+1x Hammer
+1x Steel
+100 Silver
+Crafting XP: 500
+Crafting Lv 25
+
+Shimmer Ring
+Visible in Workshop
+1x Iron Ring
+1x Mushroom Paste
+1x Shimmer Topaz
+1000 Silver
+Crafting XP: 5,000
+Crafting Lv 26
+
+Wooden Sword
+Visible in Workshop
+1x Board
+2x Iron
+4x Twine
+250 Silver
+Crafting XP: 1,750
+Crafting Lv 27
+
+Wooden Spear
+Visible in Workshop
+1x Arrowhead
+2x Twine
+1x Wood
+100 Silver
+Crafting XP: 1,750
+Crafting Lv 28
+
+Sewing Needle
+Visible in Workshop
+1x Awl
+1x Bone
+1x Twine
+500 Silver
+Crafting XP: 1,750
+Crafting Lv 29
+
+Apple Cider
+Visible in Workshop
+40x Apple
+1x Glass Bottle
+1x Orange
+5000 Silver
+Crafting XP: 100
+Crafting Lv 30
+
+Green Scarf
+Visible in Workshop
+1x Green Dye
+2x Yarn
+1000 Silver
+Crafting XP: 1,750
+Crafting Lv 30
+
+Green Shield
+Visible in Workshop
+1x Green Dye
+3x Iron
+1x Wooden Shield
+500 Silver
+Crafting XP: 5,500
+Crafting Lv 30
+
+Wooden Bow
+Visible in Workshop
+1x Fern Leaf
+2x Iron
+2x Twine
+4x Wood
+400 Silver
+Crafting XP: 2,500
+Crafting Lv 30
+
+Wagon Wheel
+Visible in Workshop
+12x Board
+14x Nails
+250 Silver
+Crafting XP: 1,750
+Crafting Lv 31
+
+Treasure Chest
+Visible in Workshop
+12x Iron
+22x Nails
+6x Wooden Plank
+1000 Silver
+Crafting XP: 7,500
+Crafting Lv 32
+
+Jade
+Hidden in Workshop
+1x Stone
+2x Unpolished Jade
+500 Silver
+Crafting XP: 3,000
+Crafting Lv 33
+
+Iced Tea
+Visible in Workshop
+1x Glass Bottle
+3x Tea Leaves
+2500 Silver
+Crafting XP: 100
+Crafting Lv 34
+
+Lava Sphere
+Visible in Workshop
+1x Runestone 11
+1x Runestone 12
+1x Runestone 13
+1x Runestone 14
+1x Runestone 15
+1x Runestone 16
+1x Runestone 17
+1x Runestone 18
+1x Runestone 19
+1x Runestone 20
+2000000 Silver
+Crafting XP: 150,000
+Crafting Lv 35
+
+Sturdy Pickaxe
+Visible in Workshop
+1x Oak
+1x Pickaxe
+1x Small Bolt
+1x Stone Shell
+500 Silver
+Crafting XP: 1,250
+Crafting Lv 35
+
+Acorn Butter
+Visible in Workshop
+75x Acorn
+1x Glass Bottle
+100 Silver
+Crafting XP: 1,500
+Crafting Lv 36
+
+Scissors
+Visible in Workshop
+1x Iron Ring
+1x Nails
+2x Steel
+1x Stone
+2x Wood
+250 Silver
+Crafting XP: 1,750
+Crafting Lv 37
+
+Aquacite
+Visible in Workshop
+2x Unpolished Aquacite
+50 Silver
+Crafting XP: 275
+Crafting Lv 38
+
+Flarite
+Visible in Workshop
+2x Unpolished Flarite
+50 Silver
+Crafting XP: 275
+Crafting Lv 38
+
+Nothing
+Crafting Lv 39
+
+Fire Ant Farm
+Visible in Workshop
+4x Board
+25x Fire Ant
+3x Glass Orb
+4x Nails
+5x Sand
+750 Silver
+Crafting XP: 3,000
+Crafting Lv 40
+
+Nothing
+Crafting Lv 41
+
+Jade Charm
+Visible in Workshop
+1x Iron Ring
+1x Jade
+2x Steel
+6x Stone
+1000 Silver
+Crafting XP: 8,000
+Crafting Lv 42
+
+Leather Helmet
+Visible in Workshop
+2x Hide
+3x Leather
+1x Mushroom Paste
+1x Steel Buckle
+2x Wooden Button
+1000 Silver
+Crafting XP: 1,000
+Crafting Lv 42
+
+Garnet
+Visible in Workshop
+1x Stone
+2x Unpolished Garnet
+750 Silver
+Crafting XP: 15,000
+Crafting Lv 43
+
+Pyrite
+Visible in Workshop
+2x Unpolished Pyrite
+100 Silver
+Crafting XP: 750
+Crafting Lv 44
+
+Sand
+Hidden in Workshop
+1x Leather
+5x Sandstone
+750 Silver
+Crafting XP: 250
+Crafting Lv 44
+
+Steel Pickaxe
+Visible in Workshop
+1x Flarite
+2x Mushroom Paste
+1x Pickaxe
+5x Steel
+1500 Silver
+Crafting XP: 2,500
+Crafting Lv 45
+
+Sturdy Sword
+Visible in Workshop
+2x Iron
+1x Leather
+1x Mushroom Paste
+1x Steel
+1500 Silver
+Crafting XP: 11,000
+Crafting Lv 45
+
+Fancy Pipe
+Visible in Workshop
+1x Iron
+3x Iron Ring
+2x Wood
+150 Silver
+Crafting XP: 5,000
+Crafting Lv 46
+
+Glass Jar
+Visible in Workshop
+3x Glass Orb
+1x Shimmer Quartz
+1x Steel
+50 Silver
+Crafting XP: 2,800
+Crafting Lv 47
+
+Nothing
+Crafting Lv 48
+
+Nothing
+Crafting Lv 49
+
+Flywheel
+Visible in Workshop
+1x Small Gear
+7x Small Screw
+20x Steel
+50000 Silver
+Crafting XP: 2,500
+Crafting Lv 50
+
+Steel Wire
+Visible in Workshop
+1x Carbon Sphere
+10x Iron
+1x Stone
+100 Silver
+Crafting XP: 1,000
+Crafting Lv 50
+
+Yarn
+Visible in Workshop
+4x Twine
+100 Silver
+Crafting XP: 1,750
+Crafting Lv 50
+
+Garnet Ring
+Visible in Workshop
+1x Garnet
+1x Iron Ring
+1x Mushroom Paste
+1500 Silver
+Crafting XP: 30,000
+Crafting Lv 51
+
+Seashell Necklace
+Visible in Workshop
+1x Blue Shell
+1x Clam Shell
+1x Conch Shell
+2x Jade
+10x Pearl
+1x Spiked Shell
+4x Steel Wire
+4x Yarn
+12000 Silver
+Crafting XP: 52,500
+Crafting Lv 51
+
+Chum
+Visible in Workshop
+1x Bucket
+7x Grubs
+4x Minnows
+10x Worms
+50 Silver
+Crafting XP: 25
+Crafting Lv 52
+
+Butter Churn
+Visible in Workshop
+1x Board
+1x Wooden Barrel
+10 Silver
+Crafting XP: 500
+Crafting Lv 53
+
+Nothing
+Crafting Lv 54
+
+Crown of Clover
+Visible in Workshop
+20x 3-leaf Clover
+2x 4-leaf Clover
+1x Steel Wire
+2500 Silver
+Crafting XP: 5,000
+Crafting Lv 55
+
+Green Cloak
+Visible in Workshop
+1x Cotton
+10x Green Dye
+5x Leather
+10x Twine
+2500 Silver
+Crafting XP: 125,000
+Crafting Lv 55
+
+Nothing
+Crafting Lv 56
+
+Nothing
+Crafting Lv 57
+
+Nothing
+Crafting Lv 58
+
+Hourglass
+Visible in Workshop
+2x Glass Bottle
+2x Mushroom Paste
+1x Sand
+6x Wood
+2000 Silver
+Crafting XP: 25,000
+Crafting Lv 59
+
+Magna Core
+Hidden in Workshop
+3x Cogwheel
+2x Flywheel
+25x Magna Quartz
+1x Seeing Stone
+10x Small Screw
+5x Small Spring
+40x Steel
+500000 Silver
+Crafting XP: 50,000
+Crafting Lv 60
+
+Sturdy Bow
+Visible in Workshop
+2x Mushroom Paste
+4x Oak
+1x Steel
+2x Stone
+2x Twine
+25000 Silver
+Crafting XP: 40,000
+Crafting Lv 60
+
+Peach Juice
+Hidden in Workshop
+1x Glass Bottle
+10x Peach
+200 Silver
+Crafting XP: 500
+Crafting Lv 61
+
+Essence of Slime
+Visible in Workshop
+1x Glass Orb
+1x Hammer
+1x Iron Ring
+2x Slimestone
+1500 Silver
+Crafting XP: 500
+Crafting Lv 62
+
+Nothing
+Crafting Lv 63
+
+Nothing
+Crafting Lv 64
+
+Reinforced Helmet
+Visible in Workshop
+4x Hide
+1x Leather Helmet
+4x Steel
+31000 Silver
+Crafting XP: 22,800
+Crafting Lv 65
+
+Unpolished Shimmer Stone
+Hidden in Workshop
+1x Emberstone
+1x Sandstone
+10 Silver
+Crafting XP: 50
+Crafting Lv 65
+
+Nothing
+Crafting Lv 66
+
+Nothing
+Crafting Lv 67
+
+Nothing
+Crafting Lv 68
+
+Nothing
+Crafting Lv 69
+
+Barbed Wire
+Hidden in Workshop
+1x Steel Wire
+5x Thorns
+250 Silver
+Crafting XP: 1,000
+Crafting Lv 70
+
+Compass
+Visible in Workshop
+1x Aquamarine
+1x Glass Orb
+1x Iron Ring
+1x Magna Core
+1x Ruby
+4x Small Screw
+1x Twine
+2x Wood
+250000 Silver
+Crafting XP: 50,000
+Crafting Lv 70
+
+Lantern
+Visible in Workshop
+1x Coal
+1x Glass Bottle
+3x Iron
+1x Iron Ring
+2x Twine
+4000 Silver
+Crafting XP: 40,000
+Crafting Lv 70
+
+Salt
+Visible in Workshop
+1x Hammer
+50x Salt Rock
+10000 Silver
+Crafting XP: 5,000
+Crafting Lv 70
+
+Spiky Bracelet
+Visible in Workshop
+4x Leather
+6x Monster Skull
+4x Mushroom Paste
+12x Onyx Scorpion
+1x Sewing Needle
+50000 Silver
+Crafting XP: 63,200
+Crafting Lv 70
+
+Sail Cloth
+Visible in Workshop
+5x Cotton
+3x Sewing Needle
+7500 Silver
+Crafting XP: 10,000
+Crafting Lv 71
+
+Nothing
+Crafting Lv 72
+
+Blue Dye
+Visible in Workshop
+3x Blue Feathers
+1x Glass Bottle
+250 Silver
+Crafting XP: 4,000
+Crafting Lv 73
+
+Purple Dye
+Visible in Workshop
+1x Glass Bottle
+10x Purple Flower
+250 Silver
+Crafting XP: 4,000
+Crafting Lv 73
+
+Red Dye
+Visible in Workshop
+1x Glass Bottle
+2x Striped Feather
+250 Silver
+Crafting XP: 4,000
+Crafting Lv 73
+
+Blue Diary
+Visible in Workshop
+1x Blue Parchment
+1x Mushroom Paste
+1x White Parchment
+250 Silver
+Crafting XP: 3,000
+Crafting Lv 74
+
+Blue Parchment
+Visible in Workshop
+3x Blue Feathers
+75 Silver
+Crafting XP: 2,750
+Crafting Lv 74
+
+Blue Twine
+Visible in Workshop
+1x Blue Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 74
+
+Green Twine
+Visible in Workshop
+1x Green Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 74
+
+Purple Twine
+Visible in Workshop
+1x Purple Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 74
+
+Red Diary
+Visible in Workshop
+1x Mushroom Paste
+1x Red Parchment
+1x White Parchment
+250 Silver
+Crafting XP: 3,000
+Crafting Lv 74
+
+Red Parchment
+Visible in Workshop
+3x Striped Feather
+75 Silver
+Crafting XP: 2,750
+Crafting Lv 74
+
+Red Scarf
+Visible in Workshop
+1x Red Dye
+2x Yarn
+1000 Silver
+Crafting XP: 2,250
+Crafting Lv 74
+
+Red Twine
+Visible in Workshop
+1x Red Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 74
+
+Block of Wood
+Visible in Workshop
+1x Axe
+1x Handsaw
+1x Pine Tree
+10000 Silver
+Crafting XP: 10,000
+Crafting Lv 75
+
+Cooking Pot
+Hidden in Workshop
+25x Emberstone
+25x Iron
+1x Moonstone
+15000 Silver
+Crafting XP: 25,000
+Crafting Lv 75
+
+Fruit Punch
+Visible in Workshop
+25x Apple
+1x Glass Bottle
+25x Grapes
+25x Lemon
+25x Orange
+5x Peach
+500 Silver
+Crafting XP: 500
+Crafting Lv 75
+
+Handsaw
+Visible in Workshop
+1x Awl
+1x Hammer
+2x Mushroom Paste
+2x Steel
+1x Wooden Plank
+2300 Silver
+Crafting XP: 10,000
+Crafting Lv 75
+
+Rucksack
+Visible in Workshop
+2x Awl
+4x Blue Twine
+3x Glass Jar
+4x Green Twine
+2x Horn Canteen
+8x Leather
+4x Red Twine
+1x Scissors
+1x Steel Buckle
+4x Wooden Button
+27500 Silver
+Crafting XP: 2,500
+Crafting Lv 75
+
+Steel Plate
+Visible in Workshop
+2x Emberstone
+4x Small Bolt
+2x Steel
+1000 Silver
+Crafting XP: 5,000
+Crafting Lv 75
+
+Wrench
+Visible in Workshop
+5x Emberstone
+1x Steel
+1000 Silver
+Crafting XP: 5,000
+Crafting Lv 75
+
+Corn Husk Doll
+Hidden in Workshop
+3x Corn
+5x Red Twine
+2x Wooden Button
+50 Silver
+Crafting XP: 2,500
+Crafting Lv 76
+
+Spoon
+Hidden in Workshop
+1x Axe
+1x Bone
+1x Twine
+750 Silver
+Crafting XP: 5,500
+Crafting Lv 76
+
+Pie Pan
+Hidden in Workshop
+25x Emberstone
+2x Moonstone
+10x Steel
+5000 Silver
+Crafting XP: 25,000
+Crafting Lv 77
+
+Pine Shelf
+Visible in Workshop
+1x Pine Board
+4x Small Bolt
+2x Steel
+2500 Silver
+Crafting XP: 3,500
+Crafting Lv 77
+
+Red Brick
+Visible in Workshop
+5x Bucket
+3x Mushroom Paste
+5x Red Dye
+50x Sand
+50x Straw
+1500 Silver
+Crafting XP: 7,500
+Crafting Lv 77
+
+Snow Shoes
+Visible in Workshop
+1x Handsaw
+5x Leather
+20x Oak
+24x Straw
+32x Yarn
+2700 Silver
+Crafting XP: 5,200
+Crafting Lv 78
+
+Step Ladder
+Visible in Workshop
+2x Ladder
+2x Small Bolt
+2x Steel Plate
+100 Silver
+Crafting XP: 5,000
+Crafting Lv 78
+
+Cannon
+Visible in Workshop
+10x Black Powder
+12x Board
+10x Emberstone
+6x Machine Part
+25x Scrap Metal
+25x Steel
+4x Wagon Wheel
+8900 Silver
+Crafting XP: 27,000
+Crafting Lv 79
+
+Fancy Guitar
+Visible in Workshop
+4x Iron
+3x Mushroom Paste
+5x Oak
+6x Steel Wire
+8550 Silver
+Crafting XP: 55,000
+Crafting Lv 80
+
+Linked Lantern
+Visible in Workshop
+1x Amethyst
+1x Aquamarine
+1x Lantern
+1x Magicite
+1x Ruby
+8000 Silver
+Crafting XP: 5,750
+Crafting Lv 80
+
+Small Bolt
+Visible in Workshop
+5x Coal
+1x Emberstone
+1x Hammer
+3x Scrap Metal
+500 Silver
+Crafting XP: 2,500
+Crafting Lv 80
+
+Valve
+Visible in Workshop
+1x Broken Pipe
+1x Cogwheel
+1x Hammer
+1x Red Dye
+1x Steel
+5000 Silver
+Crafting XP: 35,000
+Crafting Lv 80
+
+Y73841 Detector
+Hidden in Workshop
+1x Compass
+1x Pocket Watch
+1x Runestone 17
+50x Scrap Wire
+3x Small Gear
+50x Transistor
+1x Y73841 Blueprint
+250000000 Silver
+Crafting XP: 50,000
+Crafting Lv 80
+
+Corn Oil
+Visible in Workshop
+8x Corn
+1x Glass Bottle
+1x Machine Press
+1500 Silver
+Crafting XP: 25,000
+Crafting Lv 81
+
+Machine Press
+Visible in Workshop
+10x Board
+1x Bucket
+6x Machine Part
+5x Nails
+1x Steel Plate
+5000 Silver
+Crafting XP: 60,000
+Crafting Lv 81
+
+Pine Shavings
+Visible in Workshop
+1x Emberstone
+1x Pine Board
+1x Wood Planer
+1000 Silver
+Crafting XP: 1,700
+Crafting Lv 81
+
+Wood Planer
+Hidden in Workshop
+1x Iron
+1x Moonstone
+3x Small Bolt
+1x Steel
+2x Wood
+2000 Silver
+Crafting XP: 2,800
+Crafting Lv 81
+
+Butter
+Visible in Workshop
+1x Butter Churn
+25x Milk
+1x Salt
+100 Silver
+Crafting XP: 3,000
+Crafting Lv 82
+
+Mayonnaise
+Visible in Workshop
+1x Corn Oil
+25x Eggs
+1x Glass Jar
+1x Sour Root
+50 Silver
+Crafting XP: 3,000
+Crafting Lv 82
+
+Silk
+Visible in Workshop
+3x Caterpillar
+1x Machine Press
+2x Spider
+500 Silver
+Crafting XP: 2,500
+Crafting Lv 82
+
+Sunflower Oil
+Visible in Workshop
+1x Glass Bottle
+6x Sunflower
+1x Twine
+125000 Silver
+Crafting XP: 50,000
+Crafting Lv 82
+
+Belt Drive
+Visible in Workshop
+2x Pulley
+1x Purple Dye
+1x Rope
+100 Silver
+Crafting XP: 6,000
+Crafting Lv 83
+
+Metal Spool
+Visible in Workshop
+1x Broken Pipe
+5x Coal
+2x Nails
+12x Scrap Metal
+100 Silver
+Crafting XP: 6,500
+Crafting Lv 83
+
+Spool of Copper
+Visible in Workshop
+10x Copper Wire
+1x Metal Spool
+10 Silver
+Crafting XP: 6,500
+Crafting Lv 83
+
+Control Box
+Hidden in Workshop
+3x Broken Pipe
+10x Machine Part
+3x Moonstone
+2x Small Screw
+3x Small Spring
+2x Steel Plate
+800 Silver
+Crafting XP: 10,000
+Crafting Lv 84
+
+Energy Coil
+Visible in Workshop
+1x Glass Orb
+8x Scrap Wire
+1x Spool of Copper
+2x Steel
+25x Transistor
+1x Wrench
+5000 Silver
+Crafting XP: 10,000
+Crafting Lv 84
+
+Kill Switch
+Visible in Workshop
+1x Broken Pipe
+3x Emberstone
+1x Red Dye
+5x Scrap Metal
+2x Scrap Wire
+250 Silver
+Crafting XP: 3,000
+Crafting Lv 84
+
+Pear Grease
+Visible in Workshop
+5x Blue Gel
+1x Glass Bottle
+30x Prickly Pear
+500 Silver
+Crafting XP: 3,000
+Crafting Lv 84
+
+Blue Butterfly
+Hidden in Workshop
+1x Blue Dye
+1x Caterpillar
+3x Silk
+1x Wood
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 85
+
+Green Butterfly
+Hidden in Workshop
+1x Caterpillar
+1x Green Dye
+3x Silk
+1x Wood
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 85
+
+Power Monitor
+Visible in Workshop
+1x Broken Pipe
+1x Copper Wire
+10x Iron
+1x Pocket Watch
+5x Transistor
+900 Silver
+Crafting XP: 4,500
+Crafting Lv 85
+
+Purple Butterfly
+Hidden in Workshop
+1x Caterpillar
+1x Purple Dye
+3x Silk
+1x Wood
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 85
+
+Red Butterfly
+Hidden in Workshop
+1x Caterpillar
+1x Red Dye
+3x Silk
+1x Wood
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 85
+
+Ship Mast
+Visible in Workshop
+24x Board
+1x Bucket
+1x Ladder
+1x Looking Glass
+120x Nails
+20x Oak
+4x Pulley
+4x Red Scarf
+12x Rope
+4x Sail Cloth
+12x Wooden Plank
+5000000 Silver
+Crafting XP: 120,000
+Crafting Lv 85
+
+Fancy Clock
+Visible in Workshop
+2x Cogwheel
+4x Glass Orb
+12x Oak
+1x Pocket Watch
+4x Scrap Metal
+4x Small Gear
+8x Steel Wire
+5000 Silver
+Crafting XP: 5,500
+Crafting Lv 86
+
+Veggie Juice
+Visible in Workshop
+15x Beet
+7x Carrot
+7x Cucumber
+7x Eggplant
+1x Glass Bottle
+2x Horn
+7x Peas
+7x Peppers
+2x Tomato
+2x Twine
+2x Watermelon
+10000 Silver
+Crafting XP: 15,000
+Crafting Lv 87
+
+Nothing
+Crafting Lv 88
+
+Nothing
+Crafting Lv 89
+
+Fancy Drum
+Visible in Workshop
+2x Leather
+2x Mushroom Paste
+15x Oak
+4x Yarn
+20000 Silver
+Crafting XP: 2,500
+Crafting Lv 90
+
+Fancy Sword
+Visible in Workshop
+2x Gold Leaf
+2x Lemon Quartz
+2x Mushroom Paste
+4x Steel Wire
+1x Sturdy Sword
+55000 Silver
+Crafting XP: 50,000
+Crafting Lv 90
+
+Magus Hat
+Visible in Workshop
+10x Blue Feathers
+1x Gold Leaf
+2x Leather
+3x Twine
+1000 Silver
+Crafting XP: 5,000
+Crafting Lv 90
+
+Nothing
+Crafting Lv 91
+
+Arnold Palmer
+Visible in Workshop
+1x Iced Tea
+20x Lemonade
+100 Silver
+Crafting XP: 3,500
+Crafting Lv 92
+
+Large Net
+Visible in Workshop
+25x Fishing Net
+25x Iron Ring
+100 Silver
+Crafting XP: 3,500
+Crafting Lv 92
+
+Polished Boot
+Hidden in Workshop
+1x Corn Oil
+1x Old Boot
+500 Silver
+Crafting XP: 2,500
+Crafting Lv 93
+
+Pair of Boots
+Visible in Workshop
+2x Polished Boot
+5 Silver
+Crafting XP: 2,500
+Crafting Lv 94
+
+Blue Purse
+Visible in Workshop
+1x Blue Dye
+1x Coin Purse
+850 Silver
+Crafting XP: 5,500
+Crafting Lv 95
+
+Purple Bag
+Visible in Workshop
+1x Leather Bag
+1x Purple Dye
+1500 Silver
+Crafting XP: 5,500
+Crafting Lv 95
+
+Red Shield
+Hidden in Workshop
+1x Red Dye
+3x Steel
+1x Wooden Shield
+2500 Silver
+Crafting XP: 5,500
+Crafting Lv 95
+
+Fancy Chair
+Visible in Workshop
+6x Cotton
+1x Green Dye
+4x Leather
+8x Nails
+50x Oak
+1x Red Dye
+8x Twine
+25000 Silver
+Crafting XP: 3,500
+Crafting Lv 96
+
+Fancy Pan Flute
+Visible in Workshop
+1x Blue Dye
+1x Leather
+5x Twine
+9x Wood
+8000 Silver
+Crafting XP: 2,750
+Crafting Lv 96
+
+Potato Battery
+Visible in Workshop
+4x Nails
+8x Potato
+1x Spool of Copper
+4x Steel Wire
+8x Transistor
+750 Silver
+Crafting XP: 4,000
+Crafting Lv 97
+
+Red Trunk
+Visible in Workshop
+3x Leather
+16x Nails
+4x Red Dye
+8x Steel
+6x Wooden Plank
+7500 Silver
+Crafting XP: 6,500
+Crafting Lv 97
+
+Steel Vise
+Visible in Workshop
+2x Blue Dye
+1x Broken Pipe
+2x Glass Orb
+2x Small Bolt
+50x Steel
+1x Wooden Plank
+4750 Silver
+Crafting XP: 4,250
+Crafting Lv 97
+
+Amber Cane
+Visible in Workshop
+1x Amber
+1x Bone
+2x Iron Ring
+1x Mushroom Paste
+1x Oak
+3x Sand
+50000 Silver
+Crafting XP: 17,000
+Crafting Lv 98
+
+Fancy Table
+Hidden in Workshop
+1x Corn Oil
+8x Glass Orb
+32x Nails
+80x Oak
+1x Steel Vise
+45000 Silver
+Crafting XP: 10,000
+Crafting Lv 98
+
+Ship in a Bottle
+Visible in Workshop
+1x Glass Bottle
+1x Model Ship
+3x Mushroom Paste
+2x Oak
+2x Sand
+250000 Silver
+Crafting XP: 17,000
+Crafting Lv 98
+
+Bamboo Chair
+Visible in Workshop
+30x Bamboo
+1x Basic Pillow
+15x Twine
+5000 Silver
+Crafting XP: 15,000
+Crafting Lv 99
+
+Bamboo Fence
+Visible in Workshop
+35x Bamboo
+10x Board
+10x Twine
+5000 Silver
+Crafting XP: 11,000
+Crafting Lv 99
+
+Bamboo Flute
+Visible in Workshop
+1x Awl
+2x Bamboo
+1x Steel Wire
+1000 Silver
+Crafting XP: 3,000
+Crafting Lv 99
+
+Bamboo Rope
+Visible in Workshop
+4x Bamboo
+500 Silver
+Crafting XP: 100
+Crafting Lv 99
+
+Bamboo Trellis
+Visible in Workshop
+20x Bamboo
+10x Twine
+5000 Silver
+Crafting XP: 10,000
+Crafting Lv 99
+
+Basic Pillow
+Visible in Workshop
+2x Cloth
+25x Feathers
+2x Twine
+500 Silver
+Crafting XP: 1,000
+Crafting Lv 99
+
+Black Bag
+Visible in Workshop
+1x Black Dye
+1x Leather Bag
+3000 Silver
+Crafting XP: 9,500
+Crafting Lv 99
+
+Black Cloak
+Visible in Workshop
+10x Black Dye
+10x Black Twine
+1x Cotton
+5x Leather
+2500 Silver
+Crafting XP: 175,000
+Crafting Lv 99
+
+Black Dye
+Visible in Workshop
+1x Glass Bottle
+3x Shadow Bloom
+500 Silver
+Crafting XP: 2,000
+Crafting Lv 99
+
+Black Purse
+Visible in Workshop
+1x Black Dye
+1x Coin Purse
+2500 Silver
+Crafting XP: 14,000
+Crafting Lv 99
+
+Black Scarf
+Visible in Workshop
+1x Black Dye
+2x Yarn
+1000 Silver
+Crafting XP: 3,750
+Crafting Lv 99
+
+Black Shield
+Visible in Workshop
+1x Black Dye
+3x Steel
+1x Sturdy Shield
+2500 Silver
+Crafting XP: 9,000
+Crafting Lv 99
+
+Black Shirt
+Visible in Workshop
+1x Black Dye
+10x Cloth
+1x Sewing Needle
+9500 Silver
+Crafting XP: 25,000
+Crafting Lv 99
+
+Black Twine
+Visible in Workshop
+1x Black Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 99
+
+Blue Shirt
+Visible in Workshop
+1x Blue Dye
+10x Cloth
+1x Sewing Needle
+9500 Silver
+Crafting XP: 20,000
+Crafting Lv 99
+
+Brown Bag
+Visible in Workshop
+1x Brown Dye
+1x Leather Bag
+2000 Silver
+Crafting XP: 8,000
+Crafting Lv 99
+
+Brown Cloak
+Visible in Workshop
+10x Brown Dye
+1x Cotton
+5x Leather
+10x Twine
+2500 Silver
+Crafting XP: 125,000
+Crafting Lv 99
+
+Brown Dye
+Visible in Workshop
+1x Glass Bottle
+3x Mudcap
+400 Silver
+Crafting XP: 800
+Crafting Lv 99
+
+Brown Twine
+Visible in Workshop
+1x Brown Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 99
+
+Canoe
+Visible in Workshop
+10x Blue Gel
+4x Board
+5x Mushroom Paste
+10x Nails
+100x Oak
+2x Rope
+45000 Silver
+Crafting XP: 5,000
+Crafting Lv 99
+
+Cloth
+Visible in Workshop
+3x Scrap Cloth
+100 Silver
+Crafting XP: 100
+Crafting Lv 99
+
+Crossbow
+Visible in Workshop
+1x Arrowhead
+2x Iron
+2x Iron Ring
+3x Oak
+2x Steel Wire
+28000 Silver
+Crafting XP: 2,500
+Crafting Lv 99
+
+Engine
+Visible in Workshop
+1x Belt Drive
+1x Control Box
+1x Energy Coil
+1x Flywheel
+1x Kill Switch
+1x Magicite
+1x Pear Grease
+1x Power Monitor
+20x Steel
+1x Steel Plate
+50x Steel Wire
+12x Transistor
+250000 Silver
+Crafting XP: 15,000
+Crafting Lv 99
+
+Fancy Pillow
+Visible in Workshop
+25x Duck Feather
+1x Sewing Needle
+2x Silk
+70000 Silver
+Crafting XP: 70,000
+Crafting Lv 99
+
+Fancy Violin
+Visible in Workshop
+4x Moonstone
+8x Mushroom Paste
+5x Pine Board
+3x Purple Dye
+4x Steel
+1x Steel Plate
+4x Steel Wire
+25000 Silver
+Crafting XP: 12,000
+Crafting Lv 99
+
+Flying Machine
+Hidden in Workshop
+10x Leather
+4x Magna Quartz
+10x Nailed Board
+1x Power Monitor
+4x Pulley
+10x Rope
+4x Small Gear
+6x Small Spring
+2x Steel Buckle
+10x Steel Wire
+350000 Silver
+Crafting XP: 17,500
+Crafting Lv 99
+
+Frost Shield
+Visible in Workshop
+3x Blue Gel
+1x Frost Snapper Shell
+1x Hammer
+3x Nails
+1x Red Shield
+5000 Silver
+Crafting XP: 6,500
+Crafting Lv 99
+
+Gainite
+Visible in Workshop
+500x Green Dye
+2000x Mushroom Paste
+5x Painite
+2000x Steel
+2000x Stone
+1 Silver
+Crafting XP: 0
+Crafting Lv 99
+
+Gazebo
+Visible in Workshop
+1x Hammer
+120x Nails
+120x Oak
+32500 Silver
+Crafting XP: 35,000
+Crafting Lv 99
+
+Glowing Lantern
+Visible in Workshop
+1x Glass Bottle
+4x Glowshroom
+2x Green Twine
+3x Iron
+2x Iron Ring
+9000 Silver
+Crafting XP: 70,000
+Crafting Lv 99
+
+Gold Aquamarine Ring
+Visible in Workshop
+1x Aquamarine
+1x Gold Ring
+1x Strong Paste
+14000 Silver
+Crafting XP: 35,600
+Crafting Lv 99
+
+Gold Diamond Ring
+Visible in Workshop
+1x Diamond
+1x Gold Ring
+1x Strong Paste
+30000 Silver
+Crafting XP: 450,000
+Crafting Lv 99
+
+Gold Emerald Ring
+Visible in Workshop
+1x Emerald
+1x Gold Ring
+1x Strong Paste
+10000 Silver
+Crafting XP: 35,400
+Crafting Lv 99
+
+Gold Garnet Ring
+Visible in Workshop
+1x Garnet
+1x Gold Ring
+1x Strong Paste
+20000 Silver
+Crafting XP: 45,000
+Crafting Lv 99
+
+Gold Jade Ring
+Visible in Workshop
+1x Gold Ring
+1x Jade
+1x Strong Paste
+20000 Silver
+Crafting XP: 45,000
+Crafting Lv 99
+
+Gold Lemon Quartz Ring
+Visible in Workshop
+1x Gold Ring
+1x Lemon Quartz
+1x Strong Paste
+12000 Silver
+Crafting XP: 35,700
+Crafting Lv 99
+
+Gold Ruby Ring
+Visible in Workshop
+1x Gold Ring
+1x Ruby
+1x Strong Paste
+13000 Silver
+Crafting XP: 35,500
+Crafting Lv 99
+
+Grand Piano
+Visible in Workshop
+8x Block of Wood
+1x Fancy Chair
+5x Green Dye
+1x Hammer
+1x Handsaw
+88x Horn
+10x Steel
+88x Steel Wire
+10x White Parchment
+88x Wood
+11x Wooden Plank
+500000 Silver
+Crafting XP: 19,250
+Crafting Lv 99
+
+Green Shirt
+Visible in Workshop
+10x Cloth
+1x Green Dye
+1x Sewing Needle
+9500 Silver
+Crafting XP: 20,000
+Crafting Lv 99
+
+Heart Container
+Hidden in Workshop
+4x Piece of Heart
+1000000000 Silver
+Crafting XP: 0
+Crafting Lv 99
+
+Oak Table
+Visible in Workshop
+1x Handsaw
+24x Nails
+80x Oak
+2500 Silver
+Crafting XP: 5,000
+Crafting Lv 99
+
+Orange Butterfly
+Visible in Workshop
+1x Caterpillar
+1x Orange Dye
+3x Silk
+1x Wood
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 99
+
+Orange Dye
+Visible in Workshop
+4x Amber Mire Bloom
+1x Glass Bottle
+450 Silver
+Crafting XP: 1,000
+Crafting Lv 99
+
+Orange Scarf
+Visible in Workshop
+1x Orange Dye
+2x Yarn
+1000 Silver
+Crafting XP: 3,500
+Crafting Lv 99
+
+Orange Shirt
+Visible in Workshop
+10x Cloth
+1x Orange Dye
+1x Sewing Needle
+9500 Silver
+Crafting XP: 30,000
+Crafting Lv 99
+
+Orange Twine
+Visible in Workshop
+1x Orange Dye
+1x Twine
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 99
+
+Pair of Gold Boots
+Visible in Workshop
+2x Gold Boot
+10 Silver
+Crafting XP: 25,000
+Crafting Lv 99
+
+Propeller Hat
+Visible in Workshop
+2x Blue Dye
+25x Cloth
+2x Green Dye
+1x Hammer
+2x Red Dye
+2x Tin Scraps
+2x Yellow Dye
+10000 Silver
+Crafting XP: 50,000
+Crafting Lv 99
+
+Purple Shirt
+Visible in Workshop
+10x Cloth
+1x Purple Dye
+1x Sewing Needle
+9500 Silver
+Crafting XP: 20,000
+Crafting Lv 99
+
+Re'taw Pail
+Hidden in Workshop
+1x Bucket
+4x Mushroom Paste
+5x Re'taw
+6 Silver
+Crafting XP: 251
+Crafting Lv 99
+
+Red Shirt
+Visible in Workshop
+10x Cloth
+1x Red Dye
+1x Sewing Needle
+9500 Silver
+Crafting XP: 25,000
+Crafting Lv 99
+
+Strong Paste
+Visible in Workshop
+2x Glowshroom
+1x Mudcap
+2x Mushroom Paste
+100 Silver
+Crafting XP: 750
+Crafting Lv 99
+
+Sugar Cube
+Visible in Workshop
+1x Re'taw
+1x White Sugar
+1x Wooden Box
+42000 Silver
+Crafting XP: 70,000
+Crafting Lv 99
+
+Swamp Puzzle
+Visible in Workshop
+1x Piece 01
+1x Piece 03
+1x Piece 04
+1x Piece 07
+1x Piece 09
+1x Piece 11
+1x Piece 12
+1x Piece 15
+1x Piece 18
+1x Piece 22
+1x Piece 23
+1x Piece 24
+1x Piece 26
+1x Piece 30
+1x Piece 31
+1000000 Silver
+Crafting XP: 1
+Crafting Lv 99
+
+Tie Dye Scarf
+Visible in Workshop
+1x Blue Dye
+1x Green Dye
+1x Orange Dye
+1x Purple Dye
+1x Red Dye
+6x Yarn
+1x Yellow Dye
+1000 Silver
+Crafting XP: 35,000
+Crafting Lv 99
+
+Tin Scraps
+Visible in Workshop
+1x Axe
+1x Tin Can
+100 Silver
+Crafting XP: 100
+Crafting Lv 99
+
+White Cloak
+Visible in Workshop
+1x Cotton
+5x Leather
+10x Twine
+10x White Dye
+2500 Silver
+Crafting XP: 155,000
+Crafting Lv 99
+
+White Dye
+Visible in Workshop
+1x Glass Bottle
+5x Mist Lily
+500 Silver
+Crafting XP: 2,000
+Crafting Lv 99
+
+White Purse
+Visible in Workshop
+1x Coin Purse
+1x White Dye
+2500 Silver
+Crafting XP: 14,000
+Crafting Lv 99
+
+White Scarf
+Visible in Workshop
+1x White Dye
+2x Yarn
+1000 Silver
+Crafting XP: 4,000
+Crafting Lv 99
+
+White Shirt
+Visible in Workshop
+10x Cloth
+1x Sewing Needle
+1x White Dye
+9500 Silver
+Crafting XP: 25,000
+Crafting Lv 99
+
+White Twine
+Visible in Workshop
+1x Twine
+1x White Dye
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 99
+
+Yellow Bag
+Visible in Workshop
+1x Leather Bag
+1x Yellow Dye
+2000 Silver
+Crafting XP: 8,000
+Crafting Lv 99
+
+Yellow Butterfly
+Hidden in Workshop
+1x Caterpillar
+3x Silk
+1x Wood
+1x Yellow Dye
+450 Silver
+Crafting XP: 4,750
+Crafting Lv 99
+
+Yellow Dye
+Visible in Workshop
+1x Glass Bottle
+4x Swamp Thistle
+400 Silver
+Crafting XP: 800
+Crafting Lv 99
+
+Yellow Purse
+Visible in Workshop
+1x Coin Purse
+1x Yellow Dye
+2500 Silver
+Crafting XP: 13,000
+Crafting Lv 99
+
+Yellow Scarf
+Visible in Workshop
+2x Yarn
+1x Yellow Dye
+1000 Silver
+Crafting XP: 3,250
+Crafting Lv 99
+
+Yellow Shirt
+Visible in Workshop
+10x Cloth
+1x Sewing Needle
+1x Yellow Dye
+9500 Silver
+Crafting XP: 20,000
+Crafting Lv 99
+
+Yellow Twine
+Visible in Workshop
+1x Twine
+1x Yellow Dye
+10 Silver
+Crafting XP: 2,500
+Crafting Lv 99

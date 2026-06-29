@@ -91,6 +91,24 @@ class GameState:
 
 
 @dataclass
+class WorkshopRecipe:
+    """How to craft an item: the materials it consumes, keyed by material name."""
+
+    name: str
+    materials: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class Workshop:
+    """Workshop recipes, keyed by the lower-cased item name."""
+
+    recipes: dict[str, WorkshopRecipe] = field(default_factory=dict)
+
+    def get(self, item: str) -> WorkshopRecipe | None:
+        return self.recipes.get(item.lower())
+
+
+@dataclass
 class TowerRequirements:
     """Mastery levels required for each tower level.
 
@@ -149,8 +167,9 @@ class Solution:
     notes: list[str] = field(default_factory=list)
 
 
-# Bundled tower requirements, used when the user does not supply their own file.
+# Bundled data files, used when the user does not supply their own.
 DEFAULT_TOWER_PATH = Path(__file__).with_name("tower.csv")
+DEFAULT_WORKSHOP_PATH = Path(__file__).with_name("workshop.txt")
 
 
 def parse_tower_requirements(text: str) -> TowerRequirements:
@@ -188,6 +207,38 @@ def load_tower_requirements(path: Path | None = None) -> TowerRequirements:
     """Load tower requirements from ``path``, or the bundled file if None."""
     source = path if path is not None else DEFAULT_TOWER_PATH
     return parse_tower_requirements(source.read_text())
+
+
+def load_workshop(path: Path | None = None) -> Workshop:
+    """Load workshop recipes from ``path``, or the bundled file if None."""
+    from parsing import parse_workshop
+
+    source = path if path is not None else DEFAULT_WORKSHOP_PATH
+    return parse_workshop(source.read_text())
+
+
+def required_materials(
+    needs: list[ItemNeed], workshop: Workshop
+) -> dict[str, int]:
+    """Total materials to craft the shortfall of each needed, craftable item.
+
+    Each unit of shortfall is one craft, so an item's material cost scales with
+    how many more are needed. An item required at several tower levels is only
+    counted once, at its largest shortfall, since crafting is cumulative. Items
+    with no workshop recipe (gathered, not crafted) are skipped.
+    """
+    craft_counts: dict[str, int] = {}
+    for need in needs:
+        craft_counts[need.item] = max(craft_counts.get(need.item, 0), need.extra)
+
+    materials: dict[str, int] = {}
+    for item, count in craft_counts.items():
+        recipe = workshop.get(item)
+        if recipe is None:
+            continue
+        for material, quantity in recipe.materials.items():
+            materials[material] = materials.get(material, 0) + count * quantity
+    return materials
 
 
 def parse_item_amounts(spec: str) -> dict[str, int]:

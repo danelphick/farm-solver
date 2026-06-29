@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import re
 
-from farm_solver import Inventory, InventoryItem, Mastery
+from farm_solver import (
+    Inventory,
+    InventoryItem,
+    Mastery,
+    Workshop,
+    WorkshopRecipe,
+)
 
 
 def _split_blocks(text: str) -> list[list[str]]:
@@ -128,3 +134,47 @@ def parse_inventory(text: str) -> Inventory:
             category = next_category
 
     return inventory
+
+
+# --- Workshop --------------------------------------------------------------
+
+# A material line looks like "5x Wood" or "200x Grapes".
+_MATERIAL_RE = re.compile(r"^([\d,]+)x\s+(.+)$")
+
+# The line after an item's name marks a real recipe; other blocks (the header,
+# the "Nothing" level dividers) do not have it and are skipped.
+_WORKSHOP_VISIBILITY = ("Visible in Workshop", "Hidden in Workshop")
+
+
+def _parse_workshop_block(block: list[str]) -> WorkshopRecipe | None:
+    """Parse a block into a WorkshopRecipe, or None if it isn't a recipe."""
+    if len(block) < 2 or block[1] not in _WORKSHOP_VISIBILITY:
+        return None
+
+    materials: dict[str, int] = {}
+    # Materials run from the visibility line up to the "<N> Silver" cost line.
+    for line in block[2:]:
+        match = _MATERIAL_RE.match(line)
+        if match is None:
+            break
+        quantity = int(match.group(1).replace(",", ""))
+        materials[match.group(2).strip()] = quantity
+
+    return WorkshopRecipe(name=block[0], materials=materials)
+
+
+def parse_workshop(text: str) -> Workshop:
+    """Parse a workshop screen pasted from FarmRPG into a Workshop.
+
+    Items are blank-line separated blocks. An optional header and the "Nothing"
+    level dividers are skipped. For each item only the name and its materials
+    are kept; the visibility, silver cost, XP and level lines are discarded.
+
+    Recipes are keyed by the lower-cased item name; values keep the original.
+    """
+    workshop = Workshop()
+    for block in _split_blocks(text):
+        recipe = _parse_workshop_block(block)
+        if recipe is not None:
+            workshop.recipes[recipe.name.lower()] = recipe
+    return workshop

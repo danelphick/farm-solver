@@ -94,6 +94,14 @@ def print_solution(solution: farm_solver.Solution) -> None:
         print(note)
 
 
+def print_materials(materials: dict[str, int]) -> None:
+    if not materials:
+        return
+    print("\nTotal Materials required:")
+    for material in sorted(materials):
+        print(f"  {materials[material]:,}x {material}")
+
+
 def run(args: argparse.Namespace) -> int:
     state = load_state(args.masteries, args.inventory)
 
@@ -108,6 +116,9 @@ def run(args: argparse.Namespace) -> int:
         solution = farm_solver.solve_tower(state, requirements, args.level)
 
     print_solution(solution)
+
+    workshop = farm_solver.load_workshop()
+    print_materials(farm_solver.required_materials(solution.needs, workshop))
     return 0
 
 
