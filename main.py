@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import farm_solver
+import parsing
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,8 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameState:
-    masteries = farm_solver.parse_masteries(masteries_path.read_text())
-    inventory = farm_solver.parse_inventory(inventory_path.read_text())
+    masteries = parsing.parse_masteries(masteries_path.read_text())
+    inventory = parsing.parse_inventory(inventory_path.read_text())
     return farm_solver.GameState(masteries=masteries, inventory=inventory)
 
 

@@ -2,7 +2,8 @@ import textwrap
 
 import pytest
 
-from farm_solver import Mastery, parse_masteries
+from farm_solver import Mastery
+from parsing import parse_masteries
 
 # A representative paste covering every tier, comma grouping, the optional
 # trailing tier-header line, and a fully mastered (∞) item.

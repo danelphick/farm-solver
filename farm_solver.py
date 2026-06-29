@@ -10,7 +10,6 @@ currently skeletons: they parse/validate their inputs and raise
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 
 
@@ -47,13 +46,23 @@ class Mastery:
 
 
 @dataclass
-class Inventory:
-    """Quantities of items currently held."""
+class InventoryItem:
+    """A single inventory entry: how many are held and its FarmRPG category."""
 
-    items: dict[str, int] = field(default_factory=dict)
+    name: str
+    quantity: int = 0
+    category: str | None = None
+
+
+@dataclass
+class Inventory:
+    """Items currently held, keyed by item name."""
+
+    items: dict[str, InventoryItem] = field(default_factory=dict)
 
     def amount(self, item: str) -> int:
-        return self.items.get(item, 0)
+        entry = self.items.get(item)
+        return entry.quantity if entry is not None else 0
 
 
 @dataclass
@@ -90,72 +99,6 @@ class Solution:
 
 # Built-in tower requirements. Populate this with the real FarmRPG values.
 DEFAULT_TOWER_REQUIREMENTS = TowerRequirements(levels={})
-
-
-# Matches a progress line such as "976,311 / 1,000,000 Progress" or the fully
-# mastered form "832,681,556 / ∞ Progress".
-_PROGRESS_RE = re.compile(r"^([\d,]+)\s*/\s*([\d,]+|∞)\s+Progress$")
-
-
-def _split_blocks(text: str) -> list[list[str]]:
-    """Split pasted text into blocks of consecutive non-blank lines."""
-    blocks: list[list[str]] = []
-    current: list[str] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if line:
-            current.append(line)
-        elif current:
-            blocks.append(current)
-            current = []
-    if current:
-        blocks.append(current)
-    return blocks
-
-
-def _parse_mastery_block(block: list[str]) -> Mastery | None:
-    """Parse a single block into a Mastery, or None if it is the header.
-
-    A block is the item name, a progress line, a percentage/status line, and
-    optionally a trailing tier-header line which is ignored.
-    """
-    # The header block starts with "Mastery In-Progress" and has no progress
-    # line; skip it rather than treating it as an item.
-    if block[0].startswith("Mastery In-Progress"):
-        return None
-
-    if len(block) < 2:
-        raise ValueError(f"mastery block too short: {block!r}")
-
-    match = _PROGRESS_RE.match(block[1])
-    if match is None:
-        raise ValueError(f"could not parse progress line: {block[1]!r}")
-
-    progress = int(match.group(1).replace(",", ""))
-    denominator = match.group(2)
-    required = None if denominator == "∞" else int(denominator.replace(",", ""))
-
-    return Mastery(item=block[0], progress=progress, required=required)
-
-
-def parse_masteries(text: str) -> dict[str, Mastery]:
-    """Parse masteries pasted from FarmRPG into a mapping of item -> Mastery.
-
-    The pasted text is a header followed by blank-line separated blocks. Each
-    block holds an item name, a ``"<progress> / <required> Progress"`` line, a
-    percentage line, and optionally a trailing tier header which is ignored.
-    """
-    masteries: dict[str, Mastery] = {}
-    for block in _split_blocks(text):
-        mastery = _parse_mastery_block(block)
-        if mastery is not None:
-            masteries[mastery.item] = mastery
-    return masteries
-
-
-def parse_inventory(text: str) -> Inventory:
-    """Parse an inventory pasted from FarmRPG into an Inventory."""
-    raise NotImplementedError("parse_inventory is not implemented yet")
 
 
 def parse_tower_requirements(text: str) -> TowerRequirements:
