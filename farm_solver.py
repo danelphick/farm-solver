@@ -154,8 +154,18 @@ def solve_tower(
 
 
 def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
-    """Solve for mastering each item in ``goals`` to the given amount."""
-    raise NotImplementedError("solve_mastery is not implemented yet")
+    """Solve for mastering each item in ``goals`` to the given amount.
+
+    For now this only works out how much more mastery progress each item still
+    needs, given its current progress. Turning that shortfall into the Arnold
+    Palmers and Large Nets required is still to come.
+    """
+    needs = []
+    for item, target in goals.items():
+        mastery = state.masteries.get(item)
+        have = mastery.progress if mastery is not None else 0
+        needs.append(ItemNeed(item=item, have=have, target=target))
+    return Solution(needs=needs)
 
 
 def solve_acquire(state: GameState, goals: dict[str, int]) -> Solution:
