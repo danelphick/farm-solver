@@ -17,17 +17,17 @@ By default it will assume you want to reach the highest possible level, but you 
 The solver can also ignore the tower and solve for mastering a particular item using `-m`. E.g.
 
 ```
-python main.py -m "Flying Machine:100000"
+python main.py -m "Flying Machine:100000" sample-mastery.txt sample-inventory.txt
 ```
 
 You can pass multiple items by comma-separating the requirements. E.g.
 
 ```
-python main.py -m "Flying Machine:100000,Gainite:100000"
+python main.py -m "Flying Machine:100000,Gainite:100000" sample-mastery.txt sample-inventory.txt
 ```
 
 Rather than masterying an item, it can solve for acquiring a certain number of an item using `-i` (including what's already in your current inventory).
 
 ```
-python main.py -i "Flying Machine:2000,Gainite:20"
+python main.py -i "Flying Machine:2000,Gainite:20" sample-mastery.txt sample-inventory.txt
 ```
