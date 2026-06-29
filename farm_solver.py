@@ -89,11 +89,26 @@ class TowerRequirements:
 
 
 @dataclass
+class ItemNeed:
+    """How an item stands against a goal: how many are held vs. wanted."""
+
+    item: str
+    have: int
+    target: int
+
+    @property
+    def extra(self) -> int:
+        """Additional units still needed to reach the target (never negative)."""
+        return max(0, self.target - self.have)
+
+
+@dataclass
 class Solution:
     """The result of a solve: the resources required to hit the goal."""
 
     arnold_palmers: int = 0
     large_nets: int = 0
+    needs: list[ItemNeed] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
 
@@ -144,5 +159,14 @@ def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
 
 
 def solve_acquire(state: GameState, goals: dict[str, int]) -> Solution:
-    """Solve for holding the given number of each item (counting inventory)."""
-    raise NotImplementedError("solve_acquire is not implemented yet")
+    """Solve for holding the given number of each item (counting inventory).
+
+    For now this only works out how many extra of each item are still needed,
+    given what is already in the inventory. Turning that shortfall into the
+    Arnold Palmers and Large Nets required is still to come.
+    """
+    needs = [
+        ItemNeed(item=item, have=state.inventory.amount(item), target=target)
+        for item, target in goals.items()
+    ]
+    return Solution(needs=needs)

@@ -77,8 +77,15 @@ def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameSt
 
 
 def print_solution(solution: farm_solver.Solution) -> None:
-    print(f"Arnold Palmers: {solution.arnold_palmers}")
-    print(f"Large Nets:     {solution.large_nets}")
+    for need in solution.needs:
+        if need.extra > 0:
+            print(
+                f"{need.item}: need {need.extra:,} more "
+                f"(have {need.have:,} of {need.target:,})"
+            )
+        else:
+            print(f"{need.item}: already have {need.have:,} of {need.target:,}")
+
     for note in solution.notes:
         print(note)
 
