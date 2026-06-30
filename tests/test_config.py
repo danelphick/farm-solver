@@ -126,6 +126,22 @@ def test_orchard_without_bonus_is_one_to_one():
     assert production.producers[0].outputs == {"apple": 100}
 
 
+def test_passive_production_reads_raptor_pen():
+    production = passive_production({"raptor_pen": {"antlers": 2617810}})
+    pen = production.producers[0]
+    assert pen.name == "raptor_pen"
+    assert pen.period == DAILY
+    assert pen.outputs == {"antlers": 2617810}
+
+
+def test_antler_snare_adds_ten_percent_floored():
+    # 2617810 + 2617810 // 10 = 2617810 + 261781 = 2879591.
+    production = passive_production(
+        {"raptor_pen": {"antlers": 2617810, "have_antler_snare": True}}
+    )
+    assert production.producers[0].outputs == {"antlers": 2879591}
+
+
 def test_passive_production_reads_vineyard_grapes_daily():
     production = passive_production({"vineyard": {"grapes": 43000}})
     grapes = production.producers[0]

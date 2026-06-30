@@ -96,6 +96,10 @@ orange_trees = 6175
 lemon_trees = 6165
 bonus = 1.3
 
+[raptor_pen]    # antlers daily, plus 10% more with the antler snare
+antlers = 2617810
+have_antler_snare = true
+
 [vineyard]    # grapes daily
 grapes = 43000
 

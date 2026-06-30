@@ -46,6 +46,8 @@ def passive_production(
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
     * ``[orchard]`` -- apples, oranges and lemons every day, each tree count
       scaled by the multiplicative ``bonus`` and floored.
+    * ``[raptor_pen]`` -- antlers every day, plus a further 10% (floored) when
+      ``have_antler_snare`` is set.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -166,6 +168,19 @@ def passive_production(
         }
         producers.append(
             PassiveProducer(name="orchard", period=DAILY, outputs=outputs)
+        )
+
+    raptor_pen = config.get("raptor_pen")
+    if raptor_pen:
+        antlers = int(raptor_pen["antlers"])
+        if raptor_pen.get("have_antler_snare"):
+            # The snare adds 10% (floored) at noon on top of the midnight run;
+            # both land within the day, so it just lifts the daily total.
+            antlers += antlers // 10
+        producers.append(
+            PassiveProducer(
+                name="raptor_pen", period=DAILY, outputs={"antlers": antlers}
+            )
         )
 
     vineyard = config.get("vineyard")
