@@ -44,6 +44,8 @@ def passive_production(
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
+    * ``[orchard]`` -- apples, oranges and lemons every day, each tree count
+      scaled by the multiplicative ``bonus`` and floored.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -149,6 +151,21 @@ def passive_production(
                 period=MINUTE,
                 outputs={"sugar cane": rate},
             )
+        )
+
+    orchard = config.get("orchard")
+    if orchard:
+        # Each tree count yields its fruit daily, scaled by the bonus and
+        # floored. The trees map to their singular fruit name.
+        bonus = float(orchard.get("bonus", 1.0))
+        fruit = {"apple_trees": "apple", "orange_trees": "orange", "lemon_trees": "lemon"}
+        outputs = {
+            name: int(orchard[trees] * bonus)
+            for trees, name in fruit.items()
+            if trees in orchard
+        }
+        producers.append(
+            PassiveProducer(name="orchard", period=DAILY, outputs=outputs)
         )
 
     vineyard = config.get("vineyard")

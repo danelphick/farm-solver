@@ -98,6 +98,34 @@ def test_passive_production_reads_trout_bait_farm_with_two_cadences():
     assert trout.outputs == {"trout": 25000}
 
 
+def test_passive_production_reads_orchard_with_bonus():
+    # Each tree count is scaled by the multiplicative bonus and floored:
+    # 6162 * 1.3 = 8010.6 -> 8010, etc.
+    production = passive_production(
+        {
+            "orchard": {
+                "apple_trees": 6162,
+                "orange_trees": 6175,
+                "lemon_trees": 6165,
+                "bonus": 1.3,
+            }
+        }
+    )
+    orchard = production.producers[0]
+    assert orchard.name == "orchard"
+    assert orchard.period == DAILY
+    assert orchard.outputs == {
+        "apple": 8010,
+        "orange": 8027,
+        "lemon": 8014,
+    }
+
+
+def test_orchard_without_bonus_is_one_to_one():
+    production = passive_production({"orchard": {"apple_trees": 100}})
+    assert production.producers[0].outputs == {"apple": 100}
+
+
 def test_passive_production_reads_vineyard_grapes_daily():
     production = passive_production({"vineyard": {"grapes": 43000}})
     grapes = production.producers[0]
