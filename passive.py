@@ -67,8 +67,12 @@ class PassiveProduction:
     def time_to_produce(self, item: str, quantity: int) -> timedelta | None:
         """Time to passively generate ``quantity`` of ``item``.
 
-        Production happens in whole cycles, so the wait is rounded up to a whole
-        number of the producer's periods -- you cannot collect part of a cycle.
+        With a single producer the wait is rounded up to a whole number of its
+        periods, since production arrives in whole cycles and you cannot collect
+        part of one. When several producers make the item (e.g. the main run
+        plus an offset bonus deposit like the raptor snare or orchard shaker),
+        the wait falls back to their combined rate and is *not* clamped to a
+        whole cycle -- so such items can report a fraction of a period.
         Returns ``None`` when nothing produces the item.
         """
         key = item.lower()
@@ -85,8 +89,10 @@ class PassiveProduction:
             if per_cycle <= 0:
                 return None
             return math.ceil(quantity / per_cycle) * producer.period
-        # Several producers make it on different cadences; fall back to the
-        # combined rate without clamping to a single period.
+        # Several producers make it, possibly on different cadences; fall back
+        # to the combined rate. There is no single period to round up to here,
+        # so unlike the single-producer case the result is not clamped to a
+        # whole cycle and may show a fraction of a period.
         rate = self.rate_per_minute(item)
         if rate <= 0:
             return None
