@@ -43,6 +43,7 @@ def passive_production(
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
+    * ``[vineyard]`` -- grapes every day.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -105,6 +106,16 @@ def passive_production(
                     outputs={"trout": int(trout_bait_farm["trout"])},
                 )
             )
+
+    vineyard = config.get("vineyard")
+    if vineyard:
+        producers.append(
+            PassiveProducer(
+                name="vineyard",
+                period=DAILY,
+                outputs={"grapes": int(vineyard["grapes"])},
+            )
+        )
 
     hay_field = config.get("hay_field")
     if hay_field:

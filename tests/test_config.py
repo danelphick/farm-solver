@@ -96,6 +96,14 @@ def test_passive_production_reads_trout_bait_farm_with_two_cadences():
     assert trout.outputs == {"trout": 25000}
 
 
+def test_passive_production_reads_vineyard_grapes_daily():
+    production = passive_production({"vineyard": {"grapes": 43000}})
+    grapes = production.producers[0]
+    assert grapes.name == "vineyard"
+    assert grapes.period == DAILY
+    assert grapes.outputs == {"grapes": 43000}
+
+
 def test_passive_production_reads_hay_field_as_straw():
     # The hay_field section reports straw produced every ten minutes.
     production = passive_production({"hay_field": {"hay": 30000}})

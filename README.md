@@ -90,6 +90,9 @@ trout = 25000
 grubs = 7000
 minnows = 6000
 
+[vineyard]    # grapes daily
+grapes = 43000
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 
