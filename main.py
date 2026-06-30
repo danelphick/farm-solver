@@ -155,10 +155,10 @@ def run(args: argparse.Namespace) -> int:
     state = load_state(args.masteries, args.inventory)
 
     if args.mastery is not None:
-        goals = farm_solver.parse_item_amounts(args.mastery)
+        goals = parsing.parse_item_amounts(args.mastery)
         solution = farm_solver.solve_mastery(state, goals)
     elif args.items is not None:
-        goals = farm_solver.parse_item_amounts(args.items)
+        goals = parsing.parse_item_amounts(args.items)
         solution = farm_solver.solve_acquire(state, goals)
     else:
         requirements = farm_solver.load_tower_requirements(args.tower)

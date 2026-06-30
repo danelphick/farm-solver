@@ -1,6 +1,6 @@
 import textwrap
 
-from farm_solver import parse_tower_requirements
+from parsing import parse_tower_requirements
 
 # level, item, mastery quantity. Levels below 201 carry no mastery requirement.
 SAMPLE = textwrap.dedent(

@@ -3,15 +3,13 @@
 Farm Solver works out the cheapest way to spend resources (Arnold Palmers and
 Large Nets) to reach the mastery levels needed to climb the tower in FarmRPG.
 
-This module holds the data model and the solver entry points. The functions are
-currently skeletons: they parse/validate their inputs and raise
-``NotImplementedError`` where the real algorithm still needs to be filled in.
+This module holds the data model (masteries, inventory, tower requirements) and
+the solver entry points. Text parsing lives in :mod:`parsing` and the crafting
+calculations in :mod:`crafting`.
 """
 
 from __future__ import annotations
 
-import csv
-import io
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -156,61 +154,12 @@ class Solution:
 DEFAULT_TOWER_PATH = Path(__file__).with_name("tower.csv")
 
 
-def parse_tower_requirements(text: str) -> TowerRequirements:
-    """Parse a tower-requirements CSV into a TowerRequirements.
-
-    Each row is ``level, item, mastery quantity``. The first line may be an
-    optional header. Mastery requirements only start at level 201, so rows
-    without an item and quantity (e.g. lower levels) are ignored.
-    """
-    rows = list(csv.reader(io.StringIO(text)))
-    # Drop an optional header: a first row whose level column isn't a number.
-    if rows and rows[0] and not rows[0][0].strip().isdigit():
-        rows = rows[1:]
-
-    levels: dict[int, dict[str, int]] = {}
-    for row in rows:
-        if not row or not row[0].strip():
-            continue
-        if len(row) < 3:
-            continue  # no mastery requirement on this row
-        item = row[1].strip()
-        # A comma-grouped quantity (e.g. 1,000,000) is split across the trailing
-        # columns by the CSV reader; rejoin them before stripping the commas.
-        quantity_str = "".join(cell.strip() for cell in row[2:]).replace(",", "")
-        if not item or not quantity_str:
-            continue
-        level = int(row[0].strip())
-        quantity = int(quantity_str)
-        levels.setdefault(level, {})[item] = quantity
-
-    return TowerRequirements(levels=levels)
-
-
 def load_tower_requirements(path: Path | None = None) -> TowerRequirements:
     """Load tower requirements from ``path``, or the bundled file if None."""
+    from parsing import parse_tower_requirements
+
     source = path if path is not None else DEFAULT_TOWER_PATH
     return parse_tower_requirements(source.read_text())
-
-
-def parse_item_amounts(spec: str) -> dict[str, int]:
-    """Parse a ``"item:amount,item:amount"`` spec into a mapping.
-
-    Used by both the ``-i`` (acquire) and ``-m`` (master) options.
-    """
-    result: dict[str, int] = {}
-    for chunk in spec.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        item, sep, amount = chunk.rpartition(":")
-        if not sep:
-            raise ValueError(f"expected 'item:amount', got {chunk!r}")
-        try:
-            result[item.strip()] = int(amount)
-        except ValueError as exc:
-            raise ValueError(f"invalid amount in {chunk!r}") from exc
-    return result
 
 
 def solve_tower(

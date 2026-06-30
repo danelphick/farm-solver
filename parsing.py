@@ -2,15 +2,23 @@
 
 FarmRPG lets you copy your mastery and inventory screens as plain text. Both are
 laid out as blocks of lines separated by blank lines. This module turns those
-pastes into the data model defined in :mod:`farm_solver`.
+pastes (and the bundled tower CSV) into the data model defined in
+:mod:`farm_solver`.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 
 from crafting import Workshop, WorkshopRecipe
-from farm_solver import Inventory, InventoryItem, Mastery
+from farm_solver import (
+    Inventory,
+    InventoryItem,
+    Mastery,
+    TowerRequirements,
+)
 
 
 def _split_blocks(text: str) -> list[list[str]]:
@@ -173,3 +181,60 @@ def parse_workshop(text: str) -> Workshop:
         if recipe is not None:
             workshop.recipes[recipe.name.lower()] = recipe
     return workshop
+
+
+# --- Tower -----------------------------------------------------------------
+
+
+def parse_tower_requirements(text: str) -> TowerRequirements:
+    """Parse a tower-requirements CSV into a TowerRequirements.
+
+    Each row is ``level, item, mastery quantity``. The first line may be an
+    optional header. Mastery requirements only start at level 201, so rows
+    without an item and quantity (e.g. lower levels) are ignored.
+    """
+    rows = list(csv.reader(io.StringIO(text)))
+    # Drop an optional header: a first row whose level column isn't a number.
+    if rows and rows[0] and not rows[0][0].strip().isdigit():
+        rows = rows[1:]
+
+    levels: dict[int, dict[str, int]] = {}
+    for row in rows:
+        if not row or not row[0].strip():
+            continue
+        if len(row) < 3:
+            continue  # no mastery requirement on this row
+        item = row[1].strip()
+        # A comma-grouped quantity (e.g. 1,000,000) is split across the trailing
+        # columns by the CSV reader; rejoin them before stripping the commas.
+        quantity_str = "".join(cell.strip() for cell in row[2:]).replace(",", "")
+        if not item or not quantity_str:
+            continue
+        level = int(row[0].strip())
+        quantity = int(quantity_str)
+        levels.setdefault(level, {})[item] = quantity
+
+    return TowerRequirements(levels=levels)
+
+
+# --- Item specs ------------------------------------------------------------
+
+
+def parse_item_amounts(spec: str) -> dict[str, int]:
+    """Parse a ``"item:amount,item:amount"`` spec into a mapping.
+
+    Used by both the ``-i`` (acquire) and ``-m`` (master) options.
+    """
+    result: dict[str, int] = {}
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        item, sep, amount = chunk.rpartition(":")
+        if not sep:
+            raise ValueError(f"expected 'item:amount', got {chunk!r}")
+        try:
+            result[item.strip()] = int(amount)
+        except ValueError as exc:
+            raise ValueError(f"invalid amount in {chunk!r}") from exc
+    return result
