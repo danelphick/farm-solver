@@ -1,6 +1,8 @@
 import textwrap
 from datetime import date, timedelta
 
+import pytest
+
 from config import load_config, passive_production, storehouse_size
 from passive import DAILY, HOURLY, MINUTE
 
@@ -128,6 +130,40 @@ def test_feed_mill_produces_one_a_minute_by_default():
 def test_feed_boost_doubles_feed():
     production = passive_production({"feed_mill": {"have_feed_boost": True}})
     assert production.producers[0].outputs == {"feed": 2}
+
+
+def test_sugar_cane_mill_produces_one_a_minute_by_default():
+    production = passive_production({"sugar_cane_mill": {}})
+    mill = production.producers[0]
+    assert mill.name == "sugar_cane_mill"
+    assert mill.period == MINUTE
+    assert mill.outputs == {"sugar cane": 1}
+
+
+def test_sugar_boost_i_doubles_to_two():
+    production = passive_production(
+        {"sugar_cane_mill": {"have_sugar_boost_i": True}}
+    )
+    assert production.producers[0].outputs == {"sugar cane": 2}
+
+
+def test_sugar_boost_ii_quadruples_to_four():
+    production = passive_production(
+        {
+            "sugar_cane_mill": {
+                "have_sugar_boost_i": True,
+                "have_sugar_boost_ii": True,
+            }
+        }
+    )
+    assert production.producers[0].outputs == {"sugar cane": 4}
+
+
+def test_sugar_boost_ii_without_i_is_an_error():
+    with pytest.raises(ValueError):
+        passive_production(
+            {"sugar_cane_mill": {"have_sugar_boost_ii": True}}
+        )
 
 
 def test_passive_production_reads_hay_field_as_straw():

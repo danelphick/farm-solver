@@ -99,6 +99,10 @@ have_flour_power = true
 [feed_mill]    # one feed a minute, two with the feed boost
 have_feed_boost = true
 
+[sugar_cane_mill]    # one sugar cane a minute, 2 with boost I, 4 with boost II
+have_sugar_boost_i = true
+have_sugar_boost_ii = true
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 

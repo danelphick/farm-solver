@@ -47,6 +47,9 @@ def passive_production(
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
+    * ``[sugar_cane_mill]`` -- one sugar cane a minute, doubling with each of
+      ``have_sugar_boost_i`` then ``have_sugar_boost_ii`` (1 -> 2 -> 4). Boost
+      II without boost I is an error.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -127,6 +130,24 @@ def passive_production(
         producers.append(
             PassiveProducer(
                 name="feed_mill", period=MINUTE, outputs={"feed": rate}
+            )
+        )
+
+    sugar_cane_mill = config.get("sugar_cane_mill")
+    if sugar_cane_mill is not None:
+        boost_i = bool(sugar_cane_mill.get("have_sugar_boost_i"))
+        boost_ii = bool(sugar_cane_mill.get("have_sugar_boost_ii"))
+        if boost_ii and not boost_i:
+            raise ValueError(
+                "sugar_cane_mill: have_sugar_boost_ii requires have_sugar_boost_i"
+            )
+        # One sugar cane a minute, doubling with each boost: 1 -> 2 -> 4.
+        rate = 4 if boost_ii else 2 if boost_i else 1
+        producers.append(
+            PassiveProducer(
+                name="sugar_cane_mill",
+                period=MINUTE,
+                outputs={"sugar cane": rate},
             )
         )
 
