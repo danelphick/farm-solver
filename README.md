@@ -68,13 +68,23 @@ Required Crafts:
 
 ## Passive production
 
-Some buildings generate items on a fixed cadence (every ten minutes, hourly, or daily) without crafting. These are described in `config.toml` — for now the `[sawmill]` section, whose values are the quantities produced each hour:
+Some buildings generate items on a fixed cadence (every ten minutes or hourly) without crafting. These are described in `config.toml`:
 
 ```toml
-[sawmill]
+[sawmill]      # hourly
 wood = 46000
 board = 60000
 oak = 6000
+
+[hay_field]    # straw every ten minutes
+hay = 30000
+
+[quarry]       # stone every ten minutes, coal hourly
+stone = 8000
+coal = 8000
+
+[steelworks]   # steel hourly, plus steel wire at a third of that (rounded down)
+steel = 10296
 ```
 
 When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Because producers run concurrently, the total time is the longest single wait, not the sum:

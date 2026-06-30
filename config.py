@@ -12,7 +12,12 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from passive import HOURLY, PassiveProducer, PassiveProduction
+from passive import (
+    HOURLY,
+    TEN_MINUTES,
+    PassiveProducer,
+    PassiveProduction,
+)
 
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
@@ -29,10 +34,17 @@ def passive_production(
 ) -> PassiveProduction:
     """Build the passive producers described by ``config``.
 
-    For now only the hourly ``[sawmill]`` section is read; its keys are item
-    names and its values the quantity produced each hour. The storehouse size
-    (see :func:`storehouse_size`) is attached so production rates respect how
-    much can be held at once.
+    Each building has its own cadence and outputs:
+
+    * ``[sawmill]`` -- hourly; its keys are item names and values the hourly
+      quantity.
+    * ``[hay_field]`` -- straw every ten minutes.
+    * ``[quarry]`` -- stone every ten minutes and coal every hour.
+    * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
+      (rounded down).
+
+    The storehouse size (see :func:`storehouse_size`) is attached so production
+    rates respect how much can be held at once.
     """
     producers: list[PassiveProducer] = []
 
@@ -41,6 +53,46 @@ def passive_production(
         outputs = {item.lower(): int(qty) for item, qty in sawmill.items()}
         producers.append(
             PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
+        )
+
+    hay_field = config.get("hay_field")
+    if hay_field:
+        producers.append(
+            PassiveProducer(
+                name="hay_field",
+                period=TEN_MINUTES,
+                outputs={"straw": int(hay_field["hay"])},
+            )
+        )
+
+    quarry = config.get("quarry")
+    if quarry:
+        if "stone" in quarry:
+            producers.append(
+                PassiveProducer(
+                    name="quarry",
+                    period=TEN_MINUTES,
+                    outputs={"stone": int(quarry["stone"])},
+                )
+            )
+        if "coal" in quarry:
+            producers.append(
+                PassiveProducer(
+                    name="quarry",
+                    period=HOURLY,
+                    outputs={"coal": int(quarry["coal"])},
+                )
+            )
+
+    steelworks = config.get("steelworks")
+    if steelworks:
+        steel = int(steelworks["steel"])
+        producers.append(
+            PassiveProducer(
+                name="steelworks",
+                period=HOURLY,
+                outputs={"steel": steel, "steel wire": steel // 3},
+            )
         )
 
     return PassiveProduction(

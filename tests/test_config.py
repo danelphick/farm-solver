@@ -39,6 +39,28 @@ def test_passive_production_lowercases_item_names():
     assert production.producers[0].outputs == {"board": 60000}
 
 
+def test_passive_production_reads_hay_field_as_straw():
+    # The hay_field section reports straw produced every ten minutes.
+    production = passive_production({"hay_field": {"hay": 30000}})
+    assert production.produces("straw")
+    assert not production.produces("hay")
+    assert production.rate_per_minute("straw") == 3000  # 30000 / 10
+
+
+def test_passive_production_reads_quarry_with_two_cadences():
+    # Stone every ten minutes, coal every hour.
+    production = passive_production({"quarry": {"stone": 8000, "coal": 8000}})
+    assert production.rate_per_minute("stone") == 800  # 8000 / 10
+    assert production.rate_per_minute("coal") == 8000 / 60  # hourly
+
+
+def test_passive_production_reads_steelworks_with_derived_wire():
+    # Steel hourly, steel wire at a third of that, rounded down.
+    production = passive_production({"steelworks": {"steel": 100}})
+    assert production.rate_per_minute("steel") == 100 / 60
+    assert production.rate_per_minute("steel wire") == 33 / 60  # 100 // 3
+
+
 def test_passive_production_attaches_storehouse_size():
     config = {
         "sawmill": {"board": 60000},
