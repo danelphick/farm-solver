@@ -1,9 +1,5 @@
-from farm_solver import (
-    ItemNeed,
-    Workshop,
-    WorkshopRecipe,
-    required_materials,
-)
+from crafting import Workshop, WorkshopRecipe, required_materials
+from farm_solver import ItemNeed
 
 WORKSHOP = Workshop(
     recipes={

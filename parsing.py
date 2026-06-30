@@ -9,13 +9,8 @@ from __future__ import annotations
 
 import re
 
-from farm_solver import (
-    Inventory,
-    InventoryItem,
-    Mastery,
-    Workshop,
-    WorkshopRecipe,
-)
+from crafting import Workshop, WorkshopRecipe
+from farm_solver import Inventory, InventoryItem, Mastery
 
 
 def _split_blocks(text: str) -> list[list[str]]:

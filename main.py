@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import crafting
 import farm_solver
 import parsing
 
@@ -53,21 +54,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--crafting-bonus",
         type=float,
-        default=farm_solver.DEFAULT_CRAFTING_BONUS,
+        default=crafting.DEFAULT_CRAFTING_BONUS,
         metavar="NUM",
         help=(
             "average items produced per craft, reducing the materials needed "
-            f"(default: {farm_solver.DEFAULT_CRAFTING_BONUS})"
+            f"(default: {crafting.DEFAULT_CRAFTING_BONUS})"
         ),
     )
     parser.add_argument(
         "--mastery-bonus",
         type=float,
-        default=farm_solver.DEFAULT_MASTERY_BONUS,
+        default=crafting.DEFAULT_MASTERY_BONUS,
         metavar="NUM",
         help=(
             "mastery gained per crafted item, reducing the crafts needed for "
-            f"mastery goals (default: {farm_solver.DEFAULT_MASTERY_BONUS})"
+            f"mastery goals (default: {crafting.DEFAULT_MASTERY_BONUS})"
         ),
     )
     parser.add_argument(
@@ -137,7 +138,7 @@ def print_materials(materials: dict[str, int]) -> None:
         print(f"  {materials[material]:,}x {material}")
 
 
-def print_breakdown(steps: list[farm_solver.CraftStep]) -> None:
+def print_breakdown(steps: list[crafting.CraftStep]) -> None:
     if not steps:
         return
     print("\nRequired Crafts:")
@@ -165,8 +166,8 @@ def run(args: argparse.Namespace) -> int:
 
     print_solution(solution)
 
-    workshop = farm_solver.load_workshop()
-    materials = farm_solver.required_materials(
+    workshop = crafting.load_workshop()
+    materials = crafting.required_materials(
         solution.needs,
         workshop,
         args.crafting_bonus,
@@ -176,7 +177,7 @@ def run(args: argparse.Namespace) -> int:
     print_materials(materials)
 
     if args.breakdown:
-        steps = farm_solver.craft_breakdown(
+        steps = crafting.craft_breakdown(
             solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
         )
         print_breakdown(steps)

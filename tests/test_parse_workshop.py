@@ -1,6 +1,6 @@
 import textwrap
 
-from farm_solver import WorkshopRecipe
+from crafting import WorkshopRecipe
 from parsing import parse_workshop
 
 SAMPLE = textwrap.dedent(
