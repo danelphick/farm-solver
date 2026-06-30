@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 # Cadences at which the game tops up passive producers.
+MINUTE = timedelta(minutes=1)
 TEN_MINUTES = timedelta(minutes=10)
 HOURLY = timedelta(hours=1)
 DAILY = timedelta(days=1)

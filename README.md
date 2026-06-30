@@ -93,6 +93,12 @@ minnows = 6000
 [vineyard]    # grapes daily
 grapes = 43000
 
+[flour_mill]    # one flour a minute, two with flour power
+have_flour_power = true
+
+[feed_mill]    # one feed a minute, two with the feed boost
+have_feed_boost = true
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 

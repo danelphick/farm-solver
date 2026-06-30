@@ -2,7 +2,7 @@ import textwrap
 from datetime import date, timedelta
 
 from config import load_config, passive_production, storehouse_size
-from passive import DAILY, HOURLY
+from passive import DAILY, HOURLY, MINUTE
 
 
 def test_load_config_reads_toml(tmp_path):
@@ -102,6 +102,32 @@ def test_passive_production_reads_vineyard_grapes_daily():
     assert grapes.name == "vineyard"
     assert grapes.period == DAILY
     assert grapes.outputs == {"grapes": 43000}
+
+
+def test_flour_mill_produces_one_a_minute_by_default():
+    production = passive_production({"flour_mill": {}})
+    mill = production.producers[0]
+    assert mill.name == "flour_mill"
+    assert mill.period == MINUTE
+    assert mill.outputs == {"flour": 1}
+
+
+def test_flour_power_doubles_flour():
+    production = passive_production({"flour_mill": {"have_flour_power": True}})
+    assert production.producers[0].outputs == {"flour": 2}
+
+
+def test_feed_mill_produces_one_a_minute_by_default():
+    production = passive_production({"feed_mill": {}})
+    mill = production.producers[0]
+    assert mill.name == "feed_mill"
+    assert mill.period == MINUTE
+    assert mill.outputs == {"feed": 1}
+
+
+def test_feed_boost_doubles_feed():
+    production = passive_production({"feed_mill": {"have_feed_boost": True}})
+    assert production.producers[0].outputs == {"feed": 2}
 
 
 def test_passive_production_reads_hay_field_as_straw():

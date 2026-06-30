@@ -15,6 +15,7 @@ from typing import Any
 from passive import (
     DAILY,
     HOURLY,
+    MINUTE,
     TEN_MINUTES,
     PassiveProducer,
     PassiveProduction,
@@ -44,6 +45,8 @@ def passive_production(
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
     * ``[vineyard]`` -- grapes every day.
+    * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
+    * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -106,6 +109,26 @@ def passive_production(
                     outputs={"trout": int(trout_bait_farm["trout"])},
                 )
             )
+
+    flour_mill = config.get("flour_mill")
+    if flour_mill is not None:
+        # One flour a minute, doubled with flour power.
+        rate = 2 if flour_mill.get("have_flour_power") else 1
+        producers.append(
+            PassiveProducer(
+                name="flour_mill", period=MINUTE, outputs={"flour": rate}
+            )
+        )
+
+    feed_mill = config.get("feed_mill")
+    if feed_mill is not None:
+        # One feed a minute, doubled with the feed boost.
+        rate = 2 if feed_mill.get("have_feed_boost") else 1
+        producers.append(
+            PassiveProducer(
+                name="feed_mill", period=MINUTE, outputs={"feed": rate}
+            )
+        )
 
     vineyard = config.get("vineyard")
     if vineyard:
