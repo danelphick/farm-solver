@@ -95,6 +95,7 @@ apple_trees = 6162
 orange_trees = 6175
 lemon_trees = 6165
 bonus = 1.3
+have_tree_shaker = true    # separate 10% deposit of each fruit, like the snare
 
 [raptor_pen]    # antlers daily, plus a separate 10% deposit with the snare
 antlers = 2617810

@@ -126,6 +126,27 @@ def test_orchard_without_bonus_is_one_to_one():
     assert production.producers[0].outputs == {"apple": 100}
 
 
+def test_tree_shaker_is_a_separate_offset_producer():
+    # Like the antler snare, the shaker's 10% of each fruit (floored) is a
+    # separate daily producer with its own storehouse-cap window.
+    production = passive_production(
+        {
+            "orchard": {
+                "apple_trees": 6162,
+                "orange_trees": 6175,
+                "lemon_trees": 6165,
+                "bonus": 1.3,
+                "have_tree_shaker": True,
+            }
+        }
+    )
+    main = next(p for p in production.producers if p.name == "orchard")
+    shaker = next(p for p in production.producers if p.name == "orchard_shaker")
+    assert main.outputs == {"apple": 8010, "orange": 8027, "lemon": 8014}
+    assert shaker.period == DAILY
+    assert shaker.outputs == {"apple": 801, "orange": 802, "lemon": 801}
+
+
 def test_passive_production_reads_raptor_pen():
     production = passive_production({"raptor_pen": {"antlers": 2617810}})
     pen = production.producers[0]

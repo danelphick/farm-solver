@@ -45,7 +45,9 @@ def passive_production(
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
     * ``[orchard]`` -- apples, oranges and lemons every day, each tree count
-      scaled by the multiplicative ``bonus`` and floored.
+      scaled by the multiplicative ``bonus`` and floored; with
+      ``have_tree_shaker`` a separate daily deposit adds a further 10%
+      (floored) of each fruit twelve hours later, like the raptor snare.
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
       so that extra is not lost to the storehouse cap of the main run.
@@ -170,6 +172,17 @@ def passive_production(
         producers.append(
             PassiveProducer(name="orchard", period=DAILY, outputs=outputs)
         )
+        if orchard.get("have_tree_shaker"):
+            # Like the raptor snare, the shaker adds 10% (floored) of each
+            # fruit at noon, twelve hours after the main run. A separate daily
+            # producer gives it its own storehouse-cap window.
+            producers.append(
+                PassiveProducer(
+                    name="orchard_shaker",
+                    period=DAILY,
+                    outputs={name: qty // 10 for name, qty in outputs.items()},
+                )
+            )
 
     raptor_pen = config.get("raptor_pen")
     if raptor_pen:
