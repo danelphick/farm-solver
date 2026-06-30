@@ -114,6 +114,9 @@ have_tree_shaker = true    # separate 10% deposit of each fruit, like the snare
 antlers = 2617810
 have_antler_snare = true
 
+[cow_pasture]    # milk daily
+milk = 5000
+
 [vineyard]    # grapes daily
 grapes = 43000
 

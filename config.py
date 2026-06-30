@@ -52,6 +52,7 @@ def passive_production(
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
       so that extra is not lost to the storehouse cap of the main run.
+    * ``[cow_pasture]`` -- milk every day.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -222,6 +223,16 @@ def passive_production(
                     outputs={"antler": antlers // 10},
                 )
             )
+
+    cow_pasture = config.get("cow_pasture")
+    if cow_pasture:
+        producers.append(
+            PassiveProducer(
+                name="cow_pasture",
+                period=DAILY,
+                outputs={"milk": int(cow_pasture["milk"])},
+            )
+        )
 
     vineyard = config.get("vineyard")
     if vineyard:

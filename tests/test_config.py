@@ -204,6 +204,14 @@ def test_antler_snare_is_a_separate_offset_producer():
     assert snare.outputs == {"antler": 261781}
 
 
+def test_passive_production_reads_cow_pasture_milk_daily():
+    production = passive_production({"cow_pasture": {"milk": 5000}})
+    milk = production.producers[0]
+    assert milk.name == "cow_pasture"
+    assert milk.period == DAILY
+    assert milk.outputs == {"milk": 5000}
+
+
 def test_passive_production_reads_vineyard_grapes_daily():
     production = passive_production({"vineyard": {"grapes": 43000}})
     grapes = production.producers[0]

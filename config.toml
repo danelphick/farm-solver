@@ -14,6 +14,9 @@ have_sturdy_saw = true
 produces = 18271
 completed_starmap = true
 
+[cow_pasture]
+milk = 16650
+
 [worm_habitat]
 worms = 10000
 gummy_worms = 4000
