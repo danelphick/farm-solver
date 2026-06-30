@@ -131,7 +131,7 @@ def test_passive_production_reads_raptor_pen():
     pen = production.producers[0]
     assert pen.name == "raptor_pen"
     assert pen.period == DAILY
-    assert pen.outputs == {"antlers": 2617810}
+    assert pen.outputs == {"antler": 2617810}
 
 
 def test_antler_snare_adds_ten_percent_floored():
@@ -139,7 +139,7 @@ def test_antler_snare_adds_ten_percent_floored():
     production = passive_production(
         {"raptor_pen": {"antlers": 2617810, "have_antler_snare": True}}
     )
-    assert production.producers[0].outputs == {"antlers": 2879591}
+    assert production.producers[0].outputs == {"antler": 2879591}
 
 
 def test_passive_production_reads_vineyard_grapes_daily():

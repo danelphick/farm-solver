@@ -179,7 +179,7 @@ def passive_production(
             antlers += antlers // 10
         producers.append(
             PassiveProducer(
-                name="raptor_pen", period=DAILY, outputs={"antlers": antlers}
+                name="raptor_pen", period=DAILY, outputs={"antler": antlers}
             )
         )
 
