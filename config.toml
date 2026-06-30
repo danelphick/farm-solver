@@ -22,6 +22,11 @@ apple_trees = 6162
 orange_trees = 6175
 lemon_trees = 6165
 bonus = 1.3
+have_tree_shaker = true
+
+[raptor_pen]
+antlers = 2617810
+have_antler_snare = true
 
 [trout_bait_farm]
 trout = 25000
@@ -50,3 +55,6 @@ have_feed_boost = true
 [sugar_cane_mill]
 have_sugar_boost_i = true
 have_sugar_boost_ii = true
+
+[ironworks]
+have_iron_depot = true
