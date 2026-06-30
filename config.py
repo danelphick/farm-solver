@@ -42,6 +42,7 @@ def passive_production(
     * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
+    * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -82,6 +83,28 @@ def passive_production(
                 name="worm_habitat", period=HOURLY, outputs=outputs
             )
         )
+
+    trout_bait_farm = config.get("trout_bait_farm")
+    if trout_bait_farm:
+        hourly = {
+            item.lower(): int(qty)
+            for item, qty in trout_bait_farm.items()
+            if item.lower() in ("grubs", "minnows")
+        }
+        if hourly:
+            producers.append(
+                PassiveProducer(
+                    name="trout_bait_farm", period=HOURLY, outputs=hourly
+                )
+            )
+        if "trout" in trout_bait_farm:
+            producers.append(
+                PassiveProducer(
+                    name="trout_bait_farm",
+                    period=DAILY,
+                    outputs={"trout": int(trout_bait_farm["trout"])},
+                )
+            )
 
     hay_field = config.get("hay_field")
     if hay_field:

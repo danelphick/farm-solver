@@ -85,6 +85,17 @@ def test_passive_production_reads_worm_habitat():
     }
 
 
+def test_passive_production_reads_trout_bait_farm_with_two_cadences():
+    # Grubs and minnows hourly, trout daily.
+    production = passive_production(
+        {"trout_bait_farm": {"trout": 25000, "grubs": 7000, "minnows": 6000}}
+    )
+    bait = next(p for p in production.producers if p.period == HOURLY)
+    assert bait.outputs == {"grubs": 7000, "minnows": 6000}
+    trout = next(p for p in production.producers if p.period == DAILY)
+    assert trout.outputs == {"trout": 25000}
+
+
 def test_passive_production_reads_hay_field_as_straw():
     # The hay_field section reports straw produced every ten minutes.
     production = passive_production({"hay_field": {"hay": 30000}})

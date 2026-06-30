@@ -85,6 +85,11 @@ worms = 10000
 gummy_worms = 4000
 mealworms = 4000
 
+[trout_bait_farm]    # grubs and minnows hourly, trout daily
+trout = 25000
+grubs = 7000
+minnows = 6000
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 
