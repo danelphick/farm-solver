@@ -26,13 +26,31 @@ def test_load_config_reads_toml(tmp_path):
 def test_passive_production_reads_sawmill():
     config = {"sawmill": {"wood": 46000, "board": 60000, "oak": 6000}}
     production = passive_production(config)
-    assert len(production.producers) == 1
-    sawmill = production.producers[0]
-    assert sawmill.name == "sawmill"
-    assert sawmill.period == HOURLY
-    assert sawmill.outputs == {"wood": 46000, "board": 60000, "oak": 6000}
+    hourly = next(p for p in production.producers if p.period == HOURLY)
+    assert hourly.name == "sawmill"
+    assert hourly.outputs == {"wood": 46000, "board": 60000, "oak": 6000}
     # The built production answers timing queries.
     assert production.time_to_produce("board", 60000) == timedelta(hours=1)
+
+
+def test_sawmill_makes_pine_board_a_minute_at_a_time():
+    production = passive_production({"sawmill": {"wood": 46000}})
+    pine = next(p for p in production.producers if "pine board" in p.outputs)
+    assert pine.period == MINUTE
+    assert pine.outputs == {"pine board": 1}
+    # The boost flag is not turned into an hourly output of its own.
+    hourly = next(p for p in production.producers if p.period == HOURLY)
+    assert hourly.outputs == {"wood": 46000}
+
+
+def test_pine_boost_doubles_pine_board():
+    production = passive_production(
+        {"sawmill": {"wood": 46000, "have_pine_boost": True}}
+    )
+    pine = next(p for p in production.producers if "pine board" in p.outputs)
+    assert pine.outputs == {"pine board": 2}
+    hourly = next(p for p in production.producers if p.period == HOURLY)
+    assert hourly.outputs == {"wood": 46000}  # boost flag excluded
 
 
 def test_passive_production_lowercases_item_names():

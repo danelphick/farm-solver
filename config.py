@@ -38,8 +38,9 @@ def passive_production(
 
     Each building has its own cadence and outputs:
 
-    * ``[sawmill]`` -- hourly; its keys are item names and values the hourly
-      quantity.
+    * ``[sawmill]`` -- hourly; its numeric keys are item names and values the
+      hourly quantity. It also makes pine board a minute at a time, doubled
+      with ``have_pine_boost``.
     * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
@@ -69,9 +70,23 @@ def passive_production(
 
     sawmill = config.get("sawmill")
     if sawmill:
-        outputs = {item.lower(): int(qty) for item, qty in sawmill.items()}
+        # The hourly outputs are the numeric entries; flags like
+        # have_pine_boost are handled separately below.
+        outputs = {
+            item.lower(): int(qty)
+            for item, qty in sawmill.items()
+            if not isinstance(qty, bool)
+        }
         producers.append(
             PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
+        )
+        # Pine board comes off the sawmill a minute at a time, like the flour
+        # and feed mills, doubled with the pine boost.
+        rate = 2 if sawmill.get("have_pine_boost") else 1
+        producers.append(
+            PassiveProducer(
+                name="sawmill", period=MINUTE, outputs={"pine board": rate}
+            )
         )
 
     chicken_coop = config.get("chicken_coop")

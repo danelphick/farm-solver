@@ -71,10 +71,11 @@ Required Crafts:
 Some buildings generate items on a fixed cadence (every ten minutes or hourly) without crafting. These are described in `config.toml`:
 
 ```toml
-[sawmill]      # hourly
+[sawmill]      # wood/board/oak hourly; pine board one a minute
 wood = 46000
 board = 60000
 oak = 6000
+have_pine_boost = true    # two pine board a minute instead of one
 
 [chicken_coop]              # eggs and feathers daily
 produces = 18271
