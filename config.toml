@@ -58,9 +58,6 @@ have_feed_boost = true
 have_sugar_boost_i = true
 have_sugar_boost_ii = true
 
-[ironworks]
-have_iron_depot = true
-
 [fishing]
 have_reinforced_netting = true
 have_fishing_trawl = true
