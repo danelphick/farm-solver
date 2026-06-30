@@ -96,7 +96,7 @@ orange_trees = 6175
 lemon_trees = 6165
 bonus = 1.3
 
-[raptor_pen]    # antlers daily, plus 10% more with the antler snare
+[raptor_pen]    # antlers daily, plus a separate 10% deposit with the snare
 antlers = 2617810
 have_antler_snare = true
 

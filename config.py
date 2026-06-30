@@ -46,8 +46,9 @@ def passive_production(
     * ``[trout_bait_farm]`` -- grubs and minnows every hour, trout every day.
     * ``[orchard]`` -- apples, oranges and lemons every day, each tree count
       scaled by the multiplicative ``bonus`` and floored.
-    * ``[raptor_pen]`` -- antlers every day, plus a further 10% (floored) when
-      ``have_antler_snare`` is set.
+    * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
+      a separate daily deposit of a further 10% (floored) twelve hours later,
+      so that extra is not lost to the storehouse cap of the main run.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -173,15 +174,23 @@ def passive_production(
     raptor_pen = config.get("raptor_pen")
     if raptor_pen:
         antlers = int(raptor_pen["antlers"])
-        if raptor_pen.get("have_antler_snare"):
-            # The snare adds 10% (floored) at noon on top of the midnight run;
-            # both land within the day, so it just lifts the daily total.
-            antlers += antlers // 10
         producers.append(
             PassiveProducer(
                 name="raptor_pen", period=DAILY, outputs={"antler": antlers}
             )
         )
+        if raptor_pen.get("have_antler_snare"):
+            # The snare adds 10% (floored) at noon, twelve hours after the
+            # midnight run. It is a separate daily producer so it gets its own
+            # storehouse-cap window rather than being voided alongside the
+            # (much larger) main deposit.
+            producers.append(
+                PassiveProducer(
+                    name="raptor_pen_snare",
+                    period=DAILY,
+                    outputs={"antler": antlers // 10},
+                )
+            )
 
     vineyard = config.get("vineyard")
     if vineyard:

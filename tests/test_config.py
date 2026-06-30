@@ -134,12 +134,18 @@ def test_passive_production_reads_raptor_pen():
     assert pen.outputs == {"antler": 2617810}
 
 
-def test_antler_snare_adds_ten_percent_floored():
-    # 2617810 + 2617810 // 10 = 2617810 + 261781 = 2879591.
+def test_antler_snare_is_a_separate_offset_producer():
+    # The snare's 10% (2617810 // 10 = 261781) is a separate daily producer so
+    # it gets its own storehouse-cap window twelve hours after the main run.
     production = passive_production(
         {"raptor_pen": {"antlers": 2617810, "have_antler_snare": True}}
     )
-    assert production.producers[0].outputs == {"antler": 2879591}
+    main = next(p for p in production.producers if p.name == "raptor_pen")
+    snare = next(p for p in production.producers if p.name == "raptor_pen_snare")
+    assert main.period == DAILY
+    assert main.outputs == {"antler": 2617810}
+    assert snare.period == DAILY
+    assert snare.outputs == {"antler": 261781}
 
 
 def test_passive_production_reads_vineyard_grapes_daily():
