@@ -75,6 +75,7 @@ Some buildings generate items on a fixed cadence (every ten minutes or hourly) w
 wood = 46000
 board = 60000
 oak = 6000
+have_sturdy_saw = true    # oak is only produced with the sturdy saw
 have_pine_boost = true    # two pine board a minute instead of one
 
 [chicken_coop]              # eggs and feathers daily
