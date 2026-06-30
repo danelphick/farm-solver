@@ -1,0 +1,134 @@
+Zone,Item,Drop Rate
+Small Pond,Drum,0.4758
+Small Pond,Yellow Perch,0.47576
+Small Pond,Fish Bones,0.04144
+Small Pond,Cogwheel,0.00536
+Small Pond,Runestone 08,0.0008368201
+Small Pond,Small Key,0.0008
+Farm Pond,Largemouth Bass,0.24106
+Farm Pond,Drum,0.241
+Farm Pond,Yellow Perch,0.24098
+Farm Pond,Trout,0.10578
+Farm Pond,Carp,0.10576
+Farm Pond,Catfish,0.0246
+Farm Pond,Fish Bones,0.0196
+Farm Pond,Flier,0.0196
+Farm Pond,Runestone 02,0.0016129032
+Forest Pond,Largemouth Bass,0.29604
+Forest Pond,Drum,0.296
+Forest Pond,Yellow Perch,0.296
+Forest Pond,Bluegill,0.08116
+Forest Pond,Fish Bones,0.02316
+Forest Pond,Grab Bag 01,0.00304
+Forest Pond,Water Lily,0.00304
+Forest Pond,Runestone 03,0.0012578616
+Forest Pond,Square Key,0.0003034901
+Lake Tempest,Yellow Perch,0.209
+Lake Tempest,Largemouth Bass,0.20898
+Lake Tempest,Drum,0.2089
+Lake Tempest,Crappie,0.2089
+Lake Tempest,Trout,0.09352
+Lake Tempest,Globber,0.03552
+Lake Tempest,Fish Bones,0.0175
+Lake Tempest,Flier,0.01748
+Lake Tempest,Runestone 15,0.0001901141
+Small Island,Small Prawn,0.38048
+Small Island,Blue Crab,0.15042
+Small Island,Green Chromis,0.1504
+Small Island,Mackerel,0.15038
+Small Island,Blue Shell,0.0701
+Small Island,Blue Sea Bass,0.03402
+Small Island,Mussel,0.02702
+Small Island,Jellyfish,0.02702
+Small Island,MIAB,0.00664
+Small Island,Seaweed,0.00354
+Crystal River,Sunfish,0.35332
+Crystal River,Bone Fish,0.35322
+Crystal River,Trout,0.14528
+Crystal River,Blue Catfish,0.06804
+Crystal River,Globber,0.05376
+Crystal River,Glass Bottle,0.01302
+Crystal River,Old Boot,0.013
+Crystal River,Runestone 12,0.0003558719
+Emerald Beach,Conch Shell,0.29596
+Emerald Beach,Clam Shell,0.29588
+Emerald Beach,Starfish,0.125
+Emerald Beach,Clownfish,0.05902
+Emerald Beach,Red Starfish,0.05898
+Emerald Beach,Blue Tiger Fish,0.03868
+Emerald Beach,Pearl,0.02872
+Emerald Beach,Puffer,0.0229
+Emerald Beach,Seahorse,0.02288
+Emerald Beach,Stingray,0.02286
+Emerald Beach,Ruby Fish,0.01134
+Emerald Beach,Marlin,0.01132
+Emerald Beach,MIAB,0.00564
+Emerald Beach,Crab Claw,0.0002832861
+Emerald Beach,Spiked Shell,0.0002766252
+Emerald Beach,Sea Turtle,0.0002259887
+Emerald Beach,Magic Conch Shell,0.0000437158
+Vast Ocean,Skipjack,0.46392
+Vast Ocean,Mackerel,0.17436
+Vast Ocean,Shrimp,0.11002
+Vast Ocean,Green Jellyfish,0.0635
+Vast Ocean,Blue Sea Bass,0.03894
+Vast Ocean,Stingray,0.03094
+Vast Ocean,Jellyfish,0.0309
+Vast Ocean,Fluorifish,0.0309
+Vast Ocean,Marlin,0.01528
+Vast Ocean,Ruby Fish,0.01524
+Vast Ocean,Octopus,0.01012
+Vast Ocean,MIAB,0.00758
+Vast Ocean,Giant Squid,0.00758
+Vast Ocean,Sea Dragon,0.0003752345
+Vast Ocean,Runestone 18,0.0002777778
+Vast Ocean,Diving Helmet,0.0000602047
+Lake Minerva,Torch Fish,0.6539
+Lake Minerva,Flamejack,0.22574
+Lake Minerva,Redgill,0.08078
+Lake Minerva,Flarefin,0.03912
+Lake Minerva,Treasure Key,0.0003802281
+Lake Minerva,Strange Ring,0.0000748783
+Large Island,Swordfish,0.24996
+Large Island,Barracuda,0.18666
+Large Island,Sea Catfish,0.15006
+Large Island,Plumbfish,0.12558
+Large Island,Spiral Shell,0.1081
+Large Island,Serpent Eel,0.09492
+Large Island,Ruby Coral,0.0846
+Large Island,Tribal Staff,0.0001039501
+Glacier Lake,Frosteye,0.22224
+Glacier Lake,Crowfish,0.187
+Glacier Lake,Bullfish,0.14308
+Glacier Lake,Glassback,0.11622
+Glacier Lake,Sea Crest,0.09782
+Glacier Lake,Seeker,0.08456
+Glacier Lake,Ice Shark,0.0745
+Glacier Lake,Stone Jelly,0.07444
+Glacier Lake,Grab Bag 08,0.0000807754
+Glacier Lake,Frost Snapper Shell,0.0000497512
+Pirate's Cove,Purple Butterfly Fish,0.2416
+Pirate's Cove,Crab,0.20256
+Pirate's Cove,Green Barracuda,0.15436
+Pirate's Cove,Mulberry Snapper,0.1251
+Pirate's Cove,Jumbo Fish,0.10524
+Pirate's Cove,Orcafish,0.09092
+Pirate's Cove,Speckled Grouper,0.08
+Pirate's Cove,Large Chest 03,0.0000874891
+Pirate's Cove,Mystical Chest 02,0.0000851426
+Pirate's Cove,Pirate Hook,0.0000518941
+Sinking Swamp,Slimeback,0.17784
+Sinking Swamp,Splatfish,0.11898
+Sinking Swamp,Bog Barnacle,0.11834
+Sinking Swamp,Magenta Growth,0.10264
+Sinking Swamp,Boghead Snapper,0.07242
+Sinking Swamp,Reaver Claw,0.08018
+Sinking Swamp,Blubberfish,0.07232
+Sinking Swamp,Slime Egg Shell,0.06038
+Sinking Swamp,Slobster,0.0556
+Sinking Swamp,Glass Eye Urchin,0.04856
+Sinking Swamp,Toxic Tendrils,0.03656
+Sinking Swamp,Gold Ring,0.01858
+Sinking Swamp,Tin Can,0.01866
+Sinking Swamp,Mini Slime Squid,0.0189
+Sinking Swamp,Lavos Shard,0.0000257576
