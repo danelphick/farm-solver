@@ -1,0 +1,52 @@
+[storehouse]
+inventory = 49440
+updated_on = "2026-06-30"
+growth = 20
+
+[sawmill]
+wood = 46000
+board = 60000
+oak = 6000
+
+[chicken_coop]
+produces = 18271
+completed_starmap = true
+
+[worm_habitat]
+worms = 10000
+gummy_worms = 4000
+mealworms = 4000
+
+[orchard]
+apple_trees = 6162
+orange_trees = 6175
+lemon_trees = 6165
+bonus = 1.3
+
+[trout_bait_farm]
+trout = 25000
+grubs = 7000
+minnows = 6000
+
+[vineyard]
+grapes = 43000
+
+[steelworks]
+steel = 10296
+
+[hay_field]
+hay = 30000
+
+[quarry]
+stone = 8000
+coal = 8000
+
+[flour_mill]
+have_flour_power = true
+
+[feed_mill]
+have_feed_boost = true
+
+[sugar_cane_mill]
+have_sugar_boost_i = true
+have_sugar_boost_ii = true

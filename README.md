@@ -9,7 +9,7 @@ Farm Solver loads in the current state of your mastery and inventory and calcula
 Run the script passing the masteries and inventory copied and pasted from with FarmRPG directly into a text file.
 
 ``` shell
-python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] <masteries> <inventory>
+python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] [--passive-limit duration] <masteries> <inventory>
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -64,4 +64,31 @@ Required Crafts:
 
 5x Board (Produces 5, Adds 5 Mastery)
   25x Wood
+```
+
+## Passive production
+
+Some buildings generate items on a fixed cadence (every ten minutes, hourly, or daily) without crafting. These are described in `config.toml` — for now the `[sawmill]` section, whose values are the quantities produced each hour:
+
+```toml
+[sawmill]
+wood = 46000
+board = 60000
+oak = 6000
+```
+
+When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Because producers run concurrently, the total time is the longest single wait, not the sum:
+
+```
+Passive Production required:
+  18,000x Oak in 3h
+  180,000x Board in 3h
+  138,000x Wood in 3h
+  Total time: 3h (concurrent)
+```
+
+By default passively-produced items are taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead. The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
+
+```
+python main.py --passive-limit 3h sample-mastery.txt sample-inventory.txt
 ```

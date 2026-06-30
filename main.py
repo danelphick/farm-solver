@@ -12,9 +12,11 @@ import argparse
 import sys
 from pathlib import Path
 
+import config
 import crafting
 import farm_solver
 import parsing
+import passive
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -86,6 +88,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="list every craft that needs to happen, with the materials it uses",
     )
+    parser.add_argument(
+        "--passive-limit",
+        metavar="DURATION",
+        help=(
+            "how long to rely on passive production (e.g. '5d', '3h', '1d6h'); "
+            "anything it cannot supply in that time is crafted instead. With no "
+            "limit, passively-produced items are taken entirely from production."
+        ),
+    )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
     # or acquire items.
@@ -151,7 +162,35 @@ def print_breakdown(steps: list[crafting.CraftStep]) -> None:
             print(f"  {quantity:,}x {material}")
 
 
+def print_passive(uses: list[passive.PassiveUse]) -> None:
+    if not uses:
+        return
+    print("\nPassive Production required:")
+    for use in uses:
+        print(
+            f"  {use.quantity:,}x {use.item} "
+            f"in {passive.format_duration(use.time)}"
+        )
+    total = passive.total_time(uses)
+    print(f"  Total time: {passive.format_duration(total)} (concurrent)")
+
+
+def load_production() -> passive.PassiveProduction:
+    """Build passive producers from the config, or none if there is no config."""
+    try:
+        return config.passive_production(config.load_config())
+    except FileNotFoundError:
+        return passive.PassiveProduction()
+
+
 def run(args: argparse.Namespace) -> int:
+    # Parse the passive limit first so a bad duration fails before any output.
+    passive_limit = (
+        passive.parse_duration(args.passive_limit)
+        if args.passive_limit is not None
+        else None
+    )
+
     state = load_state(args.masteries, args.inventory)
 
     if args.mastery is not None:
@@ -167,20 +206,36 @@ def run(args: argparse.Namespace) -> int:
     print_solution(solution)
 
     workshop = crafting.load_workshop()
-    materials = crafting.required_materials(
-        solution.needs,
-        workshop,
-        args.crafting_bonus,
-        args.mastery_bonus,
-        args.recursive,
-    )
-    print_materials(materials)
+    production = load_production()
 
-    if args.breakdown:
-        steps = crafting.craft_breakdown(
-            solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
+    if production.producers:
+        plan = crafting.craft_plan(
+            solution.needs,
+            workshop,
+            production,
+            args.crafting_bonus,
+            args.mastery_bonus,
+            passive_limit,
         )
-        print_breakdown(steps)
+        materials = plan.materials if args.recursive else plan.shallow_materials
+        print_materials(materials)
+        print_passive(plan.passive)
+        if args.breakdown:
+            print_breakdown(plan.steps)
+    else:
+        materials = crafting.required_materials(
+            solution.needs,
+            workshop,
+            args.crafting_bonus,
+            args.mastery_bonus,
+            args.recursive,
+        )
+        print_materials(materials)
+        if args.breakdown:
+            steps = crafting.craft_breakdown(
+                solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
+            )
+            print_breakdown(steps)
     return 0
 
 
