@@ -7,6 +7,8 @@ growth = 20
 wood = 46000
 board = 60000
 oak = 6000
+have_pine_boost = true
+have_sturdy_saw = true
 
 [chicken_coop]
 produces = 18271
