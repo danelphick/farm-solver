@@ -9,7 +9,7 @@ Farm Solver loads in the current state of your mastery and inventory and calcula
 Run the script passing the masteries and inventory copied and pasted from with FarmRPG directly into a text file.
 
 ``` shell
-python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [--crafting-bonus num] [--mastery-bonus num] <masteries> <inventory>
+python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] <masteries> <inventory>
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -48,3 +48,20 @@ python main.py -r sample-mastery.txt sample-inventory.txt
 ```
 
 When expanding recursively, counts are kept as fractions through the whole crafting tree and only the final totals are rounded, so rounding errors do not accumulate level by level.
+
+Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
+
+```
+Required Crafts:
+
+5x Hammer (Produces 5, Adds 5 Mastery)
+  5x Board
+  5x Iron
+  5x Mushroom Paste
+
+5x Mushroom Paste (Produces 5, Adds 5 Mastery)
+  15x Mushroom
+
+5x Board (Produces 5, Adds 5 Mastery)
+  25x Wood
+```

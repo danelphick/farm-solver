@@ -79,6 +79,12 @@ def build_parser() -> argparse.ArgumentParser:
             "base ones"
         ),
     )
+    parser.add_argument(
+        "-b",
+        "--breakdown",
+        action="store_true",
+        help="list every craft that needs to happen, with the materials it uses",
+    )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
     # or acquire items.
@@ -131,6 +137,19 @@ def print_materials(materials: dict[str, int]) -> None:
         print(f"  {materials[material]:,}x {material}")
 
 
+def print_breakdown(steps: list[farm_solver.CraftStep]) -> None:
+    if not steps:
+        return
+    print("\nRequired Crafts:")
+    for step in steps:
+        print(
+            f"\n{step.crafts:,}x {step.item} "
+            f"(Produces {step.produced:,}, Adds {step.mastery_added:,} Mastery)"
+        )
+        for material, quantity in step.materials:
+            print(f"  {quantity:,}x {material}")
+
+
 def run(args: argparse.Namespace) -> int:
     state = load_state(args.masteries, args.inventory)
 
@@ -155,6 +174,12 @@ def run(args: argparse.Namespace) -> int:
         args.recursive,
     )
     print_materials(materials)
+
+    if args.breakdown:
+        steps = farm_solver.craft_breakdown(
+            solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
+        )
+        print_breakdown(steps)
     return 0
 
 
