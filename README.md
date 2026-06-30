@@ -80,6 +80,11 @@ oak = 6000
 produces = 18271
 completed_starmap = true    # also gold feather at 5% of the feathers
 
+[worm_habitat]    # hourly
+worms = 10000
+gummy_worms = 4000
+mealworms = 4000
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 

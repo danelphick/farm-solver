@@ -41,6 +41,7 @@ def passive_production(
       quantity.
     * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
       ``completed_starmap``) gold feathers at five percent of the feathers.
+    * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -67,6 +68,19 @@ def passive_production(
             outputs["gold feather"] = produces // 20
         producers.append(
             PassiveProducer(name="chicken_coop", period=DAILY, outputs=outputs)
+        )
+
+    worm_habitat = config.get("worm_habitat")
+    if worm_habitat:
+        # Config keys use underscores ("gummy_worms"); the items are spaced.
+        outputs = {
+            item.lower().replace("_", " "): int(qty)
+            for item, qty in worm_habitat.items()
+        }
+        producers.append(
+            PassiveProducer(
+                name="worm_habitat", period=HOURLY, outputs=outputs
+            )
         )
 
     hay_field = config.get("hay_field")

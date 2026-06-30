@@ -64,6 +64,27 @@ def test_chicken_coop_without_starmap_has_no_gold_feather():
     }
 
 
+def test_passive_production_reads_worm_habitat():
+    # Worms, gummy worms and mealworms hourly; underscores become spaces.
+    production = passive_production(
+        {
+            "worm_habitat": {
+                "worms": 10000,
+                "gummy_worms": 4000,
+                "mealworms": 4000,
+            }
+        }
+    )
+    habitat = production.producers[0]
+    assert habitat.name == "worm_habitat"
+    assert habitat.period == HOURLY
+    assert habitat.outputs == {
+        "worms": 10000,
+        "gummy worms": 4000,
+        "mealworms": 4000,
+    }
+
+
 def test_passive_production_reads_hay_field_as_straw():
     # The hay_field section reports straw produced every ten minutes.
     production = passive_production({"hay_field": {"hay": 30000}})
