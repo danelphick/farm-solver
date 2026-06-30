@@ -8,6 +8,7 @@ material instead of crafting it.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -65,8 +66,26 @@ class PassiveProduction:
     def time_to_produce(self, item: str, quantity: int) -> timedelta | None:
         """Time to passively generate ``quantity`` of ``item``.
 
+        Production happens in whole cycles, so the wait is rounded up to a whole
+        number of the producer's periods -- you cannot collect part of a cycle.
         Returns ``None`` when nothing produces the item.
         """
+        key = item.lower()
+        sources = [
+            producer for producer in self.producers if producer.outputs.get(key)
+        ]
+        if not sources:
+            return None
+        if len(sources) == 1:
+            producer = sources[0]
+            per_cycle = producer.outputs[key]
+            if self.inventory_size is not None:
+                per_cycle = min(per_cycle, self.inventory_size)
+            if per_cycle <= 0:
+                return None
+            return math.ceil(quantity / per_cycle) * producer.period
+        # Several producers make it on different cadences; fall back to the
+        # combined rate without clamping to a single period.
         rate = self.rate_per_minute(item)
         if rate <= 0:
             return None

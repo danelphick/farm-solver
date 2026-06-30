@@ -51,10 +51,16 @@ def test_inventory_size_does_not_affect_low_production_rate():
     assert production.rate_per_minute("oak") == 100
 
 
-def test_time_to_produce_quantity():
+def test_time_to_produce_quantity_rounds_up_to_whole_cycles():
     production = PassiveProduction(producers=[SAWMILL])
-    # 100000 boards at 1000 a minute takes 100 minutes.
-    assert production.time_to_produce("board", 100000) == timedelta(minutes=100)
+    # 100000 boards need a second hourly cycle (60000 then 120000), so the wait
+    # rounds up from 100 minutes to a whole 2 hours.
+    assert production.time_to_produce("board", 100000) == timedelta(hours=2)
+
+
+def test_time_to_produce_exact_multiple_is_not_rounded_up():
+    production = PassiveProduction(producers=[SAWMILL])
+    assert production.time_to_produce("board", 120000) == timedelta(hours=2)
 
 
 def test_time_to_produce_unknown_item_is_none():

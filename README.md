@@ -87,7 +87,7 @@ coal = 8000
 steel = 10296
 ```
 
-When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Because producers run concurrently, the total time is the longest single wait, not the sum:
+When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
 
 ```
 Passive Production required:

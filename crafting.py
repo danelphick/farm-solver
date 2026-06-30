@@ -309,12 +309,11 @@ def craft_plan(
             capacity = needed if limit_minutes is None else rate * limit_minutes
             from_passive = min(needed, capacity)
             if from_passive > 0:
+                amount = _round_to_nearest(from_passive)
+                time = production.time_to_produce(key, amount)
+                assert time is not None  # rate > 0, so a producer makes it
                 plan.passive.append(
-                    PassiveUse(
-                        item=names[key],
-                        quantity=_round_to_nearest(from_passive),
-                        time=timedelta(minutes=from_passive / rate),
-                    )
+                    PassiveUse(item=names[key], quantity=amount, time=time)
                 )
         else:
             from_passive = 0.0

@@ -55,10 +55,9 @@ def test_prefers_passive_without_a_limit():
         crafting_bonus=1.0,
         mastery_bonus=1.0,
     )
-    # Boards are taken entirely from the sawmill, so nothing is crafted.
-    assert plan.passive == [
-        PassiveUse("Board", 100000, timedelta(minutes=100))
-    ]
+    # Boards are taken entirely from the sawmill, so nothing is crafted. The
+    # 100000 needs a second hourly cycle, so the wait rounds up to 2 hours.
+    assert plan.passive == [PassiveUse("Board", 100000, timedelta(hours=2))]
     assert plan.steps == []
     assert plan.materials == {}
 
@@ -100,8 +99,8 @@ def test_total_passive_time_is_concurrent():
         mastery_bonus=1.0,
         passive_limit=timedelta(hours=2),
     )
-    # 100000 board / 1000 a minute = 100 minutes; wood for the 0 crafts is 0.
-    assert plan.passive == [PassiveUse("Board", 100000, timedelta(minutes=100))]
+    # 100000 board needs 2 hourly cycles; wood for the 0 crafts is 0.
+    assert plan.passive == [PassiveUse("Board", 100000, timedelta(hours=2))]
 
 
 def test_inventory_size_does_not_cap_the_total_over_time():
@@ -121,7 +120,7 @@ def test_inventory_size_does_not_cap_the_total_over_time():
         crafting_bonus=1.0,
         mastery_bonus=1.0,
     )
-    assert plan.passive == [PassiveUse("Board", 100000, timedelta(minutes=100))]
+    assert plan.passive == [PassiveUse("Board", 100000, timedelta(hours=2))]
     assert plan.steps == []
 
 
@@ -165,9 +164,7 @@ def test_mastery_goal_sourced_passively():
         crafting_bonus=1.0,
         mastery_bonus=1.1,
     )
-    assert plan.passive == [
-        PassiveUse("Board", 100000, timedelta(minutes=100))
-    ]
+    assert plan.passive == [PassiveUse("Board", 100000, timedelta(hours=2))]
     assert plan.steps == []
 
 
