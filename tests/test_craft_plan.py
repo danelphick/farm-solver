@@ -6,9 +6,7 @@ from passive import HOURLY, PassiveProducer, PassiveProduction, PassiveUse
 
 WORKSHOP = Workshop(
     recipes={
-        "bucket": WorkshopRecipe(
-            name="Bucket", materials={"Board": 5, "Iron": 1}
-        ),
+        "bucket": WorkshopRecipe(name="Bucket", materials={"Board": 5}),
         "board": WorkshopRecipe(name="Board", materials={"Wood": 5}),
     }
 )
@@ -170,7 +168,7 @@ def test_mastery_goal_sourced_passively():
 
 def test_non_passive_items_are_still_crafted():
     # Buckets are not produced passively, so they are crafted; their board
-    # material is taken from the sawmill, and iron is gathered.
+    # material is taken from the sawmill.
     plan = craft_plan(
         [ItemNeed(item="Bucket", have=0, target=10)],
         WORKSHOP,
@@ -179,8 +177,29 @@ def test_non_passive_items_are_still_crafted():
         mastery_bonus=1.0,
     )
     bucket_step = next(s for s in plan.steps if s.item == "Bucket")
-    assert bucket_step.materials == [("Board", 50), ("Iron", 10)]
+    assert bucket_step.materials == [("Board", 50)]
     # The 50 boards come from the sawmill, not a Board craft.
     assert [u.item for u in plan.passive] == ["Board"]
     assert all(step.item != "Board" for step in plan.steps)
-    assert plan.materials == {"Iron": 10}
+    assert plan.materials == {}
+
+
+def test_iron_and_nails_are_ignored():
+    # Iron and Nails are supplied automatically: never gathered, never a step.
+    workshop = Workshop(
+        recipes={
+            "hinge": WorkshopRecipe(
+                name="Hinge", materials={"Wood": 2, "Iron": 5, "Nails": 3}
+            )
+        }
+    )
+    plan = craft_plan(
+        [ItemNeed(item="Hinge", have=0, target=10)],
+        workshop,
+        PassiveProduction(),
+        crafting_bonus=1.0,
+        mastery_bonus=1.0,
+    )
+    hinge = next(s for s in plan.steps if s.item == "Hinge")
+    assert hinge.materials == [("Wood", 20)]
+    assert plan.materials == {"Wood": 20}

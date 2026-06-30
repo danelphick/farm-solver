@@ -56,6 +56,10 @@ DEFAULT_WORKSHOP_PATH = Path(__file__).with_name("workshop.txt")
 DEFAULT_CRAFTING_BONUS = 1.45
 DEFAULT_MASTERY_BONUS = 1.1
 
+# Materials the game supplies automatically when a craft needs them, so they
+# are never reported, gathered, or expanded (keys are lower-cased).
+IGNORED_MATERIALS = frozenset({"iron", "nails"})
+
 
 def load_workshop(path: Path | None = None) -> Workshop:
     """Load workshop recipes from ``path``, or the bundled file if None."""
@@ -113,6 +117,8 @@ def required_materials(
         divisor = crafting_bonus * mastery_bonus if is_mastery else crafting_bonus
         crafts = _round_to_nearest(count / divisor)
         for material, quantity in recipe.materials.items():
+            if material.lower() in IGNORED_MATERIALS:
+                continue
             materials[material] = materials.get(material, 0) + crafts * quantity
     return materials
 
@@ -127,6 +133,8 @@ def _required_materials_recursive(
     totals: dict[str, float] = {}
 
     def expand(item: str, items_needed: float) -> None:
+        if item.lower() in IGNORED_MATERIALS:
+            return  # supplied automatically; never gathered
         recipe = workshop.get(item)
         if recipe is None:
             # A base material: nothing to craft, so record the quantity needed.
@@ -175,6 +183,8 @@ def craft_breakdown(
     order: list[str] = []  # craftable items, in first-seen (parents-first) order
 
     def expand(item: str, items_needed: float) -> None:
+        if item.lower() in IGNORED_MATERIALS:
+            return  # supplied automatically; never shown or expanded
         recipe = workshop.get(item)
         if recipe is None:
             return  # base material: shown only where it is consumed
@@ -203,6 +213,7 @@ def craft_breakdown(
         materials = [
             (material, _round_to_nearest(crafts * quantity))
             for material, quantity in recipe.materials.items()
+            if material.lower() not in IGNORED_MATERIALS
         ]
         produced = crafts * crafting_bonus  # == demand[key]
         steps.append(
@@ -335,8 +346,11 @@ def craft_plan(
         materials = [
             (material, _round_to_nearest(crafts * quantity))
             for material, quantity in recipe.materials.items()
+            if material.lower() not in IGNORED_MATERIALS
         ]
         for material, quantity in recipe.materials.items():
+            if material.lower() in IGNORED_MATERIALS:
+                continue  # supplied automatically; never gathered or crafted
             demand[material.lower()] = (
                 demand.get(material.lower(), 0.0) + crafts * quantity
             )

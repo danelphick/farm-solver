@@ -41,6 +41,8 @@ Two bonuses affect how many crafts (and therefore materials) are needed:
 - `--crafting-bonus <num>` (default `1.45`): the average number of items produced per craft. A higher bonus means fewer crafts, and so fewer materials, are required.
 - `--mastery-bonus <num>` (default `1.1`): the mastery gained per item crafted or otherwise found. This only reduces the crafts needed to satisfy a *mastery* shortfall (the tower or `-m`); it does not apply to a plain item count (`-i`), nor to the quantity of an item consumed as a material by another craft.
 
+A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded — they simply do not appear in the materials, breakdown, or passive output.
+
 By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
 
 ```

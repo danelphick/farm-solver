@@ -5,7 +5,7 @@ WORKSHOP = Workshop(
     recipes={
         "hammer": WorkshopRecipe(
             name="Hammer",
-            materials={"Board": 1, "Iron": 1, "Mushroom Paste": 1},
+            materials={"Board": 1, "Mushroom Paste": 1},
         ),
         "mushroom paste": WorkshopRecipe(
             name="Mushroom Paste", materials={"Mushroom": 3}
@@ -16,8 +16,8 @@ WORKSHOP = Workshop(
 
 
 def test_breaks_down_every_craft():
-    # 5 Hammers -> 5 Board + 5 Iron + 5 Mushroom Paste; those craftable
-    # materials each get their own step, base materials only appear inline.
+    # 5 Hammers -> 5 Board + 5 Mushroom Paste; those craftable materials each
+    # get their own step, base materials only appear inline.
     needs = [ItemNeed(item="Hammer", have=0, target=5)]
     steps = craft_breakdown(
         needs, WORKSHOP, crafting_bonus=1.0, mastery_bonus=1.0
@@ -26,7 +26,7 @@ def test_breaks_down_every_craft():
         CraftStep(
             item="Hammer",
             crafts=5,
-            materials=[("Board", 5), ("Iron", 5), ("Mushroom Paste", 5)],
+            materials=[("Board", 5), ("Mushroom Paste", 5)],
             produced=5,
             mastery_added=5,
         ),
@@ -66,7 +66,7 @@ def test_crafting_bonus_distinguishes_crafts_from_consumption():
         CraftStep(
             item="Hammer",
             crafts=4,
-            materials=[("Board", 4), ("Iron", 4), ("Mushroom Paste", 4)],
+            materials=[("Board", 4), ("Mushroom Paste", 4)],
             produced=8,
             mastery_added=8,
         ),
@@ -102,7 +102,7 @@ def test_mastery_bonus_applies_only_to_own_mastery():
         CraftStep(
             item="Hammer",
             crafts=4,
-            materials=[("Board", 4), ("Iron", 4), ("Mushroom Paste", 4)],
+            materials=[("Board", 4), ("Mushroom Paste", 4)],
             produced=4,
             mastery_added=8,
         ),
