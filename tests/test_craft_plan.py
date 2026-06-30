@@ -104,6 +104,58 @@ def test_total_passive_time_is_concurrent():
     assert plan.passive == [PassiveUse("Board", 100000, timedelta(minutes=100))]
 
 
+def test_inventory_size_does_not_cap_the_total_over_time():
+    # The storehouse holds 80000, above board production (60000/hr) so the rate
+    # is unaffected; all 100000 are sourced passively given enough time -- the
+    # storehouse caps the per-cycle amount, not the total.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer(name="sawmill", period=HOURLY, outputs={"board": 60000})
+        ],
+        inventory_size=80000,
+    )
+    plan = craft_plan(
+        [ItemNeed(item="Board", have=0, target=100000)],
+        WORKSHOP,
+        production,
+        crafting_bonus=1.0,
+        mastery_bonus=1.0,
+    )
+    assert plan.passive == [PassiveUse("Board", 100000, timedelta(minutes=100))]
+    assert plan.steps == []
+
+
+def test_passive_limit_uses_the_daily_throughput():
+    # Board makes 60000/hr but only 49440 fit the storehouse, so the daily
+    # throughput is 24 * min(60000, 49440) = 1,186,560; the rest of a 2,000,000
+    # goal is crafted.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer(name="sawmill", period=HOURLY, outputs={"board": 60000})
+        ],
+        inventory_size=49440,
+    )
+    plan = craft_plan(
+        [ItemNeed(item="Board", have=0, target=2_000_000)],
+        WORKSHOP,
+        production,
+        crafting_bonus=1.0,
+        mastery_bonus=1.0,
+        passive_limit=timedelta(days=1),
+    )
+    board = next(u for u in plan.passive if u.item == "Board")
+    assert board == PassiveUse("Board", 1_186_560, timedelta(days=1))
+    assert plan.steps == [
+        CraftStep(
+            item="Board",
+            crafts=813_440,
+            materials=[("Wood", 4_067_200)],
+            produced=813_440,
+            mastery_added=813_440,
+        )
+    ]
+
+
 def test_mastery_goal_sourced_passively():
     # 110000 mastery / 1.1 bonus = 100000 boards, all from the sawmill.
     plan = craft_plan(

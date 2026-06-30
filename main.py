@@ -175,12 +175,12 @@ def print_passive(uses: list[passive.PassiveUse]) -> None:
     print(f"  Total time: {passive.format_duration(total)} (concurrent)")
 
 
-def load_production() -> passive.PassiveProduction:
-    """Build passive producers from the config, or none if there is no config."""
+def load_config() -> dict:
+    """Read the config file, or an empty config if there is none."""
     try:
-        return config.passive_production(config.load_config())
+        return config.load_config()
     except FileNotFoundError:
-        return passive.PassiveProduction()
+        return {}
 
 
 def run(args: argparse.Namespace) -> int:
@@ -206,7 +206,7 @@ def run(args: argparse.Namespace) -> int:
     print_solution(solution)
 
     workshop = crafting.load_workshop()
-    production = load_production()
+    production = config.passive_production(load_config())
 
     if production.producers:
         plan = crafting.craft_plan(

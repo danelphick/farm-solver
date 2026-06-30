@@ -87,7 +87,18 @@ Passive Production required:
   Total time: 3h (concurrent)
 ```
 
-By default passively-produced items are taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead. The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
+Passive production is also shaped by how much you can hold at once. The `[storehouse]` section records its capacity on a given day and how much it grows daily:
+
+```toml
+[storehouse]
+inventory = 49440
+updated_on = "2026-06-30"
+growth = 20
+```
+
+The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles. For the hourly sawmill that makes the daily limit `24 × min(production, storehouse size)` per item.
+
+By default passively-produced items are otherwise taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead. The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
 
 ```
 python main.py --passive-limit 3h sample-mastery.txt sample-inventory.txt

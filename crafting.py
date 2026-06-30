@@ -248,7 +248,9 @@ def craft_plan(
     passive production rather than crafted. With a ``passive_limit`` only what a
     producer can make within that time is taken; the remainder is crafted (and
     its own materials expanded in turn). Without a limit, passively-produced
-    items are taken entirely from production.
+    items are taken entirely from production. The storehouse size limits the
+    per-cycle production rate (see :class:`passive.PassiveProduction`) rather
+    than the total obtainable.
 
     Demand is aggregated across the whole crafting tree before passive capacity
     is shared out, so a producer's limited output is never double-counted. The

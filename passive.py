@@ -33,9 +33,17 @@ class PassiveProducer:
 
 @dataclass
 class PassiveProduction:
-    """All passive producers, queried by item."""
+    """All passive producers, queried by item.
+
+    ``inventory_size`` is the storehouse capacity. Each cycle the output is
+    deposited into the storehouse, which holds at most ``inventory_size`` and
+    voids the excess, and the player uses it before the next cycle. So the
+    effective per-cycle output is ``min(production, inventory_size)``; it caps
+    only the per-cycle amount, not the total obtainable over many cycles.
+    """
 
     producers: list[PassiveProducer] = field(default_factory=list)
+    inventory_size: int | None = None
 
     def rate_per_minute(self, item: str) -> float:
         """How many of ``item`` are produced per minute across all producers."""
@@ -44,7 +52,10 @@ class PassiveProduction:
         for producer in self.producers:
             quantity = producer.outputs.get(key)
             if quantity:
-                total += quantity / (producer.period.total_seconds() / 60)
+                per_cycle = quantity
+                if self.inventory_size is not None:
+                    per_cycle = min(quantity, self.inventory_size)
+                total += per_cycle / (producer.period.total_seconds() / 60)
         return total
 
     def produces(self, item: str) -> bool:
