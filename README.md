@@ -43,6 +43,15 @@ Two bonuses affect how many crafts (and therefore materials) are needed:
 
 A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded — they simply do not appear in the materials, breakdown, or passive output.
 
+Some materials are grown on the farm (crops like Corn and Cotton, the flowers, Pine Tree). These are split out of the totals and reported in their own `Farming required:` section, much like passive production:
+
+```
+Farming required:
+  58,694x Corn
+  121,051x Cotton
+  161,401x Pine Tree
+```
+
 By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
 
 ```

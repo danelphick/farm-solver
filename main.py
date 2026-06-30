@@ -15,6 +15,7 @@ from pathlib import Path
 import config
 import crafting
 import farm_solver
+import farming
 import parsing
 import passive
 
@@ -162,6 +163,14 @@ def print_breakdown(steps: list[crafting.CraftStep]) -> None:
             print(f"  {quantity:,}x {material}")
 
 
+def print_farming(materials: dict[str, int]) -> None:
+    if not materials:
+        return
+    print("\nFarming required:")
+    for material in sorted(materials):
+        print(f"  {materials[material]:,}x {material}")
+
+
 def print_passive(uses: list[passive.PassiveUse]) -> None:
     if not uses:
         return
@@ -218,7 +227,9 @@ def run(args: argparse.Namespace) -> int:
             passive_limit,
         )
         materials = plan.materials if args.recursive else plan.shallow_materials
+        materials, farmed = farming.split_farmed(materials)
         print_materials(materials)
+        print_farming(farmed)
         print_passive(plan.passive)
         if args.breakdown:
             print_breakdown(plan.steps)
@@ -230,7 +241,9 @@ def run(args: argparse.Namespace) -> int:
             args.mastery_bonus,
             args.recursive,
         )
+        materials, farmed = farming.split_farmed(materials)
         print_materials(materials)
+        print_farming(farmed)
         if args.breakdown:
             steps = crafting.craft_breakdown(
                 solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
