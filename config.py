@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from passive import (
+    DAILY,
     HOURLY,
     TEN_MINUTES,
     PassiveProducer,
@@ -38,6 +39,8 @@ def passive_production(
 
     * ``[sawmill]`` -- hourly; its keys are item names and values the hourly
       quantity.
+    * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
+      ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -53,6 +56,17 @@ def passive_production(
         outputs = {item.lower(): int(qty) for item, qty in sawmill.items()}
         producers.append(
             PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
+        )
+
+    chicken_coop = config.get("chicken_coop")
+    if chicken_coop:
+        produces = int(chicken_coop["produces"])
+        outputs = {"eggs": produces, "feathers": produces}
+        if chicken_coop.get("completed_starmap"):
+            # Gold feathers come in at five percent of the feathers produced.
+            outputs["gold feather"] = produces // 20
+        producers.append(
+            PassiveProducer(name="chicken_coop", period=DAILY, outputs=outputs)
         )
 
     hay_field = config.get("hay_field")

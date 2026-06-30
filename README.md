@@ -76,6 +76,10 @@ wood = 46000
 board = 60000
 oak = 6000
 
+[chicken_coop]              # eggs and feathers daily
+produces = 18271
+completed_starmap = true    # also gold feather at 5% of the feathers
+
 [hay_field]    # straw every ten minutes
 hay = 30000
 

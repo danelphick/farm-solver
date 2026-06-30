@@ -2,7 +2,7 @@ import textwrap
 from datetime import date, timedelta
 
 from config import load_config, passive_production, storehouse_size
-from passive import HOURLY
+from passive import DAILY, HOURLY
 
 
 def test_load_config_reads_toml(tmp_path):
@@ -37,6 +37,31 @@ def test_passive_production_lowercases_item_names():
     config = {"sawmill": {"Board": 60000}}
     production = passive_production(config)
     assert production.producers[0].outputs == {"board": 60000}
+
+
+def test_passive_production_reads_chicken_coop():
+    # produces eggs and feathers daily; gold feather at 5% when starmap is done.
+    production = passive_production(
+        {"chicken_coop": {"produces": 18271, "completed_starmap": True}}
+    )
+    coop = production.producers[0]
+    assert coop.name == "chicken_coop"
+    assert coop.period == DAILY
+    assert coop.outputs == {
+        "eggs": 18271,
+        "feathers": 18271,
+        "gold feather": 913,  # 18271 // 20
+    }
+
+
+def test_chicken_coop_without_starmap_has_no_gold_feather():
+    production = passive_production(
+        {"chicken_coop": {"produces": 18271, "completed_starmap": False}}
+    )
+    assert production.producers[0].outputs == {
+        "eggs": 18271,
+        "feathers": 18271,
+    }
 
 
 def test_passive_production_reads_hay_field_as_straw():
