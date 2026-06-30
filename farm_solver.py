@@ -234,22 +234,35 @@ def required_materials(
     workshop: Workshop,
     crafting_bonus: float = DEFAULT_CRAFTING_BONUS,
     mastery_bonus: float = DEFAULT_MASTERY_BONUS,
+    recursive: bool = False,
 ) -> dict[str, int]:
     """Total materials to craft the shortfall of each needed, craftable item.
 
     The crafting bonus is the average output per craft. For a mastery shortfall
-    each crafted item also grants the mastery bonus, so reaching a shortfall of
-    ``n`` takes ``n / crafting_bonus / mastery_bonus`` crafts; a plain item-count
-    shortfall (``-i``) takes ``n / crafting_bonus``. Any non-integer stage is
-    rounded to the nearest whole number. An item required at several tower levels
-    is only counted once, at its largest shortfall, since crafting is cumulative.
-    Items with no workshop recipe (gathered, not crafted) are skipped.
+    each crafted item also grants the mastery bonus, so the items needed to cover
+    a shortfall of ``n`` is ``n / mastery_bonus``, taking ``n / mastery_bonus /
+    crafting_bonus`` crafts; a plain item-count shortfall (``-i``) needs ``n``
+    items and ``n / crafting_bonus`` crafts. An item required at several tower
+    levels is only counted once, at its largest shortfall, since crafting is
+    cumulative. Items with no workshop recipe (gathered, not crafted) are skipped.
+
+    With ``recursive`` set, a material that is itself craftable is expanded into
+    its own materials, all the way down to the base (uncraftable) ones. The
+    mastery bonus applies only to an item's own mastery shortfall, never to the
+    quantity consumed as a material by another craft. Counts are kept as floats
+    through the tree and only the final totals are rounded, so rounding errors do
+    not accumulate. The non-recursive path rounds each item's crafts as before.
     """
     # Each item's largest shortfall, plus whether it is a mastery shortfall.
     shortfalls: dict[str, tuple[int, bool]] = {}
     for need in needs:
         previous = shortfalls.get(need.item, (0, need.is_mastery))
         shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+
+    if recursive:
+        return _required_materials_recursive(
+            shortfalls, workshop, crafting_bonus, mastery_bonus
+        )
 
     materials: dict[str, int] = {}
     for item, (count, is_mastery) in shortfalls.items():
@@ -261,6 +274,36 @@ def required_materials(
         for material, quantity in recipe.materials.items():
             materials[material] = materials.get(material, 0) + crafts * quantity
     return materials
+
+
+def _required_materials_recursive(
+    shortfalls: dict[str, tuple[int, bool]],
+    workshop: Workshop,
+    crafting_bonus: float,
+    mastery_bonus: float,
+) -> dict[str, int]:
+    """Expand every craftable need down to its base materials (see above)."""
+    totals: dict[str, float] = {}
+
+    def expand(item: str, items_needed: float) -> None:
+        recipe = workshop.get(item)
+        if recipe is None:
+            # A base material: nothing to craft, so record the quantity needed.
+            totals[item] = totals.get(item, 0.0) + items_needed
+            return
+        crafts = items_needed / crafting_bonus
+        for material, quantity in recipe.materials.items():
+            # The quantity consumed as a material gets no mastery bonus.
+            expand(material, crafts * quantity)
+
+    for item, (count, is_mastery) in shortfalls.items():
+        if workshop.get(item) is None:
+            continue
+        # The mastery bonus reduces only an item's own mastery shortfall.
+        items_needed = count / mastery_bonus if is_mastery else count
+        expand(item, float(items_needed))
+
+    return {material: _round_to_nearest(qty) for material, qty in totals.items()}
 
 
 def parse_item_amounts(spec: str) -> dict[str, int]:

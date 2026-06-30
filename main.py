@@ -70,6 +70,15 @@ def build_parser() -> argparse.ArgumentParser:
             f"mastery goals (default: {farm_solver.DEFAULT_MASTERY_BONUS})"
         ),
     )
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help=(
+            "expand craftable materials into their own materials, down to the "
+            "base ones"
+        ),
+    )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
     # or acquire items.
@@ -139,7 +148,11 @@ def run(args: argparse.Namespace) -> int:
 
     workshop = farm_solver.load_workshop()
     materials = farm_solver.required_materials(
-        solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
+        solution.needs,
+        workshop,
+        args.crafting_bonus,
+        args.mastery_bonus,
+        args.recursive,
     )
     print_materials(materials)
     return 0
