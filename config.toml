@@ -58,3 +58,12 @@ have_sugar_boost_ii = true
 
 [ironworks]
 have_iron_depot = true
+
+[fishing]
+have_reinforced_netting = true
+have_fishing_trawl = true
+use_sea_pincher = true
+
+[exploring]
+have_lemon_squeezer = true
+use_quandary_chowder = true
