@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import pytest
 
-from pets import Pet, Pets, unlocked_tiers
+from pets import Pet, Pets, read_pet_tiers, unlocked_tiers
+
+PETS_CSV = Path(__file__).resolve().parent.parent / "pets.csv"
 
 # Three tiers of four items, enough to exercise every level.
 TIERS = [
@@ -113,6 +117,29 @@ def test_pets_daily_output_combines_active_pets():
     )
     # Both level-1 single-item pets gather 24 acorns a day; combined, 48.
     assert pets.daily_output() == {"acorn": 48}
+
+
+def test_read_pet_tiers_groups_by_tier(tmp_path):
+    path = tmp_path / "pets.csv"
+    path.write_text(
+        "Pet,Tier,Item\n"
+        "Cat,1,Drum\n"
+        "Cat,2,Bluegill\n"
+        "Cat,1,Carp\n"
+        "Cat,3,Pearl\n"
+    )
+    tiers = read_pet_tiers(path)
+    # Tiers come back in order, items in file order within each tier.
+    assert tiers == {"Cat": [["Drum", "Carp"], ["Bluegill"], ["Pearl"]]}
+
+
+def test_read_real_pets_csv_has_cat_with_three_full_tiers():
+    tiers = read_pet_tiers(PETS_CSV)
+    assert tiers["Cat"] == [
+        ["Drum", "Crappie", "Feathers", "Carp"],
+        ["Blue Catfish", "Blue Shell", "Bluegill", "Blue Feathers"],
+        ["Pearl", "Gold Feather", "Globber", "Shinefish"],
+    ]
 
 
 def test_pets_daily_output_skips_out_of_season_pets():

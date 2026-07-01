@@ -22,7 +22,9 @@ elsewhere (parsing).
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # A pet retrieves this many items per hour for each level it has.
 ITEMS_PER_HOUR_PER_LEVEL = 1
@@ -125,3 +127,22 @@ class Pets:
             for item, quantity in pet.daily_output().items():
                 totals[item] = totals.get(item, 0.0) + quantity
         return totals
+
+
+def read_pet_tiers(path: Path) -> dict[str, list[list[str]]]:
+    """Each pet's tiers of item names, read from a ``Pet,Tier,Item`` CSV.
+
+    The result maps a pet's display name to its list of tiers (tier 1 first),
+    each tier a list of item names in file order. This is the fixed game data;
+    a pet's level, season, and special item are supplied separately.
+    """
+    rows_by_pet: dict[str, dict[int, list[str]]] = {}
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            pet = row["Pet"].strip()
+            tier = int(row["Tier"])
+            item = row["Item"].strip()
+            rows_by_pet.setdefault(pet, {}).setdefault(tier, []).append(item)
+    return {
+        pet: [tiers[t] for t in sorted(tiers)] for pet, tiers in rows_by_pet.items()
+    }
