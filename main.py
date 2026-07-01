@@ -9,6 +9,7 @@ See README.md for usage. In short::
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -90,6 +91,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="list every craft that needs to happen, with the materials it uses",
     )
     parser.add_argument(
+        "--unobtainable",
+        action="store_true",
+        help=(
+            "list workshop materials with no known source (not produced "
+            "passively, fished, explored, farmed, auto-supplied, or craftable)"
+        ),
+    )
+    parser.add_argument(
         "--passive-limit",
         metavar="DURATION",
         help=(
@@ -116,6 +125,50 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+FISHING_CSV = Path(__file__).with_name("fishing.csv")
+EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
+
+
+def _csv_items(path: Path) -> set[str]:
+    """Lower-cased item names from the ``Item`` column of a drop-rate CSV."""
+    if not path.exists():
+        return set()
+    with path.open(newline="") as f:
+        return {row["Item"].strip().lower() for row in csv.DictReader(f)}
+
+
+def obtainable_items(production: passive.PassiveProduction) -> set[str]:
+    """Lower-cased items obtainable without crafting.
+
+    Covers passive production, fishing, exploring, farming, and the materials
+    the game supplies automatically.
+    """
+    items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
+    for producer in production.producers:
+        items |= set(producer.outputs)
+    items |= _csv_items(FISHING_CSV)
+    items |= _csv_items(EXPLORING_CSV)
+    return items
+
+
+def unobtainable_materials(
+    workshop: crafting.Workshop, obtainable: set[str]
+) -> list[str]:
+    """Workshop materials that are neither obtainable nor craftable.
+
+    These have no known source: they are not produced passively, fished,
+    explored, farmed, auto-supplied, nor made from a recipe of their own.
+    """
+    craftable = set(workshop.recipes)
+    found: dict[str, str] = {}  # lower-cased key -> display name
+    for recipe in workshop.recipes.values():
+        for material in recipe.materials:
+            key = material.lower()
+            if key not in obtainable and key not in craftable:
+                found[key] = material
+    return sorted(found.values())
 
 
 def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameState:
@@ -169,6 +222,15 @@ def print_farming(materials: dict[str, int]) -> None:
     print("\nFarming required:")
     for material in sorted(materials):
         print(f"  {materials[material]:,}x {material}")
+
+
+def print_unobtainable(materials: list[str]) -> None:
+    print("\nUnobtainable materials:")
+    if not materials:
+        print("  (none)")
+        return
+    for material in materials:
+        print(f"  {material}")
 
 
 def print_passive(uses: list[passive.PassiveUse]) -> None:
@@ -249,6 +311,10 @@ def run(args: argparse.Namespace) -> int:
                 solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
             )
             print_breakdown(steps)
+
+    if args.unobtainable:
+        obtainable = obtainable_items(production)
+        print_unobtainable(unobtainable_materials(workshop, obtainable))
     return 0
 
 

@@ -9,7 +9,7 @@ Farm Solver loads in the current state of your mastery and inventory and calcula
 Run the script passing the masteries and inventory copied and pasted from with FarmRPG directly into a text file.
 
 ``` shell
-python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] [--passive-limit duration] <masteries> <inventory>
+python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] [--passive-limit duration] [--unobtainable] <masteries> <inventory>
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -50,6 +50,12 @@ Farming required:
   58,694x Corn
   121,051x Cotton
   161,401x Pine Tree
+```
+
+Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, auto-supplied, nor craftable from a recipe of its own. This is a static report over the whole workshop (independent of the goal) and is handy for spotting which items still need a source or more drop-rate data:
+
+```
+python main.py --unobtainable sample-mastery.txt sample-inventory.txt
 ```
 
 By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
