@@ -1,3 +1,7 @@
+[solver]
+mastery_file = "./sample-mastery.txt"
+inventory_file = "./sample-inventory.txt"
+
 [storehouse]
 inventory = 49440
 updated_on = "2026-06-30"

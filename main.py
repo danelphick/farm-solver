@@ -3,7 +3,10 @@
 See README.md for usage. In short::
 
     python main.py [-t <tower-requirements>] [-l level] \
-        [-i item:amount] [-m item:amount] <masteries> <inventory>
+        [-i item:amount] [-m item:amount] \
+        [--mastery-file <masteries>] [--inventory-file <inventory>]
+
+The mastery and inventory files default to the ``[solver]`` config section.
 """
 
 from __future__ import annotations
@@ -30,16 +33,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "masteries",
+        "--mastery-file",
         type=Path,
-        nargs="?",
-        help="text file of masteries copied from FarmRPG",
+        metavar="FILE",
+        help=(
+            "text file of masteries copied from FarmRPG "
+            "(overrides solver.mastery_file in the config)"
+        ),
     )
     parser.add_argument(
-        "inventory",
+        "--inventory-file",
         type=Path,
-        nargs="?",
-        help="text file of your inventory copied from FarmRPG",
+        metavar="FILE",
+        help=(
+            "text file of your inventory copied from FarmRPG "
+            "(overrides solver.inventory_file in the config)"
+        ),
     )
 
     parser.add_argument(
@@ -172,6 +181,34 @@ def unobtainable_materials(
     return sorted(found.values())
 
 
+def resolve_files(
+    args: argparse.Namespace, cfg: dict
+) -> tuple[Path, Path]:
+    """The mastery and inventory files, from the CLI or the [solver] config.
+
+    A command-line ``--mastery-file`` / ``--inventory-file`` overrides the
+    config; otherwise the value comes from the ``[solver]`` section. A file
+    missing from both raises a :class:`ValueError`.
+    """
+    solver = cfg.get("solver", {})
+
+    def pick(cli: Path | None, key: str, flag: str) -> Path:
+        if cli is not None:
+            return cli
+        value = solver.get(key)
+        if value is not None:
+            return Path(value)
+        raise ValueError(
+            f"no {key.replace('_', ' ')}: pass {flag} or set solver.{key} "
+            "in the config"
+        )
+
+    return (
+        pick(args.mastery_file, "mastery_file", "--mastery-file"),
+        pick(args.inventory_file, "inventory_file", "--inventory-file"),
+    )
+
+
 def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameState:
     masteries = parsing.parse_masteries(masteries_path.read_text())
     inventory = parsing.parse_inventory(inventory_path.read_text())
@@ -255,14 +292,19 @@ def load_config() -> dict:
 
 
 def run(args: argparse.Namespace) -> int:
+    cfg = load_config()
     workshop = crafting.load_workshop()
-    production = config.passive_production(load_config())
+    production = config.passive_production(cfg)
 
     # A standalone report over the whole workshop; no solving needed.
     if args.unobtainable:
         obtainable = obtainable_items(production)
         print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
+
+    # The mastery and inventory files come from the command line, falling back
+    # to the [solver] config section.
+    mastery_file, inventory_file = resolve_files(args, cfg)
 
     # Parse the passive limit first so a bad duration fails before any output.
     passive_limit = (
@@ -271,7 +313,7 @@ def run(args: argparse.Namespace) -> int:
         else None
     )
 
-    state = load_state(args.masteries, args.inventory)
+    state = load_state(mastery_file, inventory_file)
 
     if args.mastery is not None:
         goals = parsing.parse_item_amounts(args.mastery)
@@ -323,10 +365,6 @@ def run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    # Solving needs both files; --unobtainable is a standalone report that does
-    # not.
-    if not args.unobtainable and (args.masteries is None or args.inventory is None):
-        parser.error("the masteries and inventory files are required")
     try:
         return run(args)
     except FileNotFoundError as exc:
