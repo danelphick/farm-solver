@@ -25,19 +25,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="farm-solver",
         description=(
-            "Find the cheapest way to spend resources to climb the tower in "
-            "FarmRPG."
+            "Find the cheapest way to spend resources to climb the tower in " "FarmRPG."
         ),
     )
 
     parser.add_argument(
         "masteries",
         type=Path,
+        nargs="?",
         help="text file of masteries copied from FarmRPG",
     )
     parser.add_argument(
         "inventory",
         type=Path,
+        nargs="?",
         help="text file of your inventory copied from FarmRPG",
     )
 
@@ -225,7 +226,7 @@ def print_farming(materials: dict[str, int]) -> None:
 
 
 def print_unobtainable(materials: list[str]) -> None:
-    print("\nUnobtainable materials:")
+    print("The following materials are required for some crafts but are unobtainable:")
     if not materials:
         print("  (none)")
         return
@@ -239,8 +240,7 @@ def print_passive(uses: list[passive.PassiveUse]) -> None:
     print("\nPassive Production required:")
     for use in uses:
         print(
-            f"  {use.quantity:,}x {use.item} "
-            f"in {passive.format_duration(use.time)}"
+            f"  {use.quantity:,}x {use.item} " f"in {passive.format_duration(use.time)}"
         )
     total = passive.total_time(uses)
     print(f"  Total time: {passive.format_duration(total)} (concurrent)")
@@ -255,6 +255,15 @@ def load_config() -> dict:
 
 
 def run(args: argparse.Namespace) -> int:
+    workshop = crafting.load_workshop()
+    production = config.passive_production(load_config())
+
+    # A standalone report over the whole workshop; no solving needed.
+    if args.unobtainable:
+        obtainable = obtainable_items(production)
+        print_unobtainable(unobtainable_materials(workshop, obtainable))
+        return 0
+
     # Parse the passive limit first so a bad duration fails before any output.
     passive_limit = (
         passive.parse_duration(args.passive_limit)
@@ -275,9 +284,6 @@ def run(args: argparse.Namespace) -> int:
         solution = farm_solver.solve_tower(state, requirements, args.level)
 
     print_solution(solution)
-
-    workshop = crafting.load_workshop()
-    production = config.passive_production(load_config())
 
     if production.producers:
         plan = crafting.craft_plan(
@@ -311,16 +317,16 @@ def run(args: argparse.Namespace) -> int:
                 solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
             )
             print_breakdown(steps)
-
-    if args.unobtainable:
-        obtainable = obtainable_items(production)
-        print_unobtainable(unobtainable_materials(workshop, obtainable))
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Solving needs both files; --unobtainable is a standalone report that does
+    # not.
+    if not args.unobtainable and (args.masteries is None or args.inventory is None):
+        parser.error("the masteries and inventory files are required")
     try:
         return run(args)
     except FileNotFoundError as exc:

@@ -52,10 +52,10 @@ Farming required:
   161,401x Pine Tree
 ```
 
-Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, auto-supplied, nor craftable from a recipe of its own. This is a static report over the whole workshop (independent of the goal) and is handy for spotting which items still need a source or more drop-rate data:
+Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
 
 ```
-python main.py --unobtainable sample-mastery.txt sample-inventory.txt
+python main.py --unobtainable
 ```
 
 By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
