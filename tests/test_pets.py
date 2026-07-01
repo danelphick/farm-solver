@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from pets import Pet, Pets, read_pet_tiers, unlocked_tiers
+from pets import Pet, Pets, load_pets, read_pet_tiers, unlocked_tiers
 
 PETS_CSV = Path(__file__).resolve().parent.parent / "pets.csv"
 
@@ -140,6 +140,31 @@ def test_read_real_pets_csv_has_cat_with_three_full_tiers():
         ["Blue Catfish", "Blue Shell", "Bluegill", "Blue Feathers"],
         ["Pearl", "Gold Feather", "Globber", "Shinefish"],
     ]
+
+
+def test_load_pets_applies_levels_and_fixed_facts():
+    pets = load_pets(PETS_CSV, {"Owl": 6, "Wolf": 3})
+    # Levels come from the mapping; unlisted pets default to 0.
+    assert pets.pet("Owl").level == 6
+    assert pets.pet("Cat").level == 0
+    # The Owl is the special pet: 2x honey once at level 6.
+    assert pets.pet("Owl").double_item == "Honey"
+    assert pets.pet("Owl").daily_output()["honey"] == 24
+    # The Wolf is seasonal (September-October).
+    assert pets.pet("Wolf").months == frozenset({9, 10})
+
+
+def test_load_pets_marks_the_four_seasonal_pets():
+    pets = load_pets(PETS_CSV)
+    seasonal = {name for name, pet in pets.pets.items() if pet.seasonal}
+    assert seasonal == {"wolf", "polar bear", "hummingbird", "shark"}
+
+
+def test_load_pets_daily_output_respects_season():
+    pets = load_pets(PETS_CSV, {"Shark": 6})
+    # The Shark only produces in June-July.
+    assert pets.daily_output(month=1) == {}
+    assert pets.daily_output(month=6)  # non-empty in season
 
 
 def test_pets_daily_output_skips_out_of_season_pets():

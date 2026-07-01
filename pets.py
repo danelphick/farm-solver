@@ -40,6 +40,18 @@ TIER_THREE_LEVEL = 6
 # The special pet doubles its chosen item once it reaches this level.
 DOUBLE_ITEM_LEVEL = 6
 
+# Fixed game facts about individual pets, keyed by lower-cased name.
+#
+# Seasonal pets only drop items during two calendar months:
+SEASONAL_MONTHS: dict[str, frozenset[int]] = {
+    "polar bear": frozenset({1, 2}),  # January-February
+    "hummingbird": frozenset({3, 4}),  # March-April
+    "shark": frozenset({6, 7}),  # June-July
+    "wolf": frozenset({9, 10}),  # September-October
+}
+# The special pet doubles one item at level 6:
+DOUBLE_ITEMS: dict[str, str] = {"owl": "Honey"}
+
 
 def unlocked_tiers(level: int) -> int:
     """How many of the three tiers a pet of this level collects from."""
@@ -146,3 +158,25 @@ def read_pet_tiers(path: Path) -> dict[str, list[list[str]]]:
     return {
         pet: [tiers[t] for t in sorted(tiers)] for pet, tiers in rows_by_pet.items()
     }
+
+
+def load_pets(path: Path, levels: dict[str, int] | None = None) -> Pets:
+    """Build the pets from the tier CSV, per-pet ``levels``, and fixed facts.
+
+    ``levels`` maps a pet's name to its current level (case-insensitive); a pet
+    absent from it defaults to level 0 and so produces nothing. The seasonal
+    windows and the special pet's doubled item come from :data:`SEASONAL_MONTHS`
+    and :data:`DOUBLE_ITEMS`.
+    """
+    by_name = {name.lower(): level for name, level in (levels or {}).items()}
+    pets: dict[str, Pet] = {}
+    for name, tiers in read_pet_tiers(path).items():
+        key = name.lower()
+        pets[key] = Pet(
+            name=name,
+            level=by_name.get(key, 0),
+            tiers=tiers,
+            months=SEASONAL_MONTHS.get(key),
+            double_item=DOUBLE_ITEMS.get(key),
+        )
+    return Pets(pets=pets)

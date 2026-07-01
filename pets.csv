@@ -11,3 +11,327 @@ Cat,3,Pearl
 Cat,3,Gold Feather
 Cat,3,Globber
 Cat,3,Shinefish
+Wolf,1,Feathers
+Wolf,1,Pumpkin
+Wolf,1,Bone
+Wolf,1,Bitten Apple
+Wolf,2,Acorn
+Wolf,2,Straw
+Wolf,2,Blue Feathers
+Wolf,2,Fall Leaves
+Wolf,3,Gold Leaf
+Wolf,3,Striped Feather
+Wolf,3,Green Rubee
+Wolf,3,Raw Meat
+Owl,1,Apple
+Owl,1,Orange
+Owl,1,Lemon
+Owl,1,Hide
+Owl,2,Eggs
+Owl,2,Bird Egg
+Owl,2,Grapes
+Owl,2,Honey
+Owl,3,Prism Shard
+Owl,3,Gold Cucumber
+Owl,3,Runestone 11
+Owl,3,Goldfish
+Dog,1,Wood
+Dog,1,Stone
+Dog,1,Fish Bones
+Dog,1,Bone
+Dog,2,Unpolished Shimmer Stone
+Dog,2,Horn
+Dog,2,Antler
+Dog,2,Rope
+Dog,3,Amethyst
+Dog,3,Cogwheel
+Dog,3,Small Spring
+Dog,3,Large Clam Shell
+Squirrel,1,Mushroom
+Squirrel,1,Fern Leaf
+Squirrel,1,Purple Flower
+Squirrel,1,Acorn
+Squirrel,2,Arrowhead
+Squirrel,2,Leather
+Squirrel,2,Coin Purse
+Squirrel,2,Ancient Coin
+Squirrel,3,4-leaf Clover
+Squirrel,3,Dice
+Squirrel,3,Runestone 20
+Squirrel,3,Gold Crab
+Swine,1,Coal
+Swine,1,Carbon Sphere
+Swine,1,3-leaf Clover
+Swine,1,Green Dye
+Swine,2,Hammer
+Swine,2,Axe
+Swine,2,Shovel
+Swine,2,Ladder
+Swine,3,Steak
+Swine,3,Steel
+Swine,3,Moonstone
+Swine,3,Jade
+Snake,1,Iron
+Snake,1,Hops
+Snake,1,Glass Orb
+Snake,1,Horseshoe
+Snake,2,Bucket
+Snake,2,Shimmer Quartz
+Snake,2,Steel
+Snake,2,Wizard Hat
+Snake,3,Wine
+Snake,3,Gold Carrot
+Snake,3,Runestone 15
+Snake,3,Skull Coin
+Lemur,1,Snail
+Lemur,1,Caterpillar
+Lemur,1,Fire Ant
+Lemur,1,Giant Centipede
+Lemur,2,Shiny Beetle
+Lemur,2,Horned Beetle
+Lemur,2,Spider
+Lemur,2,Ruby Scorpion
+Lemur,3,Amber
+Lemur,3,Grasshopper
+Lemur,3,Cyclops Spider
+Lemur,3,Dragonfly
+Baboon,1,Corn
+Baboon,1,Glass Bottle
+Baboon,1,Sturdy Shield
+Baboon,1,Shimmer Topaz
+Baboon,2,Lemonade
+Baboon,2,Bone Fish
+Baboon,2,Cotton
+Baboon,2,Gold Eggplant
+Baboon,3,Grape Juice
+Baboon,3,Runestone 03
+Baboon,3,Gold Peppers
+Baboon,3,Redgill
+Frog,1,Peas
+Frog,1,Cucumber
+Frog,1,Hops
+Frog,1,Cabbage
+Frog,2,Green Chromis
+Frog,2,Puffer
+Frog,2,Green Jellyfish
+Frog,2,Skipjack
+Frog,3,Runestone 05
+Frog,3,Gold Feather
+Frog,3,Runestone 19
+Frog,3,Gold Leaf
+Hedgehog,1,Cabbage
+Hedgehog,1,Explosive
+Hedgehog,1,Straw
+Hedgehog,1,Cheese
+Hedgehog,2,Orange Juice
+Hedgehog,2,Twine
+Hedgehog,2,Gold Cucumber
+Hedgehog,2,Broccoli
+Hedgehog,3,Runestone 07
+Hedgehog,3,Gold Peas
+Hedgehog,3,Green Shield
+Hedgehog,3,Torch Fish
+Fox,1,Lemon Quartz
+Fox,1,Leather
+Fox,1,Cotton
+Fox,1,Green Cloak
+Fox,2,Runestone 12
+Fox,2,Pine Tree
+Fox,2,Peach
+Fox,2,Canoe
+Fox,3,Diamond
+Fox,3,Runestone 17
+Fox,3,Treasure Key
+Fox,3,Skeleton Key
+Armadillo,1,Board
+Armadillo,1,Feathers
+Armadillo,1,Iron Ring
+Armadillo,1,Iron Cup
+Armadillo,2,Mushroom Paste
+Armadillo,2,Leather
+Armadillo,2,Steel
+Armadillo,2,Magna Quartz
+Armadillo,3,Small Spring
+Armadillo,3,Small Screw
+Armadillo,3,Small Gear
+Armadillo,3,Steel Wire
+Spider,1,Eggplant
+Spider,1,Amethyst
+Spider,1,Emberstone
+Spider,1,Giant Centipede
+Spider,2,Ruby Ring
+Spider,2,Emerald Ring
+Spider,2,Mystic Ring
+Spider,2,Shimmer Ring
+Spider,3,Runestone 05
+Spider,3,Runestone 10
+Spider,3,Runestone 15
+Spider,3,Runestone 20
+Pet Rock,1,Unpolished Ruby
+Pet Rock,1,Unpolished Emerald
+Pet Rock,1,Unpolished Jade
+Pet Rock,1,Unpolished Garnet
+Pet Rock,2,Amethyst
+Pet Rock,2,Lemon Quartz
+Pet Rock,2,Shimmer Topaz
+Pet Rock,2,Jade
+Pet Rock,3,Shimmer Stone
+Pet Rock,3,Glass Orb
+Pet Rock,3,Carbon Sphere
+Pet Rock,3,Diamond
+Bird,1,Clownfish
+Bird,1,Fishing Net
+Bird,1,Eye Patch
+Bird,1,Plumbfish
+Bird,2,Pirate Flag
+Bird,2,Pirate Bandana
+Bird,2,Large Chest 02
+Bird,2,Blue Dye
+Bird,3,Skeleton Key
+Bird,3,Crab Claw
+Bird,3,Large Net
+Bird,3,Anglerfish
+Penguin,1,Marlin
+Penguin,1,Skipjack
+Penguin,1,Seahorse
+Penguin,1,Octopus
+Penguin,2,Giant Squid
+Penguin,2,Blue Tiger Fish
+Penguin,2,Fluorifish
+Penguin,2,Barracuda
+Penguin,3,Swordfish
+Penguin,3,Sea Catfish
+Penguin,3,Serpent Eel
+Penguin,3,Ruby Coral
+Green Dragon,1,Runestone 01
+Green Dragon,1,Runestone 02
+Green Dragon,1,Runestone 03
+Green Dragon,1,Runestone 04
+Green Dragon,2,Runestone 05
+Green Dragon,2,Runestone 06
+Green Dragon,2,Runestone 07
+Green Dragon,2,Runestone 08
+Green Dragon,3,Runestone 09
+Green Dragon,3,Runestone 10
+Green Dragon,3,Runestone 11
+Green Dragon,3,Runestone 12
+Red Dragon,1,Runestone 13
+Red Dragon,1,Slimestone
+Red Dragon,1,Unpolished Garnet
+Red Dragon,1,Sour Root
+Red Dragon,2,Runestone 14
+Red Dragon,2,Runestone 16
+Red Dragon,2,Green Cloak
+Red Dragon,2,Lantern
+Red Dragon,3,Runestone 17
+Red Dragon,3,Runestone 18
+Red Dragon,3,Salt
+Red Dragon,3,Herbs
+Blue Dragon,1,Runestone 01
+Blue Dragon,1,Runestone 02
+Blue Dragon,1,Runestone 04
+Blue Dragon,1,Runestone 06
+Blue Dragon,2,Runestone 08
+Blue Dragon,2,Runestone 09
+Blue Dragon,2,Runestone 13
+Blue Dragon,2,Runestone 14
+Blue Dragon,3,Lava Sphere
+Blue Dragon,3,Runestone 16
+Blue Dragon,3,Runestone 18
+Blue Dragon,3,Runestone 19
+Bear,1,Crappie
+Bear,1,Trout
+Bear,1,Honey
+Bear,1,Small Key
+Bear,2,Square Key
+Bear,2,Medium Chest 02
+Bear,2,Sunflower
+Bear,2,Grab Bag 04
+Bear,3,Inferno Sphere
+Bear,3,Large Chest 01
+Bear,3,Treasure Key
+Bear,3,Grab Bag 05
+Capybara,1,Cabbage
+Capybara,1,Gold Peas
+Capybara,1,Broccoli
+Capybara,1,Beet
+Capybara,2,Orange Juice
+Capybara,2,Lemonade
+Capybara,2,Water Lily
+Capybara,2,Apple Cider
+Capybara,3,Herbs
+Capybara,3,Grab Bag 04
+Capybara,3,Grab Bag 05
+Capybara,3,Grab Bag 07
+Strange Onion,1,Tomato
+Strange Onion,1,Onion
+Strange Onion,1,Hops
+Strange Onion,1,Potato
+Strange Onion,2,Leek
+Strange Onion,2,Watermelon
+Strange Onion,2,Corn
+Strange Onion,2,Cabbage
+Strange Onion,3,Pumpkin
+Strange Onion,3,Broccoli
+Strange Onion,3,Mega Beet Seeds
+Strange Onion,3,Mega Sunflower Seeds
+Seal,1,Runestone 06
+Seal,1,Moonstone
+Seal,1,Snowball
+Seal,1,Blue Purse
+Seal,2,Iced Tea
+Seal,2,Seaweed
+Seal,2,Mittens
+Seal,2,Rice
+Seal,3,Blue Gel
+Seal,3,Gold Sea Crest
+Seal,3,Frost Snapper Shell
+Seal,3,Glacierstone
+Skunk,1,Onion
+Skunk,1,Leek
+Skunk,1,Herbs
+Skunk,1,Cooking Pot
+Skunk,2,Sweet Root
+Skunk,2,Flour
+Skunk,2,Salt
+Skunk,2,Pie Pan
+Skunk,3,Peach
+Skunk,3,Corn Oil
+Skunk,3,Bone Broth
+Skunk,3,Butter
+Polar Bear,1,Frozen Peas
+Polar Bear,1,Frozen Catfish
+Polar Bear,1,Frozen Bones
+Polar Bear,1,Frozen Radish
+Polar Bear,2,Frozen Squid
+Polar Bear,2,Frozen Sheepshead
+Polar Bear,2,Frozen Boot
+Polar Bear,2,Frozen Tomato
+Polar Bear,3,Frozen Pine
+Polar Bear,3,Frozen Crab Claw
+Polar Bear,3,Frozen Corn
+Polar Bear,3,Cooked Fish
+Hummingbird,1,Purple Flower
+Hummingbird,1,3-leaf Clover
+Hummingbird,1,Yellow Flowers
+Hummingbird,1,Orange Flowers
+Hummingbird,2,4-leaf Clover
+Hummingbird,2,Spring Seeds
+Hummingbird,2,Blue Flowers
+Hummingbird,2,White Flowers
+Hummingbird,3,Oak
+Hummingbird,3,Red Flowers
+Hummingbird,3,Potted Flower
+Hummingbird,3,Honeysuckle
+Shark,1,Starfish
+Shark,1,Shrimp
+Shark,1,Red Starfish
+Shark,1,Barnacle Shell
+Shark,2,Puffer
+Shark,2,Ruby Coral
+Shark,2,Purple Butterfly Fish
+Shark,2,Sea Urchin
+Shark,3,Marlin
+Shark,3,Large Clam Shell
+Shark,3,Large Net
+Shark,3,Ghost Jelly
