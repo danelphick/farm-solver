@@ -9,6 +9,10 @@ openable:
   a pool, in a uniform whole-number count between that item's own ``low`` and
   ``high`` inclusive.
 
+Chests also cost a key to open, one per chest, by tier: Small Chests need a
+Small Key, Medium Chests a Square Key, Large Chests a Treasure Key, and Mystical
+Chests a Skeleton Key. Bags open freely.
+
 For solving we only care about the *average* haul per open. A fixed openable
 averages exactly its listed counts. In a random one each of the ``N`` pool
 entries is equally likely to be the one picked, so entry ``i`` averages
@@ -31,6 +35,23 @@ DEFAULT_OPENABLES_CSV = Path(__file__).with_name("openables.csv")
 # CSV ``Type`` column values.
 FIXED = "fixed"
 RANDOM = "random"
+
+# Chests cost one key to open, by tier (matched against the openable's name).
+# Bags and other openables need no key.
+CHEST_KEYS: dict[str, str] = {
+    "Small Chest": "Small Key",
+    "Medium Chest": "Square Key",
+    "Large Chest": "Treasure Key",
+    "Mystical Chest": "Skeleton Key",
+}
+
+
+def key_for(name: str) -> str | None:
+    """The key an openable named ``name`` costs to open, or ``None`` for none."""
+    for prefix, key in CHEST_KEYS.items():
+        if name.startswith(prefix):
+            return key
+    return None
 
 
 @dataclass
@@ -57,10 +78,12 @@ class Openable:
 
     ``fixed`` maps a lower-cased item name to the guaranteed count yielded each
     open. ``pool`` is the list of candidates, one of which is drawn at random
-    per open; an empty pool means the openable has no random component.
+    per open; an empty pool means the openable has no random component. ``key``,
+    if set, names the item consumed to open one (chests need a key; bags do not).
     """
 
     name: str
+    key: str | None = None
     fixed: dict[str, float] = field(default_factory=dict)
     pool: list[PoolItem] = field(default_factory=list)
 
@@ -106,7 +129,9 @@ def read_openables(path: Path) -> Locksmith:
         name = row["Openable"].strip()
         kind = row["Type"].strip().lower()
         item = row["Item"].strip()
-        openable = openables.setdefault(name.lower(), Openable(name=name))
+        openable = openables.setdefault(
+            name.lower(), Openable(name=name, key=key_for(name))
+        )
         if kind == FIXED:
             key = item.lower()
             openable.fixed[key] = openable.fixed.get(key, 0.0) + int(row["Min"])

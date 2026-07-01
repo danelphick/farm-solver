@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from locksmith import Locksmith, Openable, PoolItem, load_openables, read_openables
+from locksmith import (
+    Locksmith,
+    Openable,
+    PoolItem,
+    key_for,
+    load_openables,
+    read_openables,
+)
 
 OPENABLES_CSV = Path(__file__).resolve().parent.parent / "openables.csv"
 
@@ -89,6 +96,27 @@ def test_lookup_is_case_insensitive():
     smith = Locksmith(openables={"chest": Openable(name="Chest")})
     assert smith.openable("CHEST") is not None
     assert smith.openable("nope") is None
+
+
+@pytest.mark.parametrize(
+    "name, key",
+    [
+        ("Small Chest 01", "Small Key"),
+        ("Medium Chest 03", "Square Key"),
+        ("Large Chest 02", "Treasure Key"),
+        ("Mystical Chest 01", "Skeleton Key"),
+        ("Grab Bag 01", None),
+        ("Bait Bag 01", None),
+    ],
+)
+def test_key_for_matches_chest_tier(name, key):
+    assert key_for(name) == key
+
+
+def test_read_records_the_chest_key(tmp_path):
+    path = tmp_path / "openables.csv"
+    path.write_text("Openable,Type,Item,Min,Max\nSmall Chest 09,fixed,Ruby,10,\n")
+    assert read_openables(path).openable("Small Chest 09").key == "Small Key"
 
 
 def test_load_real_openables_csv_has_small_chest_01():
