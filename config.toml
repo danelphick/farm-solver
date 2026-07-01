@@ -75,6 +75,7 @@ have_lemon_squeezer = true
 use_quandary_chowder = true
 
 [pets]    # each pet's current level; tier items come from pets.csv
+use_crunchy_omelette = true
 "Cat" = 8
 "Wolf" = 8
 "Owl" = 8

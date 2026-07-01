@@ -157,12 +157,25 @@ def pet_items(cfg: dict) -> set[str]:
 
     Pet levels come from the ``[pets]`` config section; a pet's unlocked tiers
     depend on that level. Seasonal pets still count -- their items are
-    obtainable, just only for part of the year.
+    obtainable, just only for part of the year. The crunchy omelette only
+    scales quantities, so it does not change which items are obtainable.
     """
-    levels = cfg.get("pets", {})
-    if not levels or not PETS_CSV.exists():
+    pets_cfg = cfg.get("pets", {})
+    if not pets_cfg or not PETS_CSV.exists():
         return set()
-    return set(pets.load_pets(PETS_CSV, levels).daily_output())
+    boost = (
+        pets.CRUNCHY_OMELETTE_MULTIPLIER
+        if pets_cfg.get("use_crunchy_omelette")
+        else 1.0
+    )
+    # Only integer entries are pet levels; flags like use_crunchy_omelette
+    # (a bool, which is an int subclass) are excluded.
+    levels = {
+        name: level
+        for name, level in pets_cfg.items()
+        if isinstance(level, int) and not isinstance(level, bool)
+    }
+    return set(pets.load_pets(PETS_CSV, levels, boost).daily_output())
 
 
 def obtainable_items(production: passive.PassiveProduction, cfg: dict) -> set[str]:

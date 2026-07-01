@@ -142,6 +142,27 @@ def test_read_real_pets_csv_has_cat_with_three_full_tiers():
     ]
 
 
+def test_boost_scales_every_item():
+    # A 1.5x boost lifts a level-1 pet's four tier-1 items from 6 to 9 a day.
+    output = make_pet(1, boost=1.5).daily_output()
+    assert set(output.values()) == {9}
+
+
+def test_boost_scales_the_doubled_item_too():
+    pet = make_pet(6, double_item="Ice", boost=1.5)
+    output = pet.daily_output()
+    # Ordinary items go from 12 to 18; the doubled item from 24 to 36.
+    assert output["acorn"] == 18
+    assert output["ice"] == 36
+
+
+def test_load_pets_passes_the_boost_through():
+    pets = load_pets(PETS_CSV, {"Cat": 1}, boost=1.5)
+    assert pets.pet("Cat").boost == 1.5
+    # Level-1 Cat's tier-1 items rise from 6 to 9 a day.
+    assert pets.pet("Cat").daily_output()["drum"] == 9
+
+
 def test_load_pets_applies_levels_and_fixed_facts():
     pets = load_pets(PETS_CSV, {"Owl": 6, "Wolf": 3})
     # Levels come from the mapping; unlisted pets default to 0.

@@ -49,3 +49,12 @@ def test_pet_items_exclude_locked_tiers_at_low_level():
 
 def test_pet_items_empty_without_pets_config():
     assert pet_items({}) == set()
+
+
+def test_pet_items_ignore_the_crunchy_omelette_flag():
+    # The boost flag is not mistaken for a pet level, and only scales
+    # quantities, so the obtainable set is the same with or without it.
+    with_flag = pet_items({"pets": {"use_crunchy_omelette": True, "Cat": 8}})
+    without = pet_items({"pets": {"Cat": 8}})
+    assert with_flag == without
+    assert "shinefish" in with_flag  # Cat tier 3, still obtainable

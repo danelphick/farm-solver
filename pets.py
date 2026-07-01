@@ -40,6 +40,9 @@ TIER_THREE_LEVEL = 6
 # The special pet doubles its chosen item once it reaches this level.
 DOUBLE_ITEM_LEVEL = 6
 
+# The crunchy omelette increases every pet's retrieval by 50%.
+CRUNCHY_OMELETTE_MULTIPLIER = 1.5
+
 # Fixed game facts about individual pets, keyed by lower-cased name.
 #
 # Seasonal pets only drop items during two calendar months:
@@ -72,6 +75,7 @@ class Pet:
     set, limits a seasonal pet to those calendar months (1-12); ``None`` means
     it produces all year round. ``double_item``, if set, names the item the
     special pet produces at twice the normal rate once it reaches level 6.
+    ``boost`` scales retrieval (e.g. 1.5 with the crunchy omelette).
     """
 
     name: str
@@ -79,6 +83,7 @@ class Pet:
     tiers: list[list[str]] = field(default_factory=list)
     months: frozenset[int] | None = None
     double_item: str | None = None
+    boost: float = 1.0
 
     @property
     def seasonal(self) -> bool:
@@ -98,14 +103,15 @@ class Pet:
     def daily_output(self) -> dict[str, float]:
         """Average items gathered per day while the pet is active.
 
-        The ``24 * level`` items a day are split evenly across the active items
-        (keyed by lower-cased name); the special pet's chosen item then gets
-        twice that share once the pet is level 6 or above.
+        The ``24 * level`` items a day (scaled by ``boost``) are split evenly
+        across the active items (keyed by lower-cased name); the special pet's
+        chosen item then gets twice that share once the pet is level 6 or above.
         """
         items = self.active_items()
         if not items:
             return {}
-        per_item = self.level * HOURS_PER_DAY * ITEMS_PER_HOUR_PER_LEVEL / len(items)
+        per_hour = self.level * ITEMS_PER_HOUR_PER_LEVEL * self.boost
+        per_item = per_hour * HOURS_PER_DAY / len(items)
         output: dict[str, float] = {}
         for item in items:
             key = item.lower()
@@ -160,11 +166,14 @@ def read_pet_tiers(path: Path) -> dict[str, list[list[str]]]:
     }
 
 
-def load_pets(path: Path, levels: dict[str, int] | None = None) -> Pets:
+def load_pets(
+    path: Path, levels: dict[str, int] | None = None, boost: float = 1.0
+) -> Pets:
     """Build the pets from the tier CSV, per-pet ``levels``, and fixed facts.
 
     ``levels`` maps a pet's name to its current level (case-insensitive); a pet
-    absent from it defaults to level 0 and so produces nothing. The seasonal
+    absent from it defaults to level 0 and so produces nothing. ``boost`` scales
+    every pet's retrieval (e.g. 1.5 with the crunchy omelette). The seasonal
     windows and the special pet's doubled item come from :data:`SEASONAL_MONTHS`
     and :data:`DOUBLE_ITEMS`.
     """
@@ -178,5 +187,6 @@ def load_pets(path: Path, levels: dict[str, int] | None = None) -> Pets:
             tiers=tiers,
             months=SEASONAL_MONTHS.get(key),
             double_item=DOUBLE_ITEMS.get(key),
+            boost=boost,
         )
     return Pets(pets=pets)
