@@ -73,3 +73,33 @@ use_sea_pincher = true
 [exploring]
 have_lemon_squeezer = true
 use_quandary_chowder = true
+
+[pets]    # each pet's current level; tier items come from pets.csv
+"Cat" = 8
+"Wolf" = 8
+"Owl" = 8
+"Dog" = 8
+"Squirrel" = 8
+"Swine" = 8
+"Snake" = 8
+"Lemur" = 8
+"Baboon" = 8
+"Frog" = 8
+"Hedgehog" = 8
+"Fox" = 8
+"Armadillo" = 8
+"Spider" = 8
+"Pet Rock" = 8
+"Bird" = 8
+"Penguin" = 8
+"Green Dragon" = 8
+"Red Dragon" = 8
+"Blue Dragon" = 8
+"Bear" = 8
+"Capybara" = 8
+"Strange Onion" = 8
+"Seal" = 8
+"Skunk" = 8
+"Polar Bear" = 8
+"Hummingbird" = 8
+"Shark" = 8
