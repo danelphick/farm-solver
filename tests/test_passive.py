@@ -115,6 +115,11 @@ def test_parse_duration_rejects_garbage(text):
         (timedelta(hours=1), "1h"),
         (timedelta(days=1, hours=2, minutes=3), "1d 2h 3m"),
         (timedelta(0), "0m"),
+        # A year or more switches to years and days, dropping hours/minutes.
+        (timedelta(days=365), "1y"),
+        (timedelta(days=365, hours=5), "1y"),
+        (timedelta(days=400), "1y 35d"),
+        (timedelta(days=25447), "69y 262d"),
     ],
 )
 def test_format_duration(duration, expected):

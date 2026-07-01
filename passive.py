@@ -159,12 +159,25 @@ def parse_duration(text: str) -> timedelta:
     return timedelta(days=days, hours=hours, minutes=minutes)
 
 
+DAYS_PER_YEAR = 365
+
+
 def format_duration(duration: timedelta) -> str:
-    """Render a duration as ``"5d 3h 20m"``, dropping zero components."""
+    """Render a duration as ``"5d 3h 20m"``, dropping zero components.
+
+    A year or longer is shown as years and days (e.g. ``"2y 40d"``), dropping
+    the finer hours and minutes since they are noise at that scale.
+    """
     minutes_total = int(duration.total_seconds() + 30) // 60  # round to minutes
     days, rem = divmod(minutes_total, 24 * 60)
     hours, minutes = divmod(rem, 60)
-    parts: list[str] = []
+    if days >= DAYS_PER_YEAR:
+        years, days = divmod(days, DAYS_PER_YEAR)
+        parts = [f"{years}y"]
+        if days:
+            parts.append(f"{days}d")
+        return " ".join(parts)
+    parts = []
     if days:
         parts.append(f"{days}d")
     if hours:
