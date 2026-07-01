@@ -22,7 +22,6 @@ import farm_solver
 import farming
 import parsing
 import passive
-import pets
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,7 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 FISHING_CSV = Path(__file__).with_name("fishing.csv")
 EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
-PETS_CSV = Path(__file__).with_name("pets.csv")
 
 
 def _csv_items(path: Path) -> set[str]:
@@ -152,44 +150,17 @@ def _csv_items(path: Path) -> set[str]:
         return {row["Item"].strip().lower() for row in csv.DictReader(f)}
 
 
-def pet_items(cfg: dict) -> set[str]:
-    """Lower-cased items the configured pets can fetch at their current level.
-
-    Pet levels come from the ``[pets]`` config section; a pet's unlocked tiers
-    depend on that level. Seasonal pets still count -- their items are
-    obtainable, just only for part of the year. The crunchy omelette only
-    scales quantities, so it does not change which items are obtainable.
-    """
-    pets_cfg = cfg.get("pets", {})
-    if not pets_cfg or not PETS_CSV.exists():
-        return set()
-    boost = (
-        pets.CRUNCHY_OMELETTE_MULTIPLIER
-        if pets_cfg.get("use_crunchy_omelette")
-        else 1.0
-    )
-    # Only integer entries are pet levels; flags like use_crunchy_omelette
-    # (a bool, which is an int subclass) are excluded.
-    levels = {
-        name: level
-        for name, level in pets_cfg.items()
-        if isinstance(level, int) and not isinstance(level, bool)
-    }
-    return set(pets.load_pets(PETS_CSV, levels, boost).daily_output())
-
-
-def obtainable_items(production: passive.PassiveProduction, cfg: dict) -> set[str]:
+def obtainable_items(production: passive.PassiveProduction) -> set[str]:
     """Lower-cased items obtainable without crafting.
 
-    Covers passive production, fishing, exploring, farming, pets, and the
-    materials the game supplies automatically.
+    Covers passive production (which includes pets), fishing, exploring,
+    farming, and the materials the game supplies automatically.
     """
     items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
         items |= set(producer.outputs)
     items |= _csv_items(FISHING_CSV)
     items |= _csv_items(EXPLORING_CSV)
-    items |= pet_items(cfg)
     return items
 
 
@@ -329,7 +300,7 @@ def run(args: argparse.Namespace) -> int:
 
     # A standalone report over the whole workshop; no solving needed.
     if args.unobtainable:
-        obtainable = obtainable_items(production, cfg)
+        obtainable = obtainable_items(production)
         print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
 

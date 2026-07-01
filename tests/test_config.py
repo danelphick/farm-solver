@@ -315,6 +315,37 @@ def test_passive_production_attaches_storehouse_size():
     assert production.inventory_size == 140
 
 
+def test_passive_production_includes_pets():
+    # A level-8 Skunk has all three tiers (12 items), fetching 8*24/12 = 16 of
+    # each a day; Corn Oil is one of its tier-3 items.
+    production = passive_production({"pets": {"Skunk": 8}})
+    skunk = next(p for p in production.producers if p.name == "pet Skunk")
+    assert skunk.period == DAILY
+    assert skunk.outputs["corn oil"] == 16
+
+
+def test_pets_crunchy_omelette_boosts_producer_output():
+    production = passive_production(
+        {"pets": {"Skunk": 8, "use_crunchy_omelette": True}}
+    )
+    skunk = next(p for p in production.producers if p.name == "pet Skunk")
+    assert skunk.outputs["corn oil"] == 24  # 16 * 1.5
+
+
+def test_seasonal_pet_output_is_scaled_to_annual_average():
+    # The Shark only fetches in June-July (2 of 12 months), so its daily output
+    # is scaled by 2/12. Level 8 full rate is 16 a day, so 16/6 on average.
+    production = passive_production({"pets": {"Shark": 8}})
+    shark = next(p for p in production.producers if p.name == "pet Shark")
+    assert shark.outputs["ghost jelly"] == pytest.approx(16 / 6)  # tier 3
+
+
+def test_pets_with_no_level_are_not_producers():
+    # The boost flag alone leaves every pet at level 0, so none produce.
+    production = passive_production({"pets": {"use_crunchy_omelette": True}})
+    assert not any(p.name.startswith("pet ") for p in production.producers)
+
+
 def test_passive_production_without_sawmill_is_empty():
     assert passive_production({}).producers == []
 

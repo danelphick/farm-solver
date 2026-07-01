@@ -153,7 +153,15 @@ coal = 8000
 
 [steelworks]   # steel hourly, plus steel wire at a third of that (rounded down)
 steel = 10296
+
+[pets]         # each pet's level; tier items come from pets.csv
+use_crunchy_omelette = true   # 50% more items fetched by every pet
+"Skunk" = 8
+"Owl" = 8
+# ... one line per pet
 ```
+
+Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate. Because pets fetch slowly, sourcing a lot of an item from a pet can take a very long time; use `--passive-limit` to cap the wait and craft the rest.
 
 When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
 

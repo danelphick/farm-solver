@@ -26,6 +26,9 @@ import csv
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# The bundled tier data, used unless another path is given.
+DEFAULT_PETS_CSV = Path(__file__).with_name("pets.csv")
+
 # A pet retrieves this many items per hour for each level it has.
 ITEMS_PER_HOUR_PER_LEVEL = 1
 HOURS_PER_DAY = 24
@@ -190,3 +193,25 @@ def load_pets(
             boost=boost,
         )
     return Pets(pets=pets)
+
+
+def pets_from_config(config_section: dict, path: Path | None = None) -> Pets:
+    """Build the pets from a ``[pets]`` config section.
+
+    Integer entries are per-pet levels; the ``use_crunchy_omelette`` flag turns
+    on the 1.5x retrieval boost. Any other keys are ignored. Tier items come
+    from ``path`` (the bundled :data:`DEFAULT_PETS_CSV` by default).
+    """
+    boost = (
+        CRUNCHY_OMELETTE_MULTIPLIER
+        if config_section.get("use_crunchy_omelette")
+        else 1.0
+    )
+    # Flags like use_crunchy_omelette are bools (an int subclass), so exclude
+    # them; only genuine integer levels remain.
+    levels = {
+        name: level
+        for name, level in config_section.items()
+        if isinstance(level, int) and not isinstance(level, bool)
+    }
+    return load_pets(path or DEFAULT_PETS_CSV, levels, boost)

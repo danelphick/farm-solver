@@ -1,5 +1,5 @@
 from crafting import Workshop, WorkshopRecipe
-from main import pet_items, unobtainable_materials
+from main import unobtainable_materials
 
 WORKSHOP = Workshop(
     recipes={
@@ -34,27 +34,21 @@ def test_matching_is_case_insensitive():
     assert unobtainable_materials(workshop, {"painite"}) == []
 
 
-def test_pet_items_include_higher_tiers_at_high_level():
-    # A level-8 Cat has all three tiers unlocked, so its tier-3 item counts.
-    items = pet_items({"pets": {"Cat": 8}})
-    assert "shinefish" in items  # Cat tier 3
+def test_obtainable_items_include_pet_output():
+    # Pets are passive producers, so their items count as obtainable. A level-8
+    # Cat has all three tiers unlocked, so its tier-3 item is obtainable.
+    from config import passive_production
+    from main import obtainable_items
+
+    obtainable = obtainable_items(passive_production({"pets": {"Cat": 8}}))
+    assert "shinefish" in obtainable  # Cat tier 3
 
 
-def test_pet_items_exclude_locked_tiers_at_low_level():
-    # A level-2 Cat only reaches tier 1, so tier-3 items are not obtainable.
-    items = pet_items({"pets": {"Cat": 2}})
-    assert "drum" in items  # Cat tier 1
-    assert "shinefish" not in items  # Cat tier 3, still locked
+def test_obtainable_items_exclude_locked_pet_tiers():
+    # A level-2 Cat only reaches tier 1, so its tier-3 items are not obtainable.
+    from config import passive_production
+    from main import obtainable_items
 
-
-def test_pet_items_empty_without_pets_config():
-    assert pet_items({}) == set()
-
-
-def test_pet_items_ignore_the_crunchy_omelette_flag():
-    # The boost flag is not mistaken for a pet level, and only scales
-    # quantities, so the obtainable set is the same with or without it.
-    with_flag = pet_items({"pets": {"use_crunchy_omelette": True, "Cat": 8}})
-    without = pet_items({"pets": {"Cat": 8}})
-    assert with_flag == without
-    assert "shinefish" in with_flag  # Cat tier 3, still obtainable
+    obtainable = obtainable_items(passive_production({"pets": {"Cat": 2}}))
+    assert "drum" in obtainable  # Cat tier 1
+    assert "shinefish" not in obtainable  # Cat tier 3, still locked

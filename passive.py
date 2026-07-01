@@ -25,12 +25,13 @@ class PassiveProducer:
     """A building that yields items on a fixed cadence.
 
     ``outputs`` maps the lower-cased item name to the quantity produced each
-    ``period``.
+    ``period``. Quantities are usually whole, but some sources (e.g. pets)
+    produce a fractional average per cycle.
     """
 
     name: str
     period: timedelta
-    outputs: dict[str, int] = field(default_factory=dict)
+    outputs: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

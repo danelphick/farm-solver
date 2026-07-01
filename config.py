@@ -12,6 +12,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+import pets
 from passive import (
     DAILY,
     HOURLY,
@@ -20,6 +21,9 @@ from passive import (
     PassiveProducer,
     PassiveProduction,
 )
+
+# The number of months in a year, used to average seasonal pet output.
+MONTHS_IN_YEAR = 12
 
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
@@ -63,6 +67,8 @@ def passive_production(
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
       (rounded down).
+    * ``[pets]`` -- each listed pet fetches its average daily haul of items (see
+      :func:`_pet_producers` and :mod:`pets`), as a daily producer.
 
     The storehouse size (see :func:`storehouse_size`) is attached so production
     rates respect how much can be held at once.
@@ -284,9 +290,36 @@ def passive_production(
             )
         )
 
+    pets_config = config.get("pets")
+    if pets_config:
+        producers.extend(_pet_producers(pets_config))
+
     return PassiveProduction(
         producers=producers, inventory_size=storehouse_size(config, today)
     )
+
+
+def _pet_producers(pets_config: dict[str, Any]) -> list[PassiveProducer]:
+    """Daily producers for the pets described by a ``[pets]`` config section.
+
+    Each pet fetches items over time; its average daily haul (see
+    :func:`pets.pets_from_config`) becomes a daily producer. Seasonal pets only
+    fetch for part of the year, so their output is scaled to the long-run
+    average daily rate (months active / 12). Pets with no level produce nothing
+    and are skipped.
+    """
+    producers: list[PassiveProducer] = []
+    for pet in pets.pets_from_config(pets_config).pets.values():
+        outputs = pet.daily_output()
+        if not outputs:
+            continue
+        if pet.months is not None:
+            factor = len(pet.months) / MONTHS_IN_YEAR
+            outputs = {item: qty * factor for item, qty in outputs.items()}
+        producers.append(
+            PassiveProducer(name=f"pet {pet.name}", period=DAILY, outputs=outputs)
+        )
+    return producers
 
 
 def _as_date(value: Any) -> date:
