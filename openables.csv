@@ -1,0 +1,157 @@
+Openable,Type,Item,Min,Max
+Small Chest 01,fixed,Amethyst,10,
+Small Chest 01,fixed,Aquamarine,10,
+Small Chest 01,fixed,Emerald,10,
+Small Chest 01,fixed,Jade,10,
+Small Chest 01,fixed,Lemon Quartz,10,
+Small Chest 01,fixed,Ruby,10,
+Small Chest 02,fixed,Antler,10,
+Small Chest 02,fixed,Glass Orb,10,
+Small Chest 02,fixed,Leather,10,
+Small Chest 02,fixed,Rope,10,
+Small Chest 02,fixed,Wooden Plank,10,
+Medium Chest 01,fixed,Ancient Coin,50,
+Medium Chest 01,fixed,Apple,100,
+Medium Chest 01,fixed,Grape Juice,1,
+Medium Chest 02,fixed,Amethyst Necklace,5,
+Medium Chest 02,fixed,Aquamarine Ring,5,
+Medium Chest 02,fixed,Emerald Ring,5,
+Medium Chest 02,fixed,Ruby Ring,5,
+Medium Chest 02,fixed,Shimmer Ring,5,
+Medium Chest 03,fixed,Fishing Net,2,
+Medium Chest 03,fixed,Grab Bag 08,1,
+Medium Chest 03,fixed,Twine,25,
+Medium Chest 03,fixed,Wine,1,
+Large Chest 01,fixed,Ancient Coin,100,
+Large Chest 01,fixed,Emerald,50,
+Large Chest 01,fixed,Jade,50,
+Large Chest 01,fixed,Pearl,50,
+Large Chest 01,fixed,Ruby,50,
+Large Chest 01,fixed,Shimmer Topaz,50,
+Large Chest 02,fixed,Cogwheel,2,
+Large Chest 02,fixed,Hammer,1,
+Large Chest 02,fixed,Small Gear,3,
+Large Chest 02,fixed,Small Screw,8,
+Large Chest 02,fixed,Small Spring,2,
+Large Chest 02,fixed,Steel,5,
+Large Chest 03,fixed,Corn,10,
+Large Chest 03,fixed,Glass Bottle,5,
+Large Chest 03,fixed,Honey,1,
+Large Chest 03,fixed,Salt,10,
+Large Chest 03,fixed,Shinefish,1,
+Mystical Chest 01,fixed,Egyptian Necklace,1,
+Mystical Chest 01,fixed,Gold Coral,3,
+Mystical Chest 01,fixed,Goldgill,5,
+Mystical Chest 01,fixed,Magicite,4,
+Mystical Chest 01,fixed,Mystic Ring,10,
+Mystical Chest 01,fixed,Shimmer Ring,10,
+Mystical Chest 01,fixed,Square Key,3,
+Mystical Chest 01,fixed,Winged Amulet,1,
+Mystical Chest 01,fixed,Wizard Hat,1,
+Mystical Chest 02,fixed,Green Cloak,3,
+Mystical Chest 02,fixed,Large Net,3,
+Mystical Chest 02,fixed,Red Shield,3,
+Mystical Chest 02,fixed,Skull Coin,1,
+Mystical Chest 02,fixed,Sunflower,2,
+Grab Bag 01,random,3-leaf Clover,10,50
+Grab Bag 01,random,Aquamarine,10,50
+Grab Bag 01,random,Bone,10,50
+Grab Bag 01,random,Catfish,10,25
+Grab Bag 01,random,Gold Cucumber,10,50
+Grab Bag 01,random,Mushroom,10,50
+Grab Bag 01,random,Potato,10,50
+Grab Bag 02,random,Ancient Coin,10,25
+Grab Bag 02,random,Antler,10,25
+Grab Bag 02,random,Fire Ant,10,25
+Grab Bag 02,random,Giant Centipede,10,25
+Grab Bag 02,random,Globber,1,10
+Grab Bag 02,random,Gummy Worms,10,25
+Grab Bag 02,random,Horn,10,25
+Grab Bag 02,random,Shiny Beetle,10,25
+Grab Bag 02,random,Snail,10,25
+Grab Bag 03,random,Gold Carrot,10,25
+Grab Bag 03,random,Gold Cucumber,10,25
+Grab Bag 03,random,Gold Eggplant,10,25
+Grab Bag 03,random,Gold Feather,10,25
+Grab Bag 03,random,Gold Leaf,10,25
+Grab Bag 03,random,Gold Peas,10,25
+Grab Bag 03,random,Gold Peppers,10,50
+Grab Bag 03,random,Treasure Key,1,7
+Grab Bag 04,random,Runestone 01,1,2
+Grab Bag 04,random,Runestone 02,1,2
+Grab Bag 04,random,Runestone 03,1,2
+Grab Bag 04,random,Runestone 04,1,2
+Grab Bag 04,random,Runestone 05,1,2
+Grab Bag 04,random,Runestone 06,1,2
+Grab Bag 04,random,Runestone 07,1,2
+Grab Bag 04,random,Runestone 08,1,2
+Grab Bag 04,random,Runestone 09,1,2
+Grab Bag 04,random,Runestone 10,1,2
+Grab Bag 05,random,Runestone 11,1,2
+Grab Bag 05,random,Runestone 12,1,2
+Grab Bag 05,random,Runestone 13,1,2
+Grab Bag 05,random,Runestone 14,1,2
+Grab Bag 05,random,Runestone 15,1,2
+Grab Bag 05,random,Runestone 16,1,2
+Grab Bag 05,random,Runestone 17,1,2
+Grab Bag 05,random,Runestone 18,1,2
+Grab Bag 05,random,Runestone 19,1,2
+Grab Bag 05,random,Runestone 20,1,2
+Grab Bag 06,random,Ancient Coin,10,150
+Grab Bag 06,random,Fishing Net,10,20
+Grab Bag 06,random,Grape Juice,1,10
+Grab Bag 06,random,Lemonade,10,20
+Grab Bag 06,random,Orange Juice,10,20
+Grab Bag 06,random,Skull Coin,1,1
+Grab Bag 06,random,Steak,1,3
+Grab Bag 06,random,Wine,1,4
+Grab Bag 07,random,Gold Catfish,1,5
+Grab Bag 07,random,Gold Coral,1,5
+Grab Bag 07,random,Gold Drum,1,5
+Grab Bag 07,random,Gold Flier,1,5
+Grab Bag 07,random,Gold Jelly,1,5
+Grab Bag 07,random,Gold Sea Bass,1,5
+Grab Bag 07,random,Gold Sea Crest,1,5
+Grab Bag 07,random,Gold Trout,1,5
+Grab Bag 07,random,Goldfin,1,5
+Grab Bag 07,random,Goldgill,1,5
+Grab Bag 07,random,Goldjack,1,5
+Grab Bag 07,random,Goldray,1,5
+Grab Bag 08,random,Skeleton Key,1,1
+Grab Bag 08,random,Small Key,1,5
+Grab Bag 08,random,Square Key,1,5
+Grab Bag 08,random,Treasure Key,1,3
+Bag of Spring Seeds,fixed,Spring Seeds,25,
+Gold Seed Bag 01,fixed,Gold Carrot Seeds,100,
+Gold Seed Bag 01,fixed,Gold Cucumber Seeds,50,
+Gold Seed Bag 01,fixed,Gold Eggplant Seeds,40,
+Gold Seed Bag 01,fixed,Gold Pea Seeds,80,
+Gold Seed Bag 01,fixed,Gold Pepper Seeds,200,
+Corn Prize Bag,fixed,Ancient Coin,100,
+Corn Prize Bag,fixed,Cheese,5,
+Corn Prize Bag,fixed,Crab Claw,10,
+Corn Prize Bag,fixed,Grape Juice,2,
+Corn Prize Bag,fixed,Moonstone,25,
+Corn Prize Bag,fixed,Popcorn,1,
+Corn Prize Bag,fixed,Runestone 11,1,
+Corn Prize Bag,fixed,Salt,25,
+Bug Bag 01,random,Caterpillar,1,10
+Bug Bag 01,random,Cricket,1,10
+Bug Bag 01,random,Cyclops Spider,1,10
+Bug Bag 01,random,Dragonfly,1,10
+Bug Bag 01,random,Fire Ant,1,10
+Bug Bag 01,random,Giant Centipede,1,10
+Bug Bag 01,random,Grasshopper,1,10
+Bug Bag 01,random,Gummy Worms,1,10
+Bug Bag 01,random,Horned Beetle,1,10
+Bug Bag 01,random,Mealworms,1,10
+Bug Bag 01,random,Onyx Scorpion,1,10
+Bug Bag 01,random,Ruby Scorpion,1,10
+Bug Bag 01,random,Shiny Beetle,1,10
+Bug Bag 01,random,Snail,1,10
+Bug Bag 01,random,Spider,1,10
+Bait Bag 01,random,Grubs,10,250
+Bait Bag 01,random,Gummy Worms,10,250
+Bait Bag 01,random,Mealworms,10,250
+Bait Bag 01,random,Minnows,10,250
+Bait Bag 01,random,Worms,10,250
