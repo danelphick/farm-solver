@@ -16,7 +16,7 @@ inventory_file = "./sample-inventory.txt"
 
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them.
 
-``` shell
+```shell
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] [--passive-limit duration] [--unobtainable] [--mastery-file <file>] [--inventory-file <file>]
 ```
 
@@ -24,19 +24,19 @@ By default it will assume you want to reach the highest possible level, but you 
 
 The solver can also ignore the tower and solve for mastering a particular item using `-m`. E.g.
 
-```
+```shell
 python main.py -m "Flying Machine:100000"
 ```
 
 You can pass multiple items by comma-separating the requirements. E.g.
 
-```
+```shell
 python main.py -m "Flying Machine:100000,Gainite:100000"
 ```
 
 Rather than masterying an item, it can solve for acquiring a certain number of an item using `-i` (including what's already in your current inventory).
 
-```
+```shell
 python main.py -i "Flying Machine:2000,Gainite:20"
 ```
 
@@ -53,7 +53,7 @@ A few materials (Iron and Nails) are supplied automatically by the game whenever
 
 Some materials are grown on the farm (crops like Corn and Cotton, the flowers, Pine Tree). These are split out of the totals and reported in their own `Farming required:` section, much like passive production:
 
-```
+```text
 Farming required:
   58,694x Corn
   121,051x Cotton
@@ -62,13 +62,13 @@ Farming required:
 
 Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
 
-```
+```shell
 python main.py --unobtainable
 ```
 
 By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
 
-```
+```shell
 python main.py -r
 ```
 
@@ -76,7 +76,7 @@ When expanding recursively, counts are kept as fractions through the whole craft
 
 Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
 
-```
+```text
 Required Crafts:
 
 5x Hammer (Produces 5, Adds 5 Mastery)
@@ -157,7 +157,7 @@ steel = 10296
 
 When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
 
-```
+```text
 Passive Production required:
   18,000x Oak in 3h
   180,000x Board in 3h
@@ -178,6 +178,6 @@ The solver works out the size today (`inventory + growth × days since updated_o
 
 By default passively-produced items are otherwise taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead. The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
 
-```
+```shell
 python main.py --passive-limit 3h
 ```
