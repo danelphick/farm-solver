@@ -282,7 +282,10 @@ def print_passive(uses: list[passive.PassiveUse]) -> None:
             f"  {use.quantity:,}x {use.item} " f"in {passive.format_duration(use.time)}"
         )
     total = passive.total_time(uses)
-    print(f"  Total time: {passive.format_duration(total)} (concurrent)")
+    # "(concurrent)" only clarifies the total when several waits overlap; with a
+    # single item the total is just its own wait.
+    suffix = " (concurrent)" if len(uses) > 1 else ""
+    print(f"  Total time: {passive.format_duration(total)}{suffix}")
 
 
 def load_config() -> dict:
