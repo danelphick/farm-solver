@@ -1,5 +1,5 @@
 from crafting import Workshop, WorkshopRecipe
-from main import unobtainable_materials
+from main import pet_items, unobtainable_materials
 
 WORKSHOP = Workshop(
     recipes={
@@ -32,3 +32,20 @@ def test_matching_is_case_insensitive():
         recipes={"box": WorkshopRecipe(name="Box", materials={"PAINITE": 1})}
     )
     assert unobtainable_materials(workshop, {"painite"}) == []
+
+
+def test_pet_items_include_higher_tiers_at_high_level():
+    # A level-8 Cat has all three tiers unlocked, so its tier-3 item counts.
+    items = pet_items({"pets": {"Cat": 8}})
+    assert "shinefish" in items  # Cat tier 3
+
+
+def test_pet_items_exclude_locked_tiers_at_low_level():
+    # A level-2 Cat only reaches tier 1, so tier-3 items are not obtainable.
+    items = pet_items({"pets": {"Cat": 2}})
+    assert "drum" in items  # Cat tier 1
+    assert "shinefish" not in items  # Cat tier 3, still locked
+
+
+def test_pet_items_empty_without_pets_config():
+    assert pet_items({}) == set()

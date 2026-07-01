@@ -22,6 +22,7 @@ import farm_solver
 import farming
 import parsing
 import passive
+import pets
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,7 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "list workshop materials with no known source (not produced "
-            "passively, fished, explored, farmed, auto-supplied, or craftable)"
+            "passively, fished, explored, farmed, fetched by pets, "
+            "auto-supplied, or craftable)"
         ),
     )
     parser.add_argument(
@@ -139,6 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 FISHING_CSV = Path(__file__).with_name("fishing.csv")
 EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
+PETS_CSV = Path(__file__).with_name("pets.csv")
 
 
 def _csv_items(path: Path) -> set[str]:
@@ -149,17 +152,31 @@ def _csv_items(path: Path) -> set[str]:
         return {row["Item"].strip().lower() for row in csv.DictReader(f)}
 
 
-def obtainable_items(production: passive.PassiveProduction) -> set[str]:
+def pet_items(cfg: dict) -> set[str]:
+    """Lower-cased items the configured pets can fetch at their current level.
+
+    Pet levels come from the ``[pets]`` config section; a pet's unlocked tiers
+    depend on that level. Seasonal pets still count -- their items are
+    obtainable, just only for part of the year.
+    """
+    levels = cfg.get("pets", {})
+    if not levels or not PETS_CSV.exists():
+        return set()
+    return set(pets.load_pets(PETS_CSV, levels).daily_output())
+
+
+def obtainable_items(production: passive.PassiveProduction, cfg: dict) -> set[str]:
     """Lower-cased items obtainable without crafting.
 
-    Covers passive production, fishing, exploring, farming, and the materials
-    the game supplies automatically.
+    Covers passive production, fishing, exploring, farming, pets, and the
+    materials the game supplies automatically.
     """
     items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
         items |= set(producer.outputs)
     items |= _csv_items(FISHING_CSV)
     items |= _csv_items(EXPLORING_CSV)
+    items |= pet_items(cfg)
     return items
 
 
@@ -169,7 +186,8 @@ def unobtainable_materials(
     """Workshop materials that are neither obtainable nor craftable.
 
     These have no known source: they are not produced passively, fished,
-    explored, farmed, auto-supplied, nor made from a recipe of their own.
+    explored, farmed, fetched by pets, auto-supplied, nor made from a recipe of
+    their own.
     """
     craftable = set(workshop.recipes)
     found: dict[str, str] = {}  # lower-cased key -> display name
@@ -298,7 +316,7 @@ def run(args: argparse.Namespace) -> int:
 
     # A standalone report over the whole workshop; no solving needed.
     if args.unobtainable:
-        obtainable = obtainable_items(production)
+        obtainable = obtainable_items(production, cfg)
         print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
 
