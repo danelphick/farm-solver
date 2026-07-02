@@ -119,6 +119,48 @@ def test_lookup_is_case_insensitive():
     assert make_farm().crop("nope") is None
 
 
+def test_growers_lists_crops_that_drop_the_item():
+    farm = make_farm()
+    assert {c.name for c in farm.growers("Runestone 01")} == {"Carrot"}
+    assert {c.name for c in farm.growers("Corn")} == {"Corn"}
+    assert farm.growers("Diamond") == []
+
+
+def test_growable_items_collects_every_drop():
+    items = make_farm().growable_items()
+    assert {"corn", "carrot", "runestone 01", "gold carrot"} <= items
+
+
+def test_best_source_finds_the_grower_of_a_rare_drop():
+    crop, time = make_farm(rows=13).best_source("Runestone 01", 5)
+    assert crop == "Carrot"
+    assert time is not None
+
+
+def test_best_source_prefers_the_faster_crop():
+    # Cotton (4/seed) and Mega Cotton (40/seed) grow Cotton in the same time; a
+    # large amount needs fewer mega plantings, so the mega seed wins.
+    farm = Farm(
+        crops={
+            "cotton": Crop("Cotton", timedelta(days=4), {"cotton": 4}),
+            "mega cotton": Crop(
+                "Mega Cotton", timedelta(days=4), {"cotton": 40}, primary="Cotton"
+            ),
+        },
+        rows=13,
+    )
+    crop, _ = farm.best_source("Cotton", 1000)
+    assert crop == "Mega Cotton"
+
+
+def test_best_source_unknown_item_is_none():
+    assert make_farm(rows=13).best_source("Diamond", 5) is None
+
+
+def test_best_source_without_rows_is_none():
+    assert make_farm(rows=0).best_source("Corn", 5) is None
+
+
 def test_read_crops_parses_durations_and_keeps_display_names(tmp_path):
     path = tmp_path / "crops.csv"
     path.write_text("Crop,Growth\nCorn,10m\nSugar Cane,1h30m\n")

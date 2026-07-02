@@ -10,6 +10,7 @@ from passive import (
     PassiveUse,
     format_duration,
     parse_duration,
+    source_materials,
     time_to_produce_all,
     total_time,
 )
@@ -137,3 +138,30 @@ def test_total_time_is_the_longest_concurrent_wait():
 
 def test_total_time_of_nothing_is_zero():
     assert total_time([]) == timedelta()
+
+
+def test_source_materials_takes_everything_without_a_limit():
+    production = PassiveProduction(producers=[SAWMILL])
+    uses, rest = source_materials(production, {"Board": 120000, "Steel": 50})
+    # The sawmill makes no steel, so it passes through untouched.
+    assert rest == {"Steel": 50}
+    (use,) = uses
+    assert (use.item, use.quantity) == ("Board", 120000)
+    assert use.time == timedelta(hours=2)
+
+
+def test_source_materials_caps_at_the_limit_and_returns_the_shortfall():
+    production = PassiveProduction(producers=[SAWMILL])
+    # 60000 board an hour: in one hour only half of 120000 arrives.
+    uses, rest = source_materials(production, {"Board": 120000}, timedelta(hours=1))
+    (use,) = uses
+    assert use.quantity == 60000
+    assert use.time == timedelta(hours=1)
+    assert rest == {"Board": 60000}
+
+
+def test_source_materials_passes_through_unproduced_items():
+    production = PassiveProduction(producers=[SAWMILL])
+    uses, rest = source_materials(production, {"Steel": 10})
+    assert uses == []
+    assert rest == {"Steel": 10}

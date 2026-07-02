@@ -51,14 +51,17 @@ Two bonuses affect how many crafts (and therefore materials) are needed:
 
 A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded — they simply do not appear in the materials, breakdown, or passive output.
 
-Some materials are grown on the farm (crops like Corn and Cotton, the flowers, Pine Tree). These are split out of the totals and reported in their own `Farming required:` section, much like passive production:
+Some materials are grown on the farm rather than crafted. These are split out of the totals and reported in their own `Farming required:` section, with how long each takes to grow (harvesting and replanting continuously, with no rest):
 
 ```text
 Farming required:
-  58,694x Corn
-  121,051x Cotton
-  161,401x Pine Tree
+  58,694x Corn in 12d 4h 10m
+  121,051x Cotton in 74d 19h 12m (via Mega Cotton)
+  2,368,173x Mushroom in 22d 18h 36m
+  161,401x Pine Tree in 82d 19h 12m
 ```
+
+Each item is grown from the crop that supplies it fastest, using your row count and growth/yield modifiers from the `[farming]` config (see below). The crop is named when it differs from the item — a rare seed drop like a Runestone (grown by planting its crop) or a bulk *Mega* seed. See [the farming section](#farming) for how the model works. A handful of farmed items the crop model does not cover (the flowers) are still listed here, without a time.
 
 Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
 
@@ -161,9 +164,11 @@ use_crunchy_omelette = true   # 50% more items fetched by every pet
 # ... one line per pet
 ```
 
-Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate. Because pets fetch slowly, sourcing a lot of an item from a pet can take a very long time; use `--passive-limit` to cap the wait and craft the rest.
+Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate.
 
-When a craft needs an item that is produced passively, the solver **prefers passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
+Pets fetch **very slowly**, so they are used only as a **last resort**: anything the faster buildings, crafting, or farming can supply is sourced that way first, and a pet is relied on only for items nothing else can provide. Pet-sourced items still appear in the passive section, but their waits are long; use `--passive-limit` to cap them and craft or gather the rest.
+
+When a craft needs an item a (non-pet) building produces, the solver **prefers that passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
 
 ```text
 Passive Production required:
@@ -184,8 +189,26 @@ growth = 20
 
 The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles. For the hourly sawmill that makes the daily limit `24 × min(production, storehouse size)` per item.
 
-By default passively-produced items are otherwise taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead. The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
+By default passively-produced items are otherwise taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead (or, for pets, farmed or gathered). The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
 
 ```shell
 python main.py --passive-limit 3h
 ```
+
+## Farming
+
+Farming grows items from seeds and is preferred over slow pet production for anything a crop can supply. A seed's harvest is a *distribution* of items — mostly its primary crop, occasionally a rarer drop — so one crop can supply several different items. The model has three parts:
+
+- `crops.csv` — each crop's base growth time, and (via an optional `Primary` column) the crop a differently-named seed grows, such as a *Mega* seed.
+- `seed_drops.csv` — each seed's in-game drop table (`Crops/harvest all` for common items, `Harvest alls/crop` for rare ones), captured at a fixed row count and normalised to a per-seed rate.
+- the `[farming]` config — your row count and modifiers:
+
+```toml
+[farming]
+rows = 13
+double_crop_chance = 25    # percent chance a seed drops a second item
+speed_reduction = 90       # percent faster every crop grows
+corn_speed_reduction = 20  # corn's further percent reduction
+```
+
+From these the solver works out, for each needed item, the crop that supplies it fastest and how long continuous farming (harvest and replant, no rest) would take. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. A quantity rounds up to a whole number of plantings, and — since the rows grow one crop at a time — each item's time is reported independently in the `Farming required:` section shown above.

@@ -52,3 +52,23 @@ def test_obtainable_items_exclude_locked_pet_tiers():
     obtainable = obtainable_items(passive_production({"pets": {"Cat": 2}}))
     assert "drum" in obtainable  # Cat tier 1
     assert "shinefish" not in obtainable  # Cat tier 3, still locked
+
+
+def test_obtainable_items_include_crop_drops_from_the_farm():
+    # A crop's drops -- primary and rare -- count as obtainable via farming.
+    from datetime import timedelta
+
+    from config import passive_production
+    from crops import Crop, Farm
+    from main import obtainable_items
+
+    farm = Farm(
+        crops={
+            "carrot": Crop(
+                "Carrot", timedelta(hours=1), {"carrot": 4, "runestone 01": 0.02}
+            )
+        }
+    )
+    obtainable = obtainable_items(passive_production({}), farm)
+    assert "carrot" in obtainable
+    assert "runestone 01" in obtainable

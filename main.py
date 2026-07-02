@@ -18,6 +18,7 @@ from pathlib import Path
 
 import config
 import crafting
+import crops
 import farm_solver
 import farming
 import parsing
@@ -150,15 +151,20 @@ def _csv_items(path: Path) -> set[str]:
         return {row["Item"].strip().lower() for row in csv.DictReader(f)}
 
 
-def obtainable_items(production: passive.PassiveProduction) -> set[str]:
+def obtainable_items(
+    production: passive.PassiveProduction, farm: crops.Farm | None = None
+) -> set[str]:
     """Lower-cased items obtainable without crafting.
 
-    Covers passive production (which includes pets), fishing, exploring,
-    farming, and the materials the game supplies automatically.
+    Covers passive production (which includes pets), fishing, exploring, farming
+    (the fixed farmed items plus everything the crop model can grow, including
+    rare seed drops), and the materials the game supplies automatically.
     """
     items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
         items |= set(producer.outputs)
+    if farm is not None:
+        items |= farm.growable_items()
     items |= _csv_items(FISHING_CSV)
     items |= _csv_items(EXPLORING_CSV)
     return items
@@ -256,12 +262,19 @@ def print_breakdown(steps: list[crafting.CraftStep]) -> None:
             print(f"  {quantity:,}x {material}")
 
 
-def print_farming(materials: dict[str, int]) -> None:
-    if not materials:
+def print_farming(uses: list[farming.FarmUse]) -> None:
+    if not uses:
         return
     print("\nFarming required:")
-    for material in sorted(materials):
-        print(f"  {materials[material]:,}x {material}")
+    for use in sorted(uses, key=lambda u: u.item):
+        line = f"  {use.quantity:,}x {use.item}"
+        if use.time is not None:
+            line += f" in {passive.format_duration(use.time)}"
+            # Name the crop only when it differs from the item (a rare drop or a
+            # mega seed); otherwise "via Corn" for Corn is just noise.
+            if use.source and use.source.lower() != use.item.lower():
+                line += f" (via {use.source})"
+        print(line)
 
 
 def print_unobtainable(materials: list[str]) -> None:
@@ -296,14 +309,37 @@ def load_config() -> dict:
         return {}
 
 
+def split_pet_production(
+    production: passive.PassiveProduction,
+) -> tuple[passive.PassiveProduction, passive.PassiveProduction]:
+    """Partition ``production`` into (faster buildings, pets).
+
+    Pets are slow, so they are held back as a last-resort source: only the fast
+    producers feed the passive-preferred crafting plan, and pets fall back in
+    afterwards for base materials nothing else could supply.
+    """
+    fast: list[passive.PassiveProducer] = []
+    pets: list[passive.PassiveProducer] = []
+    for producer in production.producers:
+        target = pets if producer.name.startswith(config.PET_PRODUCER_PREFIX) else fast
+        target.append(producer)
+    size = production.inventory_size
+    return (
+        passive.PassiveProduction(producers=fast, inventory_size=size),
+        passive.PassiveProduction(producers=pets, inventory_size=size),
+    )
+
+
 def run(args: argparse.Namespace) -> int:
     cfg = load_config()
     workshop = crafting.load_workshop()
     production = config.passive_production(cfg)
+    fast_production, pet_production = split_pet_production(production)
+    farm = crops.farm_from_config(cfg.get("farming", {}))
 
     # A standalone report over the whole workshop; no solving needed.
     if args.unobtainable:
-        obtainable = obtainable_items(production)
+        obtainable = obtainable_items(production, farm)
         print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
 
@@ -333,19 +369,36 @@ def run(args: argparse.Namespace) -> int:
     print_solution(solution)
 
     if production.producers:
+        # Fast producers and crafting come first; farming then takes the crops
+        # (and rare seed drops); pets are the last-resort source for whatever
+        # base materials remain. Farming and the pet fallback are planned over
+        # the full base-material total, like passive, so they cover deep items
+        # too; the crafting-materials view stays shallow or recursive.
         plan = crafting.craft_plan(
             solution.needs,
             workshop,
-            production,
+            fast_production,
             args.crafting_bonus,
             args.mastery_bonus,
             passive_limit,
         )
-        materials = plan.materials if args.recursive else plan.shallow_materials
-        materials, farmed = farming.split_farmed(materials)
+        farm_uses, remaining = farming.plan_farming(plan.materials, farm)
+        pet_uses, remaining = passive.source_materials(
+            pet_production, remaining, passive_limit
+        )
+        if args.recursive:
+            materials = remaining
+        else:
+            sourced = {use.item.lower() for use in farm_uses}
+            sourced |= {use.item.lower() for use in pet_uses}
+            materials = {
+                item: quantity
+                for item, quantity in plan.shallow_materials.items()
+                if item.lower() not in sourced
+            }
         print_materials(materials)
-        print_farming(farmed)
-        print_passive(plan.passive)
+        print_farming(farm_uses)
+        print_passive(plan.passive + pet_uses)
         if args.breakdown:
             print_breakdown(plan.steps)
     else:
@@ -356,9 +409,9 @@ def run(args: argparse.Namespace) -> int:
             args.mastery_bonus,
             args.recursive,
         )
-        materials, farmed = farming.split_farmed(materials)
+        farm_uses, materials = farming.plan_farming(materials, farm)
         print_materials(materials)
-        print_farming(farmed)
+        print_farming(farm_uses)
         if args.breakdown:
             steps = crafting.craft_breakdown(
                 solution.needs, workshop, args.crafting_bonus, args.mastery_bonus

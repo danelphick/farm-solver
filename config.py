@@ -25,6 +25,10 @@ from passive import (
 # The number of months in a year, used to average seasonal pet output.
 MONTHS_IN_YEAR = 12
 
+# Pet producers are named with this prefix so they can be told apart from the
+# faster buildings and used only as a last-resort source (pets are slow).
+PET_PRODUCER_PREFIX = "pet "
+
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
 
@@ -317,7 +321,9 @@ def _pet_producers(pets_config: dict[str, Any]) -> list[PassiveProducer]:
             factor = len(pet.months) / MONTHS_IN_YEAR
             outputs = {item: qty * factor for item, qty in outputs.items()}
         producers.append(
-            PassiveProducer(name=f"pet {pet.name}", period=DAILY, outputs=outputs)
+            PassiveProducer(
+                name=f"{PET_PRODUCER_PREFIX}{pet.name}", period=DAILY, outputs=outputs
+            )
         )
     return producers
 

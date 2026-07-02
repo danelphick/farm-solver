@@ -167,6 +167,35 @@ class Farm:
             return None
         return math.ceil(quantity / per_harvest) * grow_time
 
+    def growers(self, item: str) -> list[Crop]:
+        """The crops whose seed can drop ``item`` (its primary or a rarer drop)."""
+        key = item.lower()
+        return [crop for crop in self.crops.values() if key in crop.drops]
+
+    def growable_items(self) -> set[str]:
+        """Every lower-cased item some crop can drop."""
+        items: set[str] = set()
+        for crop in self.crops.values():
+            items |= set(crop.drops)
+        return items
+
+    def best_source(self, item: str, quantity: int) -> tuple[str, timedelta] | None:
+        """The crop that grows ``quantity`` of ``item`` fastest, and that time.
+
+        Every crop that drops ``item`` is considered, so a rare drop is grown via
+        its crop and a bulk mega seed beats its base for large amounts. Returns
+        the crop's name and the grow time, or ``None`` when nothing grows it (or
+        the farm has no rows). Ties break on the crop name for a stable choice.
+        """
+        best: tuple[str, timedelta] | None = None
+        for crop in sorted(self.growers(item), key=lambda c: c.name):
+            time = self.time_to_grow(crop.name, quantity, item)
+            if time is None:
+                continue
+            if best is None or time < best[1]:
+                best = (crop.name, time)
+        return best
+
 
 def read_crops(path: Path) -> dict[str, Crop]:
     """Read crops from a ``Crop,Growth[,Primary]`` CSV, keyed by lower-cased name.
