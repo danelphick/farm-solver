@@ -41,24 +41,26 @@ time but +1 consumable. Sweeping "how much time is a consumable worth" traces a
 `fishing.py`: `ExploringModifiers.palmer_yield()` (200/500/×1.1) and
 `ExploringLocation.explore(yield)` splitting across drop rates.
 
-**2 — Loaders + config wiring for fishing and exploring.** Neither channel loads
-its CSV (`fishing.csv`, `exploring.csv`) or reads its `[fishing]`/`[exploring]`
-config yet. Add `read_*`/`load_*`/`*_from_config` (following the `crops.py`
-loader conventions) so each produces real per-zone/per-location yields. No
-sourcing wiring yet — just make the models real from data.
+**2 — Loaders + config wiring for fishing and exploring. DONE (`be82865`).**
+`read_zones`/`read_locations`, `load_*`, `*_from_config` on `fishing.py` and
+`exploring.py` build fully-populated models from the CSVs + `[fishing]`/
+`[exploring]` flags. Item keys lower-cased for matching; display names kept.
 
-**3 — Unify channels behind one interface.** A `Source` protocol: given
-`(item, quantity)` return candidate `Offer`s, each carrying (a) the co-products
-the action also yields (the bundle) and (b) a cost signature — `ap`, `ln`, and a
-**time-track tag** (`concurrent-pool` / `concurrent-farm` / `instant`). Wrap
-passive, pets, farming, fishing, exploring. Crafting stays as the recursion that
-expands demand to base materials feeding these sources.
+**3 — Unify channels behind one interface. IN PROGRESS.** `sources.py` defines
+`Offer` (carries a full `yields` bundle + `ap`/`ln`/`time_per_unit` on a named
+`track`) and `Draw` (an offer scaled to N units). Builders done for fishing,
+exploring, farming (`fishing_offers`/`exploring_offers`/`farming_offers`,
+`da57956`). **Remaining: passive and pet offers** — these need care (storehouse
+caps, whole-cycle rounding; each producer is its own track so times take the max
+across producers). Crafting stays as the recursion that expands demand to base
+materials feeding these offers.
 
-**4 — Time-aggregation model.** Combine a chosen set of offers into one
-`(time, AP, LN)`: passive+pets+farming → `max` of their (storehouse-/grape-juice-
-aware) track times; fishing/exploring → ~0 time, accumulate AP/LN with **joint
-production** so one zone's nets/palmers cover *all* its needed items at once
-(cover by the largest requirement). `total_time = max(track times)`.
+**4 — Time-aggregation model. DONE for offers (`da57956`).** `aggregate(draws)`
+sums time within a track and takes the max across tracks (farming crops share
+one sequential track; fishing/exploring instant), and sums AP/LN. Joint
+production is handled inside each offer via `units_for` (the binding item drives
+it, the rest of the bundle rides along). Still to fold in: passive/pet tracks
+with their storehouse-/cycle-aware times.
 
 **5 — Pareto search.** For each item enumerate candidate sources (per-unit time
 contribution within its track, consumable cost, co-products). Sweep a price-of-
