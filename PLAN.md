@@ -62,16 +62,70 @@ these offers.
 sums time within a track and takes the max across tracks (farming crops share
 one sequential track; fishing/exploring instant), and sums AP/LN. Joint
 production is handled inside each offer via `units_for` (the binding item drives
-it, the rest of the bundle rides along). Still to fold in: passive/pet tracks
-with their storehouse-/cycle-aware times.
+it, the rest of the bundle rides along). Passive folds in via `passive_offers`
+(one bundled offer at combined per-minute rates); `aggregate` covers all tracks.
 
-**5 — Pareto search.** For each item enumerate candidate sources (per-unit time
-contribution within its track, consumable cost, co-products). Sweep a price-of-
-time `λ` (2-D since fish↔LN and explore↔AP are largely independent); at each `λ`
-assign items to the min-blended-cost channel, measure the realized nonlinear
-time (bottleneck track), iterate to move the bottleneck's items onto consumables
-where that lowers cost, record realized `(time, AP, LN)`. Keep non-dominated
-points → ~5-plan frontier.
+**5 — Pareto search. DESIGNED (below).** The sourcing choice is a small **linear
+program**, swept over a price-of-time to trace the frontier. See "Solver design".
+
+### Solver design (Phase 5)
+
+**It is an LP.** Decision variables are one continuous usage level `x_o ≥ 0` per
+offer (nets, palmers, plantings, or minutes of the passive economy) plus a
+makespan `T ≥ 0`. Every cost is linear in `x`, and the awkward "max across
+tracks" time becomes linear with the `T` trick. So a single weighted objective is
+a plain LP — no integrality needed (fractional units are averages; round up only
+at reporting).
+
+For demand `d[i]` (base materials left after craft expansion, restricted to items
+some offer yields):
+
+```text
+minimize   T + λ_ap·AP + λ_ln·LN
+  where    AP = Σ_o ap_o·x_o ,  LN = Σ_o ln_o·x_o
+subject to
+  coverage:  Σ_o yields_o[i]·x_o ≥ d[i]      for each demanded item i
+  makespan:  Σ_{o in track t} time_o·x_o ≤ T for each track t
+  budgets:   AP ≤ max_ap,  LN ≤ max_ln       (optional; the "constrained" mode)
+  x_o ≥ 0,  T ≥ 0
+```
+
+Joint production needs no special handling: co-products are the *same* `x_o`
+appearing in several coverage rows, so one fishing trip is automatically credited
+to every fish it lands. Items no offer yields never enter the LP — they stay in
+the remainder for crafting, exactly as today.
+
+**Why an LP solver, not a metaheuristic.** An LP's Pareto front is piecewise-
+linear and convex, so weighted-sum scalarisation recovers *every* vertex exactly.
+Evolutionary multi-objective tools (pymoo/NSGA-II) would only approximate what we
+can get exactly and instantly. So: scalarise + sweep, don't evolve.
+
+**Frontier sweep** (`frontier(offers, demand, count=5)`):
+
+1. **All-free anchor:** large `λ` → minimise consumables; realised `T` is the
+   slowest, cheapest plan (spends AP/LN only where an item has no free source).
+2. **Fastest anchor:** `λ = 0` → minimise `T` alone, then a lexicographic tidy
+   (fix `T ≤ T*`, minimise `AP+LN`) to shed consumables that buy no extra speed.
+3. **Interior:** sweep `λ` on a log scale between the anchors, solve the LP each
+   time, keep the realised `(T, AP, LN)`, drop dominated points, thin to ~`count`
+   spread by time. One shared `λ` for AP and LN by default (fish↔LN and
+   explore↔AP touch largely disjoint items); separate prices / `--max-ap` /
+   `--max-ln` reuse the same LP via the budget rows. Sample denser near the fast
+   end if short-duration plans swing wildly in AP/LN (the noted open question).
+
+**Module shape:** new `optimizer.py`:
+
+- `all_offers(passive, fishing, exploring, farm) -> list[Offer]` (gather builders).
+- `SourcingPlan`: `draws: list[Draw]`, `time`, `arnold_palmers`, `large_nets`,
+  `remainder: dict[str,int]` (demand no offer covers).
+- `minimize(offers, demand, price_ap, price_ln, max_ap=None, max_ln=None)
+  -> SourcingPlan` — build & solve one LP with **PuLP** (see Dependencies).
+- `frontier(...) -> list[SourcingPlan]` — the sweep, dedup, thin.
+
+**Honesty/edges:** `≥` coverage + round-up reporting slightly over-provisions
+(safe). Without budgets the LP is always feasible (remainder absorbs the
+uncoverable). Million-scale demands are fine for CBC; keep a small `λ` floor to
+avoid degeneracy.
 
 **6 — Solution + reporting.** Extend `Solution` to hold the frontier (plans with
 `AP`, `LN`, `time`, per-item channel assignment). Print it as a table; a flag
@@ -82,8 +136,33 @@ the existing `print_farming`/`print_passive` plus new `print_fishing`/
 **7 — Tests + README.** Exploring/fishing loaders, aggregation, joint-production
 covering, frontier non-domination; document the frontier output and flags.
 
+## Dependencies
+
+The solver adds the project's first runtime dependency. Choice: **PuLP**.
+
+- **PuLP (chosen).** Pure-Python modelling with a bundled CBC solver — no numpy /
+  BLAS / Fortran, so it installs from a wheel on Python 3.14 with no ABI risk
+  (verified: `uv run --with pulp` solves a test LP here). Its declarative model
+  (`prob += Σ …`) keeps the LP auditable and reads like the rest of the codebase,
+  and switching a variable to integer later (whole nets/palmers) is one keyword.
+  We solve only ~5–15 tiny LPs per run, so CBC's subprocess overhead is a non-
+  issue. ~15 MiB.
+- **SciPy `linprog` (HiGHS) — alternative.** Also installs and solves on 3.14
+  (verified), in-process and fast, but needs the model assembled as raw
+  `A_ub/b_ub` matrices (sign flips + index bookkeeping — the bug-prone part we are
+  trying to avoid), and pulls in numpy (~40 MiB total). Reach for it only if
+  in-process solving or avoiding a solver subprocess ever matters.
+- **pymoo / NSGA-II — rejected.** Approximate multi-objective; unnecessary since
+  the LP frontier is exactly recoverable by scalarisation.
+
+First implementation step: `uv add pulp`, then a smoke test mirroring the check
+above, before building `optimizer.py`.
+
 ## Open questions (revisit as we reach them)
 
 - Frontier granularity may need >5 plans where very short durations cost wildly
   different AP/LN; make the count/spacing tunable.
 - Whether any hard AP/LN ceiling should cap the frontier's fast end.
+- Whether to later fold **crafting into the LP** (recipes as offers with negative
+  yields for inputs) so craft-vs-source is optimised too; for now craft expansion
+  stays a fixed pre-pass and the LP sources only the resulting base materials.
