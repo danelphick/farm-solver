@@ -209,6 +209,9 @@ rows = 13
 double_crop_chance = 25    # percent chance a seed drops a second item
 speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
+grape_juices_per_day = 14  # instant whole-field grows available each day
 ```
 
 From these the solver works out, for each needed item, the crop that supplies it fastest and how long continuous farming (harvest and replant, no rest) would take. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. A quantity rounds up to a whole number of plantings, and — since the rows grow one crop at a time — each item's time is reported independently in the `Farming required:` section shown above.
+
+Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, so its field yields those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones.

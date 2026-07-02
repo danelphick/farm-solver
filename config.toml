@@ -79,6 +79,7 @@ rows = 13
 double_crop_chance = 25    # percent chance a seed drops a second item
 speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
+grape_juices_per_day = 14
 
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true

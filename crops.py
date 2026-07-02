@@ -38,6 +38,11 @@ planting and how long a quantity takes to grow. Crops are grown one at a time
 (the rows are devoted to a single crop per planting), so each crop's grow time
 is modelled as if it had every row to itself and several crops' times add up.
 
+Growth can also be sped up with Grape Juice, which grows the whole field
+instantly but only a limited number of times a day. Because crops are grown one
+at a time, whichever crop is being farmed gets the full daily allowance, adding
+that many free harvests a day on top of natural growth.
+
 This module only models the structures; the seed data lives in the CSVs and the
 row count and modifiers come from config.
 """
@@ -116,6 +121,9 @@ class Farm:
     than one, raising each drop's expectation to ``1 + double_chance`` times its
     bonus-free rate. ``speed`` multiplies every crop's growth time (a factor
     below one grows faster); ``corn_speed`` is a further factor for corn alone.
+    ``grape_juices_per_day`` is how many times a day a Grape Juice can be used to
+    grow the whole field instantly, adding that many free harvests a day on top
+    of natural growth (see :meth:`time_to_grow`).
     """
 
     crops: dict[str, Crop] = field(default_factory=dict)
@@ -123,6 +131,7 @@ class Farm:
     double_chance: float = 0.0
     speed: float = 1.0
     corn_speed: float = 1.0
+    grape_juices_per_day: float = 0.0
 
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
@@ -157,15 +166,21 @@ class Farm:
     ) -> timedelta | None:
         """Time to harvest ``quantity`` of ``item`` by growing crop ``name``.
 
-        Harvests come a whole planting at a time, so the wait rounds up to a
-        whole number of growth cycles. Returns ``None`` when nothing can be grown
-        (unknown crop or item, no rows, or a zero rate).
+        Harvests come a whole planting at a time, so the number of plantings
+        rounds up. Each day the field yields its natural harvests (a day divided
+        by the grow time) plus ``grape_juices_per_day`` free instant harvests, so
+        the wait is the plantings divided by that daily rate. With no grape juice
+        this reduces to ``plantings * grow_time``. Returns ``None`` when nothing
+        can be grown (unknown crop or item, no rows, or a zero rate).
         """
         per_harvest = self.per_harvest(name, item)
         grow_time = self.grow_time(name)
         if not per_harvest or grow_time is None:
             return None
-        return math.ceil(quantity / per_harvest) * grow_time
+        plantings = math.ceil(quantity / per_harvest)
+        day = timedelta(days=1)
+        harvests_per_day = day / grow_time + self.grape_juices_per_day
+        return day * (plantings / harvests_per_day)
 
     def growers(self, item: str) -> list[Crop]:
         """The crops whose seed can drop ``item`` (its primary or a rarer drop)."""
@@ -247,6 +262,7 @@ def load_farm(
     double_chance: float = 0.0,
     speed: float = 1.0,
     corn_speed: float = 1.0,
+    grape_juices_per_day: float = 0.0,
 ) -> Farm:
     """Build a :class:`Farm` from the crop CSVs and the player's settings."""
     crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
@@ -259,6 +275,7 @@ def load_farm(
         double_chance=double_chance,
         speed=speed,
         corn_speed=corn_speed,
+        grape_juices_per_day=grape_juices_per_day,
     )
 
 
@@ -274,12 +291,14 @@ def farm_from_config(
     ``speed_reduction`` (how much faster every crop grows) and
     ``corn_speed_reduction`` (corn's further reduction). The reductions become
     growth-time factors of ``1 - reduction`` (a 90% reduction leaves a 0.1
-    factor). Crop and drop data come from the CSVs.
+    factor). ``grape_juices_per_day`` is a plain count of daily instant grows.
+    Crop and drop data come from the CSVs.
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
     speed = 1 - float(config_section.get("speed_reduction", 0)) / PERCENT
     corn_speed = 1 - float(config_section.get("corn_speed_reduction", 0)) / PERCENT
+    grape_juices = float(config_section.get("grape_juices_per_day", 0))
     return load_farm(
-        crops_path, drops_path, rows, double_chance, speed, corn_speed
+        crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices
     )

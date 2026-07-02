@@ -106,6 +106,26 @@ def test_time_to_grow_targets_a_secondary_drop():
     assert farm.time_to_grow("Carrot", 1, "Runestone 01") == timedelta(hours=5)
 
 
+def test_grape_juice_adds_free_daily_harvests():
+    # A crop that grows once a day, one per harvest, with 11 grape juices a day
+    # yields 1 (natural) + 11 (instant) = 12 harvests a day, so 12 take one day.
+    farm = Farm(
+        crops={"slow": Crop("Slow", timedelta(days=1), {"slow": 1})},
+        rows=1,
+        grape_juices_per_day=11,
+    )
+    assert farm.time_to_grow("Slow", 12) == timedelta(days=1)
+
+
+def test_no_grape_juice_leaves_the_grow_time_unchanged():
+    # Without grape juice the wait is simply plantings * grow time.
+    farm = Farm(
+        crops={"slow": Crop("Slow", timedelta(days=1), {"slow": 1})},
+        rows=1,
+    )
+    assert farm.time_to_grow("Slow", 12) == timedelta(days=12)
+
+
 def test_time_to_grow_unknown_crop_is_none():
     assert make_farm(rows=12).time_to_grow("Turnip", 10) is None
 
@@ -240,6 +260,22 @@ def test_farm_from_config_converts_percentages_to_factors(tmp_path):
     # Corn's 4h base becomes 24m globally, then 19m12s with corn's reduction.
     assert farm.grow_time("Corn") == timedelta(minutes=19, seconds=12)
     assert farm.grow_time("Carrot") == timedelta(seconds=12)
+
+
+def test_farm_from_config_reads_grape_juices_per_day(tmp_path):
+    crops_path = tmp_path / "crops.csv"
+    crops_path.write_text("Crop,Growth\nCorn,4h\n")
+    farm = farm_from_config(
+        {"grape_juices_per_day": 14}, crops_path, tmp_path / "absent.csv"
+    )
+    assert farm.grape_juices_per_day == 14
+
+
+def test_farm_from_config_defaults_grape_juices_to_zero(tmp_path):
+    crops_path = tmp_path / "crops.csv"
+    crops_path.write_text("Crop,Growth\nCorn,4h\n")
+    farm = farm_from_config({}, crops_path, tmp_path / "absent.csv")
+    assert farm.grape_juices_per_day == 0
 
 
 def test_farm_from_config_defaults_leave_crops_unmodified(tmp_path):
