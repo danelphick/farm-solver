@@ -74,6 +74,12 @@ use_sea_pincher = true
 have_lemon_squeezer = true
 use_quandary_chowder = true
 
+[farming]    # crop rows and growth modifiers; crops/drops come from the CSVs
+rows = 13
+double_crop_chance = 25    # percent chance a seed drops a second item
+speed_reduction = 90       # percent faster every crop grows
+corn_speed_reduction = 20  # corn's further percent reduction
+
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
 "Cat" = 8

@@ -1,0 +1,256 @@
+"""Crop growing for Farm Solver.
+
+Farming is another way to obtain items: the player plants seeds in a fixed
+number of crop rows and harvests them. A seed has a primary crop but each seed
+also has a small chance to drop other items instead, so one seed's harvest is a
+*distribution*: mostly the primary crop, occasionally a rarer item. The
+distribution is described per seed by an in-game drop table, e.g. Carrot Seeds
+at 12 rows::
+
+    Carrot        Crops/harvest all   47.55
+    Runestone 01  Harvest alls/crop    3.34
+    Gold Carrot   Harvest alls/crop    6.71
+
+The two metrics are inverses: "Crops/harvest all" is how many of that item a
+full harvest of every row yields, while "Harvest alls/crop" is how many full
+harvests it takes to get one (used for the rare drops). Both scale with the row
+count, so the row-independent figure we keep is the **per-seed** expected count
+(see :func:`per_seed_rate`). These raw figures include no yield bonuses.
+
+A few seeds are bulkier: Mushroom, and the "Mega" seed versions of some crops
+(Cotton, Sunflower and Beet), yield ten times as many items per seed as a normal
+crop. Their in-game drop tables already reflect that, so they are stored like any
+other crop -- a mega seed is simply another data row whose figures are ten times
+its base crop's and whose ``primary`` names the base crop it grows.
+
+Two independent kinds of modifier then change a harvest:
+
+* **speed** modifiers shorten the growth time by a factor -- one applies to
+  every crop, and corn has a further one of its own (a factor below one grows
+  faster, e.g. 0.5 halves the time);
+* the **yield** modifier is a chance that each seed drops *two* items instead of
+  one (typically 0%, 15% or 25%), raising every drop's expectation to
+  ``1 + chance`` times its bonus-free rate.
+
+A :class:`Farm` combines the crop data with the player's row count and modifiers
+to work out, for a given crop and target item, how many are harvested per
+planting and how long a quantity takes to grow. Crops are grown one at a time
+(the rows are devoted to a single crop per planting), so each crop's grow time
+is modelled as if it had every row to itself and several crops' times add up.
+
+This module only models the structures; the seed data lives in the CSVs and the
+row count and modifiers come from config.
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import dataclass, field
+from datetime import timedelta
+from pathlib import Path
+
+from passive import parse_duration
+
+# The bundled data, used unless another path is given.
+DEFAULT_CROPS_CSV = Path(__file__).with_name("crops.csv")
+DEFAULT_DROPS_CSV = Path(__file__).with_name("seed_drops.csv")
+
+# The one crop with a growth-speed modifier of its own, beyond the global one.
+CORN = "corn"
+
+# Config gives modifiers as whole-number percentages.
+PERCENT = 100
+
+# The two metrics an in-game seed drop table uses (lower-cased).
+CROPS_PER_HARVEST = "crops/harvest all"  # items yielded per full harvest
+HARVESTS_PER_CROP = "harvest alls/crop"  # full harvests needed for one item
+
+# The row count the figures in seed_drops.csv were captured at; each is
+# normalised from this to a row-independent per-seed rate at load.
+CAPTURE_ROWS = 12
+
+
+def per_seed_rate(metric: str, value: float, rows: int) -> float:
+    """Convert an in-game drop figure at ``rows`` rows to a per-seed rate.
+
+    ``Crops/harvest all`` counts items across every row, so the per-seed rate is
+    ``value / rows``; ``Harvest alls/crop`` is the inverse (harvests per item),
+    so the per-seed rate is ``1 / (value * rows)``.
+    """
+    label = metric.strip().lower()
+    if label == CROPS_PER_HARVEST:
+        return value / rows
+    if label == HARVESTS_PER_CROP:
+        return 1 / (value * rows)
+    raise ValueError(f"unknown drop metric {metric!r}")
+
+
+@dataclass
+class Crop:
+    """A crop and its seed's growing facts.
+
+    ``growth`` is the base time one planting takes to mature. ``drops`` maps each
+    lower-cased item the seed can produce (its primary crop included) to the
+    bonus-free expected count per seed. ``primary`` names the main item produced;
+    it defaults to the crop's own name but differs for a mega seed (``Mega
+    Cotton`` produces ``Cotton``).
+    """
+
+    name: str
+    growth: timedelta
+    drops: dict[str, float] = field(default_factory=dict)
+    primary: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.primary:
+            self.primary = self.name
+
+
+@dataclass
+class Farm:
+    """The player's crops, row count, and growth modifiers.
+
+    ``rows`` is how many seeds can be planted (and so harvested) at once.
+    ``double_chance`` is the probability (0-1) that a seed drops two items rather
+    than one, raising each drop's expectation to ``1 + double_chance`` times its
+    bonus-free rate. ``speed`` multiplies every crop's growth time (a factor
+    below one grows faster); ``corn_speed`` is a further factor for corn alone.
+    """
+
+    crops: dict[str, Crop] = field(default_factory=dict)
+    rows: int = 0
+    double_chance: float = 0.0
+    speed: float = 1.0
+    corn_speed: float = 1.0
+
+    def crop(self, name: str) -> Crop | None:
+        return self.crops.get(name.lower())
+
+    def grow_time(self, name: str) -> timedelta | None:
+        """Time for one planting of ``name`` to mature, with speed modifiers."""
+        crop = self.crop(name)
+        if crop is None:
+            return None
+        factor = self.speed
+        if name.lower() == CORN:
+            factor *= self.corn_speed
+        return crop.growth * factor
+
+    def per_harvest(self, name: str, item: str | None = None) -> float | None:
+        """Expected count of ``item`` from one full harvest of crop ``name``.
+
+        ``item`` defaults to the crop's primary produce. The bonus-free per-seed
+        rate is scaled by the row count and the double-drop chance. Returns
+        ``None`` if the crop is unknown or does not drop that item.
+        """
+        crop = self.crop(name)
+        if crop is None:
+            return None
+        rate = crop.drops.get((item or crop.primary).lower())
+        if rate is None:
+            return None
+        return self.rows * rate * (1 + self.double_chance)
+
+    def time_to_grow(
+        self, name: str, quantity: int, item: str | None = None
+    ) -> timedelta | None:
+        """Time to harvest ``quantity`` of ``item`` by growing crop ``name``.
+
+        Harvests come a whole planting at a time, so the wait rounds up to a
+        whole number of growth cycles. Returns ``None`` when nothing can be grown
+        (unknown crop or item, no rows, or a zero rate).
+        """
+        per_harvest = self.per_harvest(name, item)
+        grow_time = self.grow_time(name)
+        if not per_harvest or grow_time is None:
+            return None
+        return math.ceil(quantity / per_harvest) * grow_time
+
+
+def read_crops(path: Path) -> dict[str, Crop]:
+    """Read crops from a ``Crop,Growth[,Primary]`` CSV, keyed by lower-cased name.
+
+    ``Growth`` is a duration like ``"10m"`` or ``"1d6h"`` (see
+    :func:`passive.parse_duration`). The optional ``Primary`` column names the
+    main item a seed produces when it differs from the crop's own name (a ``Mega
+    Cotton`` seed produces ``Cotton``); left blank it defaults to the crop name.
+    The crops come back without drops; :func:`load_farm` attaches those.
+    """
+    crops: dict[str, Crop] = {}
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            name = row["Crop"].strip()
+            crops[name.lower()] = Crop(
+                name=name,
+                growth=parse_duration(row["Growth"]),
+                primary=(row.get("Primary") or "").strip(),
+            )
+    return crops
+
+
+def read_drops(path: Path) -> dict[str, dict[str, float]]:
+    """Read seed drops from a ``Crop,Item,Metric,Value`` CSV.
+
+    Each row is an in-game drop figure (``Metric`` one of the two units, see
+    :func:`per_seed_rate`) captured at :data:`CAPTURE_ROWS` rows; it is
+    normalised to a row-independent per-seed rate. The result maps a crop's
+    lower-cased name to its drops -- each dropped item (lower-cased) to its
+    bonus-free per-seed expected count. A missing file yields no drops, so crops
+    fall back to growth times alone.
+    """
+    drops: dict[str, dict[str, float]] = {}
+    if not path.exists():
+        return drops
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            crop = row["Crop"].strip().lower()
+            item = row["Item"].strip().lower()
+            rate = per_seed_rate(row["Metric"], float(row["Value"]), CAPTURE_ROWS)
+            drops.setdefault(crop, {})[item] = rate
+    return drops
+
+
+def load_farm(
+    crops_path: Path | None = None,
+    drops_path: Path | None = None,
+    rows: int = 0,
+    double_chance: float = 0.0,
+    speed: float = 1.0,
+    corn_speed: float = 1.0,
+) -> Farm:
+    """Build a :class:`Farm` from the crop CSVs and the player's settings."""
+    crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
+    drops = read_drops(drops_path or DEFAULT_DROPS_CSV)
+    for key, crop in crops.items():
+        crop.drops = drops.get(key, {})
+    return Farm(
+        crops=crops,
+        rows=rows,
+        double_chance=double_chance,
+        speed=speed,
+        corn_speed=corn_speed,
+    )
+
+
+def farm_from_config(
+    config_section: dict,
+    crops_path: Path | None = None,
+    drops_path: Path | None = None,
+) -> Farm:
+    """Build a :class:`Farm` from a ``[farming]`` config section.
+
+    The section gives the player's ``rows`` and their modifiers as whole-number
+    percentages: ``double_crop_chance`` (chance of a second drop),
+    ``speed_reduction`` (how much faster every crop grows) and
+    ``corn_speed_reduction`` (corn's further reduction). The reductions become
+    growth-time factors of ``1 - reduction`` (a 90% reduction leaves a 0.1
+    factor). Crop and drop data come from the CSVs.
+    """
+    rows = int(config_section.get("rows", 0))
+    double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
+    speed = 1 - float(config_section.get("speed_reduction", 0)) / PERCENT
+    corn_speed = 1 - float(config_section.get("corn_speed_reduction", 0)) / PERCENT
+    return load_farm(
+        crops_path, drops_path, rows, double_chance, speed, corn_speed
+    )
