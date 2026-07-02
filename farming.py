@@ -52,15 +52,18 @@ class FarmUse:
 
     ``source`` is the crop to plant -- which may differ from ``item`` for a rare
     drop (``Runestone 11`` via ``Corn``) or a bulk mega seed -- and ``time`` the
-    wait to grow ``quantity`` of it, harvesting and replanting with no rest. Both
-    are ``None`` for a farmed item the crop model does not cover (the flowers),
-    which is still grown but has no modelled time.
+    wait to grow ``quantity`` of it, harvesting and replanting with no rest.
+    ``grape_juices`` is how many instant whole-field grows that wait consumes.
+    ``source``, ``time`` and ``grape_juices`` are all ``None`` for a farmed item
+    the crop model does not cover (the flowers), which is still grown but has no
+    modelled time.
     """
 
     item: str
     quantity: int
     source: str | None = None
     time: timedelta | None = None
+    grape_juices: float | None = None
 
 
 def plan_farming(
@@ -78,7 +81,9 @@ def plan_farming(
         best = farm.best_source(item, quantity)
         if best is not None:
             source, time = best
-            uses.append(FarmUse(item, quantity, source, time))
+            uses.append(
+                FarmUse(item, quantity, source, time, farm.grape_juices_used(time))
+            )
         elif is_farmed(item):
             uses.append(FarmUse(item, quantity))
         else:

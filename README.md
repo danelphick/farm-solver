@@ -55,13 +55,13 @@ Some materials are grown on the farm rather than crafted. These are split out of
 
 ```text
 Farming required:
-  58,694x Corn in 12d 4h 10m
-  121,051x Cotton in 74d 19h 12m (via Mega Cotton)
-  2,368,173x Mushroom in 22d 18h 36m
-  161,401x Pine Tree in 82d 19h 12m
+  58,694x Corn in 10d 6h 12m using 144 Grape Juice
+  121,051x Cotton in 11d 8h (via Mega Cotton) using 159 Grape Juice
+  2,368,173x Mushroom in 20d 22h 37m using 293 Grape Juice
+  161,401x Pine Tree in 56d 10h 55m using 790 Grape Juice
 ```
 
-Each item is grown from the crop that supplies it fastest, using your row count and growth/yield modifiers from the `[farming]` config (see below). The crop is named when it differs from the item — a rare seed drop like a Runestone (grown by planting its crop) or a bulk *Mega* seed. See [the farming section](#farming) for how the model works. A handful of farmed items the crop model does not cover (the flowers) are still listed here, without a time.
+Each item is grown from the crop that supplies it fastest, using your row count and growth/yield modifiers from the `[farming]` config (see below). The crop is named when it differs from the item — a rare seed drop like a Runestone (grown by planting its crop) or a bulk *Mega* seed. Each line also notes how many Grape Juices that wait consumes (when any are used). See [the farming section](#farming) for how the model works. A handful of farmed items the crop model does not cover (the flowers) are still listed here, without a time.
 
 Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
 

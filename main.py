@@ -274,6 +274,9 @@ def print_farming(uses: list[farming.FarmUse]) -> None:
             # mega seed); otherwise "via Corn" for Corn is just noise.
             if use.source and use.source.lower() != use.item.lower():
                 line += f" (via {use.source})"
+            # Note the grape juices the wait consumes, when any are used.
+            if use.grape_juices:
+                line += f" using {round(use.grape_juices):,} Grape Juice"
         print(line)
 
 

@@ -36,6 +36,17 @@ def test_print_farming_renders_times_and_sources(capsys):
     assert "2x Red Flowers" in lines
 
 
+def test_print_farming_notes_grape_juices_used(capsys):
+    print_farming([FarmUse("Beet", 100, "Beet", timedelta(days=2), grape_juices=28)])
+    line = capsys.readouterr().out
+    assert "100x Beet in 2d using 28 Grape Juice" in line
+
+
+def test_print_farming_omits_grape_juices_when_none_used(capsys):
+    print_farming([FarmUse("Corn", 500, "Corn", timedelta(hours=2), grape_juices=0)])
+    assert "Grape Juice" not in capsys.readouterr().out
+
+
 def test_passive_total_omits_concurrent_for_a_single_item(capsys):
     print_passive([PassiveUse(item="Corn Oil", quantity=720, time=timedelta(days=30))])
     out = capsys.readouterr().out

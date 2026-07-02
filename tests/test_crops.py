@@ -117,6 +117,13 @@ def test_grape_juice_adds_free_daily_harvests():
     assert farm.time_to_grow("Slow", 12) == timedelta(days=1)
 
 
+def test_grape_juices_used_is_the_rate_times_the_days():
+    farm = Farm(grape_juices_per_day=14)
+    # Two days of farming at 14 a day uses 28 grape juices.
+    assert farm.grape_juices_used(timedelta(days=2)) == pytest.approx(28)
+    assert farm.grape_juices_used(timedelta(days=0.5)) == pytest.approx(7)
+
+
 def test_no_grape_juice_leaves_the_grow_time_unchanged():
     # Without grape juice the wait is simply plantings * grow time.
     farm = Farm(

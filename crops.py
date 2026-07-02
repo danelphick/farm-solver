@@ -182,6 +182,14 @@ class Farm:
         harvests_per_day = day / grow_time + self.grape_juices_per_day
         return day * (plantings / harvests_per_day)
 
+    def grape_juices_used(self, time: timedelta) -> float:
+        """Grape juices spent farming for ``time`` at the daily allowance.
+
+        Whichever crop is being farmed gets the full daily allowance, so the
+        count is simply the rate times the duration in days, regardless of crop.
+        """
+        return self.grape_juices_per_day * (time / timedelta(days=1))
+
     def growers(self, item: str) -> list[Crop]:
         """The crops whose seed can drop ``item`` (its primary or a rarer drop)."""
         key = item.lower()
