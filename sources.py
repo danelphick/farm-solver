@@ -1,7 +1,7 @@
 """Unified production offers for Farm Solver.
 
-The solver can obtain an item several ways -- fishing, exploring, farming, and
-(later) passive production -- and many of those produce *several* items at once:
+The solver can obtain an item several ways -- passive production, fishing,
+exploring, and farming -- and many of those produce *several* items at once:
 one Large Net at a zone catches a whole bundle of fish, one Arnold Palmer at a
 location yields a bundle of finds, one harvest of a crop gives its primary crop
 plus rarer drops. To let the optimiser credit a single action against *every*
@@ -30,12 +30,17 @@ from datetime import timedelta
 from crops import Farm
 from exploring import Exploring
 from fishing import Fishing
+from passive import PassiveProduction
 
 # Time-track names. Crops share one track (grown one at a time, so their times
 # add up); fishing and exploring are instant, so their tracks never cost time.
+# All passive buildings (and pets) share one track: they run concurrently with
+# each other, which one combined offer captures as the max over its items (see
+# :func:`passive_offers`).
 FARMING_TRACK = "farming"
 FISHING_TRACK = "fishing"
 EXPLORING_TRACK = "exploring"
+PASSIVE_TRACK = "passive"
 
 
 @dataclass
@@ -142,6 +147,44 @@ def exploring_offers(exploring: Exploring) -> list[Offer]:
             ap=1,
         )
         for location in exploring.locations.values()
+    ]
+
+
+def passive_offers(production: PassiveProduction) -> list[Offer]:
+    """One offer covering all passive production (buildings *and* pets).
+
+    Every passive building runs concurrently, so the whole economy is modelled as
+    a single offer whose bundle is each item's combined per-minute rate (summed
+    across producers, storehouse-capped -- see :meth:`PassiveProduction.
+    rate_per_minute`). One "unit" is a minute of the economy running; driving the
+    offer by the binding item (via :meth:`Offer.units_for`) makes its time the
+    longest single item's wait, which is exactly the concurrency we want: waiting
+    for the slowest item also yields all the faster ones for free.
+
+    Pets are included as ordinary (slow) producers rather than split out: their
+    low rates make any item that *only* a pet supplies expensive in time, so the
+    optimiser leaves pets as a last resort on its own, without a hand-coded rule.
+
+    Compromise: unlike :meth:`PassiveProduction.time_to_produce`, which rounds a
+    single producer's wait up to a whole cycle (you cannot collect part of a
+    ten-minute deposit), this uses a continuous per-minute rate and never rounds.
+    The optimiser needs smooth costs to compare channels, the error is at most one
+    cycle, and it matches what ``time_to_produce`` already does whenever several
+    producers share an item. Final reporting can round to whole cycles again.
+    """
+    items: set[str] = set()
+    for producer in production.producers:
+        items |= set(producer.outputs)
+    if not items:
+        return []
+    yields = {item: production.rate_per_minute(item) for item in items}
+    return [
+        Offer(
+            name="passive",
+            track=PASSIVE_TRACK,
+            yields=yields,
+            time_per_unit=timedelta(minutes=1),
+        )
     ]
 
 

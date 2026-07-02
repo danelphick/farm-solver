@@ -5,6 +5,7 @@ import pytest
 from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation, ExploringModifiers
 from fishing import Fishing, FishingModifiers, FishingZone
+from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import (
     Draw,
     Offer,
@@ -12,6 +13,7 @@ from sources import (
     exploring_offers,
     farming_offers,
     fishing_offers,
+    passive_offers,
 )
 
 
@@ -111,6 +113,51 @@ def test_farming_offer_time_shortens_with_grape_juice():
     (offer,) = farming_offers(farm)
     # 1 natural + 11 instant harvests a day = 12, so one planting is 2 hours.
     assert offer.time_per_unit == timedelta(hours=2)
+
+
+def test_passive_offer_bundles_the_whole_economy_at_per_minute_rates():
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("sawmill", HOURLY, {"board": 6000, "wood": 600}),
+            PassiveProducer("pet cat", DAILY, {"drum": 1440}),
+        ]
+    )
+    (offer,) = passive_offers(production)
+    assert offer.name == "passive" and offer.track == "passive"
+    assert offer.ap == 0 and offer.ln == 0
+    assert offer.time_per_unit == timedelta(minutes=1)
+    # 6000/hr = 100/min, 600/hr = 10/min, 1440/day = 1/min. Pets are in the bundle.
+    assert offer.yields == {
+        "board": pytest.approx(100),
+        "wood": pytest.approx(10),
+        "drum": pytest.approx(1),
+    }
+
+
+def test_passive_offer_adds_rates_across_producers_of_one_item():
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("a", HOURLY, {"steel": 600}),
+            PassiveProducer("b", HOURLY, {"steel": 1200}),
+        ]
+    )
+    (offer,) = passive_offers(production)
+    # 600/hr + 1200/hr = 1800/hr = 30/min: the concurrent producers' rates add.
+    assert offer.yields["steel"] == pytest.approx(30)
+
+
+def test_passive_offer_units_take_the_longest_item_wait():
+    production = PassiveProduction(
+        producers=[PassiveProducer("mill", HOURLY, {"board": 60, "wood": 6})]
+    )
+    (offer,) = passive_offers(production)
+    # board at 1/min needs 100 min; wood at 0.1/min needs 100 too. 300 wood binds
+    # at 3000 min while 100 board would only need 100 -- the max drives it.
+    assert offer.units_for({"board": 100, "wood": 300}) == pytest.approx(3000)
+
+
+def test_passive_offer_is_empty_without_producers():
+    assert passive_offers(PassiveProduction(producers=[])) == []
 
 
 def test_farming_offer_time_matches_time_to_grow():

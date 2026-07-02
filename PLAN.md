@@ -46,14 +46,17 @@ time but +1 consumable. Sweeping "how much time is a consumable worth" traces a
 `exploring.py` build fully-populated models from the CSVs + `[fishing]`/
 `[exploring]` flags. Item keys lower-cased for matching; display names kept.
 
-**3 — Unify channels behind one interface. IN PROGRESS.** `sources.py` defines
-`Offer` (carries a full `yields` bundle + `ap`/`ln`/`time_per_unit` on a named
-`track`) and `Draw` (an offer scaled to N units). Builders done for fishing,
-exploring, farming (`fishing_offers`/`exploring_offers`/`farming_offers`,
-`da57956`). **Remaining: passive and pet offers** — these need care (storehouse
-caps, whole-cycle rounding; each producer is its own track so times take the max
-across producers). Crafting stays as the recursion that expands demand to base
-materials feeding these offers.
+**3 — Unify channels behind one interface. DONE.** `sources.py` defines `Offer`
+(carries a full `yields` bundle + `ap`/`ln`/`time_per_unit` on a named `track`)
+and `Draw` (an offer scaled to N units). Builders cover fishing, exploring,
+farming (`da57956`) and passive+pets (`passive_offers`): the whole passive
+economy is one offer whose bundle is each item's combined per-minute rate, so its
+concurrency falls out of the binding-item `units_for`. Compromise (documented in
+code): passive uses a continuous per-minute rate rather than rounding each wait
+up to a whole cycle — smooth costs for the optimiser, error at most one cycle,
+and consistent with what `time_to_produce` already does for multi-producer items.
+Crafting stays as the recursion that expands demand to base materials feeding
+these offers.
 
 **4 — Time-aggregation model. DONE for offers (`da57956`).** `aggregate(draws)`
 sums time within a track and takes the max across tracks (farming crops share
