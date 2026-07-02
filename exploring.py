@@ -12,7 +12,12 @@ structures only; populating them from data is done elsewhere (parsing).
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
+from pathlib import Path
+
+# The bundled location data, used unless another path is given.
+DEFAULT_EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
 
 # How many items a single Arnold Palmer yields before any modifiers.
 ARNOLD_PALMER_BASE_YIELD = 200
@@ -76,3 +81,49 @@ class Exploring:
 
     def location(self, name: str) -> ExploringLocation | None:
         return self.locations.get(name.lower())
+
+
+def read_locations(path: Path) -> dict[str, ExploringLocation]:
+    """Read locations from a ``Location,Item,Drop Rate`` CSV, keyed lower-cased.
+
+    A location's rows are gathered into one :class:`ExploringLocation`; each item
+    is keyed lower-cased (like the rest of the model) for case-insensitive
+    matching. A missing file yields no locations.
+    """
+    locations: dict[str, ExploringLocation] = {}
+    if not path.exists():
+        return locations
+    with path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            name = row["Location"].strip()
+            location = locations.setdefault(
+                name.lower(), ExploringLocation(name=name)
+            )
+            location.drop_rates[row["Item"].strip().lower()] = float(row["Drop Rate"])
+    return locations
+
+
+def load_exploring(
+    path: Path | None = None, modifiers: ExploringModifiers | None = None
+) -> Exploring:
+    """Build an :class:`Exploring` from the location CSV and the player's perks."""
+    return Exploring(
+        modifiers=modifiers or ExploringModifiers(),
+        locations=read_locations(path or DEFAULT_EXPLORING_CSV),
+    )
+
+
+def exploring_from_config(
+    config_section: dict, path: Path | None = None
+) -> Exploring:
+    """Build an :class:`Exploring` from an ``[exploring]`` config section.
+
+    The section's boolean flags set the yield modifiers (see
+    :class:`ExploringModifiers`); location data comes from the CSV.
+    """
+    section = config_section or {}
+    modifiers = ExploringModifiers(
+        have_lemon_squeezer=bool(section.get("have_lemon_squeezer")),
+        use_quandary_chowder=bool(section.get("use_quandary_chowder")),
+    )
+    return load_exploring(path, modifiers)
