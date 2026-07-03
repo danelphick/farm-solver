@@ -108,6 +108,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--plans",
+        type=int,
+        default=5,
+        metavar="N",
+        help="how many plans to spread across the frontier (default: 5)",
+    )
+    parser.add_argument(
         "--passive-limit",
         metavar="DURATION",
         help=(
@@ -115,6 +122,18 @@ def build_parser() -> argparse.ArgumentParser:
             "plans slower than this are dropped from the frontier. With no limit "
             "the whole frontier is shown, however long the slowest plan takes."
         ),
+    )
+    parser.add_argument(
+        "--max-ap",
+        type=int,
+        metavar="N",
+        help="drop frontier plans that spend more than N Arnold Palmers",
+    )
+    parser.add_argument(
+        "--max-ln",
+        type=int,
+        metavar="N",
+        help="drop frontier plans that spend more than N Large Nets",
     )
 
     # Which frontier plan to expand in full: the cheapest (fewest Arnold Palmers
@@ -263,6 +282,20 @@ def print_unobtainable(materials: list[str]) -> None:
         return
     for material in materials:
         print(f"  {material}")
+
+
+def within_limits(
+    plan: optimizer.SourcingPlan,
+    time_limit: timedelta | None = None,
+    max_ap: int | None = None,
+    max_ln: int | None = None,
+) -> bool:
+    """Whether a plan respects every given time and consumable ceiling."""
+    return (
+        (time_limit is None or plan.time <= time_limit)
+        and (max_ap is None or round(plan.arnold_palmers) <= max_ap)
+        and (max_ln is None or round(plan.large_nets) <= max_ln)
+    )
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
@@ -503,13 +536,17 @@ def run(args: argparse.Namespace) -> int:
     recipes = crafting.recipe_flows(workshop)
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
 
-    plans = optimizer.frontier(offers, demand, recipes, args.crafting_bonus)
+    if args.plans < 1:
+        raise ValueError("--plans must be at least 1")
+    plans = optimizer.frontier(offers, demand, recipes, args.crafting_bonus, args.plans)
     if not plans:
         return 0  # nothing left to source
 
-    # A time limit drops plans slower than it, unless that would leave none.
-    within = [i for i, p in enumerate(plans) if time_limit is None or p.time <= time_limit]
-    shown = [plans[i] for i in within] if within else plans
+    # The limits drop plans that exceed a time or consumable ceiling, unless that
+    # would leave none (then the whole frontier is shown).
+    shown = [
+        p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
+    ] or plans
 
     cheapest = cheapest_plan(shown)
     if args.plan is not None:

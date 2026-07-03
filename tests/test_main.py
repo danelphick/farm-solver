@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from crafting import Workshop, WorkshopRecipe
 from crops import Farm
-from main import cheapest_plan, print_crafts, print_frontier, print_plan
+from main import cheapest_plan, print_crafts, print_frontier, print_plan, within_limits
 from optimizer import SourcingPlan
 from sources import Draw, Offer
 
@@ -24,6 +24,15 @@ def test_cheapest_plan_breaks_ties_on_time():
         SourcingPlan(time=timedelta(hours=1), arnold_palmers=0, large_nets=0),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_within_limits_checks_time_and_consumables():
+    plan = SourcingPlan(time=timedelta(days=2), arnold_palmers=500, large_nets=50)
+    assert within_limits(plan)  # no limits
+    assert within_limits(plan, time_limit=timedelta(days=3), max_ap=500, max_ln=50)
+    assert not within_limits(plan, time_limit=timedelta(days=1))  # too slow
+    assert not within_limits(plan, max_ap=499)  # too many palmers
+    assert not within_limits(plan, max_ln=49)  # too many nets
 
 
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):

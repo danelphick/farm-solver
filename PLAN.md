@@ -15,7 +15,7 @@ buy speed; the rest cost time but no consumables:
 | Passive (buildings) | — | concurrent wait (max) | one cycle yields many items |
 | Pets | — | concurrent wait (max) | bundle per pet |
 | Farming | — | concurrent grow time (+ grape juice) | harvest yields crop + rare drops |
-| Crafting | — | (expands into base-material demand) | — |
+| Crafting | — | none (an LP flow: consume materials → produce output) | one craft = one output item |
 | Fishing | **Large Net** | ~instant | one net at a zone yields a bundle of fish |
 | Exploring | **Arnold Palmer** | ~instant | one palmer at a location yields a bundle |
 
@@ -131,28 +131,38 @@ can get exactly and instantly. So: scalarise + sweep, don't evolve.
 uncoverable). Million-scale demands are fine for CBC; keep a small `λ` floor to
 avoid degeneracy.
 
-**6 — Solution + reporting. IN PROGRESS.** `run()` now sources via the frontier:
-`gather_demand` expands crafts to base-plus-gatherable leaves, `all_offers` +
-`frontier` produce the plans, and the report prints a frontier table
+**6 — Solution + reporting. DONE.** `run()` sources via the frontier: the offers
+and `frontier` produce the plans, and the report prints a frontier table
 (`print_frontier`, time/AP/LN, fastest/cheapest tagged) then expands one plan
 (`print_plan`: Fishing/Exploring/Farming sections + a per-item Passive list that
-surfaces the bottleneck + a no-source remainder). Selection: `--cheapest-plan`
-(default, fewest consumables) or `--plan N`; `--passive-limit` now caps a plan's
-total time (dropping slower plans). `craft_breakdown` gained a `gatherable` stop
-so `-b` matches. `parse_duration` now accepts `y` (years). `Solution.arnold_
-palmers`/`large_nets` set from the chosen plan.
-
-**6c — cleanup. DONE.** Removed the superseded sourcing (`craft_plan`/`CraftPlan`,
-`plan_farming`/`FarmUse`, `passive.source_materials`, `split_pet_production`, the
-old `print_materials`/`print_farming`/`print_passive`) and the now-inert `-r`,
-with their tests; overhauled the README around the frontier. `farming.py` keeps
-only `FARMING_ITEMS`/`is_farmed` (for `--unobtainable`). Lint clean.
+surfaces the bottleneck + a no-source remainder), with `print_crafts` for `-b`.
+Selection: `--cheapest-plan` (default, fewest consumables) or `--plan N`.
+`parse_duration` accepts `y` (years). `Solution.arnold_palmers`/`large_nets` set
+from the chosen plan. Cleanup: removed the whole superseded fixed-order pipeline
+(`craft_plan`, `plan_farming`, `source_materials`, `split_pet_production`, old
+`print_*`) and the inert `-r`, with their tests. `farming.py` keeps only
+`FARMING_ITEMS`/`is_farmed` (for `--unobtainable`).
 
 **7 — Tests + README. DONE.** Loaders, offers, aggregation, the LP optimiser and
-frontier, `gather_demand`, and the new reporting are all covered; README rewritten.
+frontier, crafting-in-LP, and the reporting are all covered; README rewritten.
 
-**7 — Tests + README.** Exploring/fishing loaders, aggregation, joint-production
-covering, frontier non-domination; document the frontier output and flags.
+**8 — Crafting folded into the LP. DONE (`50c7777`, `021db7a`).** Each recipe is a
+flow (consume materials, produce `crafting_bonus` of the output, no time/
+consumable cost), so craft-vs-gather is optimised and co-product surpluses reused
+— not pre-decided by a heuristic. The LP is built over the *obtainable* items only
+(gatherable, or craftable from obtainable, a fixed point), so coverage is always
+feasible and no shortfall slack is needed; anything else falls to the remainder.
+`run()` feeds `optimizer.frontier` the top-level demand (`top_level_demand`) plus
+the recipe flows (`recipe_flows`). Retired the `gather_demand`/`craft_breakdown`/
+`gatherable_items` heuristic layer. Fixed the Glass Bottle case (fished → crafted
+from explored Glass Orb), cutting the fastest plan's Large Nets ~68k → ~11k. This
+supersedes the "base materials left after craft expansion" framing in the Phase 5
+design below — the LP now sources the full tree, not pre-expanded leaves.
+
+**9 — Frontier controls. DONE.** `--plans N` sets how many plans span the frontier
+(default 5, for finer resolution where the fast end swings in cost). `--max-ap` /
+`--max-ln` join `--passive-limit` as ceilings that drop plans exceeding them
+(unless that leaves none); the shared filter is `main.within_limits`.
 
 ## Dependencies
 
@@ -176,16 +186,19 @@ The solver adds the project's first runtime dependency. Choice: **PuLP**.
 First implementation step: `uv add pulp`, then a smoke test mirroring the check
 above, before building `optimizer.py`.
 
-## Open questions (revisit as we reach them)
+## Status
 
-- Frontier granularity may need >5 plans where very short durations cost wildly
-  different AP/LN; make the count/spacing tunable.
-- Whether any hard AP/LN ceiling should cap the frontier's fast end.
-- **Crafting is now in the LP. DONE.** Each recipe is a flow (consume materials,
-  produce `crafting_bonus` of the output, no time/consumable cost), so craft-vs-
-  gather is optimised and co-product surpluses are reused. The LP is built over
-  the *obtainable* items only (gatherable, or craftable from obtainable — a fixed
-  point), so coverage is always feasible and no shortfall slack is needed. This
-  retired `gather_demand`/`craft_breakdown`/`gatherable_items` and the pet-exclusion
-  heuristic. Fixed the Glass Bottle case (fished → crafted from explored Glass
-  Orb), cutting the fastest plan's Large Nets ~68k → ~11k.
+All phases (1–9) are landed; the plan is complete. Resolved open questions:
+
+- **Frontier granularity** — tunable via `--plans N` (Phase 9).
+- **Hard AP/LN ceiling** — `--max-ap` / `--max-ln` filter the frontier (Phase 9).
+- **Craft-vs-gather** — optimised by folding crafting into the LP (Phase 8).
+
+Remaining possibilities, only if wanted (none blocking):
+
+- A true **constrained solve** (minimise time subject to exact AP/LN budgets)
+  rather than filtering the ~5 computed plans; needs shortfall slack + big-M in a
+  single solve, so kept out until there's a need the filter cannot meet.
+- Whole-number **integer** craft/net/palmer counts (MILP) instead of rounding the
+  LP's fractional solution at reporting; PuLP makes this a one-keyword change if
+  the rounding ever proves too loose.

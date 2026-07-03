@@ -80,10 +80,12 @@ Passive production (concurrent):
   ...
 ```
 
-Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--passive-limit <duration>` to cap a plan's total time; plans slower than it are dropped from the frontier (unless that would leave none). The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
+Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--plans N` to spread more (or fewer) plans across the frontier when you want finer resolution — useful where the fast end swings wildly in cost (default 5).
+
+Three ceilings drop plans that exceed them (unless that would leave none): `--passive-limit <duration>` on total time, and `--max-ap` / `--max-ln` on the Arnold Palmers and Large Nets spent. The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
 
 ```shell
-python main.py --passive-limit 100y
+python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a century
 ```
 
 ## Materials and crafting
