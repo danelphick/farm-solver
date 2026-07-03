@@ -185,6 +185,33 @@ def obtainable_items(
     return items
 
 
+def gatherable_items(
+    offers: list[sources.Offer], production: passive.PassiveProduction
+) -> frozenset[str]:
+    """Items to source rather than craft: those a *non-pet* channel produces.
+
+    Crafting expansion stops at these (see :func:`crafting.gather_demand`). Pets
+    are deliberately excluded: they are so slow that forcing a craftable item
+    onto the pet that happens to fetch it (rather than crafting it from cheaper
+    materials) can cost centuries. So a craftable item only a pet makes stays
+    craftable; pets still supply it as a free co-product if it is produced while
+    waiting, and remain the source for base items nothing else can make.
+    """
+    items = {
+        key
+        for offer in offers
+        if offer.track != sources.PASSIVE_TRACK
+        for key in offer.yields
+    }
+    items |= {
+        item
+        for producer in production.producers
+        if not producer.name.startswith(config.PET_PRODUCER_PREFIX)
+        for item in producer.outputs
+    }
+    return frozenset(items)
+
+
 def unobtainable_materials(
     workshop: crafting.Workshop, obtainable: set[str]
 ) -> list[str]:
@@ -360,19 +387,29 @@ def print_plan(
     passive_draws = draws_on(sources.PASSIVE_TRACK)
     if passive_draws:
         offer = passive_draws[0].offer
-        # Each item's own wait is its demand over its per-minute rate; the
-        # longest is the whole track's time, so listing them longest-first shows
-        # what drives it. (Concurrent, so the total is that longest wait.)
-        rows = [
-            (timedelta(minutes=demand[display[key]] / offer.yields[key]), display[key])
-            for key in offer.yields
-            if key in display and offer.yields[key] > 0
-        ]
-        print("\nPassive production (concurrent):")
-        for wait, name in sorted(rows, reverse=True):
-            print(
-                f"  {demand[name]:,}x {name} in {passive.format_duration(wait)}"
-            )
+        # Passive only needs to cover what the instant channels (and farming) did
+        # not, so subtract their output first -- otherwise an item fully fished or
+        # explored would still show its full passive wait here. Each item's own
+        # wait is then its residual over its per-minute rate; the longest is the
+        # whole track's time, so listing them longest-first shows what drives it.
+        elsewhere: dict[str, float] = {}
+        for other in plan.draws:
+            if other.offer.track == sources.PASSIVE_TRACK:
+                continue
+            for item, quantity in other.produced.items():
+                elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+        rows = []
+        for key in offer.yields:
+            if key not in display or offer.yields[key] <= 0:
+                continue
+            residual = demand[display[key]] - elsewhere.get(key, 0.0)
+            if residual > 1e-6:
+                wait = timedelta(minutes=residual / offer.yields[key])
+                rows.append((wait, display[key], round(residual)))
+        if rows:
+            print("\nPassive production (concurrent):")
+            for wait, name, quantity in sorted(rows, reverse=True):
+                print(f"  {quantity:,}x {name} in {passive.format_duration(wait)}")
 
     if plan.remainder:
         print("\nMaterials with no known source (craft or supply yourself):")
@@ -430,7 +467,7 @@ def run(args: argparse.Namespace) -> int:
     # Every channel is an Offer; the optimiser sources the base-plus-gatherable
     # demand (crafts expand only down to items with no gathering source).
     offers = optimizer.all_offers(production, fish, explore, farm)
-    gatherable = frozenset(key for offer in offers for key in offer.yields)
+    gatherable = gatherable_items(offers, production)
     demand = crafting.gather_demand(
         solution.needs, workshop, args.crafting_bonus, args.mastery_bonus, gatherable
     )

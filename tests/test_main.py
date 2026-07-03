@@ -1,8 +1,9 @@
 from datetime import timedelta
 
 from crops import Farm
-from main import cheapest_plan, print_frontier, print_plan
+from main import cheapest_plan, gatherable_items, print_frontier, print_plan
 from optimizer import SourcingPlan
+from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer
 
 PLANS = [
@@ -63,6 +64,60 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "2,000x Board in 3h 20m" in out
     # Items with no offer to make them are listed as a remainder.
     assert "3x Magicite" in out
+
+
+def test_gatherable_items_excludes_pet_only_items():
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("sawmill", HOURLY, {"board": 10}),
+            PassiveProducer("pet Cat", DAILY, {"mushroom paste": 5}),
+        ]
+    )
+    offers = [
+        Offer("passive", "passive", {"board": 0.17, "mushroom paste": 0.003}),
+        Offer("fish Lake", "fishing", {"trout": 1}, ln=1),
+    ]
+    gatherable = gatherable_items(offers, production)
+    assert "board" in gatherable  # a non-pet building makes it
+    assert "trout" in gatherable  # a non-passive channel makes it
+    # Only a pet makes Mushroom Paste, so it stays craftable, not pet-sourced.
+    assert "mushroom paste" not in gatherable
+
+
+def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):
+    demand = {"Horn": 1000}
+    plan = SourcingPlan(
+        draws=[
+            # Exploring makes all 1000 Horn, so passive has nothing left to add.
+            Draw(Offer("explore Canyon", "exploring", {"horn": 100}, ap=1), 10),
+            Draw(
+                Offer("passive", "passive", {"horn": 1}, time_per_unit=timedelta(minutes=1)),
+                50,
+            ),
+        ],
+    )
+    print_plan(plan, demand, Farm())
+    out = capsys.readouterr().out
+    assert "10x Arnold Palmer at Canyon (Horn)" in out  # Horn comes from exploring
+    assert "Passive production" not in out  # nothing left for passive to cover
+
+
+def test_print_plan_passive_shows_only_the_residual(capsys):
+    demand = {"Horn": 1000}
+    plan = SourcingPlan(
+        draws=[
+            # Exploring covers 600; passive must make the remaining 400.
+            Draw(Offer("explore Canyon", "exploring", {"horn": 100}, ap=1), 6),
+            Draw(
+                Offer("passive", "passive", {"horn": 1}, time_per_unit=timedelta(minutes=1)),
+                400,
+            ),
+        ],
+    )
+    print_plan(plan, demand, Farm())
+    out = capsys.readouterr().out
+    assert "Passive production (concurrent):" in out
+    assert "400x Horn in 6h 40m" in out  # 400 at 1/min = 400 minutes
 
 
 def test_print_plan_orders_passive_items_longest_wait_first(capsys):
