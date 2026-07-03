@@ -93,7 +93,7 @@ By default a seasonal pet is scaled to its steady-state yearly share, so the pla
 
 Modelling the calendar costs an extra solve: how much of the plan is in season depends on its length, which is itself an output of the solve, so the solver iterates the start date and the makespan to a fixed point (typically two passes). The solve runs many small LPs, so on a slower machine that doubling adds up — which is why it is off by default. `--average-seasons` forces the yearly-average fast path even when the config opts in, so you can flip it off for a quick run without editing the config.
 
-Three ceilings drop plans that exceed them (unless that would leave none): `--passive-limit <duration>` on total time, and `--max-ap` / `--max-ln` on the Arnold Palmers and Large Nets spent. The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
+Three ceilings drop plans that exceed them: `--passive-limit <duration>` on total time, and `--max-ap` / `--max-ln` on the Arnold Palmers and Large Nets spent. If no plan meets the limits (for instance a time cap below the farming critical path, which consumables cannot shorten), the whole frontier is shown with a note saying so and naming the best each axis reaches. The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
 
 ```shell
 python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a century

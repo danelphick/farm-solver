@@ -139,8 +139,10 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DURATION",
         help=(
             "cap the total time of a sourcing plan (e.g. '5d', '3h', '1d6h'); "
-            "plans slower than this are dropped from the frontier. With no limit "
-            "the whole frontier is shown, however long the slowest plan takes."
+            "plans slower than this are dropped from the frontier. A cap below the "
+            "fastest plan cannot be met (the farming critical path sets the floor), "
+            "so the whole frontier is shown with a note. With no limit the whole "
+            "frontier is shown, however long the slowest plan takes."
         ),
     )
     parser.add_argument(
@@ -343,6 +345,40 @@ def within_limits(
         and (max_ap is None or round(plan.arnold_palmers) <= max_ap)
         and (max_ln is None or round(plan.large_nets) <= max_ln)
     )
+
+
+def limit_shortfall(
+    plans: list[optimizer.SourcingPlan],
+    time_limit: timedelta | None,
+    max_ap: int | None,
+    max_ln: int | None,
+) -> str:
+    """Explain why no plan met the limits, naming the best each axis reaches.
+
+    The frontier's fastest plan is the makespan floor (the farming critical path,
+    which consumables cannot shorten), so a limit under it is simply infeasible --
+    worth saying rather than silently showing the whole frontier as if unlimited.
+    Called only when the limits leave no plan; each axis a plan can hit alone is
+    dropped, so an empty list means no single plan meets them all at once.
+    """
+    parts = []
+    if time_limit is not None:
+        fastest = min(p.time for p in plans)
+        if fastest > time_limit:
+            parts.append(
+                f"under {passive.format_duration(time_limit)}"
+                f" (fastest is {passive.format_duration(fastest)})"
+            )
+    if max_ap is not None:
+        fewest = round(min(p.arnold_palmers for p in plans))
+        if fewest > max_ap:
+            parts.append(f"within {max_ap:,} AP (fewest is {fewest:,})")
+    if max_ln is not None:
+        fewest = round(min(p.large_nets for p in plans))
+        if fewest > max_ln:
+            parts.append(f"within {max_ln:,} LN (fewest is {fewest:,})")
+    fits = " or ".join(parts) if parts else "every limit at once"
+    return f"No plan fits {fits}; showing the full frontier."
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
@@ -845,10 +881,11 @@ def run(args: argparse.Namespace) -> int:
         if not plans:
             return 0  # nothing left to source
         # The limits drop plans over a time or consumable ceiling, unless that
-        # would leave none (then the whole frontier is shown).
-        shown = [
+        # would leave none (then the whole frontier is shown, with a warning below).
+        within = [
             p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
-        ] or plans
+        ]
+        shown = within or plans
         new_horizon = shown[selected_plan(shown, args.plan, args.cheapest_plan)].time
         if not model_calendar or (
             horizon is not None and _makespans_close(new_horizon, horizon)
@@ -864,6 +901,8 @@ def run(args: argparse.Namespace) -> int:
             f"\nStarting {start:%d %b %Y}; a seasonal pet counts only for the "
             "part of the plan it is in season."
         )
+    if not within:
+        print(f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln)}")
     print_frontier(shown, selected, cheapest)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)

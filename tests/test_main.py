@@ -8,6 +8,7 @@ from main import (
     _should_model_calendar,
     build_parser,
     cheapest_plan,
+    limit_shortfall,
     print_crafts,
     print_frontier,
     print_plan,
@@ -36,6 +37,35 @@ def test_cheapest_plan_breaks_ties_on_time():
         SourcingPlan(time=timedelta(hours=1), arnold_palmers=0, large_nets=0),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_limit_shortfall_reports_a_too_tight_time_limit():
+    # Every plan is 3d+ here, so a 1d cap can never be met -- say so, naming both.
+    plans = [
+        SourcingPlan(time=timedelta(days=3), arnold_palmers=0, large_nets=0),
+        SourcingPlan(time=timedelta(days=5), arnold_palmers=0, large_nets=0),
+    ]
+    message = limit_shortfall(plans, timedelta(days=1), None, None)
+    assert "under 1d" in message
+    assert "fastest is 3d" in message
+    assert "showing the full frontier" in message
+
+
+def test_limit_shortfall_reports_too_tight_consumable_limits():
+    # Only the 100-AP plan, so a 5 AP cap is unmeetable; report the axis and best.
+    message = limit_shortfall(PLANS[:1], None, 5, None)
+    assert "within 5 AP (fewest is 100)" in message
+
+
+def test_limit_shortfall_names_joint_infeasibility():
+    # Each limit is reachable alone (a 5h plan, a 0-AP plan) but no single plan
+    # meets both, so no axis is individually to blame.
+    plans = [
+        SourcingPlan(time=timedelta(hours=1), arnold_palmers=100, large_nets=0),
+        SourcingPlan(time=timedelta(hours=9), arnold_palmers=0, large_nets=0),
+    ]
+    message = limit_shortfall(plans, timedelta(hours=5), 5, None)
+    assert "every limit at once" in message
 
 
 def test_average_seasons_flag_defaults_off():
