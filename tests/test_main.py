@@ -130,6 +130,27 @@ def test_print_plan_highlights_the_farming_bottleneck(capsys):
     assert "100 plantings of Corn (4d 4h) — crops grow one at a time" in out
 
 
+def test_print_plan_critical_path_prefers_farming_over_passive_fill(capsys):
+    # Farming forces a 100-minute wait. Passive runs concurrently and fills that
+    # same window making a slow item that could have been sourced elsewhere, so its
+    # track ties farming's 100 minutes -- but it is fill, not the constraint. The
+    # critical path names farming alone, not the passive item.
+    demand = {"Corn": 100, "Slow": 100}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("grow Corn", "farming", {"corn": 1}, time_per_unit=timedelta(minutes=1)), 100),
+            Draw(Offer("passive", "passive", {"slow": 1}, time_per_unit=timedelta(minutes=1)), 100),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Critical path (sets the 1h 40m total):" in out
+    critical = out.split("Critical path")[1].split("\n\n")[0]
+    assert "plantings of Corn" in critical
+    assert "Slow" not in critical  # the passive fill is not the critical path
+    assert "passive production" not in critical
+
+
 def test_print_plan_omits_critical_path_when_everything_is_instant(capsys):
     # Fishing is instant, so there is no time to explain -- no critical path line.
     demand = {"It": 100}

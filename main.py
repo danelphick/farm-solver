@@ -405,13 +405,19 @@ def print_critical_path(
     elsewhere: dict[str, float],
     display: dict[str, str],
 ) -> None:
-    """Highlight the slowest concurrent track -- what caps how fast the plan runs.
+    """Highlight the track that truly caps how fast the plan can run.
 
-    Tracks run at the same time, so the total time is the slowest of them (and,
-    within it, the slowest item). Fishing and exploring are instant, so the cap is
-    always a passive wait or a farming sequence -- occasionally both at once, when
-    they tie. Naming it shows what to speed up (source it with consumables, or pick
-    a faster plan) to finish sooner.
+    Tracks run concurrently, so the total time is the slowest of them. Fishing and
+    exploring are instant, so that leaves farming and passive production. They are
+    not symmetric, though: passive runs for free alongside everything, so it
+    opportunistically fills whatever wait another track already forces -- an item
+    that could be fished or explored instead is made passively just to save a
+    consumable, expanding the passive track to exactly the makespan. Farming, by
+    contrast, is grown deliberately and only as much as needed. So when farming is
+    (co-)maximal it is the real driver and the passive track beside it is fill;
+    only when passive is the sole longest track does it genuinely set the pace.
+    Naming the driver shows what to attack (source it with consumables, or pick a
+    faster plan) to finish sooner.
     """
     track_time: dict[str, timedelta] = {}
     for draw in plan.draws:
@@ -422,25 +428,21 @@ def print_critical_path(
     if makespan <= timedelta(0):
         return  # everything is instant; there is no wait to explain
 
-    lines: list[str] = []
-    for track, total in track_time.items():
-        if total < makespan - timedelta(seconds=1):
-            continue  # this track finishes sooner, so it is not the bottleneck
-        if track == sources.PASSIVE_TRACK:
-            item = _slowest_passive_item(plan, need, elsewhere, display)
-            if item is not None:
-                name, quantity, wait = item
-                lines.append(
-                    f"  {quantity:,}x {name} from passive production "
-                    f"({passive.format_duration(wait)}) — the slowest item to build up"
-                )
-        elif track == sources.FARMING_TRACK:
-            lines.append("  " + _farming_bottleneck(plan, total))
-    if not lines:
-        return
+    farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
+    if farming_time >= makespan - timedelta(seconds=1):
+        line = _farming_bottleneck(plan, makespan)
+    else:
+        # Passive is the sole longest track, so it genuinely sets the pace.
+        item = _slowest_passive_item(plan, need, elsewhere, display)
+        if item is None:
+            return
+        name, quantity, wait = item
+        line = (
+            f"{quantity:,}x {name} from passive production "
+            f"({passive.format_duration(wait)}) — the slowest item to build up"
+        )
     print(f"\nCritical path (sets the {passive.format_duration(makespan)} total):")
-    for line in lines:
-        print(line)
+    print(f"  {line}")
 
 
 def print_plan(
