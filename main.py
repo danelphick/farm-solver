@@ -16,7 +16,7 @@ import calendar
 import csv
 import math
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 import config
@@ -73,6 +73,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--level",
         type=int,
         help="target tower level (default: highest reachable level)",
+    )
+    parser.add_argument(
+        "--start-date",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help=(
+            "date the plan starts, used to count how much of it a seasonal pet "
+            "is in season for (default: today)"
+        ),
     )
     parser.add_argument(
         "--crafting-bonus",
@@ -182,6 +191,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 FISHING_CSV = Path(__file__).with_name("fishing.csv")
 EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
+
+# Seasonal pet availability depends on the plan's makespan, which depends back on
+# it; iterate the solve at most this many times to settle that loop.
+_MAX_SEASON_ITERS = 5
+
+
+def _makespans_close(a: timedelta, b: timedelta) -> bool:
+    """Whether two makespans agree closely enough to stop the seasonal iteration."""
+    return abs((a - b).total_seconds()) <= max(3600.0, 0.001 * b.total_seconds())
 
 
 def _csv_items(path: Path) -> set[str]:
@@ -734,13 +752,15 @@ def load_config() -> dict:
 def run(args: argparse.Namespace) -> int:
     cfg = load_config()
     workshop = crafting.load_workshop()
-    production = config.passive_production(cfg)
     farm = crops.farm_from_config(cfg.get("farming", {}))
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
     explore = exploring.exploring_from_config(cfg.get("exploring", {}))
+    start = args.start_date or date.today()
 
-    # A standalone report over the whole workshop; no solving needed.
+    # A standalone report over the whole workshop; no solving needed. Use the
+    # steady-state producers (no plan span) so every pet's items are counted.
     if args.unobtainable:
+        production = config.passive_production(cfg, today=start)
         obtainable = obtainable_items(production, farm)
         print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
@@ -770,27 +790,57 @@ def run(args: argparse.Namespace) -> int:
 
     print_solution(solution)
 
-    # Every channel is an Offer and every recipe a craft flow; the optimiser
-    # sources the top-level demand, choosing craft-vs-gather for itself.
-    offers = optimizer.all_offers(production, fish, explore, farm)
+    # Every recipe is a craft flow; the optimiser sources the top-level demand,
+    # choosing craft-vs-gather for itself. (The channel Offers are rebuilt below,
+    # since the passive ones depend on the plan span.)
     recipes = crafting.recipe_flows(workshop)
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
 
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
-    plans = optimizer.frontier(offers, demand, recipes, args.crafting_bonus, args.plans)
-    if not plans:
-        return 0  # nothing left to source
 
-    # The limits drop plans that exceed a time or consumable ceiling, unless that
-    # would leave none (then the whole frontier is shown).
-    shown = [
-        p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
-    ] or plans
+    # A seasonal pet is only in season for part of the year, so how much it
+    # contributes depends on how long the plan runs -- which is itself an output
+    # of the solve. Iterate to a fixed point: solve, take the expanded plan's
+    # makespan as the plan span, rebuild the seasonal pet rates for it, and solve
+    # again until the makespan settles. Only seasonal pets create this loop, so
+    # skip the extra passes when the config has none.
+    has_seasonal = any(
+        name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})
+    )
+    horizon: timedelta | None = None
+    production = config.passive_production(cfg, today=start)
+    shown: list[optimizer.SourcingPlan] = []
+    for _ in range(_MAX_SEASON_ITERS):
+        production = config.passive_production(
+            cfg, today=start, start=start, horizon=horizon
+        )
+        offers = optimizer.all_offers(production, fish, explore, farm)
+        plans = optimizer.frontier(
+            offers, demand, recipes, args.crafting_bonus, args.plans
+        )
+        if not plans:
+            return 0  # nothing left to source
+        # The limits drop plans over a time or consumable ceiling, unless that
+        # would leave none (then the whole frontier is shown).
+        shown = [
+            p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
+        ] or plans
+        new_horizon = shown[selected_plan(shown, args.plan, args.cheapest_plan)].time
+        if not has_seasonal or (
+            horizon is not None and _makespans_close(new_horizon, horizon)
+        ):
+            break
+        horizon = new_horizon
 
     cheapest = cheapest_plan(shown)
     selected = selected_plan(shown, args.plan, args.cheapest_plan)
 
+    if has_seasonal:
+        print(
+            f"\nStarting {start:%d %b %Y}; a seasonal pet counts only for the "
+            "part of the plan it is in season."
+        )
     print_frontier(shown, selected, cheapest)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)

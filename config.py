@@ -8,7 +8,7 @@ the ``[storehouse]`` size are read out of it.
 from __future__ import annotations
 
 import tomllib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +21,6 @@ from passive import (
     PassiveProducer,
     PassiveProduction,
 )
-
-# The number of months in a year, used to average seasonal pet output.
-MONTHS_IN_YEAR = 12
 
 # Pet producers are named with this prefix so they can be told apart from the
 # faster buildings and used only as a last-resort source (pets are slow).
@@ -40,7 +37,10 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def passive_production(
-    config: dict[str, Any], today: date | None = None
+    config: dict[str, Any],
+    today: date | None = None,
+    start: date | None = None,
+    horizon: timedelta | None = None,
 ) -> PassiveProduction:
     """Build the passive producers described by ``config``.
 
@@ -296,21 +296,27 @@ def passive_production(
 
     pets_config = config.get("pets")
     if pets_config:
-        producers.extend(_pet_producers(pets_config))
+        producers.extend(_pet_producers(pets_config, start, horizon))
 
     return PassiveProduction(
         producers=producers, inventory_size=storehouse_size(config, today)
     )
 
 
-def _pet_producers(pets_config: dict[str, Any]) -> list[PassiveProducer]:
+def _pet_producers(
+    pets_config: dict[str, Any],
+    start: date | None = None,
+    horizon: timedelta | None = None,
+) -> list[PassiveProducer]:
     """Daily producers for the pets described by a ``[pets]`` config section.
 
     Each pet fetches items over time; its average daily haul (see
-    :func:`pets.pets_from_config`) becomes a daily producer. Seasonal pets only
-    fetch for part of the year, so their output is scaled to the long-run
-    average daily rate (months active / 12). Pets with no level produce nothing
-    and are skipped.
+    :func:`pets.pets_from_config`) becomes a daily producer. A seasonal pet only
+    fetches during its calendar window, so its haul is scaled by the fraction of
+    the plan (running ``horizon`` from ``start``) that overlaps that window (see
+    :func:`pets.seasonal_fraction`) -- with no plan span given, the steady-state
+    yearly share. A pet out of season for the whole span, or with no level,
+    produces nothing and is skipped.
     """
     producers: list[PassiveProducer] = []
     for pet in pets.pets_from_config(pets_config).pets.values():
@@ -318,7 +324,9 @@ def _pet_producers(pets_config: dict[str, Any]) -> list[PassiveProducer]:
         if not outputs:
             continue
         if pet.months is not None:
-            factor = len(pet.months) / MONTHS_IN_YEAR
+            factor = pets.seasonal_fraction(pet.months, start, horizon)
+            if factor <= 0:
+                continue  # out of season for the whole plan; produces nothing
             outputs = {item: qty * factor for item, qty in outputs.items()}
         producers.append(
             PassiveProducer(

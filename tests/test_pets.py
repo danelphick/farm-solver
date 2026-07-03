@@ -1,8 +1,16 @@
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
 
-from pets import Pet, Pets, load_pets, read_pet_tiers, unlocked_tiers
+from pets import (
+    Pet,
+    Pets,
+    load_pets,
+    read_pet_tiers,
+    seasonal_fraction,
+    unlocked_tiers,
+)
 
 PETS_CSV = Path(__file__).resolve().parent.parent / "pets.csv"
 
@@ -100,6 +108,41 @@ def test_year_round_pet_is_active_every_month():
     pet = make_pet(6)
     assert not pet.seasonal
     assert pet.active_in(1)
+
+
+JUN_JUL = frozenset({6, 7})
+
+
+def test_seasonal_fraction_year_round_pet_is_always_one():
+    assert seasonal_fraction(None) == 1.0
+    assert seasonal_fraction(None, date(2026, 1, 1), timedelta(days=10)) == 1.0
+
+
+def test_seasonal_fraction_steady_state_is_days_over_year():
+    # With no plan span given, June-July is its 61-of-365 yearly share.
+    assert seasonal_fraction(JUN_JUL) == pytest.approx(61 / 365)
+
+
+def test_seasonal_fraction_fully_in_season_is_one():
+    # A month wholly inside the window overlaps completely.
+    assert seasonal_fraction(JUN_JUL, date(2026, 6, 1), timedelta(days=30)) == 1.0
+
+
+def test_seasonal_fraction_out_of_season_is_zero():
+    # A January plan never reaches the June-July window.
+    assert seasonal_fraction(JUN_JUL, date(2026, 1, 1), timedelta(days=31)) == 0.0
+
+
+def test_seasonal_fraction_partial_overlap():
+    # May 16 for 31 days is May 16-Jun 15; only the 15 June days are in season.
+    frac = seasonal_fraction(JUN_JUL, date(2026, 5, 16), timedelta(days=31))
+    assert frac == pytest.approx(15 / 31)
+
+
+def test_seasonal_fraction_multi_year_plan_settles_to_steady_state():
+    # Over many whole years the start phase washes out to the yearly share.
+    frac = seasonal_fraction(JUN_JUL, date(2026, 8, 1), timedelta(days=10 * 365))
+    assert frac == pytest.approx(61 / 365)
 
 
 def test_pets_lookup_is_case_insensitive():

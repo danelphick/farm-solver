@@ -18,7 +18,7 @@ A command-line flag overrides the config; if a file is given in neither place, t
 
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
-    [-b] [--crafting-bonus num] [--mastery-bonus num] \
+    [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--mastery-file <file>] [--inventory-file <file>]
 ```
@@ -75,7 +75,7 @@ Critical path (sets the 293y 319d total):
   2,574,345x Horn from passive production (293y 319d) — the slowest item to build up
 ```
 
-The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too. Each passive line also names the producer that makes the item; when several producers make it, the quantity is split between them by their per-minute rate share, largest first. A seasonal pet only fetches for part of the year, so its output is modelled as a long-run yearly average — which is why it contributes less than a year-round source — and its active window is flagged (`[seasonal: Mar–Apr]`) to explain the smaller share:
+The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too. Each passive line also names the producer that makes the item; when several producers make it, the quantity is split between them by their per-minute rate share, largest first. A seasonal pet only fetches during its calendar window, so it counts only for the part of the plan that overlaps that window (given the plan's start date — see below) and its window is flagged (`[seasonal: Mar–Apr]`); a pet out of season for the whole plan drops out entirely:
 
 ```text
 Exploring:
@@ -88,6 +88,8 @@ Passive production (concurrent):
 ```
 
 Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--plans N` to spread more (or fewer) plans across the frontier when you want finer resolution — useful where the fast end swings wildly in cost (default 5).
+
+The plan is assumed to start today, or on `--start-date YYYY-MM-DD`. This only matters for seasonal pets: how much one contributes depends on how much of the plan runs while it is in season, which depends on the plan's length — itself an output of the solve — so the solver iterates the start date and the makespan to a fixed point. A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years settles to the pet's steady-state yearly share whatever the start date. So the same goal can source differently in March than in July.
 
 Three ceilings drop plans that exceed them (unless that would leave none): `--passive-limit <duration>` on total time, and `--max-ap` / `--max-ln` on the Arnold Palmers and Large Nets spent. The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
 
@@ -201,7 +203,7 @@ use_crunchy_omelette = true   # 50% more items fetched by every pet
 # ... one line per pet
 ```
 
-Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate. Pets fetch **very slowly**, so the optimiser only relies on one when nothing faster (or cheaper) can supply an item — no special rule is needed; a pet's low rate simply makes any item it alone provides expensive in time, which the frontier reflects.
+Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets only fetch for two months a year, so a seasonal pet's haul is scaled by how much of the plan falls in its window (set the plan's start with `--start-date`); over a multi-year plan that settles to its steady-state yearly share. Pets fetch **very slowly**, so the optimiser only relies on one when nothing faster (or cheaper) can supply an item — no special rule is needed; a pet's low rate simply makes any item it alone provides expensive in time, which the frontier reflects.
 
 Passive production is shaped by how much you can hold at once. The `[storehouse]` section records its capacity on a given day and how much it grows daily:
 

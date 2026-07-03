@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from pathlib import Path
 
 # The bundled tier data, used unless another path is given.
@@ -57,6 +58,43 @@ SEASONAL_MONTHS: dict[str, frozenset[int]] = {
 }
 # The special pet doubles one item at level 6:
 DOUBLE_ITEMS: dict[str, str] = {"owl": "Honey"}
+
+# Days in each month (non-leap); the seasonal windows are short, fixed, and only
+# ever used as a fraction, so a leap day is immaterial.
+_MONTH_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+# Beyond this many days a plan spans enough whole years that the start-date phase
+# washes out and the fraction settles to the steady-state yearly share.
+_STEADY_STATE_DAYS = 3 * 365
+
+
+def seasonal_fraction(
+    months: frozenset[int] | None,
+    start: date | None = None,
+    horizon: timedelta | None = None,
+) -> float:
+    """The fraction of a plan's run during which a seasonal pet is fetching.
+
+    A pet with no season (``months is None``) fetches the whole time (``1.0``).
+    A seasonal one fetches only in its calendar window, so over a plan running
+    ``horizon`` from ``start`` it produces on the overlapping days -- the fraction
+    is those active days over the whole span. With no ``start``/``horizon`` given,
+    or a span of several years (where the start phase washes out), it is the
+    steady-state share of the year those months cover.
+    """
+    if months is None:
+        return 1.0
+    steady = sum(_MONTH_DAYS[m - 1] for m in months) / 365.0
+    if start is None or horizon is None:
+        return steady
+    total_days = horizon.total_seconds() / 86400
+    if total_days <= 0:
+        return 1.0 if start.month in months else 0.0
+    if total_days >= _STEADY_STATE_DAYS:
+        return steady
+    span = max(1, round(total_days))
+    active = sum(1 for i in range(span) if (start + timedelta(days=i)).month in months)
+    return active / span
 
 
 def unlocked_tiers(level: int) -> int:

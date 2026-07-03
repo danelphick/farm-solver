@@ -333,11 +333,30 @@ def test_pets_crunchy_omelette_boosts_producer_output():
 
 
 def test_seasonal_pet_output_is_scaled_to_annual_average():
-    # The Shark only fetches in June-July (2 of 12 months), so its daily output
-    # is scaled by 2/12. Level 8 full rate is 16 a day, so 16/6 on average.
+    # With no plan span given, the Shark's June-July window is scaled to its
+    # steady-state yearly share by days: 61 of 365. Level 8 full rate is 16 a day.
     production = passive_production({"pets": {"Shark": 8}})
     shark = next(p for p in production.producers if p.name == "pet Shark")
-    assert shark.outputs["ghost jelly"] == pytest.approx(16 / 6)  # tier 3
+    assert shark.outputs["ghost jelly"] == pytest.approx(16 * 61 / 365)  # tier 3
+
+
+def test_seasonal_pet_out_of_season_for_the_plan_is_dropped():
+    # A 30-day plan in January never overlaps the Shark's June-July window, so it
+    # contributes nothing and is not listed as a producer.
+    production = passive_production(
+        {"pets": {"Shark": 8}}, start=date(2026, 1, 1), horizon=timedelta(days=30)
+    )
+    assert not any(p.name == "pet Shark" for p in production.producers)
+
+
+def test_seasonal_pet_in_season_for_the_whole_plan_is_full_rate():
+    # A plan wholly inside June-July gets the Shark's full daily haul, not the
+    # yearly average.
+    production = passive_production(
+        {"pets": {"Shark": 8}}, start=date(2026, 6, 1), horizon=timedelta(days=30)
+    )
+    shark = next(p for p in production.producers if p.name == "pet Shark")
+    assert shark.outputs["ghost jelly"] == pytest.approx(16)  # tier 3, full daily
 
 
 def test_pets_with_no_level_are_not_producers():
