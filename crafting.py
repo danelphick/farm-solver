@@ -155,6 +155,57 @@ def _required_materials_recursive(
     return {material: _round_to_nearest(qty) for material, qty in totals.items()}
 
 
+def gather_demand(
+    needs: list[ItemNeed],
+    workshop: Workshop,
+    crafting_bonus: float = DEFAULT_CRAFTING_BONUS,
+    mastery_bonus: float = DEFAULT_MASTERY_BONUS,
+    gatherable: frozenset[str] = frozenset(),
+) -> dict[str, int]:
+    """Expand ``needs`` to the demand of leaves to source rather than craft.
+
+    Like :func:`required_materials` with ``recursive`` set, but expansion also
+    stops at any craftable item that can be *gathered* -- one whose lower-cased
+    name is in ``gatherable`` (produced passively, fished, explored or farmed).
+    We prefer to source such an item directly (a passively-made Board is free)
+    rather than craft it from its own materials, so it is recorded as a leaf and
+    not expanded. Craftable, non-gatherable items are still expanded down to their
+    base materials. The result maps each leaf's display name to the quantity
+    needed, feeding the sourcing optimiser (see :mod:`optimizer`); bonuses follow
+    :func:`required_materials`. Iron and nails are dropped (auto-supplied).
+    """
+    # Each item's largest shortfall, plus whether it is a mastery shortfall.
+    shortfalls: dict[str, tuple[int, bool]] = {}
+    for need in needs:
+        previous = shortfalls.get(need.item, (0, need.is_mastery))
+        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+
+    totals: dict[str, float] = {}  # lower-cased leaf -> quantity needed
+    names: dict[str, str] = {}  # lower-cased leaf -> display name
+
+    def expand(item: str, items_needed: float) -> None:
+        key = item.lower()
+        if key in IGNORED_MATERIALS:
+            return  # supplied automatically; never gathered or crafted
+        recipe = workshop.get(item)
+        if recipe is None or key in gatherable:
+            # A leaf: a base material, or a craftable item we prefer to gather.
+            names.setdefault(key, recipe.name if recipe is not None else item)
+            totals[key] = totals.get(key, 0.0) + items_needed
+            return
+        crafts = items_needed / crafting_bonus
+        for material, quantity in recipe.materials.items():
+            # The quantity consumed as a material gets no mastery bonus.
+            expand(material, crafts * quantity)
+
+    for item, (count, is_mastery) in shortfalls.items():
+        # The mastery bonus reduces only an item's own mastery shortfall.
+        items_needed = count / mastery_bonus if is_mastery else count
+        expand(item, float(items_needed))
+
+    return {names[key]: _round_to_nearest(qty) for key, qty in totals.items()}
+
+
 def craft_breakdown(
     needs: list[ItemNeed],
     workshop: Workshop,
