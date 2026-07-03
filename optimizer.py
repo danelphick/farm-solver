@@ -18,6 +18,12 @@ exploits a co-product it already has in surplus. Joint production needs no
 special handling either: a co-product is the same offer variable appearing in
 several coverage rows, so one fishing trip is credited to every fish it lands.
 
+Because a craft costs nothing in the objective, the least-cost plan is degenerate
+in the crafts: surplus gathered material can be spun into items the demand never
+asked for at no penalty. So :func:`minimize` solves twice -- first for the least
+cost, then, with that cost locked, for the fewest crafts -- reporting only the
+crafts the demand actually needs (see the second stage there).
+
 To keep every coverage constraint satisfiable (so no shortfall slack is needed),
 the LP is built only over **obtainable** items -- those gatherable, or craftable
 from obtainable materials (a fixed point, :func:`_obtainable`). A demanded item
@@ -209,6 +215,23 @@ def minimize(
         problem += pulp.lpSum(terms) <= makespan
 
     problem.solve(pulp.PULP_CBC_CMD(msg=0))
+
+    # The objective is indifferent to crafting (a craft costs no time or
+    # consumable), so surplus gathered material can be spun into items the demand
+    # never asked for -- a free, degenerate loop the first solve may pick at
+    # random. Re-solve for the fewest crafts among the least-cost plans: lock the
+    # realised time/AP/LN (with a hair of slack for float noise), then minimise
+    # total craft activity. No reported metric moves, but pointless surplus crafts
+    # drop out, leaving only what the demand actually needs.
+    if craft:
+        t_star = makespan.value() or 0.0
+        ap_star = pulp.value(arnold_palmers) or 0.0
+        ln_star = pulp.value(large_nets) or 0.0
+        problem += makespan <= t_star * (1 + 1e-9) + 1e-9
+        problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
+        problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
+        problem.setObjective(pulp.lpSum(craft.values()))
+        problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
     draws = [
         Draw(offer, units)

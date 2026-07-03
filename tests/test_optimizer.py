@@ -94,6 +94,27 @@ def test_minimize_gathers_when_cheaper_than_crafting():
     assert plan.large_nets == pytest.approx(1)
 
 
+def test_minimize_does_not_craft_surplus_into_unneeded_items():
+    # Passive yields Milk plus 1000 Board a minute as a co-product, so covering
+    # 100 Butter (which needs 100 Milk, ~100 minutes of passive) leaves ~100,000
+    # surplus Board. The Barrel->Churn->Butter chain only needs 100 Barrels, but
+    # crafting more costs no time or consumable, so the bare objective is
+    # indifferent and would spin the whole Board surplus into Barrels. The
+    # least-craft tie-break must craft only the 100 the demand actually needs.
+    passive = Offer(
+        "passive", "passive", {"milk": 1, "board": 1000}, time_per_unit=timedelta(minutes=1)
+    )
+    recipes = {
+        "butter": {"milk": 1, "churn": 1},
+        "churn": {"barrel": 1},
+        "barrel": {"board": 1},
+    }
+    plan = minimize(
+        [passive], {"Butter": 100}, recipes, 1.0, price_ap=1e-6, price_ln=1e-6
+    )
+    assert plan.crafts.get("barrel") == pytest.approx(100)
+
+
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():
     # Widget is only craftable, and its material has no source, so it cannot be
     # made -- it falls to the remainder rather than making the LP infeasible.
