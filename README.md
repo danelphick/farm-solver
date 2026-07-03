@@ -251,7 +251,9 @@ From these the solver works out, for each crop, how much a full-field planting y
 Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes the plantings, the wait, how many Grape Juices it consumes, and how many of each item those harvests produce — split between the instant Grape Juice grows and normal farming:
 
 ```text
-Farming:
+Farming (5y 202d):
   352,711 plantings of Mushroom in 5y 202d using 28,379 Grape Juice:
     229,261,734x Mushroom (18,446,346 from Grape Juice, 210,815,388 from normal farming)
 ```
+
+The `Farming` heading's time is the whole track's total — crops grow one at a time, so their waits add up.

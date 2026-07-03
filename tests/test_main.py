@@ -94,7 +94,7 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "5x Large Net at Small Pond (Drum)" in out
     assert "Exploring:" in out
     assert "2x Arnold Palmer at Cave (Bone)" in out
-    assert "Farming:" in out
+    assert "Farming (1d 1h):" in out  # 25 plantings * 1h, grown one at a time
     assert "plantings of Corn" in out
     # Board at 10/min needs 200 min = 3h 20m, shown per item under passive.
     assert "Passive production (concurrent):" in out
@@ -152,6 +152,21 @@ def test_print_plan_farming_splits_produced_by_grape_juice(capsys):
     assert "10 plantings of Corn" in out
     assert "using 5 Grape Juice" in out
     assert "1,000x Corn (500 from Grape Juice, 500 from normal farming)" in out
+
+
+def test_print_plan_farming_heading_sums_the_crop_times(capsys):
+    # Crops grow one at a time, so the Farming heading shows their total wait:
+    # 2h of Corn plus 3h of Wheat is 5h.
+    demand = {"Corn": 100, "Wheat": 100}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("grow Corn", "farming", {"corn": 50}, time_per_unit=timedelta(hours=1)), 2),
+            Draw(Offer("grow Wheat", "farming", {"wheat": 100}, time_per_unit=timedelta(hours=1)), 3),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Farming (5h):" in out
 
 
 def test_print_plan_farming_omits_split_without_grape_juice(capsys):

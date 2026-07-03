@@ -516,7 +516,9 @@ def print_plan(
 
     farming_draws = draws_on(sources.FARMING_TRACK)
     if farming_draws:
-        print("\nFarming:")
+        # Crops grow one at a time, so the whole track's time is their sum.
+        total_farming = sum((d.time for d in farming_draws), timedelta(0))
+        print(f"\nFarming ({passive.format_duration(total_farming)}):")
         for draw in farming_draws:
             crop = draw.offer.name.removeprefix("grow ")
             line = (
