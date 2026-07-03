@@ -84,6 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--average-seasons",
+        action="store_true",
+        help=(
+            "scale seasonal pets to their yearly average instead of modelling "
+            "the calendar; one solve rather than an iterative fixed point, so "
+            "faster on slower machines (ignores --start-date for seasons)"
+        ),
+    )
+    parser.add_argument(
         "--crafting-bonus",
         type=float,
         default=crafting.DEFAULT_CRAFTING_BONUS,
@@ -803,11 +812,13 @@ def run(args: argparse.Namespace) -> int:
     # contributes depends on how long the plan runs -- which is itself an output
     # of the solve. Iterate to a fixed point: solve, take the expanded plan's
     # makespan as the plan span, rebuild the seasonal pet rates for it, and solve
-    # again until the makespan settles. Only seasonal pets create this loop, so
-    # skip the extra passes when the config has none.
+    # again until the makespan settles. This costs an extra solve, so skip it --
+    # doing a single steady-state pass -- when the config has no seasonal pets, or
+    # --average-seasons opts out of the calendar for speed.
     has_seasonal = any(
         name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})
     )
+    model_calendar = has_seasonal and not args.average_seasons
     horizon: timedelta | None = None
     production = config.passive_production(cfg, today=start)
     shown: list[optimizer.SourcingPlan] = []
@@ -827,7 +838,7 @@ def run(args: argparse.Namespace) -> int:
             p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
         ] or plans
         new_horizon = shown[selected_plan(shown, args.plan, args.cheapest_plan)].time
-        if not has_seasonal or (
+        if not model_calendar or (
             horizon is not None and _makespans_close(new_horizon, horizon)
         ):
             break
@@ -836,7 +847,7 @@ def run(args: argparse.Namespace) -> int:
     cheapest = cheapest_plan(shown)
     selected = selected_plan(shown, args.plan, args.cheapest_plan)
 
-    if has_seasonal:
+    if model_calendar:
         print(
             f"\nStarting {start:%d %b %Y}; a seasonal pet counts only for the "
             "part of the plan it is in season."

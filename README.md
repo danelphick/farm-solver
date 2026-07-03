@@ -18,7 +18,7 @@ A command-line flag overrides the config; if a file is given in neither place, t
 
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
-    [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] \
+    [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--average-seasons] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--mastery-file <file>] [--inventory-file <file>]
 ```
@@ -90,6 +90,8 @@ Passive production (concurrent):
 Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--plans N` to spread more (or fewer) plans across the frontier when you want finer resolution — useful where the fast end swings wildly in cost (default 5).
 
 The plan is assumed to start today, or on `--start-date YYYY-MM-DD`. This only matters for seasonal pets: how much one contributes depends on how much of the plan runs while it is in season, which depends on the plan's length — itself an output of the solve — so the solver iterates the start date and the makespan to a fixed point. A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years settles to the pet's steady-state yearly share whatever the start date. So the same goal can source differently in March than in July.
+
+Because the makespan feeds back into the seasonal rates, this costs an extra solve (the fixed-point iteration, typically two passes). If that is too slow — the solve runs many small LPs, which adds up on a slower machine — pass `--average-seasons` to skip it: every seasonal pet is scaled to its steady-state yearly share and the solve runs once, as it does when the config has no seasonal pets at all.
 
 Three ceilings drop plans that exceed them (unless that would leave none): `--passive-limit <duration>` on total time, and `--max-ap` / `--max-ln` on the Arnold Palmers and Large Nets spent. The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
 

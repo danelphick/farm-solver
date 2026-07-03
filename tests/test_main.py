@@ -5,6 +5,7 @@ from crops import Farm
 import pytest
 
 from main import (
+    build_parser,
     cheapest_plan,
     print_crafts,
     print_frontier,
@@ -34,6 +35,12 @@ def test_cheapest_plan_breaks_ties_on_time():
         SourcingPlan(time=timedelta(hours=1), arnold_palmers=0, large_nets=0),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_average_seasons_flag_defaults_off():
+    parser = build_parser()
+    assert parser.parse_args([]).average_seasons is False
+    assert parser.parse_args(["--average-seasons"]).average_seasons is True
 
 
 def test_selected_plan_defaults_to_the_fastest():
