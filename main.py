@@ -607,6 +607,16 @@ def print_plan(
             sorted(display.get(key, key) for key in offer.yields if key in interesting)
         )
 
+    def sourced(draws: list[sources.Draw]) -> list[sources.Draw]:
+        # Drop residue draws: CBC can leave a sliver of a net, palmer or planting
+        # on a channel nothing needs, which rounds to zero produced in ~zero time
+        # or consumable -- not a real action, so keep it out of the report.
+        return [
+            d
+            for d in draws
+            if any(round(d.produced[k]) >= 1 for k in d.offer.yields if k in interesting)
+        ]
+
     def draws_on(track: str) -> list[sources.Draw]:
         return [d for d in plan.draws if d.offer.track == track]
 
@@ -622,7 +632,7 @@ def print_plan(
 
     print_critical_path(plan, need, elsewhere, display)
 
-    fishing_draws = draws_on(sources.FISHING_TRACK)
+    fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
     if fishing_draws:
         print("\nFishing:")
         for draw in sorted(fishing_draws, key=lambda d: d.ln, reverse=True):
@@ -632,7 +642,7 @@ def print_plan(
                 f" ({wanted(draw.offer)})"
             )
 
-    exploring_draws = draws_on(sources.EXPLORING_TRACK)
+    exploring_draws = sourced(draws_on(sources.EXPLORING_TRACK))
     if exploring_draws:
         print("\nExploring:")
         for draw in sorted(exploring_draws, key=lambda d: d.ap, reverse=True):
@@ -642,14 +652,7 @@ def print_plan(
                 f" ({wanted(draw.offer)})"
             )
 
-    farming_draws = draws_on(sources.FARMING_TRACK)
-    # Drop residue draws: CBC can leave a sliver of a planting on a crop nothing
-    # needs, which rounds to zero produced in zero time -- not a real action.
-    farming_draws = [
-        d
-        for d in farming_draws
-        if any(round(d.produced[k]) >= 1 for k in d.offer.yields if k in interesting)
-    ]
+    farming_draws = sourced(draws_on(sources.FARMING_TRACK))
     if farming_draws:
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))

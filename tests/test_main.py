@@ -302,6 +302,37 @@ def test_print_plan_farming_drops_residue_draws(capsys):
     assert "Mushroom" not in out  # the zero-yield residue draw is not shown
 
 
+def test_print_plan_fishing_drops_residue_draws(capsys):
+    # A sliver of a net whose interesting yields all round to zero produced is LP
+    # residue, not a real cast, so the whole line is omitted.
+    demand = {"Frost Snapper Shell": 100, "Glass Bottle": 5}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("fish Glacier Lake", "fishing", {"frost snapper shell": 100}, ln=1), 1),
+            Draw(Offer("fish Crystal River", "fishing", {"glass bottle": 10}, ln=1), 0.01),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Frost Snapper Shell" in out
+    assert "Crystal River" not in out  # the zero-yield residue net is not shown
+
+
+def test_print_plan_exploring_drops_residue_draws(capsys):
+    # Same for a sliver of a palmer that gathers nothing that rounds up.
+    demand = {"Moonstone": 100, "Glass Orb": 5}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("explore Ember Lagoon", "exploring", {"moonstone": 100}, ap=1), 1),
+            Draw(Offer("explore Crystal River", "exploring", {"glass orb": 10}, ap=1), 0.01),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Moonstone" in out
+    assert "Crystal River" not in out  # the zero-yield residue palmer is not shown
+
+
 def test_print_plan_farming_singular_harvest_all(capsys):
     # A single full-field harvest is "1 Harvest All", not "1 Harvest Alls".
     demand = {"Corn": 50}
