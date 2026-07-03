@@ -68,7 +68,14 @@ By default the **fastest** plan is expanded in full; the `>` marks which plan is
 python main.py --cheapest-plan        # expand the cheapest plan instead
 ```
 
-The chosen plan is broken down by channel, and the passive section lists each item's own wait longest-first, so the bottleneck is obvious:
+The chosen plan opens with its **critical path** — the single slowest concurrent track, and the item or crop within it that caps how fast the plan can finish. Fishing and exploring are instant, so the limit is always a passive wait or a farming sequence (or both, when they tie). It is what you would have to speed up — by sourcing it with consumables, or picking a faster plan — to finish sooner:
+
+```text
+Critical path (sets the 293y 319d total):
+  2,574,345x Horn from passive production (293y 319d) — the slowest item to build up
+```
+
+The plan is then broken down by channel, and the passive section lists each item's own wait longest-first, so the runner-up bottlenecks are visible too:
 
 ```text
 Exploring:

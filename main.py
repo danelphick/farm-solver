@@ -354,6 +354,95 @@ def print_frontier(
         )
 
 
+def _slowest_passive_item(
+    plan: optimizer.SourcingPlan,
+    need: dict[str, float],
+    elsewhere: dict[str, float],
+    display: dict[str, str],
+) -> tuple[str, int, timedelta] | None:
+    """The passive item with the longest wait: ``(name, quantity, wait)``.
+
+    Each item's wait is its residual (what other channels and crafting did not
+    cover) over its per-minute rate; the longest of these is the whole passive
+    track's time, so it is what caps a passive-bound plan.
+    """
+    passive_draws = [d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK]
+    if not passive_draws:
+        return None
+    offer = passive_draws[0].offer
+    best: tuple[str, int, timedelta] | None = None
+    for key, rate in offer.yields.items():
+        if rate <= 0:
+            continue
+        residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
+        if residual > 1e-6:
+            wait = timedelta(minutes=residual / rate)
+            if best is None or wait > best[2]:
+                best = (display.get(key, key), round(residual), wait)
+    return best
+
+
+def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
+    """Describe the farming sequence that runs the makespan (grown one at a time)."""
+    farming_draws = [d for d in plan.draws if d.offer.track == sources.FARMING_TRACK]
+    biggest = max(farming_draws, key=lambda d: d.time)
+    crop = biggest.offer.name.removeprefix("grow ")
+    duration = passive.format_duration(total)
+    if len(farming_draws) == 1:
+        return (
+            f"{math.ceil(biggest.units):,} plantings of {crop} ({duration}) "
+            "— crops grow one at a time"
+        )
+    return (
+        f"{len(farming_draws)} crops grown back-to-back ({duration}), "
+        f"longest {math.ceil(biggest.units):,} plantings of {crop}"
+    )
+
+
+def print_critical_path(
+    plan: optimizer.SourcingPlan,
+    need: dict[str, float],
+    elsewhere: dict[str, float],
+    display: dict[str, str],
+) -> None:
+    """Highlight the slowest concurrent track -- what caps how fast the plan runs.
+
+    Tracks run at the same time, so the total time is the slowest of them (and,
+    within it, the slowest item). Fishing and exploring are instant, so the cap is
+    always a passive wait or a farming sequence -- occasionally both at once, when
+    they tie. Naming it shows what to speed up (source it with consumables, or pick
+    a faster plan) to finish sooner.
+    """
+    track_time: dict[str, timedelta] = {}
+    for draw in plan.draws:
+        track_time[draw.offer.track] = (
+            track_time.get(draw.offer.track, timedelta(0)) + draw.time
+        )
+    makespan = max(track_time.values(), default=timedelta(0))
+    if makespan <= timedelta(0):
+        return  # everything is instant; there is no wait to explain
+
+    lines: list[str] = []
+    for track, total in track_time.items():
+        if total < makespan - timedelta(seconds=1):
+            continue  # this track finishes sooner, so it is not the bottleneck
+        if track == sources.PASSIVE_TRACK:
+            item = _slowest_passive_item(plan, need, elsewhere, display)
+            if item is not None:
+                name, quantity, wait = item
+                lines.append(
+                    f"  {quantity:,}x {name} from passive production "
+                    f"({passive.format_duration(wait)}) — the slowest item to build up"
+                )
+        elif track == sources.FARMING_TRACK:
+            lines.append("  " + _farming_bottleneck(plan, total))
+    if not lines:
+        return
+    print(f"\nCritical path (sets the {passive.format_duration(makespan)} total):")
+    for line in lines:
+        print(line)
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
@@ -392,6 +481,18 @@ def print_plan(
 
     def draws_on(track: str) -> list[sources.Draw]:
         return [d for d in plan.draws if d.offer.track == track]
+
+    # What every non-passive channel and crafting already supplies. The passive
+    # track and the critical-path summary both work in residuals -- an item fully
+    # sourced elsewhere adds no passive wait -- so compute it once, up front.
+    elsewhere: dict[str, float] = dict(crafted)
+    for draw in plan.draws:
+        if draw.offer.track == sources.PASSIVE_TRACK:
+            continue
+        for item, quantity in draw.produced.items():
+            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+
+    print_critical_path(plan, need, elsewhere, display)
 
     fishing_draws = draws_on(sources.FISHING_TRACK)
     if fishing_draws:
@@ -446,17 +547,11 @@ def print_plan(
     passive_draws = draws_on(sources.PASSIVE_TRACK)
     if passive_draws:
         offer = passive_draws[0].offer
-        # Passive only covers what the other channels and crafting did not, so
-        # subtract their output first -- otherwise an item fully fished, explored
-        # or crafted would still show its full passive wait. Each item's own wait
-        # is its residual over its per-minute rate; the longest is the whole
-        # track's time, so listing them longest-first shows what drives it.
-        elsewhere: dict[str, float] = dict(crafted)
-        for other in plan.draws:
-            if other.offer.track == sources.PASSIVE_TRACK:
-                continue
-            for item, quantity in other.produced.items():
-                elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+        # Passive only covers what the other channels and crafting did not (see
+        # `elsewhere` above), so an item fully fished, explored or crafted adds no
+        # passive wait. Each item's own wait is its residual over its per-minute
+        # rate; the longest is the whole track's time, so listing them longest-first
+        # shows what drives it.
         rows = []
         for key, rate in offer.yields.items():
             if rate <= 0:

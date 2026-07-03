@@ -103,6 +103,43 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "3x Magicite" in out
 
 
+def test_print_plan_highlights_the_passive_bottleneck(capsys):
+    # Passive makes 1 Slow and 10 Fast a minute; 100 of each needs 100 minutes for
+    # Slow but only 10 for Fast, so Slow is the critical path that caps the total.
+    demand = {"Slow": 100, "Fast": 100}
+    offer = Offer(
+        "passive", "passive", {"slow": 1, "fast": 10}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 100)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Critical path (sets the 1h 40m total):" in out
+    assert "100x Slow from passive production (1h 40m)" in out
+    assert "Fast" not in out.split("Critical path")[1].split("Passive")[0]
+
+
+def test_print_plan_highlights_the_farming_bottleneck(capsys):
+    # A single crop grown over 100 hours is the whole makespan, so the critical
+    # path names it and notes crops grow one at a time.
+    demand = {"Corn": 100}
+    offer = Offer("grow Corn", "farming", {"corn": 1}, time_per_unit=timedelta(hours=1))
+    plan = SourcingPlan(draws=[Draw(offer, 100)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Critical path (sets the 4d 4h total):" in out
+    assert "100 plantings of Corn (4d 4h) — crops grow one at a time" in out
+
+
+def test_print_plan_omits_critical_path_when_everything_is_instant(capsys):
+    # Fishing is instant, so there is no time to explain -- no critical path line.
+    demand = {"It": 100}
+    offer = Offer("fish Lake", "fishing", {"it": 100}, ln=1)
+    plan = SourcingPlan(draws=[Draw(offer, 1)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Critical path" not in out
+
+
 def test_print_plan_farming_splits_produced_by_grape_juice(capsys):
     # 10 plantings at 1h each is 10h; at 12 grape juices a day that is 5 instant
     # grows, half the plantings. Both kinds yield the same bundle, so of the
