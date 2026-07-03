@@ -93,15 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "-r",
-        "--recursive",
-        action="store_true",
-        help=(
-            "expand craftable materials into their own materials, down to the "
-            "base ones"
-        ),
-    )
-    parser.add_argument(
         "-b",
         "--breakdown",
         action="store_true",
@@ -265,14 +256,6 @@ def print_solution(solution: farm_solver.Solution) -> None:
         print(note)
 
 
-def print_materials(materials: dict[str, int]) -> None:
-    if not materials:
-        return
-    print("\nTotal Materials required:")
-    for material in sorted(materials):
-        print(f"  {materials[material]:,}x {material}")
-
-
 def print_breakdown(steps: list[crafting.CraftStep]) -> None:
     if not steps:
         return
@@ -286,24 +269,6 @@ def print_breakdown(steps: list[crafting.CraftStep]) -> None:
             print(f"  {quantity:,}x {material}")
 
 
-def print_farming(uses: list[farming.FarmUse]) -> None:
-    if not uses:
-        return
-    print("\nFarming required:")
-    for use in sorted(uses, key=lambda u: u.item):
-        line = f"  {use.quantity:,}x {use.item}"
-        if use.time is not None:
-            line += f" in {passive.format_duration(use.time)}"
-            # Name the crop only when it differs from the item (a rare drop or a
-            # mega seed); otherwise "via Corn" for Corn is just noise.
-            if use.source and use.source.lower() != use.item.lower():
-                line += f" (via {use.source})"
-            # Note the grape juices the wait consumes, when any are used.
-            if use.grape_juices:
-                line += f" using {round(use.grape_juices):,} Grape Juice"
-        print(line)
-
-
 def print_unobtainable(materials: list[str]) -> None:
     print("The following materials are required for some crafts but are unobtainable:")
     if not materials:
@@ -311,21 +276,6 @@ def print_unobtainable(materials: list[str]) -> None:
         return
     for material in materials:
         print(f"  {material}")
-
-
-def print_passive(uses: list[passive.PassiveUse]) -> None:
-    if not uses:
-        return
-    print("\nPassive Production required:")
-    for use in uses:
-        print(
-            f"  {use.quantity:,}x {use.item} " f"in {passive.format_duration(use.time)}"
-        )
-    total = passive.total_time(uses)
-    # "(concurrent)" only clarifies the total when several waits overlap; with a
-    # single item the total is just its own wait.
-    suffix = " (concurrent)" if len(uses) > 1 else ""
-    print(f"  Total time: {passive.format_duration(total)}{suffix}")
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
@@ -436,27 +386,6 @@ def load_config() -> dict:
         return config.load_config()
     except FileNotFoundError:
         return {}
-
-
-def split_pet_production(
-    production: passive.PassiveProduction,
-) -> tuple[passive.PassiveProduction, passive.PassiveProduction]:
-    """Partition ``production`` into (faster buildings, pets).
-
-    Pets are slow, so they are held back as a last-resort source: only the fast
-    producers feed the passive-preferred crafting plan, and pets fall back in
-    afterwards for base materials nothing else could supply.
-    """
-    fast: list[passive.PassiveProducer] = []
-    pets: list[passive.PassiveProducer] = []
-    for producer in production.producers:
-        target = pets if producer.name.startswith(config.PET_PRODUCER_PREFIX) else fast
-        target.append(producer)
-    size = production.inventory_size
-    return (
-        passive.PassiveProduction(producers=fast, inventory_size=size),
-        passive.PassiveProduction(producers=pets, inventory_size=size),
-    )
 
 
 def run(args: argparse.Namespace) -> int:

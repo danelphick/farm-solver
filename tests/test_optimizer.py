@@ -3,8 +3,8 @@ from datetime import timedelta
 import pytest
 
 from crops import Crop, Farm
-from exploring import Exploring, ExploringLocation, ExploringModifiers
-from fishing import Fishing, FishingModifiers, FishingZone
+from exploring import Exploring, ExploringLocation
+from fishing import Fishing, FishingZone
 from optimizer import SourcingPlan, all_offers, frontier, minimize
 from passive import HOURLY, PassiveProducer, PassiveProduction
 from sources import Offer

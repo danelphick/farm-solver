@@ -140,9 +140,16 @@ surfaces the bottleneck + a no-source remainder). Selection: `--cheapest-plan`
 (default, fewest consumables) or `--plan N`; `--passive-limit` now caps a plan's
 total time (dropping slower plans). `craft_breakdown` gained a `gatherable` stop
 so `-b` matches. `parse_duration` now accepts `y` (years). `Solution.arnold_
-palmers`/`large_nets` set from the chosen plan. **Remaining (6c):** remove the
-superseded sourcing code (`craft_plan`/`plan_farming`/`source_materials`/
-`split_pet_production`/old `print_*`, the now-inert `-r`) and overhaul the README.
+palmers`/`large_nets` set from the chosen plan.
+
+**6c — cleanup. DONE.** Removed the superseded sourcing (`craft_plan`/`CraftPlan`,
+`plan_farming`/`FarmUse`, `passive.source_materials`, `split_pet_production`, the
+old `print_materials`/`print_farming`/`print_passive`) and the now-inert `-r`,
+with their tests; overhauled the README around the frontier. `farming.py` keeps
+only `FARMING_ITEMS`/`is_farmed` (for `--unobtainable`). Lint clean.
+
+**7 — Tests + README. DONE.** Loaders, offers, aggregation, the LP optimiser and
+frontier, `gather_demand`, and the new reporting are all covered; README rewritten.
 
 **7 — Tests + README.** Exploring/fishing loaders, aggregation, joint-production
 covering, frontier non-domination; document the frontier output and flags.

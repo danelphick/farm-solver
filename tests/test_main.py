@@ -1,66 +1,76 @@
 from datetime import timedelta
 
-from farming import FarmUse
-from main import print_farming, print_passive, split_pet_production
-from passive import PassiveProducer, PassiveProduction, PassiveUse
+from crops import Farm
+from main import cheapest_plan, print_frontier, print_plan
+from optimizer import SourcingPlan
+from sources import Draw, Offer
+
+PLANS = [
+    SourcingPlan(time=timedelta(0), arnold_palmers=100, large_nets=20),
+    SourcingPlan(time=timedelta(hours=5), arnold_palmers=10, large_nets=0),
+    SourcingPlan(time=timedelta(days=3), arnold_palmers=0, large_nets=0),
+]
 
 
-def test_split_pet_production_separates_pets_from_fast_producers():
-    production = PassiveProduction(
-        producers=[
-            PassiveProducer("sawmill", timedelta(hours=1), {"wood": 10}),
-            PassiveProducer("pet Cat", timedelta(days=1), {"drum": 5}),
+def test_cheapest_plan_picks_the_fewest_consumables():
+    # The last plan spends nothing, so it is the cheapest despite being slowest.
+    assert cheapest_plan(PLANS) == 2
+
+
+def test_cheapest_plan_breaks_ties_on_time():
+    plans = [
+        SourcingPlan(time=timedelta(hours=2), arnold_palmers=0, large_nets=0),
+        SourcingPlan(time=timedelta(hours=1), arnold_palmers=0, large_nets=0),
+    ]
+    assert cheapest_plan(plans) == 1
+
+
+def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
+    print_frontier(PLANS, selected=2, cheapest=2)
+    lines = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
+    assert "   1. 0m / 100 AP / 20 LN  [fastest]" in lines
+    assert " > 3. 3d / 0 AP / 0 LN  [cheapest]" in lines
+
+
+def test_print_plan_renders_each_channel_and_the_remainder(capsys):
+    demand = {"Drum": 500, "Bone": 100, "Corn": 1000, "Board": 2000}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("fish Small Pond", "fishing", {"drum": 100}, ln=1), 5),
+            Draw(Offer("explore Cave", "exploring", {"bone": 50}, ap=1), 2),
+            Draw(
+                Offer("grow Corn", "farming", {"corn": 40}, time_per_unit=timedelta(hours=1)),
+                25,
+            ),
+            Draw(
+                Offer("passive", "passive", {"board": 10}, time_per_unit=timedelta(minutes=1)),
+                200,
+            ),
         ],
-        inventory_size=100,
+        remainder={"Magicite": 3},
     )
-    fast, pets = split_pet_production(production)
-    assert [p.name for p in fast.producers] == ["sawmill"]
-    assert [p.name for p in pets.producers] == ["pet Cat"]
-    # The storehouse capacity carries over to both.
-    assert fast.inventory_size == 100 and pets.inventory_size == 100
-
-
-def test_print_farming_renders_times_and_sources(capsys):
-    print_farming(
-        [
-            FarmUse("Corn", 500, "Corn", timedelta(hours=2)),
-            FarmUse("Runestone 11", 10, "Corn", timedelta(days=1)),
-            FarmUse("Red Flowers", 2),
-        ]
-    )
-    lines = [line.strip() for line in capsys.readouterr().out.splitlines()]
-    # The crop's name is dropped when it matches the item, kept for a rare drop,
-    # and a flower outside the crop model shows no time.
-    assert "500x Corn in 2h" in lines
-    assert "10x Runestone 11 in 1d (via Corn)" in lines
-    assert "2x Red Flowers" in lines
-
-
-def test_print_farming_notes_grape_juices_used(capsys):
-    print_farming([FarmUse("Beet", 100, "Beet", timedelta(days=2), grape_juices=28)])
-    line = capsys.readouterr().out
-    assert "100x Beet in 2d using 28 Grape Juice" in line
-
-
-def test_print_farming_omits_grape_juices_when_none_used(capsys):
-    print_farming([FarmUse("Corn", 500, "Corn", timedelta(hours=2), grape_juices=0)])
-    assert "Grape Juice" not in capsys.readouterr().out
-
-
-def test_passive_total_omits_concurrent_for_a_single_item(capsys):
-    print_passive([PassiveUse(item="Corn Oil", quantity=720, time=timedelta(days=30))])
+    print_plan(plan, demand, Farm(grape_juices_per_day=14))
     out = capsys.readouterr().out
-    assert "Total time: 30d" in out
-    assert "(concurrent)" not in out
+
+    assert "Fishing:" in out
+    assert "5x Large Net at Small Pond (Drum)" in out
+    assert "Exploring:" in out
+    assert "2x Arnold Palmer at Cave (Bone)" in out
+    assert "Farming:" in out
+    assert "plantings of Corn" in out
+    # Board at 10/min needs 200 min = 3h 20m, shown per item under passive.
+    assert "Passive production (concurrent):" in out
+    assert "2,000x Board in 3h 20m" in out
+    # Items with no offer to make them are listed as a remainder.
+    assert "3x Magicite" in out
 
 
-def test_passive_total_notes_concurrent_for_several_items(capsys):
-    print_passive(
-        [
-            PassiveUse(item="Corn Oil", quantity=720, time=timedelta(days=30)),
-            PassiveUse(item="Steel", quantity=400, time=timedelta(hours=2)),
-        ]
-    )
-    out = capsys.readouterr().out
-    # The total is the longest wait, marked concurrent since the waits overlap.
-    assert "Total time: 30d (concurrent)" in out
+def test_print_plan_orders_passive_items_longest_wait_first(capsys):
+    demand = {"Slow": 100, "Fast": 100}
+    offer = Offer("passive", "passive", {"slow": 1, "fast": 10}, time_per_unit=timedelta(minutes=1))
+    plan = SourcingPlan(draws=[Draw(offer, 100)])
+    print_plan(plan, demand, Farm())
+    lines = [line.strip() for line in capsys.readouterr().out.splitlines() if "in " in line]
+    # Slow (100 min) is a longer wait than Fast (10 min), so it is listed first.
+    assert lines[0].endswith("Slow in 1h 40m")
+    assert lines[1].endswith("Fast in 10m")

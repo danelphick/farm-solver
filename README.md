@@ -2,7 +2,7 @@
 
 This is an attempt to find the optimal way to spend resources to climb the tower in FarmRPG.
 
-Farm Solver loads in the current state of your mastery and inventory and calculates how many Arnold Palmers and Large Nets are required to get the mastery levels required to climb the tower.
+Farm Solver loads in the current state of your mastery and inventory, works out what each tower level still needs, expands the crafting, and then finds the best ways to gather everything — trading total **time** against the **Arnold Palmers** and **Large Nets** you spend. It reports a range of plans along that tradeoff, from "spend nothing and wait" to "spend freely and finish fast".
 
 ## Usage
 
@@ -17,7 +17,10 @@ inventory_file = "./sample-inventory.txt"
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them.
 
 ```shell
-python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item amount] [-r] [-b] [--crafting-bonus num] [--mastery-bonus num] [--passive-limit duration] [--unobtainable] [--mastery-file <file>] [--inventory-file <file>]
+python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
+    [-b] [--crafting-bonus num] [--mastery-bonus num] \
+    [--cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
+    [--mastery-file <file>] [--inventory-file <file>]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -40,44 +43,61 @@ Rather than masterying an item, it can solve for acquiring a certain number of a
 python main.py -i "Flying Machine:2000,Gainite:20"
 ```
 
+## Sourcing plans
+
+Every item you still need can be obtained several ways, and the ways differ in what they cost:
+
+- **Passive production** — buildings (and pets) generate items over time for free. They all run concurrently, so their cost is *time*, and the wait is the slowest single item.
+- **Fishing** — each **Large Net** instantly catches a bundle of fish from a zone. It costs a net, not time.
+- **Exploring** — each **Arnold Palmer** instantly yields a bundle of finds from a location. It costs a palmer, not time.
+- **Farming** — crops grow over time (see [Farming](#farming)); grown one at a time, so their times add up, but they run concurrently with the passive buildings.
+
+Spending a net or a palmer buys speed: it lifts an item out of the slow farming/passive queues for zero time, at the cost of one consumable. So there is a genuine tradeoff between time, Arnold Palmers, and Large Nets. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another, spanning "all free but slow" to "fast but costly":
+
+```text
+Sourcing plans (time / Arnold Palmers / Large Nets):
+   1. 87y 62d / 71,136 AP / 0 LN  [fastest]
+ > 2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
+```
+
+One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
+
+By default the **cheapest** plan (the one spending the fewest Arnold Palmers and Large Nets) is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to be explicit about the default:
+
+```shell
+python main.py --plan 1        # expand the fastest plan instead
+```
+
+The chosen plan is broken down by channel, and the passive section lists each item's own wait longest-first, so the bottleneck is obvious:
+
+```text
+Exploring:
+  3,931x Arnold Palmer at Jundland Desert (Small Bolt)
+
+Passive production (concurrent):
+  2,574,345x Horn in 293y 319d
+  2,858,281x Purple Flower in 279y 246d
+  ...
+```
+
+Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--passive-limit <duration>` to cap a plan's total time; plans slower than it are dropped from the frontier (unless that would leave none). The duration is written as `2y`, `5d`, `3h`, `90m`, or a combination like `1y6d`, `1d6h30m`:
+
+```shell
+python main.py --passive-limit 100y
+```
+
 ## Materials and crafting
 
-After listing what you still need, the solver works out the workshop materials required to craft those items and prints them as a total.
+To reach a tower requirement the solver expands each needed item into the workshop materials that craft it. Crafting stops at any item that can be **gathered** (produced passively, fished, explored or farmed): rather than craft such an item from its own materials, the solver sources it directly — so a passively-made Board stays free instead of being crafted from Wood. Everything else is expanded down to its base materials, which the sourcing plans then gather.
 
 Two bonuses affect how many crafts (and therefore materials) are needed:
 
 - `--crafting-bonus <num>` (default `1.45`): the average number of items produced per craft. A higher bonus means fewer crafts, and so fewer materials, are required.
 - `--mastery-bonus <num>` (default `1.1`): the mastery gained per item crafted or otherwise found. This only reduces the crafts needed to satisfy a *mastery* shortfall (the tower or `-m`); it does not apply to a plain item count (`-i`), nor to the quantity of an item consumed as a material by another craft.
 
-A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded — they simply do not appear in the materials, breakdown, or passive output.
+A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded.
 
-Some materials are grown on the farm rather than crafted. These are split out of the totals and reported in their own `Farming required:` section, with how long each takes to grow (harvesting and replanting continuously, with no rest):
-
-```text
-Farming required:
-  58,694x Corn in 10d 6h 12m using 144 Grape Juice
-  121,051x Cotton in 11d 8h (via Mega Cotton) using 159 Grape Juice
-  2,368,173x Mushroom in 20d 22h 37m using 293 Grape Juice
-  161,401x Pine Tree in 56d 10h 55m using 790 Grape Juice
-```
-
-Each item is grown from the crop that supplies it fastest, using your row count and growth/yield modifiers from the `[farming]` config (see below). The crop is named when it differs from the item — a rare seed drop like a Runestone (grown by planting its crop) or a bulk *Mega* seed. Each line also notes how many Grape Juices that wait consumes (when any are used). See [the farming section](#farming) for how the model works. A handful of farmed items the crop model does not cover (the flowers) are still listed here, without a time.
-
-Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
-
-```shell
-python main.py --unobtainable
-```
-
-By default, materials that are themselves craftable (for example a chair made from wood) are reported as-is. Pass `-r`/`--recursive` to expand them into their own materials, all the way down to the base, uncraftable ones:
-
-```shell
-python main.py -r
-```
-
-When expanding recursively, counts are kept as fractions through the whole crafting tree and only the final totals are rounded, so rounding errors do not accumulate level by level.
-
-Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
+Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base and gathered materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
 
 ```text
 Required Crafts:
@@ -94,9 +114,17 @@ Required Crafts:
   25x Wood
 ```
 
-## Passive production
+Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
 
-Some buildings generate items on a fixed cadence (every ten minutes or hourly) without crafting. These are described in `config.toml`:
+```shell
+python main.py --unobtainable
+```
+
+## Configuration
+
+### Passive producers
+
+Some buildings generate items on a fixed cadence (every minute, ten minutes, hourly, or daily) without crafting. These are described in `config.toml`:
 
 ```toml
 [sawmill]      # wood/board/oak hourly; pine board one a minute
@@ -164,21 +192,9 @@ use_crunchy_omelette = true   # 50% more items fetched by every pet
 # ... one line per pet
 ```
 
-Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate.
+Pets are passive producers too. A pet fetches a number of items an hour equal to its level, spread across the item tiers it has unlocked (more tiers unlock at levels 3 and 6), so the solver models each as a daily producer of its average haul — the tier items live in `pets.csv`, and the `[pets]` config gives each pet's level. `use_crunchy_omelette` fetches 50% more. Seasonal pets (which only fetch for two months a year) are scaled down to their long-run average daily rate. Pets fetch **very slowly**, so the optimiser only relies on one when nothing faster (or cheaper) can supply an item — no special rule is needed; a pet's low rate simply makes any item it alone provides expensive in time, which the frontier reflects.
 
-Pets fetch **very slowly**, so they are used only as a **last resort**: anything the faster buildings, crafting, or farming can supply is sourced that way first, and a pet is relied on only for items nothing else can provide. Pet-sourced items still appear in the passive section, but their waits are long; use `--passive-limit` to cap them and craft or gather the rest.
-
-When a craft needs an item a (non-pet) building produces, the solver **prefers that passive sourcing** over crafting it: it takes the item from production instead, and reports it in a separate section with how long it would take. Since production arrives in whole cycles, each wait is rounded up to a whole number of the producer's periods (so a ten-minute producer never reports a fraction of ten minutes). Because producers run concurrently, the total time is the longest single wait, not the sum:
-
-```text
-Passive Production required:
-  18,000x Oak in 3h
-  180,000x Board in 3h
-  138,000x Wood in 3h
-  Total time: 3h (concurrent)
-```
-
-Passive production is also shaped by how much you can hold at once. The `[storehouse]` section records its capacity on a given day and how much it grows daily:
+Passive production is shaped by how much you can hold at once. The `[storehouse]` section records its capacity on a given day and how much it grows daily:
 
 ```toml
 [storehouse]
@@ -187,17 +203,26 @@ updated_on = "2026-06-30"
 growth = 20
 ```
 
-The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles. For the hourly sawmill that makes the daily limit `24 × min(production, storehouse size)` per item.
+The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles.
 
-By default passively-produced items are otherwise taken entirely from production, however long that takes. Pass `--passive-limit <duration>` to cap how long you are willing to wait; anything production cannot supply within that time is crafted instead (or, for pets, farmed or gathered). The duration is written as `5d`, `3h`, `90m`, or a combination like `1d6h30m`:
+### Fishing and exploring
 
-```shell
-python main.py --passive-limit 3h
+The consumable channels have their own perk flags; the zones and drop rates come from `fishing.csv` and `exploring.csv`:
+
+```toml
+[fishing]    # how many fish one Large Net catches
+have_reinforced_netting = true   # base catch 400 instead of 250
+have_fishing_trawl = true        # +100 fish per net
+use_sea_pincher = true           # then ×1.1
+
+[exploring]    # how many items one Arnold Palmer yields
+have_lemon_squeezer = true       # base yield 500 instead of 200
+use_quandary_chowder = true      # then ×1.1 (550 with the squeezer)
 ```
 
 ## Farming
 
-Farming grows items from seeds and is preferred over slow pet production for anything a crop can supply. A seed's harvest is a *distribution* of items — mostly its primary crop, occasionally a rarer drop — so one crop can supply several different items. The model has three parts:
+Farming grows items from seeds. A seed's harvest is a *distribution* of items — mostly its primary crop, occasionally a rarer drop — so one crop can supply several different items. The model has three parts:
 
 - `crops.csv` — each crop's base growth time, and (via an optional `Primary` column) the crop a differently-named seed grows, such as a *Mega* seed.
 - `seed_drops.csv` — each seed's in-game drop table (`Crops/harvest all` for common items, `Harvest alls/crop` for rare ones), captured at a fixed row count and normalised to a per-seed rate.
@@ -212,6 +237,6 @@ corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 14  # instant whole-field grows available each day
 ```
 
-From these the solver works out, for each needed item, the crop that supplies it fastest and how long continuous farming (harvest and replant, no rest) would take. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. A quantity rounds up to a whole number of plantings, and — since the rows grow one crop at a time — each item's time is reported independently in the `Farming required:` section shown above.
+From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
 
-Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, so its field yields those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones.
+Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes how many Grape Juices the wait consumes.

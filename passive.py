@@ -134,37 +134,6 @@ def total_time(uses: list[PassiveUse]) -> timedelta:
     return max((use.time for use in uses), default=timedelta())
 
 
-def source_materials(
-    production: PassiveProduction,
-    materials: dict[str, int],
-    limit: timedelta | None = None,
-) -> tuple[list[PassiveUse], dict[str, int]]:
-    """Source ``materials`` from passive ``production``, up to ``limit``.
-
-    For each material a producer makes, take what it can supply within ``limit``
-    (everything, if no limit) as a :class:`PassiveUse`; the shortfall, plus any
-    material nothing produces, is returned as the remainder. Used to fall back to
-    slow producers (pets) for base materials no faster source could cover.
-    """
-    uses: list[PassiveUse] = []
-    rest: dict[str, int] = {}
-    limit_minutes = None if limit is None else limit.total_seconds() / 60
-    for item, quantity in materials.items():
-        rate = production.rate_per_minute(item)
-        if rate <= 0:
-            rest[item] = quantity
-            continue
-        take = quantity if limit_minutes is None else min(quantity, rate * limit_minutes)
-        amount = min(quantity, round(take))
-        if amount > 0:
-            time = production.time_to_produce(item, amount)
-            assert time is not None  # rate > 0, so a producer makes it
-            uses.append(PassiveUse(item=item, quantity=amount, time=time))
-        if amount < quantity:
-            rest[item] = quantity - amount
-    return uses, rest
-
-
 _DURATION_RE = re.compile(r"(\d+)\s*([ydhm])")
 
 
