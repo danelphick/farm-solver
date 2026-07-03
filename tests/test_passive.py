@@ -97,6 +97,8 @@ def test_time_to_produce_all_keeps_only_produced_materials():
         ("90m", timedelta(minutes=90)),
         ("1d6h30m", timedelta(days=1, hours=6, minutes=30)),
         ("  2H ", timedelta(hours=2)),
+        ("2y", timedelta(days=730)),
+        ("1y30d", timedelta(days=395)),
     ],
 )
 def test_parse_duration(text, expected):

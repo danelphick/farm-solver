@@ -211,6 +211,7 @@ def craft_breakdown(
     workshop: Workshop,
     crafting_bonus: float = DEFAULT_CRAFTING_BONUS,
     mastery_bonus: float = DEFAULT_MASTERY_BONUS,
+    gatherable: frozenset[str] = frozenset(),
 ) -> list[CraftStep]:
     """Every craft needed to satisfy ``needs``, expanded through the whole tree.
 
@@ -222,6 +223,10 @@ def craft_breakdown(
     as floats through the tree and only the displayed numbers are rounded. Steps
     are listed parents-before-children, with base (uncraftable) materials only
     appearing inside a step's material list, never as a step of their own.
+
+    Expansion also stops at any craftable item in ``gatherable`` (sourced rather
+    than crafted, see :func:`gather_demand`): it gets no step of its own and its
+    materials are not expanded, matching the demand the optimiser actually crafts.
     """
     # Each item's largest shortfall, plus whether it is a mastery shortfall.
     shortfalls: dict[str, tuple[int, bool]] = {}
@@ -234,12 +239,12 @@ def craft_breakdown(
     order: list[str] = []  # craftable items, in first-seen (parents-first) order
 
     def expand(item: str, items_needed: float) -> None:
-        if item.lower() in IGNORED_MATERIALS:
+        key = item.lower()
+        if key in IGNORED_MATERIALS:
             return  # supplied automatically; never shown or expanded
         recipe = workshop.get(item)
-        if recipe is None:
-            return  # base material: shown only where it is consumed
-        key = item.lower()
+        if recipe is None or key in gatherable:
+            return  # base or gathered: shown only where it is consumed
         if key not in demand:
             names[key] = recipe.name
             order.append(key)

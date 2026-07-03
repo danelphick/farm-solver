@@ -13,16 +13,22 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import config
 import crafting
 import crops
+import exploring
 import farm_solver
 import farming
+import fishing
+import optimizer
 import parsing
 import passive
+import sources
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,10 +120,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--passive-limit",
         metavar="DURATION",
         help=(
-            "how long to rely on passive production (e.g. '5d', '3h', '1d6h'); "
-            "anything it cannot supply in that time is crafted instead. With no "
-            "limit, passively-produced items are taken entirely from production."
+            "cap the total time of a sourcing plan (e.g. '5d', '3h', '1d6h'); "
+            "plans slower than this are dropped from the frontier. With no limit "
+            "the whole frontier is shown, however long the slowest plan takes."
         ),
+    )
+
+    # Which frontier plan to expand in full: the cheapest (fewest Arnold Palmers
+    # and Large Nets, the default) or a specific one by its number in the table.
+    plan = parser.add_mutually_exclusive_group()
+    plan.add_argument(
+        "--cheapest-plan",
+        action="store_true",
+        help=(
+            "expand the plan spending the fewest Arnold Palmers and Large Nets "
+            "(the default)"
+        ),
+    )
+    plan.add_argument(
+        "--plan",
+        type=int,
+        metavar="N",
+        help="expand plan number N from the frontier table instead",
     )
 
     # The goal is mutually exclusive: climb the tower (default), master items,
@@ -304,6 +328,108 @@ def print_passive(uses: list[passive.PassiveUse]) -> None:
     print(f"  Total time: {passive.format_duration(total)}{suffix}")
 
 
+def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
+    """Index of the plan spending the fewest consumables (ties: least time)."""
+    return min(
+        range(len(plans)),
+        key=lambda i: (
+            plans[i].arnold_palmers + plans[i].large_nets,
+            plans[i].time.total_seconds(),
+        ),
+    )
+
+
+def print_frontier(
+    plans: list[optimizer.SourcingPlan], selected: int, cheapest: int
+) -> None:
+    """The frontier table: each plan's time and consumables, fastest first."""
+    print("\nSourcing plans (time / Arnold Palmers / Large Nets):")
+    for i, plan in enumerate(plans):
+        marker = ">" if i == selected else " "
+        tags = []
+        if i == 0:
+            tags.append("fastest")
+        if i == cheapest:
+            tags.append("cheapest")
+        note = f"  [{', '.join(tags)}]" if tags else ""
+        print(
+            f" {marker} {i + 1}. {passive.format_duration(plan.time)}"
+            f" / {round(plan.arnold_palmers):,} AP"
+            f" / {round(plan.large_nets):,} LN{note}"
+        )
+
+
+def _wanted(offer: sources.Offer, display: dict[str, str]) -> str:
+    """The demanded items an offer yields, by display name, comma-joined."""
+    return ", ".join(sorted(display[key] for key in offer.yields if key in display))
+
+
+def print_plan(
+    plan: optimizer.SourcingPlan, demand: dict[str, int], farm: crops.Farm
+) -> None:
+    """Expand one plan into its per-channel actions and leftover materials."""
+    display = {item.lower(): item for item in demand}
+
+    def draws_on(track: str) -> list[sources.Draw]:
+        return [d for d in plan.draws if d.offer.track == track]
+
+    fishing_draws = draws_on(sources.FISHING_TRACK)
+    if fishing_draws:
+        print("\nFishing:")
+        for draw in fishing_draws:
+            zone = draw.offer.name.removeprefix("fish ")
+            print(
+                f"  {math.ceil(draw.units):,}x Large Net at {zone}"
+                f" ({_wanted(draw.offer, display)})"
+            )
+
+    exploring_draws = draws_on(sources.EXPLORING_TRACK)
+    if exploring_draws:
+        print("\nExploring:")
+        for draw in exploring_draws:
+            location = draw.offer.name.removeprefix("explore ")
+            print(
+                f"  {math.ceil(draw.units):,}x Arnold Palmer at {location}"
+                f" ({_wanted(draw.offer, display)})"
+            )
+
+    farming_draws = draws_on(sources.FARMING_TRACK)
+    if farming_draws:
+        print("\nFarming:")
+        for draw in farming_draws:
+            crop = draw.offer.name.removeprefix("grow ")
+            line = (
+                f"  {math.ceil(draw.units):,} plantings of {crop}"
+                f" in {passive.format_duration(draw.time)}"
+            )
+            juices = farm.grape_juices_used(draw.time)
+            if round(juices) >= 1:
+                line += f" using {round(juices):,} Grape Juice"
+            print(f"{line} ({_wanted(draw.offer, display)})")
+
+    passive_draws = draws_on(sources.PASSIVE_TRACK)
+    if passive_draws:
+        offer = passive_draws[0].offer
+        # Each item's own wait is its demand over its per-minute rate; the
+        # longest is the whole track's time, so listing them longest-first shows
+        # what drives it. (Concurrent, so the total is that longest wait.)
+        rows = [
+            (timedelta(minutes=demand[display[key]] / offer.yields[key]), display[key])
+            for key in offer.yields
+            if key in display and offer.yields[key] > 0
+        ]
+        print("\nPassive production (concurrent):")
+        for wait, name in sorted(rows, reverse=True):
+            print(
+                f"  {demand[name]:,}x {name} in {passive.format_duration(wait)}"
+            )
+
+    if plan.remainder:
+        print("\nMaterials with no known source (craft or supply yourself):")
+        for material in sorted(plan.remainder):
+            print(f"  {plan.remainder[material]:,}x {material}")
+
+
 def load_config() -> dict:
     """Read the config file, or an empty config if there is none."""
     try:
@@ -337,8 +463,9 @@ def run(args: argparse.Namespace) -> int:
     cfg = load_config()
     workshop = crafting.load_workshop()
     production = config.passive_production(cfg)
-    fast_production, pet_production = split_pet_production(production)
     farm = crops.farm_from_config(cfg.get("farming", {}))
+    fish = fishing.fishing_from_config(cfg.get("fishing", {}))
+    explore = exploring.exploring_from_config(cfg.get("exploring", {}))
 
     # A standalone report over the whole workshop; no solving needed.
     if args.unobtainable:
@@ -350,8 +477,8 @@ def run(args: argparse.Namespace) -> int:
     # to the [solver] config section.
     mastery_file, inventory_file = resolve_files(args, cfg)
 
-    # Parse the passive limit first so a bad duration fails before any output.
-    passive_limit = (
+    # Parse the time limit first so a bad duration fails before any output.
+    time_limit = (
         passive.parse_duration(args.passive_limit)
         if args.passive_limit is not None
         else None
@@ -371,55 +498,45 @@ def run(args: argparse.Namespace) -> int:
 
     print_solution(solution)
 
-    if production.producers:
-        # Fast producers and crafting come first; farming then takes the crops
-        # (and rare seed drops); pets are the last-resort source for whatever
-        # base materials remain. Farming and the pet fallback are planned over
-        # the full base-material total, like passive, so they cover deep items
-        # too; the crafting-materials view stays shallow or recursive.
-        plan = crafting.craft_plan(
-            solution.needs,
-            workshop,
-            fast_production,
-            args.crafting_bonus,
-            args.mastery_bonus,
-            passive_limit,
-        )
-        farm_uses, remaining = farming.plan_farming(plan.materials, farm)
-        pet_uses, remaining = passive.source_materials(
-            pet_production, remaining, passive_limit
-        )
-        if args.recursive:
-            materials = remaining
-        else:
-            sourced = {use.item.lower() for use in farm_uses}
-            sourced |= {use.item.lower() for use in pet_uses}
-            materials = {
-                item: quantity
-                for item, quantity in plan.shallow_materials.items()
-                if item.lower() not in sourced
-            }
-        print_materials(materials)
-        print_farming(farm_uses)
-        print_passive(plan.passive + pet_uses)
-        if args.breakdown:
-            print_breakdown(plan.steps)
+    # Every channel is an Offer; the optimiser sources the base-plus-gatherable
+    # demand (crafts expand only down to items with no gathering source).
+    offers = optimizer.all_offers(production, fish, explore, farm)
+    gatherable = frozenset(key for offer in offers for key in offer.yields)
+    demand = crafting.gather_demand(
+        solution.needs, workshop, args.crafting_bonus, args.mastery_bonus, gatherable
+    )
+
+    plans = optimizer.frontier(offers, demand)
+    if not plans:
+        return 0  # nothing left to source
+
+    # A time limit drops plans slower than it, unless that would leave none.
+    within = [i for i, p in enumerate(plans) if time_limit is None or p.time <= time_limit]
+    shown = [plans[i] for i in within] if within else plans
+
+    cheapest = cheapest_plan(shown)
+    if args.plan is not None:
+        if not 1 <= args.plan <= len(shown):
+            raise ValueError(f"--plan must be between 1 and {len(shown)}")
+        selected = args.plan - 1
     else:
-        materials = crafting.required_materials(
+        selected = cheapest
+
+    print_frontier(shown, selected, cheapest)
+    chosen = shown[selected]
+    solution.arnold_palmers = round(chosen.arnold_palmers)
+    solution.large_nets = round(chosen.large_nets)
+    print_plan(chosen, demand, farm)
+
+    if args.breakdown:
+        steps = crafting.craft_breakdown(
             solution.needs,
             workshop,
             args.crafting_bonus,
             args.mastery_bonus,
-            args.recursive,
+            gatherable,
         )
-        farm_uses, materials = farming.plan_farming(materials, farm)
-        print_materials(materials)
-        print_farming(farm_uses)
-        if args.breakdown:
-            steps = crafting.craft_breakdown(
-                solution.needs, workshop, args.crafting_bonus, args.mastery_bonus
-            )
-            print_breakdown(steps)
+        print_breakdown(steps)
     return 0
 
 

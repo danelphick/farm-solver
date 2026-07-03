@@ -165,13 +165,15 @@ def source_materials(
     return uses, rest
 
 
-_DURATION_RE = re.compile(r"(\d+)\s*([dhm])")
+_DURATION_RE = re.compile(r"(\d+)\s*([ydhm])")
 
 
 def parse_duration(text: str) -> timedelta:
-    """Parse a duration like ``"5d"``, ``"3h"``, ``"90m"`` or ``"1d6h30m"``.
+    """Parse a duration like ``"5d"``, ``"3h"``, ``"90m"``, ``"2y"`` or ``"1d6h30m"``.
 
-    Units are ``d`` (days), ``h`` (hours) and ``m`` (minutes).
+    Units are ``y`` (years, of :data:`DAYS_PER_YEAR` days), ``d`` (days), ``h``
+    (hours) and ``m`` (minutes); years and days both feed the day count, matching
+    what :func:`format_duration` prints.
     """
     cleaned = text.strip().lower()
     matches = _DURATION_RE.findall(cleaned)
@@ -181,7 +183,9 @@ def parse_duration(text: str) -> timedelta:
 
     days = hours = minutes = 0
     for value, unit in matches:
-        if unit == "d":
+        if unit == "y":
+            days += int(value) * DAYS_PER_YEAR
+        elif unit == "d":
             days += int(value)
         elif unit == "h":
             hours += int(value)

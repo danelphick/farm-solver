@@ -131,11 +131,18 @@ can get exactly and instantly. So: scalarise + sweep, don't evolve.
 uncoverable). Million-scale demands are fine for CBC; keep a small `λ` floor to
 avoid degeneracy.
 
-**6 — Solution + reporting.** Extend `Solution` to hold the frontier (plans with
-`AP`, `LN`, `time`, per-item channel assignment). Print it as a table; a flag
-(e.g. `--plan N`, or `--max-ap/--max-ln` to pick a point) expands one plan into
-the existing `print_farming`/`print_passive` plus new `print_fishing`/
-`print_exploring`. Finally set `Solution.arnold_palmers`/`large_nets`.
+**6 — Solution + reporting. IN PROGRESS.** `run()` now sources via the frontier:
+`gather_demand` expands crafts to base-plus-gatherable leaves, `all_offers` +
+`frontier` produce the plans, and the report prints a frontier table
+(`print_frontier`, time/AP/LN, fastest/cheapest tagged) then expands one plan
+(`print_plan`: Fishing/Exploring/Farming sections + a per-item Passive list that
+surfaces the bottleneck + a no-source remainder). Selection: `--cheapest-plan`
+(default, fewest consumables) or `--plan N`; `--passive-limit` now caps a plan's
+total time (dropping slower plans). `craft_breakdown` gained a `gatherable` stop
+so `-b` matches. `parse_duration` now accepts `y` (years). `Solution.arnold_
+palmers`/`large_nets` set from the chosen plan. **Remaining (6c):** remove the
+superseded sourcing code (`craft_plan`/`plan_farming`/`source_materials`/
+`split_pet_production`/old `print_*`, the now-inert `-r`) and overhaul the README.
 
 **7 — Tests + README.** Exploring/fishing loaders, aggregation, joint-production
 covering, frontier non-domination; document the frontier output and flags.
