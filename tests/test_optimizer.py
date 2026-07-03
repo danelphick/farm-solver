@@ -157,6 +157,28 @@ def test_frontier_is_non_dominated():
                 )
 
 
+def test_frontier_fills_a_flat_segment_a_price_sweep_would_skip():
+    # Two items, each farmable (1 min each, one sequential track) or fishable (1
+    # net each), with identical time-per-net. Farming both (200 min, 0 nets) and
+    # fishing both (0 min, 200 nets) are the ends of a flat frontier segment, so
+    # every weighted-sum price collapses onto one end -- a price sweep would find
+    # only the extremes. The epsilon-constraint sweep must surface an interior
+    # plan that trades some time for some nets.
+    offers = [
+        Offer("grow A", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1)),
+        Offer("grow B", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1)),
+        Offer("fish A", "fishing", {"a": 1}, ln=1),
+        Offer("fish B", "fishing", {"b": 1}, ln=1),
+    ]
+    plans = frontier(offers, {"A": 100, "B": 100}, count=5)
+    interior = [
+        p
+        for p in plans
+        if timedelta(0) < p.time < timedelta(minutes=200) and p.large_nets > 0
+    ]
+    assert interior, "the flat segment's interior was not sampled"
+
+
 def test_frontier_thins_to_the_requested_count():
     # A staircase of offers at rising net-cost for speed gives many vertices;
     # ask for 3 and get at most 3, still including both extremes.

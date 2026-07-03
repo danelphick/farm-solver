@@ -188,17 +188,34 @@ above, before building `optimizer.py`.
 
 ## Status
 
-All phases (1–9) are landed; the plan is complete. Resolved open questions:
+All phases (1–10) are landed; the plan is complete. Resolved open questions:
 
 - **Frontier granularity** — tunable via `--plans N` (Phase 9).
 - **Hard AP/LN ceiling** — `--max-ap` / `--max-ln` filter the frontier (Phase 9).
 - **Craft-vs-gather** — optimised by folding crafting into the LP (Phase 8).
 
+**10 — Epsilon-constraint frontier + no surplus crafts. DONE.** Two fixes to the
+frontier's fidelity:
+
+- *Least crafts among least-cost plans.* A craft costs nothing in the objective,
+  so the least-cost plan is degenerate in its crafts -- surplus gathered material
+  (e.g. the Board a passive economy dumps out while you wait) can be spun into
+  items nothing needs. `minimize` now solves twice: first for the least
+  `(time, AP, LN)`, then, with those locked, for the fewest total crafts, so only
+  the crafts the demand needs are reported.
+- *Epsilon-constraint sampling.* A weighted-sum price sweep only ever returns the
+  *endpoints* of a flat (linear) frontier segment, hiding every moderate-
+  consumable plan on it (e.g. spending some AP to explore a slow-farmed crop
+  rather than all or none). `frontier` now finds the two endpoints by price, then
+  fills between them by capping the makespan at many times and minimising
+  consumables under each cap (`minimize(time_cap=...)`), so the flat segments are
+  populated before thinning.
+
 Remaining possibilities, only if wanted (none blocking):
 
-- A true **constrained solve** (minimise time subject to exact AP/LN budgets)
-  rather than filtering the ~5 computed plans; needs shortfall slack + big-M in a
-  single solve, so kept out until there's a need the filter cannot meet.
+- Independent **AP vs LN** prices/caps: the sweep minimises `AP + LN` as one
+  quantity, so it picks a single AP/LN mix per time. Splitting them would trace
+  the full 3-D frontier, at more solves.
 - Whole-number **integer** craft/net/palmer counts (MILP) instead of rounding the
   LP's fractional solution at reporting; PuLP makes this a one-keyword change if
   the rounding ever proves too loose.

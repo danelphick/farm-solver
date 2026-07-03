@@ -32,6 +32,7 @@ that is neither is dropped into the plan's ``remainder``.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -54,15 +55,19 @@ from sources import (
 # Usage below this many units is treated as zero (CBC leaves tiny residuals).
 UNIT_EPSILON = 1e-6
 
-# Price-of-time anchors for the frontier sweep, in minutes saved per consumable.
-# A tiny price barely penalises consumables (the fastest plan, using them freely
-# but not wastefully); a large one all but forbids them (the cheapest, slowest
-# plan) -- 1e9 dwarfs any realistic per-consumable time saving without the wild
-# coefficient magnitudes that upset the solver. The interior is swept
-# geometrically between.
+# Price-of-time anchors for the two frontier endpoints, in minutes saved per
+# consumable. A tiny price barely penalises consumables (the fastest plan, using
+# them freely but not wastefully); a large one all but forbids them (the
+# cheapest, slowest plan) -- 1e9 dwarfs any realistic per-consumable time saving
+# without the wild coefficient magnitudes that upset the solver. The interior is
+# then filled by an epsilon-constraint sweep on time (see :func:`frontier`).
 _FAST_PRICE = 1e-6
 _FREE_PRICE = 1e9
-_SWEEP_EXPONENTS = range(-6, 10)
+
+# How many makespan caps the epsilon-constraint sweep samples, at least. Kept
+# well above the requested plan count so thinning has a dense frontier to spread
+# over; the LPs are tiny, so a few dozen extra solves are cheap.
+_MIN_CAP_SAMPLES = 40
 
 
 def all_offers(
@@ -149,16 +154,24 @@ def minimize(
     crafting_bonus: float = 1.0,
     price_ap: float = 0.0,
     price_ln: float = 0.0,
+    time_cap: timedelta | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand`` at least cost for the given prices.
 
     ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
     (auto-supplied materials already stripped); one craft consumes those and
-    yields ``crafting_bonus`` of the item. The LP minimises
-    ``T + price_ap*AP + price_ln*LN`` (``T`` the makespan in minutes) subject to
-    net production (gathered + crafted - consumed) covering ``demand`` for every
-    obtainable item, and each track's time summing to at most ``T``. A demanded
-    item that is neither gatherable nor craftable lands in the ``remainder``.
+    yields ``crafting_bonus`` of the item. Net production (gathered + crafted -
+    consumed) must cover ``demand`` for every obtainable item, and each track's
+    time sums to at most the makespan ``T``. A demanded item that is neither
+    gatherable nor craftable lands in the ``remainder``.
+
+    Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
+    default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
+    With ``time_cap`` set it instead minimises the consumables ``AP + LN`` subject
+    to ``T <= time_cap`` -- an epsilon-constraint solve, which unlike the weighted
+    sum can land on the *interior* of a flat frontier segment (see
+    :func:`frontier`), so it surfaces the moderate-consumable plans a price sweep
+    would skip. ``price_ap``/``price_ln`` are ignored when ``time_cap`` is given.
     """
     recipes = recipes or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
@@ -195,7 +208,11 @@ def minimize(
 
     arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
     large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
-    problem += makespan + price_ap * arnold_palmers + price_ln * large_nets
+    if time_cap is not None:
+        problem += makespan <= _minutes(time_cap)
+        problem += arnold_palmers + large_nets
+    else:
+        problem += makespan + price_ap * arnold_palmers + price_ln * large_nets
 
     # Net production of each item covers its demand: gathered + crafted - consumed.
     for item in items:
@@ -284,6 +301,20 @@ def _thin(plans: list[SourcingPlan], count: int) -> list[SourcingPlan]:
     return [plans[i] for i in sorted(picked)]
 
 
+def _time_caps(t_fast: float, t_slow: float, count: int) -> list[float]:
+    """``count`` makespan caps (seconds) geometric between the two endpoints.
+
+    Geometric spacing samples the fast end (sub-year plans) and the slow end
+    (multi-decade plans) alike, so no part of the frontier is starved. Endpoints
+    are excluded (solved separately); a degenerate range yields no caps.
+    """
+    if count < 1 or t_slow <= t_fast:
+        return []
+    lo = math.log(max(t_fast, t_slow * 1e-9))
+    hi = math.log(t_slow)
+    return [math.exp(lo + (hi - lo) * (i + 1) / (count + 1)) for i in range(count)]
+
+
 def frontier(
     offers: list[Offer],
     demand: dict[str, float],
@@ -293,15 +324,25 @@ def frontier(
 ) -> list[SourcingPlan]:
     """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
 
-    Sweeps the price of time from tiny (spend consumables freely -- the fastest
-    plan) to huge (avoid them -- the cheapest, slowest), solving the LP at each
-    price, then keeps the non-dominated plans and thins them to about ``count``
-    spread across the frontier. Returns a single plan when consumables buy no
-    speed (the two ends coincide).
+    First finds the two endpoints -- the fastest plan (spend consumables freely)
+    and the cheapest, slowest one (avoid them) -- then fills the frontier between
+    them by an **epsilon-constraint sweep**: cap the makespan at each of many
+    times spanning the two ends and minimise the consumables under that cap. This
+    is what a plain price sweep cannot do -- where the frontier has a flat
+    (linear) segment, every weighted-sum price collapses onto an endpoint, hiding
+    the moderate-consumable plans in between (e.g. spending some Arnold Palmers to
+    explore a slow-farmed crop rather than all or none). The non-dominated results
+    are thinned to about ``count`` plans spread across the frontier. Returns a
+    single plan when consumables buy no speed (the two ends coincide).
     """
-    prices = [_FAST_PRICE, *(10.0**e for e in _SWEEP_EXPONENTS), _FREE_PRICE]
-    plans = [
-        minimize(offers, demand, recipes, crafting_bonus, price, price)
-        for price in prices
+    fast = minimize(offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE)
+    cheap = minimize(offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE)
+    plans = [fast, cheap]
+    # Sample well above `count` so thinning has a dense frontier to spread over.
+    samples = max(_MIN_CAP_SAMPLES, 4 * count)
+    caps = _time_caps(fast.time.total_seconds(), cheap.time.total_seconds(), samples)
+    plans += [
+        minimize(offers, demand, recipes, crafting_bonus, time_cap=timedelta(seconds=cap))
+        for cap in caps
     ]
     return _thin(_non_dominated(plans), count)
