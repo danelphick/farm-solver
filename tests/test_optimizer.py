@@ -115,6 +115,22 @@ def test_minimize_does_not_craft_surplus_into_unneeded_items():
     assert plan.crafts.get("barrel") == pytest.approx(100)
 
 
+def test_minimize_does_not_farm_a_crop_nothing_needs():
+    # Passive covers the demand over 100 minutes, which is the makespan. A crop on
+    # its own farming track could grow for those 100 minutes for free (farming is
+    # concurrent with passive, so it adds no time), producing a mushroom nothing
+    # consumes. The least-activity tie-break must leave that crop unplanted.
+    passive = Offer(
+        "passive", "passive", {"it": 1}, time_per_unit=timedelta(minutes=1)
+    )
+    mushrooms = Offer(
+        "grow Mushroom", "farming", {"mushroom": 10}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = minimize([passive, mushrooms], {"It": 100}, price_ap=1e-6, price_ln=1e-6)
+    grown = [d for d in plan.draws if d.offer.name == "grow Mushroom"]
+    assert grown == []
+
+
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():
     # Widget is only craftable, and its material has no source, so it cannot be
     # made -- it falls to the remainder rather than making the LP infeasible.

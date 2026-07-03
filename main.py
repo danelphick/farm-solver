@@ -136,15 +136,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="drop frontier plans that spend more than N Large Nets",
     )
 
-    # Which frontier plan to expand in full: the cheapest (fewest Arnold Palmers
-    # and Large Nets, the default) or a specific one by its number in the table.
+    # Which frontier plan to expand in full: the fastest (the default), the
+    # cheapest (fewest Arnold Palmers and Large Nets), or a specific one by its
+    # number in the table.
     plan = parser.add_mutually_exclusive_group()
+    plan.add_argument(
+        "--fastest-plan",
+        action="store_true",
+        help="expand the fastest plan (the default)",
+    )
     plan.add_argument(
         "--cheapest-plan",
         action="store_true",
         help=(
-            "expand the plan spending the fewest Arnold Palmers and Large Nets "
-            "(the default)"
+            "expand the plan spending the fewest Arnold Palmers and Large Nets"
         ),
     )
     plan.add_argument(
@@ -309,6 +314,26 @@ def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
     )
 
 
+def selected_plan(
+    plans: list[optimizer.SourcingPlan],
+    plan: int | None,
+    cheapest: bool,
+) -> int:
+    """Index of the plan to expand, from ``--plan`` / ``--cheapest-plan``.
+
+    Explicit ``--plan N`` wins (1-based, validated); ``--cheapest-plan`` picks
+    the fewest-consumable plan; otherwise the default is the fastest, which is
+    plan 0 since the frontier is sorted fastest first.
+    """
+    if plan is not None:
+        if not 1 <= plan <= len(plans):
+            raise ValueError(f"--plan must be between 1 and {len(plans)}")
+        return plan - 1
+    if cheapest:
+        return cheapest_plan(plans)
+    return 0
+
+
 def print_frontier(
     plans: list[optimizer.SourcingPlan], selected: int, cheapest: int
 ) -> None:
@@ -400,7 +425,23 @@ def print_plan(
             juices = farm.grape_juices_used(draw.time)
             if round(juices) >= 1:
                 line += f" using {round(juices):,} Grape Juice"
-            print(f"{line} ({wanted(draw.offer)})")
+            print(f"{line}:")
+            # Grape-juice and natural harvests yield the same bundle, so the
+            # grape-juice share of the plantings splits every produced item the
+            # same way.
+            gj_share = juices / draw.units if draw.units else 0.0
+            for key in sorted(k for k in draw.offer.yields if k in interesting):
+                total = draw.produced[key]
+                name = display.get(key, key)
+                if round(juices) >= 1:
+                    from_gj = total * gj_share
+                    print(
+                        f"    {round(total):,}x {name}"
+                        f" ({round(from_gj):,} from Grape Juice,"
+                        f" {round(total - from_gj):,} from normal farming)"
+                    )
+                else:
+                    print(f"    {round(total):,}x {name}")
 
     passive_draws = draws_on(sources.PASSIVE_TRACK)
     if passive_draws:
@@ -549,12 +590,7 @@ def run(args: argparse.Namespace) -> int:
     ] or plans
 
     cheapest = cheapest_plan(shown)
-    if args.plan is not None:
-        if not 1 <= args.plan <= len(shown):
-            raise ValueError(f"--plan must be between 1 and {len(shown)}")
-        selected = args.plan - 1
-    else:
-        selected = cheapest
+    selected = selected_plan(shown, args.plan, args.cheapest_plan)
 
     print_frontier(shown, selected, cheapest)
     chosen = shown[selected]

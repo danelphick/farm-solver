@@ -2,7 +2,16 @@ from datetime import timedelta
 
 from crafting import Workshop, WorkshopRecipe
 from crops import Farm
-from main import cheapest_plan, print_crafts, print_frontier, print_plan, within_limits
+import pytest
+
+from main import (
+    cheapest_plan,
+    print_crafts,
+    print_frontier,
+    print_plan,
+    selected_plan,
+    within_limits,
+)
 from optimizer import SourcingPlan
 from sources import Draw, Offer
 
@@ -24,6 +33,25 @@ def test_cheapest_plan_breaks_ties_on_time():
         SourcingPlan(time=timedelta(hours=1), arnold_palmers=0, large_nets=0),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_selected_plan_defaults_to_the_fastest():
+    # No --plan and no --cheapest-plan: the fastest (plan 0, sorted first) wins,
+    # even though PLANS[2] is the cheapest.
+    assert selected_plan(PLANS, plan=None, cheapest=False) == 0
+
+
+def test_selected_plan_honours_cheapest():
+    assert selected_plan(PLANS, plan=None, cheapest=True) == 2
+
+
+def test_selected_plan_honours_explicit_number():
+    assert selected_plan(PLANS, plan=2, cheapest=False) == 1
+
+
+def test_selected_plan_rejects_out_of_range_number():
+    with pytest.raises(ValueError):
+        selected_plan(PLANS, plan=4, cheapest=False)
 
 
 def test_within_limits_checks_time_and_consumables():
@@ -73,6 +101,32 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "2,000x Board in 3h 20m" in out
     # Items with no offer to make them are listed as a remainder.
     assert "3x Magicite" in out
+
+
+def test_print_plan_farming_splits_produced_by_grape_juice(capsys):
+    # 10 plantings at 1h each is 10h; at 12 grape juices a day that is 5 instant
+    # grows, half the plantings. Both kinds yield the same bundle, so of the
+    # 1,000 Corn produced, 500 come from Grape Juice and 500 from normal farming.
+    demand = {"Corn": 1000}
+    offer = Offer("grow Corn", "farming", {"corn": 100}, time_per_unit=timedelta(hours=1))
+    plan = SourcingPlan(draws=[Draw(offer, 10)])
+    print_plan(plan, demand, Farm(grape_juices_per_day=12), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "10 plantings of Corn" in out
+    assert "using 5 Grape Juice" in out
+    assert "1,000x Corn (500 from Grape Juice, 500 from normal farming)" in out
+
+
+def test_print_plan_farming_omits_split_without_grape_juice(capsys):
+    # With no grape juice every harvest is natural, so the produced count is shown
+    # plainly with no breakdown.
+    demand = {"Corn": 1000}
+    offer = Offer("grow Corn", "farming", {"corn": 100}, time_per_unit=timedelta(hours=1))
+    plan = SourcingPlan(draws=[Draw(offer, 10)])
+    print_plan(plan, demand, Farm(grape_juices_per_day=0), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "1,000x Corn" in out
+    assert "Grape Juice" not in out
 
 
 def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):

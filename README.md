@@ -19,7 +19,7 @@ A command-line flag overrides the config; if a file is given in neither place, t
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] \
-    [--cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
+    [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--mastery-file <file>] [--inventory-file <file>]
 ```
 
@@ -56,16 +56,16 @@ Spending a net or a palmer buys speed: it lifts an item out of the slow farming/
 
 ```text
 Sourcing plans (time / Arnold Palmers / Large Nets):
-   1. 87y 62d / 71,136 AP / 0 LN  [fastest]
- > 2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
+ > 1. 87y 62d / 71,136 AP / 0 LN  [fastest]
+   2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
 ```
 
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 
-By default the **cheapest** plan (the one spending the fewest Arnold Palmers and Large Nets) is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to be explicit about the default:
+By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one spending the fewest Arnold Palmers and Large Nets (`--fastest-plan` is the explicit form of the default):
 
 ```shell
-python main.py --plan 1        # expand the fastest plan instead
+python main.py --cheapest-plan        # expand the cheapest plan instead
 ```
 
 The chosen plan is broken down by channel, and the passive section lists each item's own wait longest-first, so the bottleneck is obvious:
@@ -241,4 +241,10 @@ grape_juices_per_day = 14  # instant whole-field grows available each day
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
 
-Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes how many Grape Juices the wait consumes.
+Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes the plantings, the wait, how many Grape Juices it consumes, and how many of each item those harvests produce — split between the instant Grape Juice grows and normal farming:
+
+```text
+Farming:
+  352,711 plantings of Mushroom in 5y 202d using 28,379 Grape Juice:
+    229,261,734x Mushroom (18,446,346 from Grape Juice, 210,815,388 from normal farming)
+```

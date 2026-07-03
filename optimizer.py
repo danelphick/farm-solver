@@ -18,11 +18,13 @@ exploits a co-product it already has in surplus. Joint production needs no
 special handling either: a co-product is the same offer variable appearing in
 several coverage rows, so one fishing trip is credited to every fish it lands.
 
-Because a craft costs nothing in the objective, the least-cost plan is degenerate
-in the crafts: surplus gathered material can be spun into items the demand never
-asked for at no penalty. So :func:`minimize` solves twice -- first for the least
-cost, then, with that cost locked, for the fewest crafts -- reporting only the
-crafts the demand actually needs (see the second stage there).
+Because activity that costs no time or consumable is free in the objective, the
+least-cost plan is degenerate: surplus gathered material can be spun into items
+the demand never asked for, and a crop farmed off the bottleneck track adds no
+time either, so either can appear as slack at no penalty. So :func:`minimize`
+solves twice -- first for the least cost, then, with that cost locked, for the
+least total activity (crafts plus gathering) -- reporting only what the demand
+actually needs (see the second stage there).
 
 To keep every coverage constraint satisfiable (so no shortfall slack is needed),
 the LP is built only over **obtainable** items -- those gatherable, or craftable
@@ -233,21 +235,24 @@ def minimize(
 
     problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
-    # The objective is indifferent to crafting (a craft costs no time or
-    # consumable), so surplus gathered material can be spun into items the demand
-    # never asked for -- a free, degenerate loop the first solve may pick at
-    # random. Re-solve for the fewest crafts among the least-cost plans: lock the
-    # realised time/AP/LN (with a hair of slack for float noise), then minimise
-    # total craft activity. No reported metric moves, but pointless surplus crafts
-    # drop out, leaving only what the demand actually needs.
-    if craft:
+    # The objective is indifferent to any activity that costs no time or
+    # consumable. Surplus gathered material can be spun into items the demand never
+    # asked for (a craft is free), and gathering that fits under the makespan is
+    # free too -- a crop farmed on a track that is not the bottleneck adds no time,
+    # so the first solve may leave a whole field of an unneeded crop as slack. Both
+    # are degenerate loops CBC may pick at random. Re-solve for the least total
+    # activity among the least-cost plans: lock the realised time/AP/LN (with a
+    # hair of slack for float noise), then minimise crafts plus gathering units. No
+    # reported metric moves, but pointless surplus -- crafted or farmed -- drops
+    # out, leaving only what the demand actually needs.
+    if used or craft:
         t_star = makespan.value() or 0.0
         ap_star = pulp.value(arnold_palmers) or 0.0
         ln_star = pulp.value(large_nets) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
-        problem.setObjective(pulp.lpSum(craft.values()))
+        problem.setObjective(pulp.lpSum(craft.values()) + pulp.lpSum(usage))
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
     draws = [

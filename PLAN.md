@@ -197,12 +197,14 @@ All phases (1–10) are landed; the plan is complete. Resolved open questions:
 **10 — Epsilon-constraint frontier + no surplus crafts. DONE.** Two fixes to the
 frontier's fidelity:
 
-- *Least crafts among least-cost plans.* A craft costs nothing in the objective,
-  so the least-cost plan is degenerate in its crafts -- surplus gathered material
-  (e.g. the Board a passive economy dumps out while you wait) can be spun into
-  items nothing needs. `minimize` now solves twice: first for the least
-  `(time, AP, LN)`, then, with those locked, for the fewest total crafts, so only
-  the crafts the demand needs are reported.
+- *Least activity among least-cost plans.* Any activity that costs no time or
+  consumable is free in the objective, so the least-cost plan is degenerate:
+  surplus gathered material (e.g. the Board a passive economy dumps out while you
+  wait) can be spun into items nothing needs, and a crop farmed off the bottleneck
+  track adds no time either, so a whole field of an unneeded crop can appear as
+  slack. `minimize` now solves twice: first for the least `(time, AP, LN)`, then,
+  with those locked, for the least total activity (crafts plus gathering units), so
+  only what the demand needs is reported.
 - *Epsilon-constraint sampling.* A weighted-sum price sweep only ever returns the
   *endpoints* of a flat (linear) frontier segment, hiding every moderate-
   consumable plan on it (e.g. spending some AP to explore a slow-farmed crop
