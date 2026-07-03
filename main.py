@@ -12,6 +12,7 @@ The mastery and inventory files default to the ``[solver]`` config section.
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import math
 import sys
@@ -28,6 +29,7 @@ import fishing
 import optimizer
 import parsing
 import passive
+import pets
 import sources
 
 
@@ -450,12 +452,91 @@ def print_critical_path(
     print(f"  {line}")
 
 
+def _apportion(quantity: int, weights: list[float]) -> list[int]:
+    """Split ``quantity`` into integer parts proportional to ``weights``.
+
+    Uses the largest-remainder method, so the parts always sum to exactly
+    ``quantity`` with no rounding drift across the sources.
+    """
+    total = sum(weights)
+    if total <= 0:
+        return [0] * len(weights)
+    raw = [quantity * w / total for w in weights]
+    parts = [math.floor(r) for r in raw]
+    for i in sorted(
+        range(len(raw)), key=lambda i: (raw[i] - parts[i], -i), reverse=True
+    )[: quantity - sum(parts)]:
+        parts[i] += 1
+    return parts
+
+
+def _season_note(producer_name: str) -> str:
+    """A bracketed active-months window for a seasonal pet, else empty.
+
+    Seasonal pets only fetch during a short calendar window, so their output is
+    modelled as a long-run yearly average (see :func:`config._pet_producers`) --
+    which is why such a pet contributes less than a year-round one. Flagging the
+    window in the report explains that reduced share (and that shifting the plan
+    into or out of that window would change it in-game).
+    """
+    key = producer_name.removeprefix(config.PET_PRODUCER_PREFIX).lower()
+    months = pets.SEASONAL_MONTHS.get(key)
+    if not months:
+        return ""
+    lo, hi = min(months), max(months)
+    span = (
+        calendar.month_abbr[lo]
+        if lo == hi
+        else f"{calendar.month_abbr[lo]}–{calendar.month_abbr[hi]}"
+    )
+    return f" [seasonal: {span}]"
+
+
+def _passive_sources(
+    production: passive.PassiveProduction, item: str, quantity: int
+) -> str:
+    """Name the passive producer(s) that make ``quantity`` of ``item``.
+
+    A single producer is named plainly (``(from Windmill)``); when several make
+    the item, the quantity is broken down between them by their per-minute rate
+    share (which is exactly each one's share of the shared wait), largest first.
+    A seasonal pet contributes less because its output is a yearly average, and
+    the breakdown flags its active window (see :func:`_season_note`). Returns an
+    empty string when nothing known produces the item.
+    """
+    key = item.lower()
+    contributors: list[tuple[float, str]] = []  # (rate, name)
+    for producer in production.producers:
+        output = producer.outputs.get(key)
+        if not output:
+            continue
+        per_cycle = output
+        if production.inventory_size is not None:
+            per_cycle = min(per_cycle, production.inventory_size)
+        rate = per_cycle / (producer.period.total_seconds() / 60)
+        if rate > 0:
+            contributors.append((rate, producer.name))
+    if not contributors:
+        return ""
+    if len(contributors) == 1:
+        name = contributors[0][1]
+        return f" (from {name}{_season_note(name)})"
+    counts = _apportion(quantity, [rate for rate, _ in contributors])
+    labelled = sorted(
+        ((count, rate, name) for count, (rate, name) in zip(counts, contributors)),
+        key=lambda t: (-t[0], -t[1], t[2]),  # biggest share, then rate, then name
+    )
+    parts = [f"{count:,} from {name}{_season_note(name)}" for count, _, name in labelled]
+    return " (" + ", ".join(parts) + ")"
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
     farm: crops.Farm,
     workshop: crafting.Workshop,
     crafting_bonus: float,
+    production: passive.PassiveProduction | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
     # Display names for everything that can appear (demand plus every recipe item
@@ -575,11 +656,18 @@ def print_plan(
             residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
             if residual > 1e-6:
                 wait = timedelta(minutes=residual / rate)
-                rows.append((wait, display.get(key, key), round(residual)))
+                rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
-            for wait, name, quantity in sorted(rows, reverse=True):
-                print(f"  {quantity:,}x {name} in {passive.format_duration(wait)}")
+            for wait, name, quantity, key in sorted(rows, reverse=True):
+                source = (
+                    _passive_sources(production, key, quantity)
+                    if production is not None
+                    else ""
+                )
+                print(
+                    f"  {quantity:,}x {name} in {passive.format_duration(wait)}{source}"
+                )
 
     if plan.remainder:
         print("\nMaterials with no known source (supply yourself):")
@@ -707,7 +795,7 @@ def run(args: argparse.Namespace) -> int:
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)
-    print_plan(chosen, demand, farm, workshop, args.crafting_bonus)
+    print_plan(chosen, demand, farm, workshop, args.crafting_bonus, production)
 
     if args.breakdown:
         print_crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)

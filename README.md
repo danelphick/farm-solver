@@ -75,15 +75,15 @@ Critical path (sets the 293y 319d total):
   2,574,345x Horn from passive production (293y 319d) — the slowest item to build up
 ```
 
-The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too:
+The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too. Each passive line also names the producer that makes the item; when several producers make it, the quantity is split between them by their per-minute rate share, largest first. A seasonal pet only fetches for part of the year, so its output is modelled as a long-run yearly average — which is why it contributes less than a year-round source — and its active window is flagged (`[seasonal: Mar–Apr]`) to explain the smaller share:
 
 ```text
 Exploring:
   3,931x Arnold Palmer at Jundland Desert (Small Bolt)
 
 Passive production (concurrent):
-  2,574,345x Horn in 293y 319d
-  2,858,281x Purple Flower in 279y 246d
+  2,574,345x Horn in 293y 319d (from pet Dog)
+  2,858,281x Purple Flower in 279y 246d (2,449,955 from pet Squirrel, 408,326 from pet Hummingbird [seasonal: Mar–Apr])
   ...
 ```
 

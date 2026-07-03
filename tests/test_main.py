@@ -13,6 +13,7 @@ from main import (
     within_limits,
 )
 from optimizer import SourcingPlan
+from passive import MINUTE, PassiveProducer, PassiveProduction
 from sources import Draw, Offer
 
 PLANS = [
@@ -277,6 +278,72 @@ def test_print_plan_farming_singular_harvest_all(capsys):
     out = capsys.readouterr().out
     assert "1 Harvest All of Corn" in out
     assert "Harvest Alls" not in out
+
+
+def test_print_plan_passive_names_a_single_source(capsys):
+    # One producer makes the item, so it is named plainly with "(from ...)".
+    demand = {"Flower": 10}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("passive", "passive", {"flower": 5}, time_per_unit=MINUTE), 2)]
+    )
+    production = PassiveProduction(
+        producers=[PassiveProducer("Windmill", MINUTE, {"flower": 5})]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
+    out = capsys.readouterr().out
+    assert "10x Flower in 2m (from Windmill)" in out
+
+
+def test_print_plan_passive_breaks_down_multiple_sources(capsys):
+    # Two producers make the item; the quantity is split by their rate share, on
+    # the same line, largest contributor first.
+    demand = {"Flower": 100}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("passive", "passive", {"flower": 4}, time_per_unit=MINUTE), 25)]
+    )
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("Greenhouse", MINUTE, {"flower": 1}),
+            PassiveProducer("Windmill", MINUTE, {"flower": 3}),
+        ]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
+    out = capsys.readouterr().out
+    # 3-to-1 rate split of 100 is 75 from Windmill and 25 from Greenhouse.
+    assert "100x Flower in 25m (75 from Windmill, 25 from Greenhouse)" in out
+
+
+def test_print_plan_passive_splits_pets_by_rate(capsys):
+    # Two pets return the same item at different hauls; the split follows their
+    # rates (3-to-1 of 100 is 75/25), largest share first.
+    demand = {"Flower": 100}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("passive", "passive", {"flower": 4}, time_per_unit=MINUTE), 25)]
+    )
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("pet Fox", MINUTE, {"flower": 1}),
+            PassiveProducer("pet Squirrel", MINUTE, {"flower": 3}),
+        ]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
+    out = capsys.readouterr().out
+    assert "100x Flower in 25m (75 from pet Squirrel, 25 from pet Fox)" in out
+
+
+def test_print_plan_passive_flags_seasonal_pets(capsys):
+    # A seasonal pet fetches only part of the year, so its share is a yearly
+    # average; the report flags the active window that explains the lower amount.
+    demand = {"Flower": 10}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("passive", "passive", {"flower": 5}, time_per_unit=MINUTE), 2)]
+    )
+    production = PassiveProduction(
+        producers=[PassiveProducer("pet Hummingbird", MINUTE, {"flower": 5})]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
+    out = capsys.readouterr().out
+    assert "10x Flower in 2m (from pet Hummingbird [seasonal: Mar–Apr])" in out
 
 
 def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):
