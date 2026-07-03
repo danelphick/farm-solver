@@ -26,6 +26,7 @@ import exploring
 import farm_solver
 import farming
 import fishing
+import locksmith
 import optimizer
 import parsing
 import passive
@@ -613,18 +614,26 @@ def print_plan(
     workshop: crafting.Workshop,
     crafting_bonus: float,
     production: passive.PassiveProduction | None = None,
+    open_flows: list[sources.OpenFlow] | None = None,
+    openable_names: dict[str, str] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
+    open_flows = open_flows or []
+    flows_by_name = {flow.name.lower(): flow for flow in open_flows}
+
     # Display names for everything that can appear (demand plus every recipe item
-    # and material), keyed lower-cased.
+    # and material, plus openable names, keys and contents), keyed lower-cased.
     display = {item.lower(): item for item in demand}
     for key, recipe in workshop.recipes.items():
         display.setdefault(key, recipe.name)
         for material in recipe.materials:
             display.setdefault(material.lower(), material)
+    for key, name in (openable_names or {}).items():
+        display.setdefault(key, name)
 
-    # What the plan actually needs of each item: the direct demand plus whatever
-    # the chosen crafts consume as materials.
+    # What the plan actually needs of each item: the direct demand, whatever the
+    # chosen crafts consume as materials, and whatever opening chests consumes
+    # (the chest tokens and their keys).
     need: dict[str, float] = {item.lower(): float(qty) for item, qty in demand.items()}
     for item, count in plan.crafts.items():
         recipe = workshop.get(item)
@@ -634,8 +643,20 @@ def print_plan(
             key = material.lower()
             if key not in crafting.IGNORED_MATERIALS:
                 need[key] = need.get(key, 0.0) + quantity * count
-    # What crafting itself produces (crafting_bonus per craft).
+    # What crafting produces (crafting_bonus per craft) and what opening yields;
+    # both are free, instant supply that spares the passive/farming channels.
     crafted = {item: crafting_bonus * count for item, count in plan.crafts.items()}
+    opened: dict[str, float] = {}
+    for name, count in plan.opens.items():
+        flow = flows_by_name.get(name.lower())
+        if flow is None:
+            continue
+        for item, quantity in flow.consumes.items():
+            need[item] = need.get(item, 0.0) + quantity * count
+        for item, quantity in flow.yields.items():
+            opened[item] = opened.get(item, 0.0) + quantity * count
+    # Only genuinely-needed items (demand, craft materials, and the chests/keys
+    # opens consume) are worth showing; an openable's other contents are byproducts.
     interesting = set(need) | set(crafted)
 
     def wanted(offer: sources.Offer) -> str:
@@ -656,10 +677,12 @@ def print_plan(
     def draws_on(track: str) -> list[sources.Draw]:
         return [d for d in plan.draws if d.offer.track == track]
 
-    # What every non-passive channel and crafting already supplies. The passive
-    # track and the critical-path summary both work in residuals -- an item fully
-    # sourced elsewhere adds no passive wait -- so compute it once, up front.
+    # What every non-passive channel, crafting and opening already supplies. The
+    # passive track and the critical-path summary both work in residuals -- an item
+    # fully sourced elsewhere adds no passive wait -- so compute it once, up front.
     elsewhere: dict[str, float] = dict(crafted)
+    for item, quantity in opened.items():
+        elsewhere[item] = elsewhere.get(item, 0.0) + quantity
     for draw in plan.draws:
         if draw.offer.track == sources.PASSIVE_TRACK:
             continue
@@ -687,6 +710,36 @@ def print_plan(
                 f"  {math.ceil(draw.units):,}x Arnold Palmer at {location}"
                 f" ({wanted(draw.offer)})"
             )
+
+    # Opening chests and bags at the Locksmith. Skip residue opens that yield less
+    # than one of anything wanted (CBC can leave a sliver, as with draws).
+    opens = [
+        (name, count)
+        for name, count in plan.opens.items()
+        if (flow := flows_by_name.get(name.lower())) is not None
+        and any(
+            round(flow.yields[item] * count) >= 1
+            for item in flow.yields
+            if item in need
+        )
+    ]
+    if opens:
+        print("\nOpening (Locksmith):")
+        for name, count in sorted(opens, key=lambda nc: nc[1], reverse=True):
+            flow = flows_by_name[name.lower()]
+            keys = [
+                f"{round(quantity * count):,} {display.get(item, item)}"
+                for item, quantity in flow.consumes.items()
+                if item != name.lower() and round(quantity * count) >= 1
+            ]
+            cost = f" using {', '.join(keys)}" if keys else ""
+            gained = ", ".join(
+                f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
+                for item in sorted(flow.yields)
+                if item in need and round(flow.yields[item] * count) >= 1
+            )
+            detail = f" -> {gained}" if gained else ""
+            print(f"  {math.ceil(count):,}x {display.get(name.lower(), name)}{cost}{detail}")
 
     farming_draws = sourced(draws_on(sources.FARMING_TRACK))
     if farming_draws:
@@ -852,9 +905,13 @@ def run(args: argparse.Namespace) -> int:
     print_solution(solution)
 
     # Every recipe is a craft flow; the optimiser sources the top-level demand,
-    # choosing craft-vs-gather for itself. (The channel Offers are rebuilt below,
-    # since the passive ones depend on the plan span.)
+    # choosing craft-vs-gather for itself. Openables are free multi-output flows
+    # (open a chest or bag for its contents), so the solver can gather a chest and
+    # open it when that beats gathering the contents directly. (The channel Offers
+    # are rebuilt below, since the passive ones depend on the plan span.)
     recipes = crafting.recipe_flows(workshop)
+    smith = locksmith.load_openables()
+    open_flows = sources.open_flows(smith)
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
 
     if args.plans < 1:
@@ -876,7 +933,7 @@ def run(args: argparse.Namespace) -> int:
         )
         offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(
-            offers, demand, recipes, args.crafting_bonus, args.plans
+            offers, demand, recipes, args.crafting_bonus, args.plans, open_flows
         )
         if not plans:
             return 0  # nothing left to source
@@ -907,7 +964,10 @@ def run(args: argparse.Namespace) -> int:
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)
-    print_plan(chosen, demand, farm, workshop, args.crafting_bonus, production)
+    print_plan(
+        chosen, demand, farm, workshop, args.crafting_bonus, production,
+        open_flows, smith.names,
+    )
 
     if args.breakdown:
         print_crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)

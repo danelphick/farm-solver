@@ -17,7 +17,7 @@ from main import (
 )
 from optimizer import SourcingPlan
 from passive import MINUTE, PassiveProducer, PassiveProduction
-from sources import Draw, Offer
+from sources import Draw, Offer, OpenFlow
 
 PLANS = [
     SourcingPlan(time=timedelta(0), arnold_palmers=100, large_nets=20),
@@ -361,6 +361,52 @@ def test_print_plan_exploring_drops_residue_draws(capsys):
     out = capsys.readouterr().out
     assert "Moonstone" in out
     assert "Crystal River" not in out  # the zero-yield residue palmer is not shown
+
+
+def test_print_plan_reports_opening_chests(capsys):
+    # The plan fishes a chest and its key, then opens the chest for its contents.
+    # The chest also drops Trinket, which nothing needs -- a byproduct, so it is
+    # left out of the reported yields.
+    demand = {"Gem": 50}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("fish Vault", "fishing", {"locked chest": 1}, ln=1), 1),
+            Draw(Offer("fish Keys", "fishing", {"brass key": 1}, ln=1), 1),
+        ],
+        opens={"Locked Chest": 1},
+    )
+    chest = OpenFlow(
+        name="Locked Chest",
+        consumes={"locked chest": 1, "brass key": 1},
+        yields={"gem": 50, "trinket": 99},
+    )
+    names = {
+        "locked chest": "Locked Chest",
+        "brass key": "Brass Key",
+        "gem": "Gem",
+        "trinket": "Trinket",
+    }
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, open_flows=[chest], openable_names=names)
+    out = capsys.readouterr().out
+    assert "Opening (Locksmith):" in out
+    assert "1x Locked Chest using 1 Brass Key -> 50x Gem" in out
+    assert "Trinket" not in out  # the unneeded byproduct is not listed
+    # The chest and key show up as what the fishing casts were for.
+    assert "Locked Chest" in out.split("Fishing:")[1]
+
+
+def test_print_plan_drops_residue_opens(capsys):
+    # A sliver of an open whose interesting yields all round to zero is LP residue.
+    demand = {"Gem": 50}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Vault", "fishing", {"gem": 50}, ln=1), 1)],
+        opens={"Junk Box": 0.001},
+    )
+    junk = OpenFlow(name="Junk Box", consumes={"junk box": 1}, yields={"gem": 50})
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, open_flows=[junk],
+               openable_names={"junk box": "Junk Box", "gem": "Gem"})
+    out = capsys.readouterr().out
+    assert "Opening (Locksmith):" not in out
 
 
 def test_print_plan_farming_singular_harvest_all(capsys):

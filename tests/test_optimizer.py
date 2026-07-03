@@ -7,7 +7,7 @@ from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
 from optimizer import SourcingPlan, all_offers, frontier, minimize
 from passive import HOURLY, PassiveProducer, PassiveProduction
-from sources import Offer
+from sources import Offer, OpenFlow
 
 # A free-but-slow farming offer and a fast-but-costly fishing offer for the same
 # item, the basic time-vs-consumable tradeoff.
@@ -129,6 +129,60 @@ def test_minimize_does_not_farm_a_crop_nothing_needs():
     plan = minimize([passive, mushrooms], {"It": 100}, price_ap=1e-6, price_ln=1e-6)
     grown = [d for d in plan.draws if d.offer.name == "grow Mushroom"]
     assert grown == []
+
+
+def test_minimize_opens_a_chest_when_cheaper_than_gathering():
+    # A Gem fishes one-to-a-net, or comes 100 to a chest that itself fishes
+    # one-to-a-net. Opening 100 Gems is one chest (~1 net) vs ~100 direct nets, so
+    # the optimiser fishes the chest and opens it.
+    offers = [
+        Offer("fish Gem", "fishing", {"gem": 1}, ln=1),
+        Offer("fish Vault", "fishing", {"treasure chest": 1}, ln=1),
+    ]
+    chest = OpenFlow(
+        name="Treasure Chest", consumes={"treasure chest": 1}, yields={"gem": 100}
+    )
+    plan = minimize(
+        offers, {"Gem": 100}, price_ap=1e-6, price_ln=1e-6, openables=[chest]
+    )
+    assert plan.opens.get("Treasure Chest") == pytest.approx(1)
+    assert plan.large_nets == pytest.approx(1)
+
+
+def test_minimize_gathers_a_chest_and_its_key_to_open_it():
+    # The chest needs a Key to open. Both the chest and the key must be fished, so
+    # opening one chest for its 50 Gems costs two nets (chest + key).
+    offers = [
+        Offer("fish Vault", "fishing", {"locked chest": 1}, ln=1),
+        Offer("fish Keys", "fishing", {"brass key": 1}, ln=1),
+    ]
+    chest = OpenFlow(
+        name="Locked Chest",
+        consumes={"locked chest": 1, "brass key": 1},
+        yields={"gem": 50},
+    )
+    plan = minimize(
+        offers, {"Gem": 50}, price_ap=1e-6, price_ln=1e-6, openables=[chest]
+    )
+    assert plan.opens.get("Locked Chest") == pytest.approx(1)
+    assert plan.large_nets == pytest.approx(2)  # one chest + one key
+
+
+def test_minimize_leaves_an_item_only_a_keyless_uncraftable_chest_gives_in_remainder():
+    # The chest yields the Gem but nothing sources the chest itself, so the Gem is
+    # unobtainable and lands in the remainder rather than being opened for free.
+    chest = OpenFlow(name="Ghost Chest", consumes={"ghost chest": 1}, yields={"gem": 5})
+    plan = minimize([], {"Gem": 5}, openables=[chest])
+    assert plan.remainder == {"Gem": 5}
+    assert plan.opens == {}
+
+
+def test_minimize_ignores_openables_for_items_it_does_not_help():
+    # An openable unrelated to the demand is simply not opened.
+    chest = OpenFlow(name="Junk Box", consumes={"junk box": 1}, yields={"junk": 100})
+    plan = minimize([FISH_ITEM], {"It": 10}, openables=[chest])
+    assert plan.opens == {}
+    assert plan.large_nets == pytest.approx(10)
 
 
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():

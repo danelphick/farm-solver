@@ -108,9 +108,15 @@ class Openable:
 
 @dataclass
 class Locksmith:
-    """The known openables, keyed by lower-cased name for case-insensitive lookup."""
+    """The known openables, keyed by lower-cased name for case-insensitive lookup.
+
+    ``names`` maps the lower-cased form of every openable, key and contained item
+    back to its original-cased display name, so a report can label them nicely
+    (the models elsewhere work in lower case).
+    """
 
     openables: dict[str, Openable] = field(default_factory=dict)
+    names: dict[str, str] = field(default_factory=dict)
 
     def openable(self, name: str) -> Openable | None:
         return self.openables.get(name.lower())
@@ -125,6 +131,7 @@ def read_openables(path: Path) -> Locksmith:
     candidate's own count range.
     """
     openables: dict[str, Openable] = {}
+    names: dict[str, str] = {}
     for row in _rows(path):
         name = row["Openable"].strip()
         kind = row["Type"].strip().lower()
@@ -132,6 +139,10 @@ def read_openables(path: Path) -> Locksmith:
         openable = openables.setdefault(
             name.lower(), Openable(name=name, key=key_for(name))
         )
+        names.setdefault(name.lower(), name)
+        names.setdefault(item.lower(), item)
+        if openable.key is not None:
+            names.setdefault(openable.key.lower(), openable.key)
         if kind == FIXED:
             key = item.lower()
             openable.fixed[key] = openable.fixed.get(key, 0.0) + int(row["Min"])
@@ -141,7 +152,7 @@ def read_openables(path: Path) -> Locksmith:
             )
         else:
             raise ValueError(f"unknown openable type {kind!r} for {name!r}")
-    return Locksmith(openables=openables)
+    return Locksmith(openables=openables, names=names)
 
 
 def _rows(path: Path) -> list[dict[str, str]]:

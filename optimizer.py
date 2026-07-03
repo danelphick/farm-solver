@@ -1,13 +1,14 @@
 """The sourcing optimiser for Farm Solver.
 
 Given the items still needed, this picks how to obtain them -- gathering across
-every channel (passive production, fishing, exploring, farming) *and* crafting --
-trading total time against the Arnold Palmers and Large Nets spent. As worked out
-in ``PLAN.md``, that choice is a small **linear program**: one continuous usage
-level per :class:`~sources.Offer`, one craft count per craftable item, plus a
-makespan ``T``. Because every objective is linear, the whole ``(time, AP, LN)``
-Pareto frontier is recovered exactly by minimising ``T + price*(AP + LN)`` over a
-sweep of the price of time (:func:`frontier`) -- no metaheuristic needed.
+every channel (passive production, fishing, exploring, farming), crafting, *and*
+opening chests -- trading total time against the Arnold Palmers and Large Nets
+spent. As worked out in ``PLAN.md``, that choice is a small **linear program**:
+one continuous usage level per :class:`~sources.Offer`, one craft count per
+craftable item, one open count per openable, plus a makespan ``T``. Because every
+objective is linear, the whole ``(time, AP, LN)`` Pareto frontier is recovered
+exactly by minimising ``T + price*(AP + LN)`` over a sweep of the price of time
+(:func:`frontier`) -- no metaheuristic needed.
 
 Crafting is folded into the LP so the craft-vs-gather choice is optimised rather
 than pre-decided: each recipe is a flow that consumes its materials and produces
@@ -17,6 +18,14 @@ from cheaply-explored Glass Orb rather than fishing it net by net), and it even
 exploits a co-product it already has in surplus. Joint production needs no
 special handling either: a co-product is the same offer variable appearing in
 several coverage rows, so one fishing trip is credited to every fish it lands.
+
+Opening chests is folded in the same way (see :class:`~sources.OpenFlow`): an
+open consumes the chest and its key and produces the chest's average contents, at
+no time or consumable cost. Unlike a craft it is multi-output -- one open yields
+the whole bundle -- so it is its own flow variable rather than a recipe. This
+lets the solver acquire a chest by fishing or exploring and open it whenever that
+beats gathering the contents directly, chaining through chests whose contents are
+themselves openable.
 
 Because activity that costs no time or consumable is free in the objective, the
 least-cost plan is degenerate: surplus gathered material can be spun into items
@@ -47,6 +56,7 @@ from passive import PassiveProduction
 from sources import (
     Draw,
     Offer,
+    OpenFlow,
     aggregate,
     exploring_offers,
     farming_offers,
@@ -91,15 +101,18 @@ def all_offers(
 class SourcingPlan:
     """One way to source the demand: the actions taken, the cost, the remainder.
 
-    ``draws`` are the gathering actions and ``crafts`` maps each crafted item
-    (lower-cased) to how many crafts of it to do. ``time`` is the makespan
-    (concurrent tracks, the longest), ``arnold_palmers`` and ``large_nets`` the
-    consumables spent (raw, un-rounded), and ``remainder`` the demanded items that
-    are neither gatherable nor craftable, which you must supply yourself.
+    ``draws`` are the gathering actions, ``crafts`` maps each crafted item
+    (lower-cased) to how many crafts of it to do, and ``opens`` maps each opened
+    openable (by display name) to how many of it to open at the Locksmith.
+    ``time`` is the makespan (concurrent tracks, the longest),
+    ``arnold_palmers`` and ``large_nets`` the consumables spent (raw,
+    un-rounded), and ``remainder`` the demanded items that are neither gatherable
+    nor craftable, which you must supply yourself.
     """
 
     draws: list[Draw] = field(default_factory=list)
     crafts: dict[str, float] = field(default_factory=dict)
+    opens: dict[str, float] = field(default_factory=dict)
     time: timedelta = timedelta(0)
     arnold_palmers: float = 0.0
     large_nets: float = 0.0
@@ -115,12 +128,18 @@ def _minutes(time: timedelta) -> float:
     return time.total_seconds() / 60
 
 
-def _obtainable(offer_items: set[str], recipes: dict[str, dict[str, float]]) -> set[str]:
-    """Every item that can be produced: gathered, or crafted from obtainable ones.
+def _obtainable(
+    offer_items: set[str],
+    recipes: dict[str, dict[str, float]],
+    openables: list[OpenFlow],
+) -> set[str]:
+    """Every item that can be produced: gathered, crafted, or opened from such.
 
-    Starts from the items some offer yields and repeatedly marks a craftable item
-    obtainable once all of its materials are (a fixed point). Auto-supplied
-    materials (iron, nails) are expected to be stripped from ``recipes`` already.
+    Starts from the items some offer yields and repeatedly marks obtainable any
+    craftable item whose materials are all obtainable, and every output of an
+    openable whose consumed items (the openable itself and its key) are all
+    obtainable -- a fixed point. Auto-supplied materials (iron, nails) are
+    expected to be stripped from ``recipes`` already.
     """
     obtainable = set(offer_items)
     changed = True
@@ -130,13 +149,27 @@ def _obtainable(offer_items: set[str], recipes: dict[str, dict[str, float]]) -> 
             if item not in obtainable and all(m in obtainable for m in materials):
                 obtainable.add(item)
                 changed = True
+        for flow in openables:
+            if all(c in obtainable for c in flow.consumes):
+                for out in flow.yields:
+                    if out not in obtainable:
+                        obtainable.add(out)
+                        changed = True
     return obtainable
 
 
 def _reachable(
-    seeds: set[str], recipes: dict[str, dict[str, float]], craftable: set[str]
+    seeds: set[str],
+    recipes: dict[str, dict[str, float]],
+    craftable: set[str],
+    openers: dict[str, list[OpenFlow]],
 ) -> set[str]:
-    """Every item touched by covering ``seeds``, following recipes we may craft."""
+    """Every item touched by covering ``seeds``.
+
+    Follows recipes we may craft (down to their materials) and, for any item an
+    openable yields, the openable's consumed items (its own token and key), so
+    the chest and key behind a wanted drop are pulled into the LP too.
+    """
     seen: set[str] = set()
     stack = list(seeds)
     while stack:
@@ -146,6 +179,8 @@ def _reachable(
         seen.add(item)
         if item in craftable:
             stack.extend(recipes[item])
+        for flow in openers.get(item, ()):
+            stack.extend(flow.consumes)
     return seen
 
 
@@ -157,15 +192,19 @@ def minimize(
     price_ap: float = 0.0,
     price_ln: float = 0.0,
     time_cap: timedelta | None = None,
+    openables: list[OpenFlow] | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand`` at least cost for the given prices.
 
     ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
     (auto-supplied materials already stripped); one craft consumes those and
-    yields ``crafting_bonus`` of the item. Net production (gathered + crafted -
-    consumed) must cover ``demand`` for every obtainable item, and each track's
-    time sums to at most the makespan ``T``. A demanded item that is neither
-    gatherable nor craftable lands in the ``remainder``.
+    yields ``crafting_bonus`` of the item. ``openables`` are Locksmith flows:
+    opening one consumes its token (and key) and yields its average bundle, at no
+    time or consumable cost -- a free multi-output flow the LP drives like crafts.
+    Net production (gathered + crafted + opened - consumed) must cover ``demand``
+    for every obtainable item, and each track's time sums to at most the makespan
+    ``T``. A demanded item that is neither gatherable, craftable nor openable
+    lands in the ``remainder``.
 
     Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
     default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
@@ -176,16 +215,26 @@ def minimize(
     would skip. ``price_ap``/``price_ln`` are ignored when ``time_cap`` is given.
     """
     recipes = recipes or {}
+    openables = openables or []
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
     offer_items = {key for offer in offers for key in offer.yields}
-    obtainable = _obtainable(offer_items, recipes)
+    obtainable = _obtainable(offer_items, recipes, openables)
     craftable = {
         item
         for item, materials in recipes.items()
         if all(m in obtainable for m in materials)
     }
-    items = _reachable({k for k in wanted if k in obtainable}, recipes, craftable)
+    # Which openables are usable (all their inputs obtainable), indexed by the
+    # items they yield so reachability can walk from a wanted drop to its chest.
+    openable_flows = [f for f in openables if all(c in obtainable for c in f.consumes)]
+    openers: dict[str, list[OpenFlow]] = {}
+    for flow in openable_flows:
+        for out in flow.yields:
+            openers.setdefault(out, []).append(flow)
+    items = _reachable(
+        {k for k in wanted if k in obtainable}, recipes, craftable, openers
+    )
 
     remainder = {
         display: round(qty)
@@ -197,6 +246,14 @@ def minimize(
 
     used = [o for o in offers if any(o.yield_of(i) > 0 for i in items)]
     crafted = sorted(items & craftable)
+    # Openables worth modelling: those touching a reachable item, either yielding
+    # one or consuming one (a chest reached only as the thing a key gates still
+    # needs its open variable). Keep a stable order for naming.
+    opened = [
+        f
+        for f in openable_flows
+        if any(i in items for i in f.yields) or any(i in items for i in f.consumes)
+    ]
     # For each material, which crafts consume it and how much.
     consumers: dict[str, list[tuple[str, float]]] = {}
     for item in crafted:
@@ -206,6 +263,7 @@ def minimize(
     problem = pulp.LpProblem("sourcing", pulp.LpMinimize)
     usage = [pulp.LpVariable(f"x{i}", lowBound=0) for i in range(len(used))]
     craft = {item: pulp.LpVariable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
+    opens = [pulp.LpVariable(f"o{i}", lowBound=0) for i in range(len(opened))]
     makespan = pulp.LpVariable("T", lowBound=0)
 
     arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
@@ -216,15 +274,26 @@ def minimize(
     else:
         problem += makespan + price_ap * arnold_palmers + price_ln * large_nets
 
-    # Net production of each item covers its demand: gathered + crafted - consumed.
+    # Net production of each item covers its demand:
+    # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
     for item in items:
         gathered = pulp.lpSum(
             o.yield_of(item) * x for o, x in zip(used, usage) if o.yield_of(item) > 0
         )
         made = crafting_bonus * craft[item] if item in craft else 0
         consumed = pulp.lpSum(qty * craft[j] for j, qty in consumers.get(item, []))
+        unpacked = pulp.lpSum(
+            f.yields.get(item, 0.0) * o
+            for f, o in zip(opened, opens)
+            if f.yields.get(item, 0.0)
+        )
+        emptied = pulp.lpSum(
+            f.consumes.get(item, 0.0) * o
+            for f, o in zip(opened, opens)
+            if f.consumes.get(item, 0.0)
+        )
         need = wanted[item][1] if item in wanted else 0
-        problem += gathered + made - consumed >= need
+        problem += gathered + made - consumed + unpacked - emptied >= need
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
@@ -245,14 +314,16 @@ def minimize(
     # hair of slack for float noise), then minimise crafts plus gathering units. No
     # reported metric moves, but pointless surplus -- crafted or farmed -- drops
     # out, leaving only what the demand actually needs.
-    if used or craft:
+    if used or craft or opens:
         t_star = makespan.value() or 0.0
         ap_star = pulp.value(arnold_palmers) or 0.0
         ln_star = pulp.value(large_nets) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
-        problem.setObjective(pulp.lpSum(craft.values()) + pulp.lpSum(usage))
+        problem.setObjective(
+            pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
+        )
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
     draws = [
@@ -265,10 +336,16 @@ def minimize(
         for item in crafted
         if (count := craft[item].value() or 0.0) > UNIT_EPSILON
     }
+    opens_done = {
+        flow.name: count
+        for flow, o in zip(opened, opens)
+        if (count := o.value() or 0.0) > UNIT_EPSILON
+    }
     time, ap, ln = aggregate(draws)
     return SourcingPlan(
         draws=sorted(draws, key=lambda d: d.offer.name),
         crafts=crafts,
+        opens=opens_done,
         time=time,
         arnold_palmers=ap,
         large_nets=ln,
@@ -326,6 +403,7 @@ def frontier(
     recipes: dict[str, dict[str, float]] | None = None,
     crafting_bonus: float = 1.0,
     count: int = 5,
+    openables: list[OpenFlow] | None = None,
 ) -> list[SourcingPlan]:
     """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
 
@@ -340,14 +418,23 @@ def frontier(
     are thinned to about ``count`` plans spread across the frontier. Returns a
     single plan when consumables buy no speed (the two ends coincide).
     """
-    fast = minimize(offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE)
-    cheap = minimize(offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE)
+    fast = minimize(
+        offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
+        openables=openables,
+    )
+    cheap = minimize(
+        offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
+        openables=openables,
+    )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
     caps = _time_caps(fast.time.total_seconds(), cheap.time.total_seconds(), samples)
     plans += [
-        minimize(offers, demand, recipes, crafting_bonus, time_cap=timedelta(seconds=cap))
+        minimize(
+            offers, demand, recipes, crafting_bonus,
+            time_cap=timedelta(seconds=cap), openables=openables,
+        )
         for cap in caps
     ]
     return _thin(_non_dominated(plans), count)

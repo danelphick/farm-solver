@@ -30,6 +30,7 @@ from datetime import timedelta
 from crops import Farm
 from exploring import Exploring
 from fishing import Fishing
+from locksmith import Locksmith
 from passive import PassiveProduction
 
 # Time-track names. Crops share one track (grown one at a time, so their times
@@ -102,6 +103,28 @@ class Draw:
     @property
     def time(self) -> timedelta:
         return self.offer.time_per_unit * self.units
+
+
+@dataclass
+class OpenFlow:
+    """Opening one openable: what it consumes and the average bundle it yields.
+
+    Opening a chest or bag at the Locksmith consumes one of the openable itself
+    (and a key, for chests) and adds its *average* contents to the inventory, at
+    no time, Arnold Palmer or Large Net cost of its own -- the cost is having
+    gathered the openable and key in the first place. So the optimiser opens an
+    openable whenever acquiring-and-opening its contents beats gathering them
+    directly, and chains naturally (a chest that yields a bag, a bag that yields
+    keys). Unlike a craft, one open yields a whole *bundle* at once, so it is its
+    own multi-output flow rather than a recipe (see :mod:`optimizer`).
+
+    ``consumes`` and ``yields`` both map a lower-cased item to how many one open
+    uses or produces.
+    """
+
+    name: str
+    consumes: dict[str, float] = field(default_factory=dict)
+    yields: dict[str, float] = field(default_factory=dict)
 
 
 def aggregate(draws: list[Draw]) -> tuple[timedelta, float, float]:
@@ -213,3 +236,22 @@ def farming_offers(farm: Farm) -> list[Offer]:
             )
         )
     return offers
+
+
+def open_flows(locksmith: Locksmith) -> list[OpenFlow]:
+    """A flow per openable: consume it (and its key) to yield its average bundle.
+
+    An openable with no contents (nothing to yield) is skipped. Chests also
+    consume one key of their tier; bags consume only themselves.
+    """
+    flows: list[OpenFlow] = []
+    for openable in locksmith.openables.values():
+        yields = openable.average_output()
+        if not yields:
+            continue
+        consumes = {openable.name.lower(): 1.0}
+        if openable.key is not None:
+            key = openable.key.lower()
+            consumes[key] = consumes.get(key, 0.0) + 1.0
+        flows.append(OpenFlow(name=openable.name, consumes=consumes, yields=yields))
+    return flows

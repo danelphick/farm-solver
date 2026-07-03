@@ -5,6 +5,7 @@ import pytest
 from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation, ExploringModifiers
 from fishing import Fishing, FishingModifiers, FishingZone
+from locksmith import Locksmith, Openable, PoolItem
 from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import (
     Draw,
@@ -13,6 +14,7 @@ from sources import (
     exploring_offers,
     farming_offers,
     fishing_offers,
+    open_flows,
     passive_offers,
 )
 
@@ -158,6 +160,40 @@ def test_passive_offer_units_take_the_longest_item_wait():
 
 def test_passive_offer_is_empty_without_producers():
     assert passive_offers(PassiveProduction(producers=[])) == []
+
+
+def test_open_flow_for_a_chest_consumes_the_chest_and_its_key():
+    smith = Locksmith(
+        openables={
+            "small chest 01": Openable(
+                name="Small Chest 01", key="Small Key", fixed={"ruby": 10, "jade": 10}
+            )
+        }
+    )
+    (flow,) = open_flows(smith)
+    assert flow.name == "Small Chest 01"
+    # One open consumes the chest token and one Small Key.
+    assert flow.consumes == {"small chest 01": 1.0, "small key": 1.0}
+    assert flow.yields == {"ruby": 10, "jade": 10}
+
+
+def test_open_flow_for_a_bag_consumes_only_itself():
+    smith = Locksmith(
+        openables={
+            "grab bag": Openable(
+                name="Grab Bag", pool=[PoolItem("Silver", 1, 3), PoolItem("Gold", 1, 3)]
+            )
+        }
+    )
+    (flow,) = open_flows(smith)
+    assert flow.consumes == {"grab bag": 1.0}
+    # Average bundle: each of two picks averages 2/2 = 1.
+    assert flow.yields == {"silver": 1.0, "gold": 1.0}
+
+
+def test_open_flows_skips_empty_openables():
+    smith = Locksmith(openables={"empty": Openable(name="Empty")})
+    assert open_flows(smith) == []
 
 
 def test_farming_offer_time_matches_time_to_grow():
