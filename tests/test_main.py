@@ -5,6 +5,7 @@ from crops import Farm
 import pytest
 
 from main import (
+    _should_model_calendar,
     build_parser,
     cheapest_plan,
     print_crafts,
@@ -41,6 +42,31 @@ def test_average_seasons_flag_defaults_off():
     parser = build_parser()
     assert parser.parse_args([]).average_seasons is False
     assert parser.parse_args(["--average-seasons"]).average_seasons is True
+
+
+def test_should_model_calendar_is_off_by_default():
+    # Even with a seasonal pet, the calendar is not modelled unless opted into.
+    assert not _should_model_calendar({"Wolf": 8}, average_seasons=False)
+
+
+def test_should_model_calendar_when_config_opts_in_with_a_seasonal_pet():
+    assert _should_model_calendar(
+        {"Wolf": 8, "model_calendar": True}, average_seasons=False
+    )
+
+
+def test_average_seasons_forces_the_calendar_off():
+    # The CLI flag overrides the config opt-in.
+    assert not _should_model_calendar(
+        {"Wolf": 8, "model_calendar": True}, average_seasons=True
+    )
+
+
+def test_should_model_calendar_needs_an_actual_seasonal_pet():
+    # Opting in with only year-round pets has nothing to model.
+    assert not _should_model_calendar(
+        {"Dog": 8, "model_calendar": True}, average_seasons=False
+    )
 
 
 def test_selected_plan_defaults_to_the_fastest():

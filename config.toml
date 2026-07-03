@@ -83,6 +83,9 @@ grape_juices_per_day = 14
 
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
+# Model the calendar so a seasonal pet only counts while in season (uses the
+# plan's --start-date; costs an extra solve). Off by default (yearly average).
+model_calendar = false
 "Cat" = 8
 "Wolf" = 8
 "Owl" = 8

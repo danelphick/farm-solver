@@ -88,8 +88,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "scale seasonal pets to their yearly average instead of modelling "
-            "the calendar; one solve rather than an iterative fixed point, so "
-            "faster on slower machines (ignores --start-date for seasons)"
+            "the calendar (the default; overrides pets.model_calendar in the "
+            "config, forcing the single-solve fast path)"
         ),
     )
     parser.add_argument(
@@ -209,6 +209,19 @@ _MAX_SEASON_ITERS = 5
 def _makespans_close(a: timedelta, b: timedelta) -> bool:
     """Whether two makespans agree closely enough to stop the seasonal iteration."""
     return abs((a - b).total_seconds()) <= max(3600.0, 0.001 * b.total_seconds())
+
+
+def _should_model_calendar(pets_config: dict, average_seasons: bool) -> bool:
+    """Whether to model the seasonal calendar rather than a yearly average.
+
+    The calendar model costs an extra solve (an iterative fixed point on the
+    makespan), so it is off by default and opted into with ``pets.model_calendar``
+    in the config. ``--average-seasons`` forces it off, and there is nothing to
+    model unless the config actually has a seasonal pet.
+    """
+    if average_seasons or not pets_config.get("model_calendar"):
+        return False
+    return any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
 
 
 def _csv_items(path: Path) -> set[str]:
@@ -810,15 +823,11 @@ def run(args: argparse.Namespace) -> int:
 
     # A seasonal pet is only in season for part of the year, so how much it
     # contributes depends on how long the plan runs -- which is itself an output
-    # of the solve. Iterate to a fixed point: solve, take the expanded plan's
-    # makespan as the plan span, rebuild the seasonal pet rates for it, and solve
-    # again until the makespan settles. This costs an extra solve, so skip it --
-    # doing a single steady-state pass -- when the config has no seasonal pets, or
-    # --average-seasons opts out of the calendar for speed.
-    has_seasonal = any(
-        name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})
-    )
-    model_calendar = has_seasonal and not args.average_seasons
+    # of the solve. When modelling the calendar (opt-in, see _should_model_calendar)
+    # iterate to a fixed point: solve, take the expanded plan's makespan as the plan
+    # span, rebuild the seasonal pet rates for it, and solve again until the makespan
+    # settles. Otherwise a single steady-state pass (horizon None) is enough.
+    model_calendar = _should_model_calendar(cfg.get("pets", {}), args.average_seasons)
     horizon: timedelta | None = None
     production = config.passive_production(cfg, today=start)
     shown: list[optimizer.SourcingPlan] = []
