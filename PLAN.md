@@ -65,8 +65,12 @@ production is handled inside each offer via `units_for` (the binding item drives
 it, the rest of the bundle rides along). Passive folds in via `passive_offers`
 (one bundled offer at combined per-minute rates); `aggregate` covers all tracks.
 
-**5 — Pareto search. DESIGNED (below).** The sourcing choice is a small **linear
-program**, swept over a price-of-time to trace the frontier. See "Solver design".
+**5 — Pareto search. DONE.** `optimizer.py`: `all_offers` gathers every channel,
+`minimize` solves one LP with PuLP (linear coverage + per-track makespan), and
+`frontier` sweeps the price of time into a thinned, non-dominated set of
+`SourcingPlan`s. Verified end-to-end on the real data (fishing/exploring/farming/
+passive all selectable). Consumable budgets ("constrained" mode) deferred: hard
+coverage makes a binding budget infeasible, so they need shortfall slack vars.
 
 ### Solver design (Phase 5)
 

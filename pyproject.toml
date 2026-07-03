@@ -5,10 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "pulp>=3.3.2",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+filterwarnings = [
+    # PuLP 3.x warns about APIs that change in 4.0 (direct LpVariable, the
+    # bundled PULP_CBC_CMD); they work now, so quiet the noise until we migrate.
+    "ignore:.*LpVariable.*deprecated.*:DeprecationWarning",
+    "ignore:.*PULP_CBC_CMD is deprecated.*:DeprecationWarning",
+]
 
 [dependency-groups]
 dev = [
