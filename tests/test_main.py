@@ -2,9 +2,8 @@ from datetime import timedelta
 
 from crafting import Workshop, WorkshopRecipe
 from crops import Farm
-from main import cheapest_plan, gatherable_items, print_crafts, print_frontier, print_plan
+from main import cheapest_plan, print_crafts, print_frontier, print_plan
 from optimizer import SourcingPlan
-from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer
 
 PLANS = [
@@ -65,24 +64,6 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "2,000x Board in 3h 20m" in out
     # Items with no offer to make them are listed as a remainder.
     assert "3x Magicite" in out
-
-
-def test_gatherable_items_excludes_pet_only_items():
-    production = PassiveProduction(
-        producers=[
-            PassiveProducer("sawmill", HOURLY, {"board": 10}),
-            PassiveProducer("pet Cat", DAILY, {"mushroom paste": 5}),
-        ]
-    )
-    offers = [
-        Offer("passive", "passive", {"board": 0.17, "mushroom paste": 0.003}),
-        Offer("fish Lake", "fishing", {"trout": 1}, ln=1),
-    ]
-    gatherable = gatherable_items(offers, production)
-    assert "board" in gatherable  # a non-pet building makes it
-    assert "trout" in gatherable  # a non-passive channel makes it
-    # Only a pet makes Mushroom Paste, so it stays craftable, not pet-sourced.
-    assert "mushroom paste" not in gatherable
 
 
 def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):

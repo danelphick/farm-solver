@@ -181,6 +181,11 @@ above, before building `optimizer.py`.
 - Frontier granularity may need >5 plans where very short durations cost wildly
   different AP/LN; make the count/spacing tunable.
 - Whether any hard AP/LN ceiling should cap the frontier's fast end.
-- Whether to later fold **crafting into the LP** (recipes as offers with negative
-  yields for inputs) so craft-vs-source is optimised too; for now craft expansion
-  stays a fixed pre-pass and the LP sources only the resulting base materials.
+- **Crafting is now in the LP. DONE.** Each recipe is a flow (consume materials,
+  produce `crafting_bonus` of the output, no time/consumable cost), so craft-vs-
+  gather is optimised and co-product surpluses are reused. The LP is built over
+  the *obtainable* items only (gatherable, or craftable from obtainable — a fixed
+  point), so coverage is always feasible and no shortfall slack is needed. This
+  retired `gather_demand`/`craft_breakdown`/`gatherable_items` and the pet-exclusion
+  heuristic. Fixed the Glass Bottle case (fished → crafted from explored Glass
+  Orb), cutting the fastest plan's Large Nets ~68k → ~11k.

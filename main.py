@@ -185,33 +185,6 @@ def obtainable_items(
     return items
 
 
-def gatherable_items(
-    offers: list[sources.Offer], production: passive.PassiveProduction
-) -> frozenset[str]:
-    """Items to source rather than craft: those a *non-pet* channel produces.
-
-    Crafting expansion stops at these (see :func:`crafting.gather_demand`). Pets
-    are deliberately excluded: they are so slow that forcing a craftable item
-    onto the pet that happens to fetch it (rather than crafting it from cheaper
-    materials) can cost centuries. So a craftable item only a pet makes stays
-    craftable; pets still supply it as a free co-product if it is produced while
-    waiting, and remain the source for base items nothing else can make.
-    """
-    items = {
-        key
-        for offer in offers
-        if offer.track != sources.PASSIVE_TRACK
-        for key in offer.yields
-    }
-    items |= {
-        item
-        for producer in production.producers
-        if not producer.name.startswith(config.PET_PRODUCER_PREFIX)
-        for item in producer.outputs
-    }
-    return frozenset(items)
-
-
 def unobtainable_materials(
     workshop: crafting.Workshop, obtainable: set[str]
 ) -> list[str]:
@@ -281,19 +254,6 @@ def print_solution(solution: farm_solver.Solution) -> None:
 
     for note in solution.notes:
         print(note)
-
-
-def print_breakdown(steps: list[crafting.CraftStep]) -> None:
-    if not steps:
-        return
-    print("\nRequired Crafts:")
-    for step in steps:
-        print(
-            f"\n{step.crafts:,}x {step.item} "
-            f"(Produces {step.produced:,}, Adds {step.mastery_added:,} Mastery)"
-        )
-        for material, quantity in step.materials:
-            print(f"  {quantity:,}x {material}")
 
 
 def print_unobtainable(materials: list[str]) -> None:
