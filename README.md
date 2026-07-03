@@ -75,7 +75,7 @@ Critical path (sets the 293y 319d total):
   2,574,345x Horn from passive production (293y 319d) — the slowest item to build up
 ```
 
-The plan is then broken down by channel, and the passive section lists each item's own wait longest-first, so the runner-up bottlenecks are visible too:
+The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too:
 
 ```text
 Exploring:
@@ -248,11 +248,11 @@ grape_juices_per_day = 14  # instant whole-field grows available each day
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
 
-Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes the plantings, the wait, how many Grape Juices it consumes, and how many of each item those harvests produce — split between the instant Grape Juice grows and normal farming:
+Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes the Harvest Alls (full-field harvests), the wait, how many Grape Juices it consumes, and how many of each item those harvests produce — split between the instant Grape Juice grows and normal farming:
 
 ```text
 Farming (5y 202d):
-  352,711 plantings of Mushroom in 5y 202d using 28,379 Grape Juice:
+  352,711 Harvest Alls of Mushroom in 5y 202d using 28,379 Grape Juice:
     229,261,734x Mushroom (18,446,346 from Grape Juice, 210,815,388 from normal farming)
 ```
 

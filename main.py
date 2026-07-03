@@ -382,6 +382,11 @@ def _slowest_passive_item(
     return best
 
 
+def _harvest_alls(count: int) -> str:
+    """``count`` "Harvest All"s (the full-field harvest action), pluralised."""
+    return f"{count:,} Harvest All{'' if count == 1 else 's'}"
+
+
 def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
     """Describe the farming sequence that runs the makespan (grown one at a time)."""
     farming_draws = [d for d in plan.draws if d.offer.track == sources.FARMING_TRACK]
@@ -390,12 +395,12 @@ def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
     duration = passive.format_duration(total)
     if len(farming_draws) == 1:
         return (
-            f"{math.ceil(biggest.units):,} plantings of {crop} ({duration}) "
+            f"{_harvest_alls(math.ceil(biggest.units))} of {crop} ({duration}) "
             "— crops grow one at a time"
         )
     return (
         f"{len(farming_draws)} crops grown back-to-back ({duration}), "
-        f"longest {math.ceil(biggest.units):,} plantings of {crop}"
+        f"longest {_harvest_alls(math.ceil(biggest.units))} of {crop}"
     )
 
 
@@ -499,7 +504,7 @@ def print_plan(
     fishing_draws = draws_on(sources.FISHING_TRACK)
     if fishing_draws:
         print("\nFishing:")
-        for draw in fishing_draws:
+        for draw in sorted(fishing_draws, key=lambda d: d.ln, reverse=True):
             zone = draw.offer.name.removeprefix("fish ")
             print(
                 f"  {math.ceil(draw.units):,}x Large Net at {zone}"
@@ -509,7 +514,7 @@ def print_plan(
     exploring_draws = draws_on(sources.EXPLORING_TRACK)
     if exploring_draws:
         print("\nExploring:")
-        for draw in exploring_draws:
+        for draw in sorted(exploring_draws, key=lambda d: d.ap, reverse=True):
             location = draw.offer.name.removeprefix("explore ")
             print(
                 f"  {math.ceil(draw.units):,}x Arnold Palmer at {location}"
@@ -517,14 +522,21 @@ def print_plan(
             )
 
     farming_draws = draws_on(sources.FARMING_TRACK)
+    # Drop residue draws: CBC can leave a sliver of a planting on a crop nothing
+    # needs, which rounds to zero produced in zero time -- not a real action.
+    farming_draws = [
+        d
+        for d in farming_draws
+        if any(round(d.produced[k]) >= 1 for k in d.offer.yields if k in interesting)
+    ]
     if farming_draws:
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))
         print(f"\nFarming ({passive.format_duration(total_farming)}):")
-        for draw in farming_draws:
+        for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             crop = draw.offer.name.removeprefix("grow ")
             line = (
-                f"  {math.ceil(draw.units):,} plantings of {crop}"
+                f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"
             )
             juices = farm.grape_juices_used(draw.time)

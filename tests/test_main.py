@@ -94,8 +94,8 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "5x Large Net at Small Pond (Drum)" in out
     assert "Exploring:" in out
     assert "2x Arnold Palmer at Cave (Bone)" in out
-    assert "Farming (1d 1h):" in out  # 25 plantings * 1h, grown one at a time
-    assert "plantings of Corn" in out
+    assert "Farming (1d 1h):" in out  # 25 Harvest Alls * 1h, grown one at a time
+    assert "Harvest Alls of Corn" in out
     # Board at 10/min needs 200 min = 3h 20m, shown per item under passive.
     assert "Passive production (concurrent):" in out
     assert "2,000x Board in 3h 20m" in out
@@ -127,7 +127,7 @@ def test_print_plan_highlights_the_farming_bottleneck(capsys):
     print_plan(plan, demand, Farm(), Workshop(), 1.0)
     out = capsys.readouterr().out
     assert "Critical path (sets the 4d 4h total):" in out
-    assert "100 plantings of Corn (4d 4h) — crops grow one at a time" in out
+    assert "100 Harvest Alls of Corn (4d 4h) — crops grow one at a time" in out
 
 
 def test_print_plan_critical_path_prefers_farming_over_passive_fill(capsys):
@@ -146,7 +146,7 @@ def test_print_plan_critical_path_prefers_farming_over_passive_fill(capsys):
     out = capsys.readouterr().out
     assert "Critical path (sets the 1h 40m total):" in out
     critical = out.split("Critical path")[1].split("\n\n")[0]
-    assert "plantings of Corn" in critical
+    assert "Harvest Alls of Corn" in critical
     assert "Slow" not in critical  # the passive fill is not the critical path
     assert "passive production" not in critical
 
@@ -170,7 +170,7 @@ def test_print_plan_farming_splits_produced_by_grape_juice(capsys):
     plan = SourcingPlan(draws=[Draw(offer, 10)])
     print_plan(plan, demand, Farm(grape_juices_per_day=12), Workshop(), 1.0)
     out = capsys.readouterr().out
-    assert "10 plantings of Corn" in out
+    assert "10 Harvest Alls of Corn" in out
     assert "using 5 Grape Juice" in out
     assert "1,000x Corn (500 from Grape Juice, 500 from normal farming)" in out
 
@@ -200,6 +200,83 @@ def test_print_plan_farming_omits_split_without_grape_juice(capsys):
     out = capsys.readouterr().out
     assert "1,000x Corn" in out
     assert "Grape Juice" not in out
+
+
+def test_print_plan_orders_fishing_by_large_nets(capsys):
+    # Two zones; the one using more Large Nets is listed first regardless of the
+    # draw order, so the biggest consumable spend leads.
+    demand = {"Cod": 100, "Eel": 100}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("fish Small Pond", "fishing", {"cod": 100}, ln=1), 1),
+            Draw(Offer("fish Big Lake", "fishing", {"eel": 10}, ln=1), 10),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    lines = [line for line in capsys.readouterr().out.splitlines() if "Large Net at" in line]
+    assert lines[0].strip().startswith("10x Large Net at Big Lake")
+    assert lines[1].strip().startswith("1x Large Net at Small Pond")
+
+
+def test_print_plan_orders_exploring_by_arnold_palmers(capsys):
+    # The location using more Arnold Palmers is listed first.
+    demand = {"Ore": 100, "Gem": 100}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("explore Cave", "exploring", {"ore": 10}, ap=1), 10),
+            Draw(Offer("explore Ridge", "exploring", {"gem": 2}, ap=1), 50),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    lines = [line for line in capsys.readouterr().out.splitlines() if "Arnold Palmer at" in line]
+    assert lines[0].strip().startswith("50x Arnold Palmer at Ridge")
+    assert lines[1].strip().startswith("10x Arnold Palmer at Cave")
+
+
+def test_print_plan_orders_farming_by_time(capsys):
+    # Crops are listed longest-growing first, so the farming bottleneck leads.
+    demand = {"Corn": 100, "Wheat": 100}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("grow Corn", "farming", {"corn": 50}, time_per_unit=timedelta(hours=1)), 2),
+            Draw(Offer("grow Wheat", "farming", {"wheat": 20}, time_per_unit=timedelta(hours=1)), 5),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    lines = [
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if "Harvest All" in line and " in " in line  # the per-crop farming lines
+    ]
+    assert "Wheat" in lines[0]  # 5h of Wheat outlasts 2h of Corn
+    assert "Corn" in lines[1]
+
+
+def test_print_plan_farming_drops_residue_draws(capsys):
+    # A sliver of a planting on a crop nothing needs rounds to zero produced in
+    # zero time -- LP residue, not a real action -- so it is omitted entirely.
+    demand = {"Corn": 100, "Mushroom": 5}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("grow Corn", "farming", {"corn": 50}, time_per_unit=timedelta(hours=1)), 2),
+            Draw(Offer("grow Mushroom", "farming", {"mushroom": 10}, time_per_unit=timedelta(hours=1)), 0.01),
+        ],
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Harvest Alls of Corn" in out
+    assert "Mushroom" not in out  # the zero-yield residue draw is not shown
+
+
+def test_print_plan_farming_singular_harvest_all(capsys):
+    # A single full-field harvest is "1 Harvest All", not "1 Harvest Alls".
+    demand = {"Corn": 50}
+    offer = Offer("grow Corn", "farming", {"corn": 50}, time_per_unit=timedelta(hours=1))
+    plan = SourcingPlan(draws=[Draw(offer, 1)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "1 Harvest All of Corn" in out
+    assert "Harvest Alls" not in out
 
 
 def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):
