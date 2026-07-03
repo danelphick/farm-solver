@@ -153,6 +153,45 @@ def _required_materials_recursive(
     return {material: _round_to_nearest(qty) for material, qty in totals.items()}
 
 
+def recipe_flows(workshop: Workshop) -> dict[str, dict[str, float]]:
+    """Each recipe as ``lower-cased item -> {lower-cased material: quantity}``.
+
+    Auto-supplied materials (iron, nails) are stripped, since they are never
+    gathered or counted. This is the crafting the sourcing optimiser folds into
+    its LP (see :mod:`optimizer`), so it can choose to craft an item instead of
+    gathering it.
+    """
+    flows: dict[str, dict[str, float]] = {}
+    for key, recipe in workshop.recipes.items():
+        flows[key] = {
+            material.lower(): float(quantity)
+            for material, quantity in recipe.materials.items()
+            if material.lower() not in IGNORED_MATERIALS
+        }
+    return flows
+
+
+def top_level_demand(
+    needs: list[ItemNeed], mastery_bonus: float = DEFAULT_MASTERY_BONUS
+) -> dict[str, float]:
+    """The directly needed items and how many of each, for the optimiser.
+
+    Each item's largest shortfall drives it (crafting is cumulative). A mastery
+    shortfall of ``n`` needs ``n / mastery_bonus`` items found, since each found
+    item grants the mastery bonus; a plain item-count shortfall needs ``n``. The
+    optimiser then works out all the crafting and gathering beneath these.
+    """
+    shortfalls: dict[str, tuple[int, bool]] = {}
+    for need in needs:
+        previous = shortfalls.get(need.item, (0, need.is_mastery))
+        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+    return {
+        item: (count / mastery_bonus if is_mastery else float(count))
+        for item, (count, is_mastery) in shortfalls.items()
+        if count > 0
+    }
+
+
 def gather_demand(
     needs: list[ItemNeed],
     workshop: Workshop,

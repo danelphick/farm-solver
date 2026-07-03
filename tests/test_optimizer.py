@@ -63,6 +63,46 @@ def test_minimize_without_any_offer_returns_everything_as_remainder():
     assert plan == SourcingPlan(remainder={"It": 10})
 
 
+def test_minimize_crafts_when_cheaper_than_gathering():
+    # Glass Bottle can be fished (1 net each) or crafted from Glass Orb, which
+    # explores 10-to-a-palmer. Crafting 100 costs ~10 palmers vs ~100 nets, so
+    # the optimiser crafts rather than fishes.
+    offers = [
+        Offer("fish Lake", "fishing", {"glass bottle": 1}, ln=1),
+        Offer("explore Cave", "exploring", {"glass orb": 10}, ap=1),
+    ]
+    recipes = {"glass bottle": {"glass orb": 1}}
+    plan = minimize(
+        offers, {"Glass Bottle": 100}, recipes, 1.0, price_ap=1e-6, price_ln=1e-6
+    )
+    assert plan.large_nets == 0
+    assert plan.crafts.get("glass bottle") == pytest.approx(100)
+    assert plan.arnold_palmers == pytest.approx(10)
+
+
+def test_minimize_gathers_when_cheaper_than_crafting():
+    # If the same bottle fishes 100-to-a-net, fishing beats crafting from orbs.
+    offers = [
+        Offer("fish Lake", "fishing", {"glass bottle": 100}, ln=1),
+        Offer("explore Cave", "exploring", {"glass orb": 10}, ap=1),
+    ]
+    recipes = {"glass bottle": {"glass orb": 1}}
+    plan = minimize(
+        offers, {"Glass Bottle": 100}, recipes, 1.0, price_ap=1e-6, price_ln=1e-6
+    )
+    assert plan.crafts == {}
+    assert plan.large_nets == pytest.approx(1)
+
+
+def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():
+    # Widget is only craftable, and its material has no source, so it cannot be
+    # made -- it falls to the remainder rather than making the LP infeasible.
+    recipes = {"widget": {"unobtanium": 1}}
+    plan = minimize([], {"Widget": 5}, recipes)
+    assert plan.remainder == {"Widget": 5}
+    assert plan.crafts == {}
+
+
 def test_frontier_spans_the_tradeoff_fastest_first():
     plans = frontier([FARM_ITEM, FISH_ITEM], {"It": 100})
     # The two extremes: instant for 100 nets, or free over 100 minutes.

@@ -1,7 +1,8 @@
 from datetime import timedelta
 
+from crafting import Workshop, WorkshopRecipe
 from crops import Farm
-from main import cheapest_plan, gatherable_items, print_frontier, print_plan
+from main import cheapest_plan, gatherable_items, print_crafts, print_frontier, print_plan
 from optimizer import SourcingPlan
 from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer
@@ -50,7 +51,7 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
         ],
         remainder={"Magicite": 3},
     )
-    print_plan(plan, demand, Farm(grape_juices_per_day=14))
+    print_plan(plan, demand, Farm(grape_juices_per_day=14), Workshop(), 1.45)
     out = capsys.readouterr().out
 
     assert "Fishing:" in out
@@ -96,7 +97,7 @@ def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):
             ),
         ],
     )
-    print_plan(plan, demand, Farm())
+    print_plan(plan, demand, Farm(), Workshop(), 1.45)
     out = capsys.readouterr().out
     assert "10x Arnold Palmer at Canyon (Horn)" in out  # Horn comes from exploring
     assert "Passive production" not in out  # nothing left for passive to cover
@@ -114,17 +115,34 @@ def test_print_plan_passive_shows_only_the_residual(capsys):
             ),
         ],
     )
-    print_plan(plan, demand, Farm())
+    print_plan(plan, demand, Farm(), Workshop(), 1.45)
     out = capsys.readouterr().out
     assert "Passive production (concurrent):" in out
     assert "400x Horn in 6h 40m" in out  # 400 at 1/min = 400 minutes
+
+
+def test_print_crafts_lists_parents_before_children(capsys):
+    workshop = Workshop(
+        recipes={
+            "hammer": WorkshopRecipe("Hammer", {"Board": 2, "Iron": 1}),
+            "board": WorkshopRecipe("Board", {"Wood": 5}),
+        }
+    )
+    plan = SourcingPlan(crafts={"board": 10, "hammer": 5})
+    print_crafts(plan, workshop, crafting_bonus=1.0, mastery_bonus=1.0)
+    out = capsys.readouterr().out
+    assert "5x Hammer (Produces 5, Adds 5 Mastery)" in out
+    assert "10x Board (Produces 10, Adds 10 Mastery)" in out
+    assert "50x Wood" in out  # 10 Board crafts * 5 Wood
+    assert "Iron" not in out  # auto-supplied, never shown
+    assert out.index("Hammer") < out.index("Board")  # parent before child
 
 
 def test_print_plan_orders_passive_items_longest_wait_first(capsys):
     demand = {"Slow": 100, "Fast": 100}
     offer = Offer("passive", "passive", {"slow": 1, "fast": 10}, time_per_unit=timedelta(minutes=1))
     plan = SourcingPlan(draws=[Draw(offer, 100)])
-    print_plan(plan, demand, Farm())
+    print_plan(plan, demand, Farm(), Workshop(), 1.45)
     lines = [line.strip() for line in capsys.readouterr().out.splitlines() if "in " in line]
     # Slow (100 min) is a longer wait than Fast (10 min), so it is listed first.
     assert lines[0].endswith("Slow in 1h 40m")

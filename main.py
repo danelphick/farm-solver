@@ -336,16 +336,41 @@ def print_frontier(
         )
 
 
-def _wanted(offer: sources.Offer, display: dict[str, str]) -> str:
-    """The demanded items an offer yields, by display name, comma-joined."""
-    return ", ".join(sorted(display[key] for key in offer.yields if key in display))
-
-
 def print_plan(
-    plan: optimizer.SourcingPlan, demand: dict[str, int], farm: crops.Farm
+    plan: optimizer.SourcingPlan,
+    demand: dict[str, float],
+    farm: crops.Farm,
+    workshop: crafting.Workshop,
+    crafting_bonus: float,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
+    # Display names for everything that can appear (demand plus every recipe item
+    # and material), keyed lower-cased.
     display = {item.lower(): item for item in demand}
+    for key, recipe in workshop.recipes.items():
+        display.setdefault(key, recipe.name)
+        for material in recipe.materials:
+            display.setdefault(material.lower(), material)
+
+    # What the plan actually needs of each item: the direct demand plus whatever
+    # the chosen crafts consume as materials.
+    need: dict[str, float] = {item.lower(): float(qty) for item, qty in demand.items()}
+    for item, count in plan.crafts.items():
+        recipe = workshop.get(item)
+        if recipe is None:
+            continue
+        for material, quantity in recipe.materials.items():
+            key = material.lower()
+            if key not in crafting.IGNORED_MATERIALS:
+                need[key] = need.get(key, 0.0) + quantity * count
+    # What crafting itself produces (crafting_bonus per craft).
+    crafted = {item: crafting_bonus * count for item, count in plan.crafts.items()}
+    interesting = set(need) | set(crafted)
+
+    def wanted(offer: sources.Offer) -> str:
+        return ", ".join(
+            sorted(display.get(key, key) for key in offer.yields if key in interesting)
+        )
 
     def draws_on(track: str) -> list[sources.Draw]:
         return [d for d in plan.draws if d.offer.track == track]
@@ -357,7 +382,7 @@ def print_plan(
             zone = draw.offer.name.removeprefix("fish ")
             print(
                 f"  {math.ceil(draw.units):,}x Large Net at {zone}"
-                f" ({_wanted(draw.offer, display)})"
+                f" ({wanted(draw.offer)})"
             )
 
     exploring_draws = draws_on(sources.EXPLORING_TRACK)
@@ -367,7 +392,7 @@ def print_plan(
             location = draw.offer.name.removeprefix("explore ")
             print(
                 f"  {math.ceil(draw.units):,}x Arnold Palmer at {location}"
-                f" ({_wanted(draw.offer, display)})"
+                f" ({wanted(draw.offer)})"
             )
 
     farming_draws = draws_on(sources.FARMING_TRACK)
@@ -382,39 +407,87 @@ def print_plan(
             juices = farm.grape_juices_used(draw.time)
             if round(juices) >= 1:
                 line += f" using {round(juices):,} Grape Juice"
-            print(f"{line} ({_wanted(draw.offer, display)})")
+            print(f"{line} ({wanted(draw.offer)})")
 
     passive_draws = draws_on(sources.PASSIVE_TRACK)
     if passive_draws:
         offer = passive_draws[0].offer
-        # Passive only needs to cover what the instant channels (and farming) did
-        # not, so subtract their output first -- otherwise an item fully fished or
-        # explored would still show its full passive wait here. Each item's own
-        # wait is then its residual over its per-minute rate; the longest is the
-        # whole track's time, so listing them longest-first shows what drives it.
-        elsewhere: dict[str, float] = {}
+        # Passive only covers what the other channels and crafting did not, so
+        # subtract their output first -- otherwise an item fully fished, explored
+        # or crafted would still show its full passive wait. Each item's own wait
+        # is its residual over its per-minute rate; the longest is the whole
+        # track's time, so listing them longest-first shows what drives it.
+        elsewhere: dict[str, float] = dict(crafted)
         for other in plan.draws:
             if other.offer.track == sources.PASSIVE_TRACK:
                 continue
             for item, quantity in other.produced.items():
                 elsewhere[item] = elsewhere.get(item, 0.0) + quantity
         rows = []
-        for key in offer.yields:
-            if key not in display or offer.yields[key] <= 0:
+        for key, rate in offer.yields.items():
+            if rate <= 0:
                 continue
-            residual = demand[display[key]] - elsewhere.get(key, 0.0)
+            residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
             if residual > 1e-6:
-                wait = timedelta(minutes=residual / offer.yields[key])
-                rows.append((wait, display[key], round(residual)))
+                wait = timedelta(minutes=residual / rate)
+                rows.append((wait, display.get(key, key), round(residual)))
         if rows:
             print("\nPassive production (concurrent):")
             for wait, name, quantity in sorted(rows, reverse=True):
                 print(f"  {quantity:,}x {name} in {passive.format_duration(wait)}")
 
     if plan.remainder:
-        print("\nMaterials with no known source (craft or supply yourself):")
+        print("\nMaterials with no known source (supply yourself):")
         for material in sorted(plan.remainder):
             print(f"  {plan.remainder[material]:,}x {material}")
+
+
+def print_crafts(
+    plan: optimizer.SourcingPlan,
+    workshop: crafting.Workshop,
+    crafting_bonus: float,
+    mastery_bonus: float,
+) -> None:
+    """List the crafts the plan performs, parents before the items they consume."""
+    if not plan.crafts:
+        return
+    consumed = {
+        material.lower()
+        for item in plan.crafts
+        if (recipe := workshop.get(item)) is not None
+        for material in recipe.materials
+    }
+    order: list[str] = []
+    seen: set[str] = set()
+
+    def visit(item: str) -> None:
+        if item in seen or item not in plan.crafts:
+            return
+        seen.add(item)
+        order.append(item)
+        recipe = workshop.get(item)
+        if recipe is not None:
+            for material in recipe.materials:
+                visit(material.lower())
+
+    for item in sorted(k for k in plan.crafts if k not in consumed):
+        visit(item)
+    for item in sorted(plan.crafts):  # any left in a cycle
+        visit(item)
+
+    print("\nRequired Crafts:")
+    for key in order:
+        count = plan.crafts[key]
+        recipe = workshop.get(key)
+        assert recipe is not None  # only craftable items are in plan.crafts
+        produced = count * crafting_bonus
+        print(
+            f"\n{round(count):,}x {recipe.name} "
+            f"(Produces {round(produced):,}, Adds {round(produced * mastery_bonus):,} Mastery)"
+        )
+        for material, quantity in recipe.materials.items():
+            if material.lower() not in crafting.IGNORED_MATERIALS:
+                print(f"  {round(count * quantity):,}x {material}")
 
 
 def load_config() -> dict:
@@ -464,15 +537,13 @@ def run(args: argparse.Namespace) -> int:
 
     print_solution(solution)
 
-    # Every channel is an Offer; the optimiser sources the base-plus-gatherable
-    # demand (crafts expand only down to items with no gathering source).
+    # Every channel is an Offer and every recipe a craft flow; the optimiser
+    # sources the top-level demand, choosing craft-vs-gather for itself.
     offers = optimizer.all_offers(production, fish, explore, farm)
-    gatherable = gatherable_items(offers, production)
-    demand = crafting.gather_demand(
-        solution.needs, workshop, args.crafting_bonus, args.mastery_bonus, gatherable
-    )
+    recipes = crafting.recipe_flows(workshop)
+    demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
 
-    plans = optimizer.frontier(offers, demand)
+    plans = optimizer.frontier(offers, demand, recipes, args.crafting_bonus)
     if not plans:
         return 0  # nothing left to source
 
@@ -492,17 +563,10 @@ def run(args: argparse.Namespace) -> int:
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)
-    print_plan(chosen, demand, farm)
+    print_plan(chosen, demand, farm, workshop, args.crafting_bonus)
 
     if args.breakdown:
-        steps = crafting.craft_breakdown(
-            solution.needs,
-            workshop,
-            args.crafting_bonus,
-            args.mastery_bonus,
-            gatherable,
-        )
-        print_breakdown(steps)
+        print_crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)
     return 0
 
 

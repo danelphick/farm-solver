@@ -1,19 +1,27 @@
 """The sourcing optimiser for Farm Solver.
 
-Given the items still needed (base materials left after crafting expansion) this
-picks how to obtain them across every channel -- passive production, fishing,
-exploring and farming -- trading total time against the Arnold Palmers and Large
-Nets spent. As worked out in ``PLAN.md``, that choice is a small **linear
-program**: one continuous usage level per :class:`~sources.Offer` plus a makespan
-``T``, with linear coverage and per-track makespan constraints. Because every
-objective is linear, the whole ``(time, AP, LN)`` Pareto frontier is recovered
-exactly by minimising ``T + price*(AP + LN)`` over a sweep of the price of time
-(:func:`frontier`) -- no metaheuristic needed.
+Given the items still needed, this picks how to obtain them -- gathering across
+every channel (passive production, fishing, exploring, farming) *and* crafting --
+trading total time against the Arnold Palmers and Large Nets spent. As worked out
+in ``PLAN.md``, that choice is a small **linear program**: one continuous usage
+level per :class:`~sources.Offer`, one craft count per craftable item, plus a
+makespan ``T``. Because every objective is linear, the whole ``(time, AP, LN)``
+Pareto frontier is recovered exactly by minimising ``T + price*(AP + LN)`` over a
+sweep of the price of time (:func:`frontier`) -- no metaheuristic needed.
 
-Joint production needs no special handling: a co-product is just the same offer
-variable appearing in several coverage rows, so one fishing trip is credited to
-every fish it lands. Items no offer yields never enter the LP; they stay in the
-plan's ``remainder`` for crafting, as before.
+Crafting is folded into the LP so the craft-vs-gather choice is optimised rather
+than pre-decided: each recipe is a flow that consumes its materials and produces
+``crafting_bonus`` of its output, at no time or consumable cost. So the solver
+crafts an item when that is cheaper than gathering it (e.g. crafting Glass Bottle
+from cheaply-explored Glass Orb rather than fishing it net by net), and it even
+exploits a co-product it already has in surplus. Joint production needs no
+special handling either: a co-product is the same offer variable appearing in
+several coverage rows, so one fishing trip is credited to every fish it lands.
+
+To keep every coverage constraint satisfiable (so no shortfall slack is needed),
+the LP is built only over **obtainable** items -- those gatherable, or craftable
+from obtainable materials (a fixed point, :func:`_obtainable`). A demanded item
+that is neither is dropped into the plan's ``remainder``.
 """
 
 from __future__ import annotations
@@ -68,14 +76,17 @@ def all_offers(
 
 @dataclass
 class SourcingPlan:
-    """One way to source the demand: the draws made, the cost, and the remainder.
+    """One way to source the demand: the actions taken, the cost, the remainder.
 
-    ``time`` is the makespan (concurrent tracks, the longest), ``arnold_palmers``
-    and ``large_nets`` the consumables spent (raw, un-rounded), and ``remainder``
-    the demanded items no offer could supply, left for crafting.
+    ``draws`` are the gathering actions and ``crafts`` maps each crafted item
+    (lower-cased) to how many crafts of it to do. ``time`` is the makespan
+    (concurrent tracks, the longest), ``arnold_palmers`` and ``large_nets`` the
+    consumables spent (raw, un-rounded), and ``remainder`` the demanded items that
+    are neither gatherable nor craftable, which you must supply yourself.
     """
 
     draws: list[Draw] = field(default_factory=list)
+    crafts: dict[str, float] = field(default_factory=dict)
     time: timedelta = timedelta(0)
     arnold_palmers: float = 0.0
     large_nets: float = 0.0
@@ -91,60 +102,108 @@ def _minutes(time: timedelta) -> float:
     return time.total_seconds() / 60
 
 
+def _obtainable(offer_items: set[str], recipes: dict[str, dict[str, float]]) -> set[str]:
+    """Every item that can be produced: gathered, or crafted from obtainable ones.
+
+    Starts from the items some offer yields and repeatedly marks a craftable item
+    obtainable once all of its materials are (a fixed point). Auto-supplied
+    materials (iron, nails) are expected to be stripped from ``recipes`` already.
+    """
+    obtainable = set(offer_items)
+    changed = True
+    while changed:
+        changed = False
+        for item, materials in recipes.items():
+            if item not in obtainable and all(m in obtainable for m in materials):
+                obtainable.add(item)
+                changed = True
+    return obtainable
+
+
+def _reachable(
+    seeds: set[str], recipes: dict[str, dict[str, float]], craftable: set[str]
+) -> set[str]:
+    """Every item touched by covering ``seeds``, following recipes we may craft."""
+    seen: set[str] = set()
+    stack = list(seeds)
+    while stack:
+        item = stack.pop()
+        if item in seen:
+            continue
+        seen.add(item)
+        if item in craftable:
+            stack.extend(recipes[item])
+    return seen
+
+
 def minimize(
     offers: list[Offer],
-    demand: dict[str, int],
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None = None,
+    crafting_bonus: float = 1.0,
     price_ap: float = 0.0,
     price_ln: float = 0.0,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand`` at least cost for the given prices.
 
-    Minimises ``T + price_ap*AP + price_ln*LN`` (``T`` the makespan in minutes)
-    subject to covering every demanded item some offer yields and each track's
-    time summing to at most ``T``. Items no offer yields come back in the plan's
-    ``remainder`` for crafting. (Consumable budgets -- the "constrained" mode --
-    are deferred: with hard coverage a binding budget makes the LP infeasible, so
-    they need shortfall slack variables, added when that mode is built.)
+    ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
+    (auto-supplied materials already stripped); one craft consumes those and
+    yields ``crafting_bonus`` of the item. The LP minimises
+    ``T + price_ap*AP + price_ln*LN`` (``T`` the makespan in minutes) subject to
+    net production (gathered + crafted - consumed) covering ``demand`` for every
+    obtainable item, and each track's time summing to at most ``T``. A demanded
+    item that is neither gatherable nor craftable lands in the ``remainder``.
     """
-    # Match demand to offers case-insensitively, but keep display names for the
-    # remainder.
+    recipes = recipes or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
-    coverable = {
-        key for key in wanted if any(o.yield_of(key) > 0 for o in offers)
+
+    offer_items = {key for offer in offers for key in offer.yields}
+    obtainable = _obtainable(offer_items, recipes)
+    craftable = {
+        item
+        for item, materials in recipes.items()
+        if all(m in obtainable for m in materials)
     }
-    # Only offers that yield something wanted can help; the rest just add cost.
-    relevant = [o for o in offers if any(o.yield_of(k) > 0 for k in coverable)]
+    items = _reachable({k for k in wanted if k in obtainable}, recipes, craftable)
 
     remainder = {
-        display: qty
+        display: round(qty)
         for key, (display, qty) in wanted.items()
-        if key not in coverable
+        if key not in obtainable
     }
-
-    if not coverable:
+    if not items:
         return SourcingPlan(remainder=remainder)
 
+    used = [o for o in offers if any(o.yield_of(i) > 0 for i in items)]
+    crafted = sorted(items & craftable)
+    # For each material, which crafts consume it and how much.
+    consumers: dict[str, list[tuple[str, float]]] = {}
+    for item in crafted:
+        for material, quantity in recipes[item].items():
+            consumers.setdefault(material, []).append((item, quantity))
+
     problem = pulp.LpProblem("sourcing", pulp.LpMinimize)
-    usage = [
-        pulp.LpVariable(f"x{i}", lowBound=0) for i in range(len(relevant))
-    ]
+    usage = [pulp.LpVariable(f"x{i}", lowBound=0) for i in range(len(used))]
+    craft = {item: pulp.LpVariable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
     makespan = pulp.LpVariable("T", lowBound=0)
 
-    arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(relevant, usage))
-    large_nets = pulp.lpSum(o.ln * x for o, x in zip(relevant, usage))
-
+    arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
+    large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
     problem += makespan + price_ap * arnold_palmers + price_ln * large_nets
 
-    # Coverage: enough of every wanted item this set of offers can make.
-    for key in coverable:
-        _, qty = wanted[key]
-        problem += (
-            pulp.lpSum(o.yield_of(key) * x for o, x in zip(relevant, usage)) >= qty
+    # Net production of each item covers its demand: gathered + crafted - consumed.
+    for item in items:
+        gathered = pulp.lpSum(
+            o.yield_of(item) * x for o, x in zip(used, usage) if o.yield_of(item) > 0
         )
+        made = crafting_bonus * craft[item] if item in craft else 0
+        consumed = pulp.lpSum(qty * craft[j] for j, qty in consumers.get(item, []))
+        need = wanted[item][1] if item in wanted else 0
+        problem += gathered + made - consumed >= need
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
-    for offer, x in zip(relevant, usage):
+    for offer, x in zip(used, usage):
         tracks.setdefault(offer.track, []).append(_minutes(offer.time_per_unit) * x)
     for terms in tracks.values():
         problem += pulp.lpSum(terms) <= makespan
@@ -153,12 +212,18 @@ def minimize(
 
     draws = [
         Draw(offer, units)
-        for offer, x in zip(relevant, usage)
+        for offer, x in zip(used, usage)
         if (units := x.value() or 0.0) > UNIT_EPSILON
     ]
+    crafts = {
+        item: count
+        for item in crafted
+        if (count := craft[item].value() or 0.0) > UNIT_EPSILON
+    }
     time, ap, ln = aggregate(draws)
     return SourcingPlan(
         draws=sorted(draws, key=lambda d: d.offer.name),
+        crafts=crafts,
         time=time,
         arnold_palmers=ap,
         large_nets=ln,
@@ -197,7 +262,11 @@ def _thin(plans: list[SourcingPlan], count: int) -> list[SourcingPlan]:
 
 
 def frontier(
-    offers: list[Offer], demand: dict[str, int], count: int = 5
+    offers: list[Offer],
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None = None,
+    crafting_bonus: float = 1.0,
+    count: int = 5,
 ) -> list[SourcingPlan]:
     """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
 
@@ -208,5 +277,8 @@ def frontier(
     speed (the two ends coincide).
     """
     prices = [_FAST_PRICE, *(10.0**e for e in _SWEEP_EXPONENTS), _FREE_PRICE]
-    plans = [minimize(offers, demand, price, price) for price in prices]
+    plans = [
+        minimize(offers, demand, recipes, crafting_bonus, price, price)
+        for price in prices
+    ]
     return _thin(_non_dominated(plans), count)
