@@ -187,6 +187,20 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "3x Magicite" in out
 
 
+def test_print_plan_critical_path_counts_marginal_passive_as_fill(capsys):
+    # Farming caps at 100h; passive overshoots to 101h (~1%) making the last Beets.
+    # That sliver is fill, so farming stays the named critical path.
+    demand = {"Beet": 201}
+    farming = Offer("grow Beet", "farming", {"beet": 1}, time_per_unit=timedelta(hours=1))
+    passive_offer = Offer("passive", "passive", {"beet": 1}, time_per_unit=timedelta(hours=1))
+    plan = SourcingPlan(draws=[Draw(farming, 100), Draw(passive_offer, 101)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    critical = out.split("Critical path")[1].splitlines()[1]
+    assert "Harvest Alls of Beet" in critical
+    assert "passive" not in critical
+
+
 def test_print_plan_highlights_the_passive_bottleneck(capsys):
     # Passive makes 1 Slow and 10 Fast a minute; 100 of each needs 100 minutes for
     # Slow but only 10 for Fast, so Slow is the critical path that caps the total.

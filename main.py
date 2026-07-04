@@ -219,6 +219,10 @@ EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
 # it; iterate the solve at most this many times to settle that loop.
 _MAX_SEASON_ITERS = 5
 
+# How close to the makespan the farming track may fall and still count as the
+# critical path (the rest being passive fill); see :func:`print_critical_path`.
+_FARMING_COMAX_MARGIN = 0.01
+
 
 def _makespans_close(a: timedelta, b: timedelta) -> bool:
     """Whether two makespans agree closely enough to stop the seasonal iteration."""
@@ -566,8 +570,14 @@ def print_critical_path(
     if makespan <= timedelta(0):
         return  # everything is instant; there is no wait to explain
 
+    # Farming counts as co-maximal within a small relative margin: passive fill
+    # often overshoots it by a sliver (making a last handful of an item slightly
+    # faster than another planting would), which should still read as farming-bound
+    # rather than crediting the pace to a few passively-made items. A genuine
+    # passive bottleneck leaves farming far below the makespan, outside the margin.
     farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
-    if farming_time >= makespan - timedelta(seconds=1):
+    tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
+    if farming_time >= makespan - tolerance:
         line = _farming_bottleneck(plan, makespan)
     else:
         # Passive is the sole longest track, so it genuinely sets the pace.
