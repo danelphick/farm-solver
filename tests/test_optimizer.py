@@ -267,8 +267,8 @@ def test_minimize_respects_the_cookie_cap():
 
 def test_minimize_does_not_spend_cookies_off_the_critical_path():
     # Passive sets a 100-day makespan; farming's ten Slow fit in ten plain days
-    # under that, so a boost would not finish the plan any sooner -- and the
-    # least-activity re-solve hands the scarce sets back rather than waste them.
+    # under that, so a boost would not finish the plan any sooner. Priced even a
+    # hair, a cookie that saves no time is a net cost, so none are spent.
     normal = Offer("grow Slow", "farming", {"slow": 1}, time_per_unit=timedelta(days=1))
     cookie = Offer(
         "grow Slow with cookies", "farming", {"slow": 10}, cookies=1,
@@ -277,10 +277,47 @@ def test_minimize_does_not_spend_cookies_off_the_critical_path():
     passive = Offer("passive", "passive", {"other": 1}, time_per_unit=timedelta(days=1))
     plan = minimize(
         [normal, cookie, passive], {"Slow": 10, "Other": 100},
-        price_ap=1e-6, price_ln=1e-6, cookie_sets=5,
+        price_ap=1e-6, price_ln=1e-6, price_cookie=1e-6, price_gj=1e-6, cookie_sets=5,
     )
     assert plan.time == timedelta(days=100)
     assert plan.cookie_sets == 0
+
+
+def test_minimize_avoids_priced_cookies_and_grape_juice_for_a_thrifty_plan():
+    # Farming X three ways: plain natural (slow, free), with Grape Juice (faster,
+    # a juice a planting), or a cookie day (fastest, a set and the day's juices).
+    natural = Offer(
+        "grow X without grape juice", "farming", {"x": 1}, time_per_unit=timedelta(hours=3)
+    )
+    juiced = Offer("grow X", "farming", {"x": 1}, gj=1, time_per_unit=timedelta(hours=1))
+    cookie = Offer(
+        "grow X with cookies", "farming", {"x": 10}, cookies=1, gj=2,
+        time_per_unit=timedelta(days=1),
+    )
+    offers = [natural, juiced, cookie]
+    # A high price on both makes the plan farm naturally: slower, but spending none.
+    thrifty = minimize(offers, {"X": 30}, price_cookie=1e9, price_gj=1e9, cookie_sets=5)
+    assert thrifty.cookie_sets == 0
+    assert thrifty.grape_juices == 0
+    # A tiny price spends them to go faster.
+    fast = minimize(offers, {"X": 30}, price_cookie=1e-6, price_gj=1e-6, cookie_sets=5)
+    assert fast.cookie_sets + fast.grape_juices > 0
+    assert fast.time < thrifty.time
+
+
+def test_frontier_spreads_cookie_and_grape_juice_use_across_plans():
+    # A crop only farmable (no consumable channel) still yields a spread of plans,
+    # from cookie/Grape-Juice-fast to a thrifty natural plan spending neither.
+    offers = [
+        Offer("grow X without grape juice", "farming", {"x": 1}, time_per_unit=timedelta(hours=3)),
+        Offer("grow X", "farming", {"x": 1}, gj=1, time_per_unit=timedelta(hours=1)),
+        Offer("grow X with cookies", "farming", {"x": 10}, cookies=1, gj=2, time_per_unit=timedelta(days=1)),
+    ]
+    plans = frontier(offers, {"X": 500}, cookie_sets=5)
+    assert len(plans) > 1
+    assert plans[0].cookie_sets + plans[0].grape_juices > 0  # fastest spends them
+    thriftiest = min(plans, key=lambda p: p.cookie_sets + p.grape_juices)
+    assert thriftiest.cookie_sets == 0 and thriftiest.grape_juices == 0
 
 
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():

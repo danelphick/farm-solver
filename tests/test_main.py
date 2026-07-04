@@ -136,22 +136,20 @@ def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
 
 
 def test_print_frontier_omits_cookie_and_grape_juice_columns_when_unused(capsys):
-    # PLANS spend no cookies and have no farming draws, so the table stays plain.
-    print_frontier(PLANS, selected=0, cheapest=2, farm=Farm(grape_juices_per_day=14))
+    # PLANS spend no cookies or Grape Juices, so the table stays plain.
+    print_frontier(PLANS, selected=0, cheapest=2)
     out = capsys.readouterr().out
     assert "Sourcing plans (time / Arnold Palmers / Large Nets):" in out
     assert "cookie sets" not in out and "Grape Juice" not in out
 
 
 def test_print_frontier_shows_cookie_sets_and_grape_juice(capsys):
-    # A plan that farms a slow crop for a day (14 GJ) and spends 5 cookie sets.
-    offer = Offer("grow Pine Tree", "farming", {"pine tree": 1}, time_per_unit=timedelta(days=1))
-    plan = SourcingPlan(draws=[Draw(offer, 1)], time=timedelta(days=1), cookie_sets=5)
-    print_frontier([plan], selected=0, cheapest=0, farm=Farm(grape_juices_per_day=14))
+    plan = SourcingPlan(time=timedelta(days=1), cookie_sets=5, grape_juices=14)
+    print_frontier([plan], selected=0, cheapest=0)
     out = capsys.readouterr().out
     assert "time / Arnold Palmers / Large Nets / cookie sets / Grape Juice" in out
     assert "5 sets" in out
-    assert "14 GJ" in out  # 14 a day over one day of farming
+    assert "14 GJ" in out
 
 
 def test_print_plan_renders_each_channel_and_the_remainder(capsys):
@@ -260,11 +258,11 @@ def test_print_plan_omits_critical_path_when_everything_is_instant(capsys):
 
 
 def test_print_plan_farming_splits_produced_by_grape_juice(capsys):
-    # 10 plantings at 1h each is 10h; at 12 grape juices a day that is 5 instant
-    # grows, half the plantings. Both kinds yield the same bundle, so of the
-    # 1,000 Corn produced, 500 come from Grape Juice and 500 from normal farming.
+    # The blended offer carries its Grape Juice share (half a juice a planting
+    # here); over 10 plantings that is 5 juices, and both kinds yield the same
+    # bundle, so of the 1,000 Corn, 500 come from Grape Juice and 500 from normal.
     demand = {"Corn": 1000}
-    offer = Offer("grow Corn", "farming", {"corn": 100}, time_per_unit=timedelta(hours=1))
+    offer = Offer("grow Corn", "farming", {"corn": 100}, gj=0.5, time_per_unit=timedelta(hours=1))
     plan = SourcingPlan(draws=[Draw(offer, 10)])
     print_plan(plan, demand, Farm(grape_juices_per_day=12), Workshop(), 1.0)
     out = capsys.readouterr().out
@@ -461,7 +459,7 @@ def test_cookie_sets_available_is_zero_without_cookies():
 def test_print_plan_reports_cookie_boosted_farming(capsys):
     demand = {"Slow": 420}
     offer = Offer(
-        "grow Slow with cookies", "farming", {"slow": 42}, cookies=1,
+        "grow Slow with cookies", "farming", {"slow": 42}, cookies=1, gj=2,
         time_per_unit=timedelta(days=1),
     )
     plan = SourcingPlan(draws=[Draw(offer, 10)], cookie_sets=10)

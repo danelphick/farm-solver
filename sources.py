@@ -49,10 +49,10 @@ class Offer:
     """One joint-production activity and what performing it once costs and yields.
 
     ``yields`` maps each lower-cased item the activity produces to how many one
-    unit of it yields (the bundle). ``ap``, ``ln`` and ``cookies`` are the Arnold
-    Palmers, Large Nets and cookie sets one unit consumes, ``time_per_unit`` the
-    time one unit takes on its ``track``. Everything scales linearly with the
-    number of units used.
+    unit of it yields (the bundle). ``ap``, ``ln``, ``cookies`` and ``gj`` are the
+    Arnold Palmers, Large Nets, cookie sets and Grape Juices one unit consumes,
+    ``time_per_unit`` the time one unit takes on its ``track``. Everything scales
+    linearly with the number of units used.
     """
 
     name: str
@@ -61,6 +61,7 @@ class Offer:
     ap: float = 0.0
     ln: float = 0.0
     cookies: float = 0.0
+    gj: float = 0.0
     time_per_unit: timedelta = timedelta(0)
 
     def yield_of(self, item: str) -> float:
@@ -105,6 +106,10 @@ class Draw:
     @property
     def cookies(self) -> float:
         return self.offer.cookies * self.units
+
+    @property
+    def gj(self) -> float:
+        return self.offer.gj * self.units
 
     @property
     def time(self) -> timedelta:
@@ -218,25 +223,30 @@ def passive_offers(production: PassiveProduction) -> list[Offer]:
 
 
 def farming_offers(farm: Farm) -> list[Offer]:
-    """Offers for growing each crop: a plain planting, and a cookie-boosted day.
+    """Offers for growing each crop, trading farming time against Grape Juice.
 
-    The plain offer's ``time_per_unit`` is the effective time for one full-field
-    planting, folding in the daily Grape Juice allowance the same way
-    :meth:`Farm.time_to_grow` does: a day yields its natural harvests plus the
-    instant grows, so one planting effectively takes ``day / harvests_per_day``. A
-    near-instant crop gets no Grape Juice (:meth:`Farm.grape_juices_for`) -- it
-    already grows faster than a wait, so a grow would be wasted on it.
+    Each crop that grows Grape Juice gets two ways to farm it so the optimiser can
+    choose whether to spend the scarce daily allowance:
+
+    * ``grow X`` folds the Grape Juice in the way :meth:`Farm.time_to_grow` does --
+      a day yields its natural harvests plus the instant grows, so one planting
+      effectively takes ``day / harvests_per_day`` and costs its share
+      ``grape_juices / harvests_per_day`` of a Grape Juice. It is the faster way.
+    * ``grow X without grape juice`` waits out natural growth alone: one planting
+      takes the full grow time and costs no Grape Juice. It is the slower way.
+
+    A near-instant crop grows faster than a wait, so it never gets Grape Juice
+    (:meth:`Farm.grape_juices_for` is zero) -- just the one plain ``grow X`` at its
+    grow time.
 
     A qualifying crop (slow enough -- see :meth:`Farm.takes_cookies`) also gets a
     cookie-day offer: one unit is a single day of farming that crop under a full
     cookie set, whose five-minute window boosts the harvests taken in it --
     ninefold (:data:`crops.COOKIE_SET_MULTIPLIER`) on the timed harvest and the
     day's Grape Juice grows (see :meth:`Farm.cookie_day_yield`). It takes a real
-    day on the farming track and costs one cookie set, so the optimiser spends its
-    scarce sets on the crops where a boosted day saves the most farming time.
+    day on the farming track and costs one cookie set and that day's Grape Juice.
     Modelling a whole day (natural harvests included) rather than only the boost
-    keeps it a standalone action, needing no coupling back to the plain planting
-    offer.
+    keeps it a standalone action, needing no coupling back to the plain offers.
     """
     day = timedelta(days=1)
     offers: list[Offer] = []
@@ -244,16 +254,28 @@ def farming_offers(farm: Farm) -> list[Offer]:
         grow_time = farm.grow_time(crop.name)
         if grow_time is None:
             continue
-        harvests_per_day = day / grow_time + farm.grape_juices_for(crop.name)
+        juices = farm.grape_juices_for(crop.name)
+        harvests_per_day = day / grow_time + juices
         bundle = {item: farm.per_harvest(crop.name, item) for item in crop.drops}
         offers.append(
             Offer(
                 name=f"grow {crop.name}",
                 track=FARMING_TRACK,
                 yields=bundle,
+                gj=juices / (day / grow_time + juices),
                 time_per_unit=day / harvests_per_day,
             )
         )
+        if juices:
+            # The Grape-Juice-free alternative: slower, but spends no allowance.
+            offers.append(
+                Offer(
+                    name=f"grow {crop.name} without grape juice",
+                    track=FARMING_TRACK,
+                    yields=bundle,
+                    time_per_unit=grow_time,
+                )
+            )
         if farm.takes_cookies(crop.name):
             cookie_bundle = {
                 item: farm.cookie_day_yield(crop.name, item) for item in crop.drops
@@ -264,6 +286,7 @@ def farming_offers(farm: Farm) -> list[Offer]:
                     track=FARMING_TRACK,
                     yields=cookie_bundle,
                     cookies=1,
+                    gj=juices,
                     time_per_unit=day,
                 )
             )

@@ -54,7 +54,7 @@ Every item you still need can be obtained several ways, and the ways differ in w
 
 On top of the four channels, chests and bags can be **opened** at the Locksmith for their contents (see [Openables](#openables)). Opening costs no time or consumable of its own — the cost is having gathered the chest (and its key) in the first place, usually by fishing or exploring — so the solver acquires and opens a chest whenever that beats gathering its contents directly, and chains opens where the contents are themselves openable (a chest yielding a bag, a bag yielding keys).
 
-Spending a net or a palmer buys speed: it lifts an item out of the slow farming/passive queues for zero time, at the cost of one consumable. So there is a genuine tradeoff between time, Arnold Palmers, and Large Nets. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another, spanning "all free but slow" to "fast but costly":
+Spending a net or a palmer buys speed: it lifts an item out of the slow farming/passive queues for zero time, at the cost of one consumable. Cookie sets and Grape Juices (see [Cookies](#cookies)) are the same kind of scarce speed-for-time trade on the farming track. So there is a genuine tradeoff between time and all four. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another, spanning "all free but slow" to "fast but costly":
 
 ```text
 Sourcing plans (time / Arnold Palmers / Large Nets):
@@ -62,13 +62,17 @@ Sourcing plans (time / Arnold Palmers / Large Nets):
    2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
 ```
 
-When a plan spends **cookie sets** or **Grape Juices** (see [Cookies](#cookies)), each is added as its own column, so you can weigh those scarce resources across the frontier alongside the consumables:
+Each of cookie sets and Grape Juices is priced and swept like the consumables, so the frontier offers plans that spend more of them to finish sooner or none of them to save them — a goal grown entirely by farming (say a heap of Beet) is no longer a single take-it-or-leave-it plan. When some plan spends them, each gets its own column:
 
 ```text
 Sourcing plans (time / Arnold Palmers / Large Nets / cookie sets / Grape Juice):
- > 1. 10d 11h 40m / 209,031 AP / 48,511 LN / 10 sets / 147 GJ  [fastest]
-   2. 95d 22h 11m / 126,105 AP / 0 LN / 0 sets / 728 GJ
+ > 1. 11d 8h 47m / 0 AP / 0 LN / 11 sets / 159 GJ  [fastest]
+   2. 36d 8h 46m / 0 AP / 0 LN / 11 sets / 156 GJ
+   ...
+   5. 3y 242d / 0 AP / 0 LN / 0 sets / 0 GJ  [cheapest]
 ```
+
+The **cheapest** plan is the one spending the fewest of all four (leaning hardest on free farming and passive production), so it is not always the slowest overall.
 
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 

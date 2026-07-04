@@ -112,9 +112,16 @@ def test_farming_offer_time_shortens_with_grape_juice():
         rows=1,
         grape_juices_per_day=11,
     )
-    (offer,) = farming_offers(farm)
-    # 1 natural + 11 instant harvests a day = 12, so one planting is 2 hours.
-    assert offer.time_per_unit == timedelta(hours=2)
+    blended, natural = farming_offers(farm)
+    # 1 natural + 11 instant harvests a day = 12, so one planting is 2 hours, and
+    # its Grape Juice share is 11/12 of a juice.
+    assert blended.name == "grow Slow"
+    assert blended.time_per_unit == timedelta(hours=2)
+    assert blended.gj == pytest.approx(11 / 12)
+    # The Grape-Juice-free alternative waits out the full day for one planting.
+    assert natural.name == "grow Slow without grape juice"
+    assert natural.time_per_unit == timedelta(days=1)
+    assert natural.gj == 0
 
 
 def test_passive_offer_bundles_the_whole_economy_at_per_minute_rates():
@@ -205,9 +212,14 @@ def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
     )
     offers = farming_offers(farm)
     names = {o.name for o in offers}
-    assert names == {"grow Slow", "grow Slow with cookies"}
+    assert names == {
+        "grow Slow",
+        "grow Slow without grape juice",
+        "grow Slow with cookies",
+    }
     cookie = next(o for o in offers if o.cookies)
     assert cookie.cookies == 1
+    assert cookie.gj == 2  # a cookie day spends the day's Grape Juice allowance
     assert cookie.track == "farming"
     assert cookie.time_per_unit == timedelta(days=1)
     # A boosted day: (24 - 1) plain + 9*(1 natural + 2 grape-juice) boosted = 50.
@@ -248,9 +260,9 @@ def test_farming_offer_time_matches_time_to_grow():
         rows=13,
         grape_juices_per_day=14,
     )
-    (offer,) = farming_offers(farm)
-    # Ten full-field plantings via the offer should equal Farm.time_to_grow for
-    # exactly ten plantings' worth of beet (52 a planting at 13 rows).
+    offer = next(o for o in farming_offers(farm) if o.name == "grow Beet")
+    # Ten full-field plantings via the blended offer should equal Farm.time_to_grow
+    # for exactly ten plantings' worth of beet (52 a planting at 13 rows).
     quantity = 10 * round(farm.per_harvest("Beet"))
     grown = farm.time_to_grow("Beet", quantity)
     assert (offer.time_per_unit * 10).total_seconds() == pytest.approx(

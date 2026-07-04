@@ -398,11 +398,18 @@ def limit_shortfall(
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
-    """Index of the plan spending the fewest consumables (ties: least time)."""
+    """Index of the plan spending the fewest scarce resources (ties: least time).
+
+    Cookie sets and Grape Juices count alongside the Arnold Palmers and Large
+    Nets, so the thriftiest plan is the one that leans hardest on free farming.
+    """
     return min(
         range(len(plans)),
         key=lambda i: (
-            plans[i].arnold_palmers + plans[i].large_nets,
+            plans[i].arnold_palmers
+            + plans[i].large_nets
+            + plans[i].cookie_sets
+            + plans[i].grape_juices,
             plans[i].time.total_seconds(),
         ),
     )
@@ -428,32 +435,17 @@ def selected_plan(
     return 0
 
 
-def _plan_grape_juices(plan: optimizer.SourcingPlan, farm: crops.Farm) -> float:
-    """Total Grape Juices a plan spends across its farming draws (none if instant)."""
-    total = 0.0
-    for draw in plan.draws:
-        if draw.offer.track != sources.FARMING_TRACK:
-            continue
-        crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
-        total += farm.grape_juices_used(draw.time, crop)
-    return total
-
-
 def print_frontier(
-    plans: list[optimizer.SourcingPlan],
-    selected: int,
-    cheapest: int,
-    farm: crops.Farm | None = None,
+    plans: list[optimizer.SourcingPlan], selected: int, cheapest: int
 ) -> None:
     """The frontier table: each plan's time and consumables, fastest first.
 
     Cookie sets and Grape Juices are shown as extra columns only when some plan
-    actually spends them (Grape Juices need ``farm`` to total the farming draws),
-    so a plan that uses neither keeps the plain time/AP/LN table.
+    actually spends them, so a plan that uses neither keeps the plain time/AP/LN
+    table.
     """
-    juices = [_plan_grape_juices(p, farm) if farm is not None else 0.0 for p in plans]
     show_cookies = any(round(p.cookie_sets) >= 1 for p in plans)
-    show_juices = any(round(j) >= 1 for j in juices)
+    show_juices = any(round(p.grape_juices) >= 1 for p in plans)
 
     columns = ["time", "Arnold Palmers", "Large Nets"]
     if show_cookies:
@@ -478,7 +470,7 @@ def print_frontier(
         if show_cookies:
             parts.append(f"{round(plan.cookie_sets):,} sets")
         if show_juices:
-            parts.append(f"{round(juices[i]):,} GJ")
+            parts.append(f"{round(plan.grape_juices):,} GJ")
         print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
 
 
@@ -522,7 +514,7 @@ def _farming_action(draw: sources.Draw) -> str:
         crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
         noun = "day" if units == 1 else "days"
         return f"{units:,} cookie-boosted {noun} of {crop}"
-    crop = draw.offer.name.removeprefix("grow ")
+    crop = draw.offer.name.removeprefix("grow ").removesuffix(" without grape juice")
     return f"{_harvest_alls(units)} of {crop}"
 
 
@@ -852,13 +844,13 @@ def print_plan(
             heading += f", {round(total_sets):,} cookie sets"
         print(heading + "):")
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
+            juices = draw.gj  # LP-tracked; zero for the without-grape-juice offer
             if draw.offer.cookies:
-                crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
-                juices = farm.grape_juices_used(draw.time, crop)
                 _print_cookie_farming(draw, juices, interesting, display)
                 continue
-            crop = draw.offer.name.removeprefix("grow ")
-            juices = farm.grape_juices_used(draw.time, crop)
+            crop = draw.offer.name.removeprefix("grow ").removesuffix(
+                " without grape juice"
+            )
             line = (
                 f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"
@@ -1097,7 +1089,7 @@ def run(args: argparse.Namespace) -> int:
         )
     if not within:
         print(f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln)}")
-    print_frontier(shown, selected, cheapest, farm)
+    print_frontier(shown, selected, cheapest)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)

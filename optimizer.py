@@ -76,12 +76,6 @@ UNIT_EPSILON = 1e-6
 _FAST_PRICE = 1e-6
 _FREE_PRICE = 1e9
 
-# Least-activity penalty per cookie set in the second solve. Large enough to
-# dwarf the farming plantings one boosted day replaces (a few hundred), so a
-# cookie that does not shorten the locked makespan is dropped in favour of plain
-# farming; a cookie the critical path needs is kept regardless by that lock.
-_COOKIE_ACTIVITY_PENALTY = 1e6
-
 # How many makespan caps the epsilon-constraint sweep samples, at least. Kept
 # well above the requested plan count so thinning has a dense frontier to spread
 # over; the LPs are tiny, so a few dozen extra solves are cheap.
@@ -111,9 +105,9 @@ class SourcingPlan:
     (lower-cased) to how many crafts of it to do, and ``opens`` maps each opened
     openable (by display name) to how many of it to open at the Locksmith.
     ``time`` is the makespan (concurrent tracks, the longest),
-    ``arnold_palmers``, ``large_nets`` and ``cookie_sets`` the consumables spent
-    (raw, un-rounded), and ``remainder`` the demanded items that are neither
-    gatherable nor craftable, which you must supply yourself.
+    ``arnold_palmers``, ``large_nets``, ``cookie_sets`` and ``grape_juices`` the
+    consumables spent (raw, un-rounded), and ``remainder`` the demanded items that
+    are neither gatherable nor craftable, which you must supply yourself.
     """
 
     draws: list[Draw] = field(default_factory=list)
@@ -123,12 +117,25 @@ class SourcingPlan:
     arnold_palmers: float = 0.0
     large_nets: float = 0.0
     cookie_sets: float = 0.0
+    grape_juices: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     @property
-    def cost(self) -> tuple[float, float, float]:
-        """The objective triple ``(time seconds, AP, LN)`` for comparisons."""
-        return (self.time.total_seconds(), self.arnold_palmers, self.large_nets)
+    def cost(self) -> tuple[float, float, float, float, float]:
+        """The objective ``(time seconds, AP, LN, cookie sets, GJ)`` for comparisons.
+
+        Cookie sets and Grape Juices are scarce resources traded against time like
+        the consumables, so they belong in the Pareto cost -- otherwise a slower
+        plan that conserves them would look dominated by a faster one that spends
+        them, and get pruned from the frontier.
+        """
+        return (
+            self.time.total_seconds(),
+            self.arnold_palmers,
+            self.large_nets,
+            self.cookie_sets,
+            self.grape_juices,
+        )
 
 
 def _minutes(time: timedelta) -> float:
@@ -198,6 +205,8 @@ def minimize(
     crafting_bonus: float = 1.0,
     price_ap: float = 0.0,
     price_ln: float = 0.0,
+    price_cookie: float = 0.0,
+    price_gj: float = 0.0,
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
@@ -226,11 +235,13 @@ def minimize(
 
     ``cookie_sets`` caps how many cookie-boosted farming days the plan may use
     (see :func:`~sources.farming_offers`): the total of every cookie offer's usage
-    is held at or below it. Cookies are free -- they cost no time or consumable --
-    and only ever shorten the farming track, so the first solve spends them to cut
-    the makespan; the least-activity re-solve then penalises them so any that did
-    not actually shorten the critical path are handed back, keeping scarce sets
-    from being wasted on a track that was not the bottleneck.
+    is held at or below it. Cookie sets and Grape Juices are scarce resources that
+    only shorten the farming track, so -- like Arnold Palmers and Large Nets --
+    they are priced (``price_cookie``, ``price_gj``) rather than spent freely: a
+    tiny price uses them wherever they cut the makespan (never gratuitously, since
+    a use that saves no time is a net cost), a large price avoids them for a
+    slower, thriftier plan. The frontier sweeps these prices to offer plans that
+    spend more or fewer of them (see :func:`frontier`).
 
     Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
     default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
@@ -296,13 +307,20 @@ def minimize(
     arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
     large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
     cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
+    grape_juices = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
     # Only so many full cookie sets are on hand to spend boosting farming days.
     problem += cookies <= cookie_sets
     if time_cap is not None:
         problem += makespan <= _minutes(time_cap)
-        problem += arnold_palmers + large_nets
+        problem += arnold_palmers + large_nets + cookies + grape_juices
     else:
-        problem += makespan + price_ap * arnold_palmers + price_ln * large_nets
+        problem += (
+            makespan
+            + price_ap * arnold_palmers
+            + price_ln * large_nets
+            + price_cookie * cookies
+            + price_gj * grape_juices
+        )
 
     # Net production of each item covers its demand:
     # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
@@ -351,14 +369,18 @@ def minimize(
         t_star = makespan.value() or 0.0
         ap_star = pulp.value(arnold_palmers) or 0.0
         ln_star = pulp.value(large_nets) or 0.0
+        cookie_star = pulp.value(cookies) or 0.0
+        gj_star = pulp.value(grape_juices) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
+        # Cookies and Grape Juices are priced, so the first solve already uses only
+        # ones that pay for themselves in time; lock them too, so the least-activity
+        # re-solve keeps the same thrifty mix and only sheds pointless surplus.
+        problem += cookies <= cookie_star * (1 + 1e-9) + 1e-9
+        problem += grape_juices <= gj_star * (1 + 1e-9) + 1e-9
         problem.setObjective(
-            pulp.lpSum(craft.values())
-            + pulp.lpSum(usage)
-            + pulp.lpSum(opens)
-            + _COOKIE_ACTIVITY_PENALTY * cookies
+            pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
         )
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
@@ -386,13 +408,14 @@ def minimize(
         arnold_palmers=ap,
         large_nets=ln,
         cookie_sets=sum(d.cookies for d in draws),
+        grape_juices=sum(d.gj for d in draws),
         remainder=remainder,
     )
 
 
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:
-    """Whether ``a`` is at least as good as ``b`` on all three objectives, better
-    on one -- so ``b`` is not worth keeping."""
+    """Whether ``a`` is at least as good as ``b`` on every objective, better on one
+    -- so ``b`` is not worth keeping."""
     return all(x <= y for x, y in zip(a.cost, b.cost)) and a.cost != b.cost
 
 
@@ -401,7 +424,8 @@ def _non_dominated(plans: list[SourcingPlan]) -> list[SourcingPlan]:
     unique: dict[tuple, SourcingPlan] = {}
     for plan in plans:
         key = (round(plan.time.total_seconds()), round(plan.arnold_palmers),
-               round(plan.large_nets))
+               round(plan.large_nets), round(plan.cookie_sets),
+               round(plan.grape_juices))
         unique.setdefault(key, plan)
     kept = [
         p for p in unique.values()
@@ -444,12 +468,14 @@ def frontier(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
 ) -> list[SourcingPlan]:
-    """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
+    """The Pareto frontier of sourcing plans, fastest first.
 
-    First finds the two endpoints -- the fastest plan (spend consumables freely)
-    and the cheapest, slowest one (avoid them) -- then fills the frontier between
-    them by an **epsilon-constraint sweep**: cap the makespan at each of many
-    times spanning the two ends and minimise the consumables under that cap. This
+    Every scarce resource is traded against time: Arnold Palmers, Large Nets,
+    cookie sets and Grape Juices. First finds the two endpoints -- the fastest
+    plan (spend them freely) and the cheapest, slowest one (avoid them) -- then
+    fills the frontier between them by an **epsilon-constraint sweep**: cap the
+    makespan at each of many times spanning the two ends and minimise the
+    consumables under that cap. This
     is what a plain price sweep cannot do -- where the frontier has a flat
     (linear) segment, every weighted-sum price collapses onto an endpoint, hiding
     the moderate-consumable plans in between (e.g. spending some Arnold Palmers to
@@ -459,10 +485,12 @@ def frontier(
     """
     fast = minimize(
         offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
+        price_cookie=_FAST_PRICE, price_gj=_FAST_PRICE,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
+        price_cookie=_FREE_PRICE, price_gj=_FREE_PRICE,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     plans = [fast, cheap]
