@@ -135,6 +135,25 @@ def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
     assert " > 3. 3d / 0 AP / 0 LN  [cheapest]" in lines
 
 
+def test_print_frontier_omits_cookie_and_grape_juice_columns_when_unused(capsys):
+    # PLANS spend no cookies and have no farming draws, so the table stays plain.
+    print_frontier(PLANS, selected=0, cheapest=2, farm=Farm(grape_juices_per_day=14))
+    out = capsys.readouterr().out
+    assert "Sourcing plans (time / Arnold Palmers / Large Nets):" in out
+    assert "cookie sets" not in out and "Grape Juice" not in out
+
+
+def test_print_frontier_shows_cookie_sets_and_grape_juice(capsys):
+    # A plan that farms a slow crop for a day (14 GJ) and spends 5 cookie sets.
+    offer = Offer("grow Pine Tree", "farming", {"pine tree": 1}, time_per_unit=timedelta(days=1))
+    plan = SourcingPlan(draws=[Draw(offer, 1)], time=timedelta(days=1), cookie_sets=5)
+    print_frontier([plan], selected=0, cheapest=0, farm=Farm(grape_juices_per_day=14))
+    out = capsys.readouterr().out
+    assert "time / Arnold Palmers / Large Nets / cookie sets / Grape Juice" in out
+    assert "5 sets" in out
+    assert "14 GJ" in out  # 14 a day over one day of farming
+
+
 def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     demand = {"Drum": 500, "Bone": 100, "Corn": 1000, "Board": 2000}
     plan = SourcingPlan(

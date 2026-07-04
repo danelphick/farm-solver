@@ -424,11 +424,40 @@ def selected_plan(
     return 0
 
 
+def _plan_grape_juices(plan: optimizer.SourcingPlan, farm: crops.Farm) -> float:
+    """Total Grape Juices a plan spends across its farming draws (none if instant)."""
+    total = 0.0
+    for draw in plan.draws:
+        if draw.offer.track != sources.FARMING_TRACK:
+            continue
+        crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+        total += farm.grape_juices_used(draw.time, crop)
+    return total
+
+
 def print_frontier(
-    plans: list[optimizer.SourcingPlan], selected: int, cheapest: int
+    plans: list[optimizer.SourcingPlan],
+    selected: int,
+    cheapest: int,
+    farm: crops.Farm | None = None,
 ) -> None:
-    """The frontier table: each plan's time and consumables, fastest first."""
-    print("\nSourcing plans (time / Arnold Palmers / Large Nets):")
+    """The frontier table: each plan's time and consumables, fastest first.
+
+    Cookie sets and Grape Juices are shown as extra columns only when some plan
+    actually spends them (Grape Juices need ``farm`` to total the farming draws),
+    so a plan that uses neither keeps the plain time/AP/LN table.
+    """
+    juices = [_plan_grape_juices(p, farm) if farm is not None else 0.0 for p in plans]
+    show_cookies = any(round(p.cookie_sets) >= 1 for p in plans)
+    show_juices = any(round(j) >= 1 for j in juices)
+
+    columns = ["time", "Arnold Palmers", "Large Nets"]
+    if show_cookies:
+        columns.append("cookie sets")
+    if show_juices:
+        columns.append("Grape Juice")
+    print(f"\nSourcing plans ({' / '.join(columns)}):")
+
     for i, plan in enumerate(plans):
         marker = ">" if i == selected else " "
         tags = []
@@ -437,11 +466,16 @@ def print_frontier(
         if i == cheapest:
             tags.append("cheapest")
         note = f"  [{', '.join(tags)}]" if tags else ""
-        print(
-            f" {marker} {i + 1}. {passive.format_duration(plan.time)}"
-            f" / {round(plan.arnold_palmers):,} AP"
-            f" / {round(plan.large_nets):,} LN{note}"
-        )
+        parts = [
+            passive.format_duration(plan.time),
+            f"{round(plan.arnold_palmers):,} AP",
+            f"{round(plan.large_nets):,} LN",
+        ]
+        if show_cookies:
+            parts.append(f"{round(plan.cookie_sets):,} sets")
+        if show_juices:
+            parts.append(f"{round(juices[i]):,} GJ")
+        print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
 
 
 def _slowest_passive_item(
@@ -1053,7 +1087,7 @@ def run(args: argparse.Namespace) -> int:
         )
     if not within:
         print(f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln)}")
-    print_frontier(shown, selected, cheapest)
+    print_frontier(shown, selected, cheapest, farm)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)

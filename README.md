@@ -62,6 +62,14 @@ Sourcing plans (time / Arnold Palmers / Large Nets):
    2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
 ```
 
+When a plan spends **cookie sets** or **Grape Juices** (see [Cookies](#cookies)), each is added as its own column, so you can weigh those scarce resources across the frontier alongside the consumables:
+
+```text
+Sourcing plans (time / Arnold Palmers / Large Nets / cookie sets / Grape Juice):
+ > 1. 10d 11h 40m / 209,031 AP / 48,511 LN / 10 sets / 147 GJ  [fastest]
+   2. 95d 22h 11m / 126,105 AP / 0 LN / 0 sets / 728 GJ
+```
+
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 
 By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one spending the fewest Arnold Palmers and Large Nets (`--fastest-plan` is the explicit form of the default):
