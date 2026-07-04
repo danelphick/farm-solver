@@ -52,7 +52,7 @@ def _parse_mastery_block(block: list[str]) -> Mastery | None:
     """
     # The header block starts with "Mastery In-Progress" and has no progress
     # line; skip it rather than treating it as an item.
-    if block[0].startswith("Mastery In-Progress"):
+    if block[0].lower().startswith("mastery in-progress"):
         return None
 
     if len(block) < 2:

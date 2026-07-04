@@ -1,0 +1,1997 @@
+Mastery In-ProgressCopy Mastery Data
+Stop Tracking All
+Tier V (MM) chevron_down
+
+Steel Plate
+976,311 / 1,000,000 Progress
+97.6311% Track
+
+Black Shield
+941,307 / 1,000,000 Progress
+94.1307% Track
+
+Hops
+940,162 / 1,000,000 Progress
+94.0162% Track
+
+Bamboo Trellis
+931,292 / 1,000,000 Progress
+93.1292% Track
+
+Pumpkin
+914,704 / 1,000,000 Progress
+91.4704% Track
+
+Butter
+881,029 / 1,000,000 Progress
+88.1029% Track
+
+Orange Twine
+873,396 / 1,000,000 Progress
+87.3396% Track
+
+Frozen Shell
+862,021 / 1,000,000 Progress
+86.2021% Track
+
+Cabbage
+826,361 / 1,000,000 Progress
+82.6361% Stop
+
+Machine Press
+821,120 / 1,000,000 Progress
+82.112% Track
+
+White Scarf
+819,551 / 1,000,000 Progress
+81.9551% Track
+
+Arnold Palmer
+810,596 / 1,000,000 Progress
+81.0596% Track
+
+Tomato
+803,060 / 1,000,000 Progress
+80.306% Track
+
+Pumpkin Spiced Milk
+750,637 / 1,000,000 Progress
+75.0637% Track
+
+Radish
+737,112 / 1,000,000 Progress
+73.7112% Track
+
+Leek
+688,894 / 1,000,000 Progress
+68.8894% Track
+
+Gold Emerald Ring
+678,425 / 1,000,000 Progress
+67.8425% Track
+
+Metal Spool
+613,331 / 1,000,000 Progress
+61.3331% Track
+
+Candy Corn
+604,467 / 1,000,000 Progress
+60.4467% Track
+
+Runestone 03
+599,316 / 1,000,000 Progress
+59.9316% Track
+
+Yellow Bag
+597,646 / 1,000,000 Progress
+59.7646% Track
+
+Oak Table
+561,125 / 1,000,000 Progress
+56.1125% Stop
+
+Pine Board
+553,821 / 1,000,000 Progress
+55.3821% Track
+
+Rice
+531,523 / 1,000,000 Progress
+53.1523% Track
+
+Belt Drive
+524,832 / 1,000,000 Progress
+52.4832% Track
+
+Gold Garnet Ring
+487,051 / 1,000,000 Progress
+48.7051% Track
+
+Snow Globe
+479,120 / 1,000,000 Progress
+47.912% Track
+
+Cooking Pot
+469,623 / 1,000,000 Progress
+46.9623% Track
+
+Silk
+436,197 / 1,000,000 Progress
+43.6197% Track
+
+Snowman
+411,511 / 1,000,000 Progress
+41.1511% Track
+
+Purple Twine
+411,401 / 1,000,000 Progress
+41.1401% Stop
+
+Black Scarf
+404,599 / 1,000,000 Progress
+40.4599% Track
+
+Crab Claw
+394,269 / 1,000,000 Progress
+39.4269% Track
+
+Block of Wood
+390,172 / 1,000,000 Progress
+39.0172% Track
+
+Christmas Tree
+387,989 / 1,000,000 Progress
+38.7989% Track
+
+Tie Dye Scarf
+376,318 / 1,000,000 Progress
+37.6318% Track
+
+Gold Aquamarine Ring
+372,856 / 1,000,000 Progress
+37.2856% Track
+
+Broccoli
+359,453 / 1,000,000 Progress
+35.9453% Track
+
+Glowing Lantern
+354,352 / 1,000,000 Progress
+35.4352% Track
+
+Kill Switch
+347,546 / 1,000,000 Progress
+34.7546% Track
+
+Reinforced Helmet
+346,501 / 1,000,000 Progress
+34.6501% Track
+
+Leather Helmet
+345,135 / 1,000,000 Progress
+34.5135% Track
+
+Spool of Copper
+339,972 / 1,000,000 Progress
+33.9972% Track
+
+Acorn Butter
+339,062 / 1,000,000 Progress
+33.9062% Track
+
+Green Cloak
+330,955 / 1,000,000 Progress
+33.0955% Track
+
+Jack-o-lantern
+330,536 / 1,000,000 Progress
+33.0536% Track
+
+Corn Oil
+328,204 / 1,000,000 Progress
+32.8204% Track
+
+Gold Peppers
+325,402 / 1,000,000 Progress
+32.5402% Track
+
+Black Twine
+311,678 / 1,000,000 Progress
+31.1678% Track
+
+Rucksack
+309,439 / 1,000,000 Progress
+30.9439% Track
+
+Wheat
+309,072 / 1,000,000 Progress
+30.9072% Track
+
+Gold Eggplant
+308,071 / 1,000,000 Progress
+30.8071% Track
+
+Milk Carton
+307,004 / 1,000,000 Progress
+30.7004% Track
+
+Grape Juice
+304,256 / 1,000,000 Progress
+30.4256% Track
+
+Pear Grease
+297,218 / 1,000,000 Progress
+29.7218% Track
+
+Sunflower Oil
+294,502 / 1,000,000 Progress
+29.4502% Track
+
+Runestone 02
+275,325 / 1,000,000 Progress
+27.5325% Track
+
+Brown Bag
+263,636 / 1,000,000 Progress
+26.3636% Track
+
+Spiked Shell
+263,240 / 1,000,000 Progress
+26.324% Track
+
+Black Purse
+261,645 / 1,000,000 Progress
+26.1645% Track
+
+Gold Jade Ring
+259,066 / 1,000,000 Progress
+25.9066% Track
+
+Cannon
+258,432 / 1,000,000 Progress
+25.8432% Track
+
+Frozen Wheel
+257,007 / 1,000,000 Progress
+25.7007% Track
+
+White Twine
+255,346 / 1,000,000 Progress
+25.5346% Track
+
+Potato Battery
+249,412 / 1,000,000 Progress
+24.9412% Track
+
+Runestone 12
+239,917 / 1,000,000 Progress
+23.9917% Track
+
+Gold Carrot
+235,681 / 1,000,000 Progress
+23.5681% Track
+
+Sail Cloth
+230,319 / 1,000,000 Progress
+23.0319% Track
+
+White Purse
+222,717 / 1,000,000 Progress
+22.2717% Track
+
+Cabbage Stew
+221,845 / 1,000,000 Progress
+22.1845% Stop
+
+Gold Peas
+219,831 / 1,000,000 Progress
+21.9831% Track
+
+Red Brick
+208,623 / 1,000,000 Progress
+20.8623% Track
+
+Runestone 05
+203,405 / 1,000,000 Progress
+20.3405% Track
+
+Energy Coil
+199,321 / 1,000,000 Progress
+19.9321% Track
+
+Runestone 18
+196,797 / 1,000,000 Progress
+19.6797% Track
+
+Inferno Sphere
+195,149 / 1,000,000 Progress
+19.5149% Track
+
+Pie Pan
+192,891 / 1,000,000 Progress
+19.2891% Track
+
+Lava Sphere
+188,206 / 1,000,000 Progress
+18.8206% Track
+
+Seashell Necklace
+175,977 / 1,000,000 Progress
+17.5977% Track
+
+Runestone 04
+169,400 / 1,000,000 Progress
+16.94% Track
+
+Runestone 17
+168,020 / 1,000,000 Progress
+16.802% Track
+
+Crown of Clover
+167,139 / 1,000,000 Progress
+16.7139% Track
+
+Sea Dragon
+162,551 / 1,000,000 Progress
+16.2551% Track
+
+Fire Ant Farm
+159,691 / 1,000,000 Progress
+15.9691% Track
+
+Mushroom Stew
+153,976 / 1,000,000 Progress
+15.3976% Track
+
+Unrefined Sugar
+153,322 / 1,000,000 Progress
+15.3322% Track
+
+Runestone 09
+147,741 / 1,000,000 Progress
+14.7741% Track
+
+Snow Shoes
+147,414 / 1,000,000 Progress
+14.7414% Track
+
+Polished Boot
+143,416 / 1,000,000 Progress
+14.3416% Track
+
+Gold Lemon Quartz Ring
+137,835 / 1,000,000 Progress
+13.7835% Track
+
+Hickory Omelette
+137,050 / 1,000,000 Progress
+13.705% Track
+
+Runestone 13
+132,364 / 1,000,000 Progress
+13.2364% Track
+
+Runestone 06
+127,400 / 1,000,000 Progress
+12.74% Track
+
+Heart Necklace
+127,074 / 1,000,000 Progress
+12.7074% Track
+
+Power Monitor
+125,064 / 1,000,000 Progress
+12.5064% Track
+
+Runestone 14
+123,454 / 1,000,000 Progress
+12.3454% Track
+
+Frozen Feather
+122,513 / 1,000,000 Progress
+12.2513% Track
+
+Veggie Juice
+122,314 / 1,000,000 Progress
+12.2314% Track
+
+Runestone 01
+120,742 / 1,000,000 Progress
+12.0742% Track
+
+Basic Pillow
+119,903 / 1,000,000 Progress
+11.9903% Track
+
+Frozen Starfish
+118,720 / 1,000,000 Progress
+11.872% Track
+
+Corn Husk Doll
+118,289 / 1,000,000 Progress
+11.8289% Track
+
+Wine
+117,806 / 1,000,000 Progress
+11.7806% Track
+
+Goldgill
+116,822 / 1,000,000 Progress
+11.6822% Track
+
+Frozen Book
+112,425 / 1,000,000 Progress
+11.2425% Track
+
+Runestone 08
+112,200 / 1,000,000 Progress
+11.22% Track
+
+Yellow Shirt
+110,306 / 1,000,000 Progress
+11.0306% Track
+
+Runestone 15
+109,523 / 1,000,000 Progress
+10.9523% Track
+
+Frozen Crab Claw
+109,340 / 1,000,000 Progress
+10.934% Track
+
+Sea Pincher Special
+107,840 / 1,000,000 Progress
+10.784% Track
+
+Bouquet of Flowers
+107,116 / 1,000,000 Progress
+10.7116% Track
+
+Cat's Meow
+107,093 / 1,000,000 Progress
+10.7093% Track
+
+Bamboo Chair
+106,731 / 1,000,000 Progress
+10.6731% Track
+
+Engine
+106,335 / 1,000,000 Progress
+10.6335% Track
+
+Step Ladder
+106,113 / 1,000,000 Progress
+10.6113% Track
+
+Gold Ruby Ring
+105,678 / 1,000,000 Progress
+10.5678% Track
+
+Flywheel
+105,158 / 1,000,000 Progress
+10.5158% Track
+
+Steel Vise
+104,539 / 1,000,000 Progress
+10.4539% Track
+
+Frozen Coin
+104,523 / 1,000,000 Progress
+10.4523% Track
+
+Pine Shelf
+104,262 / 1,000,000 Progress
+10.4262% Track
+
+Black Shirt
+104,066 / 1,000,000 Progress
+10.4066% Track
+
+Neigh
+102,547 / 1,000,000 Progress
+10.2547% Track
+
+Quandary Chowder
+102,040 / 1,000,000 Progress
+10.204% Track
+
+Black Bag
+101,986 / 1,000,000 Progress
+10.1986% Track
+
+Bone Broth
+101,836 / 1,000,000 Progress
+10.1836% Track
+
+Orange Shirt
+101,666 / 1,000,000 Progress
+10.1666% Track
+
+Magus Hat
+101,209 / 1,000,000 Progress
+10.1209% Track
+
+Bamboo Fence
+101,158 / 1,000,000 Progress
+10.1158% Track
+
+Runestone 19
+100,976 / 1,000,000 Progress
+10.0976% Track
+
+Yellow Butterfly
+100,939 / 1,000,000 Progress
+10.0939% Track
+
+Breakfast Boost
+100,871 / 1,000,000 Progress
+10.0871% Track
+
+Blue Shirt
+100,843 / 1,000,000 Progress
+10.0843% Track
+
+Purple Shirt
+100,801 / 1,000,000 Progress
+10.0801% Track
+
+Shrimp-a-Plenty
+100,604 / 1,000,000 Progress
+10.0604% Track
+
+Over The Moon
+100,431 / 1,000,000 Progress
+10.0431% Track
+
+Red Shirt
+100,353 / 1,000,000 Progress
+10.0353% Track
+
+Holiday Wreath
+100,333 / 1,000,000 Progress
+10.0333% Track
+
+Brown Cloak
+100,311 / 1,000,000 Progress
+10.0311% Track
+
+Gazebo
+100,282 / 1,000,000 Progress
+10.0282% Track
+
+Pair of Boots
+100,279 / 1,000,000 Progress
+10.0279% Track
+
+White Shirt
+100,277 / 1,000,000 Progress
+10.0277% Track
+
+Onion Soup
+100,251 / 1,000,000 Progress
+10.0251% Track
+
+Propeller Hat
+100,220 / 1,000,000 Progress
+10.022% Track
+
+Green Top Hat
+100,134 / 1,000,000 Progress
+10.0134% Track
+
+Crunchy Omelette
+100,085 / 1,000,000 Progress
+10.0085% Track
+
+Ugly Buddy Sweater
+100,054 / 1,000,000 Progress
+10.0054% Track
+Tier IV (GM) chevron_down
+
+Runestone 11
+99,440 / 100,000 Progress
+99.44% Track
+
+Frost Shield
+96,653 / 100,000 Progress
+96.653% Stop
+
+Control Box
+93,564 / 100,000 Progress
+93.564% Track
+
+Runestone 10
+93,377 / 100,000 Progress
+93.377% Track
+
+Shinefish
+93,145 / 100,000 Progress
+93.145% Track
+
+Runestone 07
+92,350 / 100,000 Progress
+92.35% Track
+
+Runestone 20
+91,639 / 100,000 Progress
+91.639% Track
+
+Runestone 16
+91,337 / 100,000 Progress
+91.337% Track
+
+Red Diamond Fish
+89,132 / 100,000 Progress
+89.132% Track
+
+Mayonnaise
+83,032 / 100,000 Progress
+83.032% Stop
+
+Gold Coral
+81,425 / 100,000 Progress
+81.425% Track
+
+Fancy Chair
+78,844 / 100,000 Progress
+78.844% Stop
+
+Gold Sea Crest
+76,497 / 100,000 Progress
+76.497% Track
+
+Fancy Violin
+75,850 / 100,000 Progress
+75.85% Stop
+
+Spooky Scarecrow
+68,088 / 100,000 Progress
+68.088% Track
+
+Fancy Table
+67,662 / 100,000 Progress
+67.662% Track
+
+Spiky Bracelet
+56,765 / 100,000 Progress
+56.765% Track
+
+Amber Cane
+56,731 / 100,000 Progress
+56.731% Track
+
+Sea Turtle
+56,077 / 100,000 Progress
+56.077% Track
+
+Gold Catfish
+53,888 / 100,000 Progress
+53.888% Track
+
+Grand Piano
+53,340 / 100,000 Progress
+53.34% Stop
+
+Fancy Sword
+51,750 / 100,000 Progress
+51.75% Track
+
+Valve
+51,145 / 100,000 Progress
+51.145% Track
+
+Gold Trout
+51,030 / 100,000 Progress
+51.03% Track
+
+Goldjack
+49,472 / 100,000 Progress
+49.472% Stop
+
+Gold Drum
+48,064 / 100,000 Progress
+48.064% Track
+
+King Apple
+44,624 / 100,000 Progress
+44.624% Track
+
+Piñata Whop Stick
+43,063 / 100,000 Progress
+43.063% Track
+
+Goldray
+41,747 / 100,000 Progress
+41.747% Track
+
+Yellow Watermelon
+41,711 / 100,000 Progress
+41.711% Track
+
+Gold Sea Bass
+41,083 / 100,000 Progress
+41.083% Track
+
+Goldfin
+40,717 / 100,000 Progress
+40.717% Track
+
+Gold Jelly
+40,152 / 100,000 Progress
+40.152% Track
+
+Green Shirt
+39,521 / 100,000 Progress
+39.521% Track
+
+Fancy Clock
+38,959 / 100,000 Progress
+38.959% Track
+
+Blue Butterfly
+38,288 / 100,000 Progress
+38.288% Track
+
+Gold Diamond Ring
+38,264 / 100,000 Progress
+38.264% Track
+
+Gold Flier
+38,168 / 100,000 Progress
+38.168% Track
+
+Fruit Punch
+35,418 / 100,000 Progress
+35.418% Track
+
+Compass
+29,295 / 100,000 Progress
+29.295% Track
+
+Hot Potato
+29,286 / 100,000 Progress
+29.286% Track
+
+QED Cell
+28,630 / 100,000 Progress
+28.63% Track
+
+Green Butterfly
+28,495 / 100,000 Progress
+28.495% Track
+
+Frozen Skull
+26,660 / 100,000 Progress
+26.66% Track
+
+Ship Mast
+25,969 / 100,000 Progress
+25.969% Track
+
+Glass Eyes
+24,937 / 100,000 Progress
+24.937% Track
+
+Flying Machine
+21,953 / 100,000 Progress
+21.953% Track
+
+Frozen Peas
+18,975 / 100,000 Progress
+18.975% Track
+
+Black Cloak
+18,429 / 100,000 Progress
+18.429% Track
+
+Yule Goat
+17,991 / 100,000 Progress
+17.991% Track
+
+Witch's Broom
+17,873 / 100,000 Progress
+17.873% Track
+
+Purple Butterfly
+17,438 / 100,000 Progress
+17.438% Track
+
+Cicada Shell
+16,633 / 100,000 Progress
+16.633% Track
+
+Red Butterfly
+16,282 / 100,000 Progress
+16.282% Track
+
+Gold Feed
+14,798 / 100,000 Progress
+14.798% Track
+
+Re'taw Pail
+12,678 / 100,000 Progress
+12.678% Track
+
+Red Velvet Cake
+12,507 / 100,000 Progress
+12.507% Track
+
+White Sugar
+12,370 / 100,000 Progress
+12.37% Track
+
+Festive Eggnog
+12,360 / 100,000 Progress
+12.36% Track
+
+Peach Juice
+11,596 / 100,000 Progress
+11.596% Track
+
+Cicada
+11,474 / 100,000 Progress
+11.474% Track
+
+White Cloak
+11,149 / 100,000 Progress
+11.149% Track
+
+Orange Butterfly
+10,971 / 100,000 Progress
+10.971% Track
+
+Pine Shavings
+10,642 / 100,000 Progress
+10.642% Track
+
+Wood Planer
+10,530 / 100,000 Progress
+10.53% Track
+
+Lucky Trout
+10,409 / 100,000 Progress
+10.409% Track
+
+Fuzzy Trout
+10,236 / 100,000 Progress
+10.236% Track
+
+Brown Sugar
+10,222 / 100,000 Progress
+10.222% Track
+
+Pink Jelly
+10,005 / 100,000 Progress
+10.005% Track
+
+Molasses
+10,004 / 100,000 Progress
+10.004% Track
+Tier III (M) chevron_down
+
+Frozen Radish
+8,053 / 10,000 Progress
+80.53% Track
+
+Frozen Corn
+7,267 / 10,000 Progress
+72.67% Track
+
+Frozen Tomato
+5,477 / 10,000 Progress
+54.77% Track
+
+Ship in a Bottle
+5,233 / 10,000 Progress
+52.33% Track
+
+Blue Milk
+5,153 / 10,000 Progress
+51.53% Track
+
+Witch's Brew
+4,948 / 10,000 Progress
+49.48% Track
+
+Steel Pickaxe
+4,863 / 10,000 Progress
+48.63% Track
+
+Frozen Pine
+4,553 / 10,000 Progress
+45.53% Track
+
+Sturdy Pickaxe
+4,361 / 10,000 Progress
+43.61% Track
+
+Crystal Pickaxe
+3,641 / 10,000 Progress
+36.41% Track
+
+Frozen Hops
+2,995 / 10,000 Progress
+29.95% Track
+
+Frozen Cabbage
+2,966 / 10,000 Progress
+29.66% Track
+
+Shamrock Milk
+2,705 / 10,000 Progress
+27.05% Track
+
+Ghost Jelly
+1,736 / 10,000 Progress
+17.36% Track
+
+Inferno Pepper
+1,733 / 10,000 Progress
+17.33% Track
+
+Sea Urchin
+1,701 / 10,000 Progress
+17.01% Track
+
+Barnacle Shell
+1,685 / 10,000 Progress
+16.85% Track
+
+Apple Ant
+1,388 / 10,000 Progress
+13.88% Track
+
+Gold Slimeback
+1,379 / 10,000 Progress
+13.79% Track
+
+Sugar Cube
+1,320 / 10,000 Progress
+13.2% Track
+
+Gainite
+1,075 / 10,000 Progress
+10.75% Track
+Tier II chevron_down
+
+Lucky Potato
+835 / 1,000 Progress
+83.5% Track
+
+Ant Apple
+799 / 1,000 Progress
+79.9% Track
+
+Lucky Corn
+733 / 1,000 Progress
+73.3% Track
+Tier I chevron_down
+
+11th Leaf Centerpiece
+94 / 100 Progress
+94% Track
+No Tier chevron_down
+
+Lobster
+2 / 10 Progress
+20% Track
+Mega Mastered
+
+Board
+832,681,556 / ∞ Progress
+Complete!
+
+Twine
+502,207,043 / ∞ Progress
+Complete!
+
+Conch Shell
+204,640,491 / ∞ Progress
+Complete!
+
+Clam Shell
+204,639,591 / ∞ Progress
+Complete!
+
+Frosteye
+194,128,118 / ∞ Progress
+Complete!
+
+Crowfish
+194,127,842 / ∞ Progress
+Complete!
+
+Iron Ring
+159,086,165 / ∞ Progress
+Complete!
+
+Rope
+158,037,879 / ∞ Progress
+Complete!
+
+Steel
+149,974,955 / ∞ Progress
+Complete!
+
+Drum
+142,938,638 / ∞ Progress
+Complete!
+
+Yellow Perch
+142,918,035 / ∞ Progress
+Complete!
+
+Bullfish
+136,876,785 / ∞ Progress
+Complete!
+
+Largemouth Bass
+133,016,939 / ∞ Progress
+Complete!
+
+Skipjack
+133,010,702 / ∞ Progress
+Complete!
+
+Bone Fish
+117,232,960 / ∞ Progress
+Complete!
+
+Sunfish
+117,177,864 / ∞ Progress
+Complete!
+
+Fishing Net
+113,710,622 / ∞ Progress
+Complete!
+
+Glassback
+106,140,878 / ∞ Progress
+Complete!
+
+Mushroom
+100,379,496 / ∞ Progress
+Complete!
+
+Torch Fish
+97,414,412 / ∞ Progress
+Complete!
+
+Sea Crest
+95,485,736 / ∞ Progress
+Complete!
+
+Trout
+89,770,102 / ∞ Progress
+Complete!
+
+Small Prawn
+88,377,689 / ∞ Progress
+Complete!
+
+Starfish
+87,731,143 / ∞ Progress
+Complete!
+
+Mackerel
+87,401,705 / ∞ Progress
+Complete!
+
+Purple Butterfly Fish
+86,350,843 / ∞ Progress
+Complete!
+
+Crab
+86,324,992 / ∞ Progress
+Complete!
+
+Seeker
+79,535,342 / ∞ Progress
+Complete!
+
+Mushroom Paste
+78,029,799 / ∞ Progress
+Complete!
+
+Stone Jelly
+73,407,607 / ∞ Progress
+Complete!
+
+Sand
+70,396,470 / ∞ Progress
+Complete!
+
+Ice Shark
+68,171,193 / ∞ Progress
+Complete!
+
+Green Barracuda
+60,448,252 / ∞ Progress
+Complete!
+
+Clownfish
+56,364,796 / ∞ Progress
+Complete!
+
+Red Starfish
+56,328,358 / ∞ Progress
+Complete!
+
+Shrimp
+51,973,878 / ∞ Progress
+Complete!
+
+Steel Wire
+50,776,041 / ∞ Progress
+Complete!
+
+Wooden Plank
+47,729,098 / ∞ Progress
+Complete!
+
+Mulberry Snapper
+46,797,290 / ∞ Progress
+Complete!
+
+Glass Orb
+45,491,490 / ∞ Progress
+Complete!
+
+Jumbo Fish
+42,088,787 / ∞ Progress
+Complete!
+
+Bluegill
+40,267,394 / ∞ Progress
+Complete!
+
+Yarn
+38,628,210 / ∞ Progress
+Complete!
+
+Glass Bottle
+38,352,990 / ∞ Progress
+Complete!
+
+Green Chromis
+35,474,702 / ∞ Progress
+Complete!
+
+Blue Crab
+35,420,554 / ∞ Progress
+Complete!
+
+Orcafish
+35,033,543 / ∞ Progress
+Complete!
+
+Flamejack
+34,046,638 / ∞ Progress
+Complete!
+
+Blue Tiger Fish
+32,917,722 / ∞ Progress
+Complete!
+
+Pearl
+32,359,154 / ∞ Progress
+Complete!
+
+Speckled Grouper
+32,273,775 / ∞ Progress
+Complete!
+
+Stingray
+31,974,122 / ∞ Progress
+Complete!
+
+Blue Catfish
+31,073,423 / ∞ Progress
+Complete!
+
+Globber
+26,874,841 / ∞ Progress
+Complete!
+
+Blue Sea Bass
+26,596,176 / ∞ Progress
+Complete!
+
+Unpolished Shimmer Stone
+25,507,935 / ∞ Progress
+Complete!
+
+Green Jellyfish
+24,206,883 / ∞ Progress
+Complete!
+
+Bucket
+22,710,246 / ∞ Progress
+Complete!
+
+Blue Shell
+22,577,881 / ∞ Progress
+Complete!
+
+Seahorse
+20,291,862 / ∞ Progress
+Complete!
+
+Puffer
+20,285,492 / ∞ Progress
+Complete!
+
+Jellyfish
+19,750,851 / ∞ Progress
+Complete!
+
+Leather
+19,088,665 / ∞ Progress
+Complete!
+
+Black Powder
+18,684,604 / ∞ Progress
+Complete!
+
+Crappie
+18,148,295 / ∞ Progress
+Complete!
+
+Garnet
+17,492,762 / ∞ Progress
+Complete!
+
+Marlin
+15,815,092 / ∞ Progress
+Complete!
+
+Ruby Fish
+15,788,477 / ∞ Progress
+Complete!
+
+Redgill
+15,559,424 / ∞ Progress
+Complete!
+
+Slimeback
+15,484,269 / ∞ Progress
+Complete!
+
+Fish Bones
+14,363,210 / ∞ Progress
+Complete!
+
+Iron Cup
+13,662,021 / ∞ Progress
+Complete!
+
+White Parchment
+13,176,337 / ∞ Progress
+Complete!
+
+Fluorifish
+11,753,000 / ∞ Progress
+Complete!
+
+Shimmer Stone
+11,456,755 / ∞ Progress
+Complete!
+
+Awl
+10,548,620 / ∞ Progress
+Complete!
+
+Bog Barnacle
+10,392,889 / ∞ Progress
+Complete!
+
+Splatfish
+10,386,053 / ∞ Progress
+Complete!
+
+MIAB
+9,814,128 / ∞ Progress
+Complete!
+
+Carp
+9,539,091 / ∞ Progress
+Complete!
+
+Swordfish
+9,021,372 / ∞ Progress
+Complete!
+
+Green Dye
+9,018,397 / ∞ Progress
+Complete!
+
+Magenta Growth
+8,944,923 / ∞ Progress
+Complete!
+
+Wooden Button
+8,441,107 / ∞ Progress
+Complete!
+
+Mussel
+8,038,711 / ∞ Progress
+Complete!
+
+Emerald
+7,541,302 / ∞ Progress
+Complete!
+
+Hammer
+7,497,920 / ∞ Progress
+Complete!
+
+Flarefin
+7,468,687 / ∞ Progress
+Complete!
+
+Cloth
+7,086,133 / ∞ Progress
+Complete!
+
+Ruby
+7,049,316 / ∞ Progress
+Complete!
+
+Large Net
+7,034,272 / ∞ Progress
+Complete!
+
+Reaver Claw
+7,001,468 / ∞ Progress
+Complete!
+
+Wooden Box
+6,670,309 / ∞ Progress
+Complete!
+
+Red Dye
+6,622,498 / ∞ Progress
+Complete!
+
+Axe
+6,374,514 / ∞ Progress
+Complete!
+
+Boghead Snapper
+6,311,089 / ∞ Progress
+Complete!
+
+Blubberfish
+6,310,507 / ∞ Progress
+Complete!
+
+Barracuda
+6,246,938 / ∞ Progress
+Complete!
+
+Wooden Table
+6,030,499 / ∞ Progress
+Complete!
+
+Shimmer Topaz
+5,803,914 / ∞ Progress
+Complete!
+
+Magicite
+5,639,581 / ∞ Progress
+Complete!
+
+Catfish
+5,626,715 / ∞ Progress
+Complete!
+
+Jade
+5,609,401 / ∞ Progress
+Complete!
+
+Potato
+5,388,726 / ∞ Progress
+Complete!
+
+Frozen Jelly
+5,374,719 / ∞ Progress
+Complete!
+
+Slime Egg Shell
+5,280,769 / ∞ Progress
+Complete!
+
+Garnet Ring
+5,204,200 / ∞ Progress
+Complete!
+
+Frozen Angelfish
+5,037,625 / ∞ Progress
+Complete!
+
+Blue Dye
+4,958,061 / ∞ Progress
+Complete!
+
+Slobster
+4,883,928 / ∞ Progress
+Complete!
+
+Sea Catfish
+4,819,830 / ∞ Progress
+Complete!
+
+Carrot
+4,736,584 / ∞ Progress
+Complete!
+
+Gold Cucumber
+4,723,632 / ∞ Progress
+Complete!
+
+Orange Juice
+4,365,074 / ∞ Progress
+Complete!
+
+Plumbfish
+4,328,212 / ∞ Progress
+Complete!
+
+Peppers
+4,266,963 / ∞ Progress
+Complete!
+
+Glass Eye Urchin
+4,241,573 / ∞ Progress
+Complete!
+
+Lemonade
+4,202,001 / ∞ Progress
+Complete!
+
+Flier
+4,123,354 / ∞ Progress
+Complete!
+
+Octopus
+3,874,306 / ∞ Progress
+Complete!
+
+Peas
+3,757,679 / ∞ Progress
+Complete!
+
+Spiral Shell
+3,571,809 / ∞ Progress
+Complete!
+
+Serpent Eel
+3,316,489 / ∞ Progress
+Complete!
+
+Small Bolt
+3,274,444 / ∞ Progress
+Complete!
+
+Toxic Tendrils
+3,195,039 / ∞ Progress
+Complete!
+
+Yellow Dye
+3,143,154 / ∞ Progress
+Complete!
+
+Horseshoe
+3,118,914 / ∞ Progress
+Complete!
+
+Giant Squid
+2,904,947 / ∞ Progress
+Complete!
+
+Ruby Coral
+2,882,119 / ∞ Progress
+Complete!
+
+Eggplant
+2,644,798 / ∞ Progress
+Complete!
+
+Beet
+2,503,699 / ∞ Progress
+Complete!
+
+Frozen Spyfish
+2,404,818 / ∞ Progress
+Complete!
+
+Frozen Lobster
+2,392,305 / ∞ Progress
+Complete!
+
+Frozen Bones
+2,238,057 / ∞ Progress
+Complete!
+
+Wooden Shield
+2,237,505 / ∞ Progress
+Complete!
+
+Cucumber
+2,213,962 / ∞ Progress
+Complete!
+
+Purple Dye
+2,179,650 / ∞ Progress
+Complete!
+
+Corn
+2,176,204 / ∞ Progress
+Complete!
+
+Frozen Manta Ray
+2,167,080 / ∞ Progress
+Complete!
+
+Sturdy Shield
+2,133,538 / ∞ Progress
+Complete!
+
+Leather Bag
+2,098,574 / ∞ Progress
+Complete!
+
+Coin Purse
+2,095,745 / ∞ Progress
+Complete!
+
+Green Twine
+2,077,360 / ∞ Progress
+Complete!
+
+Blue Twine
+2,033,523 / ∞ Progress
+Complete!
+
+Shovel
+1,938,806 / ∞ Progress
+Complete!
+
+Water Lily
+1,901,906 / ∞ Progress
+Complete!
+
+Sewing Needle
+1,889,964 / ∞ Progress
+Complete!
+
+Feed
+1,802,042 / ∞ Progress
+Complete!
+
+Frozen Squid
+1,773,587 / ∞ Progress
+Complete!
+
+Wagon Wheel
+1,737,536 / ∞ Progress
+Complete!
+
+Red Twine
+1,737,229 / ∞ Progress
+Complete!
+
+Salt
+1,719,475 / ∞ Progress
+Complete!
+
+Lantern
+1,708,914 / ∞ Progress
+Complete!
+
+Frozen Biter
+1,701,852 / ∞ Progress
+Complete!
+
+Brown Dye
+1,680,705 / ∞ Progress
+Complete!
+
+Orange Dye
+1,676,077 / ∞ Progress
+Complete!
+
+Fancy Pipe
+1,670,489 / ∞ Progress
+Complete!
+
+Cotton
+1,656,588 / ∞ Progress
+Complete!
+
+Tin Can
+1,652,379 / ∞ Progress
+Complete!
+
+Gold Ring
+1,652,156 / ∞ Progress
+Complete!
+
+Mini Slime Squid
+1,651,342 / ∞ Progress
+Complete!
+
+Handsaw
+1,634,979 / ∞ Progress
+Complete!
+
+Pickaxe
+1,624,815 / ∞ Progress
+Complete!
+
+Horn Canteen
+1,607,844 / ∞ Progress
+Complete!
+
+Black Dye
+1,591,287 / ∞ Progress
+Complete!
+
+Butter Churn
+1,566,339 / ∞ Progress
+Complete!
+
+Glass Jar
+1,505,222 / ∞ Progress
+Complete!
+
+Strong Paste
+1,488,572 / ∞ Progress
+Complete!
+
+Apple Cider
+1,483,152 / ∞ Progress
+Complete!
+
+Crossbow
+1,471,789 / ∞ Progress
+Complete!
+
+Wooden Barrel
+1,440,818 / ∞ Progress
+Complete!
+
+Sunflower
+1,419,093 / ∞ Progress
+Complete!
+
+Frozen Sheepshead
+1,396,667 / ∞ Progress
+Complete!
+
+Ladder
+1,370,742 / ∞ Progress
+Complete!
+
+Steel Buckle
+1,361,230 / ∞ Progress
+Complete!
+
+Scissors
+1,297,403 / ∞ Progress
+Complete!
+
+Watermelon
+1,273,681 / ∞ Progress
+Complete!
+
+Amethyst Necklace
+1,271,951 / ∞ Progress
+Complete!
+
+Green Parchment
+1,257,564 / ∞ Progress
+Complete!
+
+Tin Scraps
+1,252,524 / ∞ Progress
+Complete!
+
+Onion
+1,237,120 / ∞ Progress
+Complete!
+
+Explosive
+1,227,483 / ∞ Progress
+Complete!
+
+Sturdy Sword
+1,226,779 / ∞ Progress
+Complete!
+
+Green Scarf
+1,215,376 / ∞ Progress
+Complete!
+
+Nailed Board
+1,181,504 / ∞ Progress
+Complete!
+
+Mystic Ring
+1,176,457 / ∞ Progress
+Complete!
+
+Toilet Paper
+1,175,562 / ∞ Progress
+Complete!
+
+Essence of Slime
+1,165,352 / ∞ Progress
+Complete!
+
+Purple Diary
+1,162,789 / ∞ Progress
+Complete!
+
+Shimmer Ring
+1,156,256 / ∞ Progress
+Complete!
+
+Blue Parchment
+1,155,266 / ∞ Progress
+Complete!
+
+Wrench
+1,154,586 / ∞ Progress
+Complete!
+
+Flour
+1,145,688 / ∞ Progress
+Complete!
+
+Blue Diary
+1,142,040 / ∞ Progress
+Complete!
+
+Emerald Ring
+1,137,642 / ∞ Progress
+Complete!
+
+Blue Purse
+1,129,875 / ∞ Progress
+Complete!
+
+Chum
+1,120,116 / ∞ Progress
+Complete!
+
+Red Shield
+1,116,003 / ∞ Progress
+Complete!
+
+Looking Glass
+1,111,484 / ∞ Progress
+Complete!
+
+Bottle Rocket
+1,109,826 / ∞ Progress
+Complete!
+
+Aquamarine Ring
+1,104,176 / ∞ Progress
+Complete!
+
+Lemon Quartz Ring
+1,092,486 / ∞ Progress
+Complete!
+
+Ruby Ring
+1,090,835 / ∞ Progress
+Complete!
+
+Spoon
+1,088,775 / ∞ Progress
+Complete!
+
+Wooden Sword
+1,087,108 / ∞ Progress
+Complete!
+
+Seaweed
+1,086,852 / ∞ Progress
+Complete!
+
+Leather Diary
+1,086,762 / ∞ Progress
+Complete!
+
+Treasure Chest
+1,084,138 / ∞ Progress
+Complete!
+
+Sturdy Bow
+1,079,818 / ∞ Progress
+Complete!
+
+Green Shield
+1,077,165 / ∞ Progress
+Complete!
+
+Sturdy Box
+1,074,846 / ∞ Progress
+Complete!
+
+Hourglass
+1,073,635 / ∞ Progress
+Complete!
+
+Broom
+1,070,441 / ∞ Progress
+Complete!
+
+Pitchfork
+1,066,615 / ∞ Progress
+Complete!
+
+Jade Charm
+1,064,660 / ∞ Progress
+Complete!
+
+Magnifying Glass
+1,061,504 / ∞ Progress
+Complete!
+
+Purple Parchment
+1,060,578 / ∞ Progress
+Complete!
+
+Fancy Guitar
+1,056,995 / ∞ Progress
+Complete!
+
+Pearl Necklace
+1,054,008 / ∞ Progress
+Complete!
+
+Wizard Hat
+1,051,524 / ∞ Progress
+Complete!
+
+Linked Lantern
+1,050,138 / ∞ Progress
+Complete!
+
+Fancy Pan Flute
+1,045,972 / ∞ Progress
+Complete!
+
+Pine Tree
+1,044,768 / ∞ Progress
+Complete!
+
+White Dye
+1,042,103 / ∞ Progress
+Complete!
+
+Wooden Spear
+1,041,346 / ∞ Progress
+Complete!
+
+Wooden Bow
+1,039,436 / ∞ Progress
+Complete!
+
+Yellow Scarf
+1,038,418 / ∞ Progress
+Complete!
+
+Leather Waterskin
+1,038,126 / ∞ Progress
+Complete!
+
+Red Berry Pie
+1,034,294 / ∞ Progress
+Complete!
+
+Frozen Catfish
+1,033,926 / ∞ Progress
+Complete!
+
+Green Diary
+1,033,808 / ∞ Progress
+Complete!
+
+Red Scarf
+1,033,771 / ∞ Progress
+Complete!
+
+Red Trunk
+1,032,403 / ∞ Progress
+Complete!
+
+Red Parchment
+1,030,053 / ∞ Progress
+Complete!
+
+Red Diary
+1,027,096 / ∞ Progress
+Complete!
+
+Frozen Boot
+1,026,798 / ∞ Progress
+Complete!
+
+Leather Belt
+1,025,395 / ∞ Progress
+Complete!
+
+Yellow Purse
+1,023,808 / ∞ Progress
+Complete!
+
+Barbed Wire
+1,022,127 / ∞ Progress
+Complete!
+
+Yellow Twine
+1,018,447 / ∞ Progress
+Complete!
+
+Fancy Drum
+1,018,323 / ∞ Progress
+Complete!
+
+Sugar Cane
+1,015,085 / ∞ Progress
+Complete!
+
+Iced Tea
+1,014,432 / ∞ Progress
+Complete!
+
+Brown Twine
+1,013,580 / ∞ Progress
+Complete!
+
+Concord Grape Pie
+1,011,397 / ∞ Progress
+Complete!
+
+Bone Pickaxe
+1,010,454 / ∞ Progress
+Complete!
+
+Valentines Card
+1,004,668 / ∞ Progress
+Complete!
+
+Bamboo Rope
+1,004,590 / ∞ Progress
+Complete!
+
+Bamboo Flute
+1,003,560 / ∞ Progress
+Complete!
+
+Canoe
+1,002,038 / ∞ Progress
+Complete!
+
+Acorn Pie
+1,001,106 / ∞ Progress
+Complete!
+
+Frozen Dagger
+1,001,010 / ∞ Progress
+Complete!
+
+Purple Bag
+1,000,937 / ∞ Progress
+Complete!
+
+Orange Scarf
+1,000,394 / ∞ Progress
+Complete!
+
+
+
+
