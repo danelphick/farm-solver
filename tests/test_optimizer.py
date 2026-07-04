@@ -236,6 +236,53 @@ def test_minimize_does_not_open_a_chest_when_inventory_covers_the_contents():
     assert plan.crafts.get("trinket") == pytest.approx(100)
 
 
+def test_minimize_spends_a_cookie_day_to_speed_farming():
+    # One cookie-boosted day grows 10 Slow; a plain planting grows 1 a day. To get
+    # 10 Slow the cookie day is one day versus ten, so the optimiser spends the set.
+    normal = Offer("grow Slow", "farming", {"slow": 1}, time_per_unit=timedelta(days=1))
+    cookie = Offer(
+        "grow Slow with cookies", "farming", {"slow": 10}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    plan = minimize(
+        [normal, cookie], {"Slow": 10}, price_ap=1e-6, price_ln=1e-6, cookie_sets=1
+    )
+    assert plan.cookie_sets == pytest.approx(1)
+    assert plan.time == timedelta(days=1)
+
+
+def test_minimize_respects_the_cookie_cap():
+    normal = Offer("grow Slow", "farming", {"slow": 1}, time_per_unit=timedelta(days=1))
+    cookie = Offer(
+        "grow Slow with cookies", "farming", {"slow": 10}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    # No sets on hand: the boost is unavailable, so all ten days are plain farming.
+    plan = minimize(
+        [normal, cookie], {"Slow": 10}, price_ap=1e-6, price_ln=1e-6, cookie_sets=0
+    )
+    assert plan.cookie_sets == 0
+    assert plan.time == timedelta(days=10)
+
+
+def test_minimize_does_not_spend_cookies_off_the_critical_path():
+    # Passive sets a 100-day makespan; farming's ten Slow fit in ten plain days
+    # under that, so a boost would not finish the plan any sooner -- and the
+    # least-activity re-solve hands the scarce sets back rather than waste them.
+    normal = Offer("grow Slow", "farming", {"slow": 1}, time_per_unit=timedelta(days=1))
+    cookie = Offer(
+        "grow Slow with cookies", "farming", {"slow": 10}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    passive = Offer("passive", "passive", {"other": 1}, time_per_unit=timedelta(days=1))
+    plan = minimize(
+        [normal, cookie, passive], {"Slow": 10, "Other": 100},
+        price_ap=1e-6, price_ln=1e-6, cookie_sets=5,
+    )
+    assert plan.time == timedelta(days=100)
+    assert plan.cookie_sets == 0
+
+
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():
     # Widget is only craftable, and its material has no source, so it cannot be
     # made -- it falls to the remainder rather than making the LP infeasible.

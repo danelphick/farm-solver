@@ -76,6 +76,12 @@ UNIT_EPSILON = 1e-6
 _FAST_PRICE = 1e-6
 _FREE_PRICE = 1e9
 
+# Least-activity penalty per cookie set in the second solve. Large enough to
+# dwarf the farming plantings one boosted day replaces (a few hundred), so a
+# cookie that does not shorten the locked makespan is dropped in favour of plain
+# farming; a cookie the critical path needs is kept regardless by that lock.
+_COOKIE_ACTIVITY_PENALTY = 1e6
+
 # How many makespan caps the epsilon-constraint sweep samples, at least. Kept
 # well above the requested plan count so thinning has a dense frontier to spread
 # over; the LPs are tiny, so a few dozen extra solves are cheap.
@@ -105,9 +111,9 @@ class SourcingPlan:
     (lower-cased) to how many crafts of it to do, and ``opens`` maps each opened
     openable (by display name) to how many of it to open at the Locksmith.
     ``time`` is the makespan (concurrent tracks, the longest),
-    ``arnold_palmers`` and ``large_nets`` the consumables spent (raw,
-    un-rounded), and ``remainder`` the demanded items that are neither gatherable
-    nor craftable, which you must supply yourself.
+    ``arnold_palmers``, ``large_nets`` and ``cookie_sets`` the consumables spent
+    (raw, un-rounded), and ``remainder`` the demanded items that are neither
+    gatherable nor craftable, which you must supply yourself.
     """
 
     draws: list[Draw] = field(default_factory=list)
@@ -116,6 +122,7 @@ class SourcingPlan:
     time: timedelta = timedelta(0)
     arnold_palmers: float = 0.0
     large_nets: float = 0.0
+    cookie_sets: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -194,6 +201,7 @@ def minimize(
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
+    cookie_sets: float = 0.0,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand`` at least cost for the given prices.
 
@@ -215,6 +223,14 @@ def minimize(
     gathered or opened for anew. The credit is a constant, so surplus stock simply
     leaves the balance slack; it never makes an otherwise-unproducible item
     obtainable (that could render the LP infeasible once stock ran out).
+
+    ``cookie_sets`` caps how many cookie-boosted farming days the plan may use
+    (see :func:`~sources.farming_offers`): the total of every cookie offer's usage
+    is held at or below it. Cookies are free -- they cost no time or consumable --
+    and only ever shorten the farming track, so the first solve spends them to cut
+    the makespan; the least-activity re-solve then penalises them so any that did
+    not actually shorten the critical path are handed back, keeping scarce sets
+    from being wasted on a track that was not the bottleneck.
 
     Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
     default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
@@ -279,6 +295,9 @@ def minimize(
 
     arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
     large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
+    cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
+    # Only so many full cookie sets are on hand to spend boosting farming days.
+    problem += cookies <= cookie_sets
     if time_cap is not None:
         problem += makespan <= _minutes(time_cap)
         problem += arnold_palmers + large_nets
@@ -336,7 +355,10 @@ def minimize(
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
         problem.setObjective(
-            pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
+            pulp.lpSum(craft.values())
+            + pulp.lpSum(usage)
+            + pulp.lpSum(opens)
+            + _COOKIE_ACTIVITY_PENALTY * cookies
         )
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
@@ -363,6 +385,7 @@ def minimize(
         time=time,
         arnold_palmers=ap,
         large_nets=ln,
+        cookie_sets=sum(d.cookies for d in draws),
         remainder=remainder,
     )
 
@@ -419,6 +442,7 @@ def frontier(
     count: int = 5,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
+    cookie_sets: float = 0.0,
 ) -> list[SourcingPlan]:
     """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
 
@@ -435,11 +459,11 @@ def frontier(
     """
     fast = minimize(
         offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
-        openables=openables, inventory=inventory,
+        openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
-        openables=openables, inventory=inventory,
+        openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
@@ -448,7 +472,8 @@ def frontier(
     plans += [
         minimize(
             offers, demand, recipes, crafting_bonus,
-            time_cap=timedelta(seconds=cap), openables=openables, inventory=inventory,
+            time_cap=timedelta(seconds=cap), openables=openables,
+            inventory=inventory, cookie_sets=cookie_sets,
         )
         for cap in caps
     ]

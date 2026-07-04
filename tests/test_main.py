@@ -8,6 +8,7 @@ from main import (
     _should_model_calendar,
     build_parser,
     cheapest_plan,
+    cookie_sets_available,
     limit_shortfall,
     print_crafts,
     print_frontier,
@@ -407,6 +408,36 @@ def test_print_plan_reduces_passive_residual_by_inventory(capsys):
     print_plan(plan, demand, Farm(), workshop, 1.0, inventory={"gear": 40})
     out = capsys.readouterr().out
     assert "60x Gear" in out  # 100 needed minus 40 already held
+
+
+def test_cookie_sets_available_takes_the_scarcest_type():
+    inv = {"happy cookies": 88, "spooky cookies": 78, "lovely cookies": 65}
+    assert cookie_sets_available(inv, None) == 65
+
+
+def test_cookie_sets_available_override_wins_in_either_direction():
+    inv = {"happy cookies": 88, "spooky cookies": 78, "lovely cookies": 65}
+    assert cookie_sets_available(inv, 200) == 200
+    assert cookie_sets_available(inv, 0) == 0
+
+
+def test_cookie_sets_available_is_zero_without_cookies():
+    assert cookie_sets_available({}, None) == 0
+
+
+def test_print_plan_reports_cookie_boosted_farming(capsys):
+    demand = {"Slow": 420}
+    offer = Offer(
+        "grow Slow with cookies", "farming", {"slow": 42}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 10)], cookie_sets=10)
+    print_plan(plan, demand, Farm(grape_juices_per_day=2), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Farming (10d, 10 cookie sets):" in out
+    assert "10 cookie-boosted days of Slow" in out
+    assert "420x Slow" in out
+    assert "20 Grape Juice" in out  # 2 a day over 10 days
 
 
 def test_print_plan_drops_residue_opens(capsys):

@@ -64,6 +64,12 @@ DEFAULT_DROPS_CSV = Path(__file__).with_name("seed_drops.csv")
 # The one crop with a growth-speed modifier of its own, beyond the global one.
 CORN = "corn"
 
+# A full cookie set (one Happy, one Spooky and one Lovely Cookie active at once)
+# multiplies the crop yield of a harvest by this while it lasts. One cookie
+# triples the yield, so three stacked give nine times (see :meth:`Farm.
+# cookie_day_yield`). Sets are used only to boost Grape Juice instant grows.
+COOKIE_SET_MULTIPLIER = 9
+
 # Config gives modifiers as whole-number percentages.
 PERCENT = 100
 
@@ -124,6 +130,11 @@ class Farm:
     ``grape_juices_per_day`` is how many times a day a Grape Juice can be used to
     grow the whole field instantly, adding that many free harvests a day on top
     of natural growth (see :meth:`time_to_grow`).
+
+    ``cookie_time_threshold`` gates which crops a cookie set may boost: only crops
+    whose grow time is at least this benefit enough to be worth a scarce set (a
+    fast crop's harvest is dominated by natural growth, which cookies do not
+    touch). ``None`` disables cookies entirely (see :meth:`cookie_day_yield`).
     """
 
     crops: dict[str, Crop] = field(default_factory=dict)
@@ -132,6 +143,7 @@ class Farm:
     speed: float = 1.0
     corn_speed: float = 1.0
     grape_juices_per_day: float = 0.0
+    cookie_time_threshold: timedelta | None = None
 
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
@@ -160,6 +172,40 @@ class Farm:
         if rate is None:
             return None
         return self.rows * rate * (1 + self.double_chance)
+
+    def takes_cookies(self, name: str) -> bool:
+        """Whether crop ``name`` is slow enough for a cookie set to be worth it.
+
+        Cookies boost only Grape Juice grows, so they help most where natural
+        growth (which they do not touch) is a small share of the day's harvests --
+        i.e. slow crops. A crop qualifies when its grow time reaches the farm's
+        ``cookie_time_threshold``; with no threshold set, cookies are off.
+        """
+        threshold = self.cookie_time_threshold
+        if threshold is None:
+            return False
+        grow_time = self.grow_time(name)
+        return grow_time is not None and grow_time >= threshold
+
+    def cookie_day_yield(self, name: str, item: str | None = None) -> float | None:
+        """Expected ``item`` from one day of farming ``name`` under a cookie set.
+
+        A cookie set lasts long enough to boost that day's Grape Juice grows to
+        :data:`COOKIE_SET_MULTIPLIER` times their yield, while the day's natural
+        harvests (a day over the grow time) are unaffected. So the day yields
+        ``(natural + multiplier * grape_juices) * per_harvest``. Returns ``None``
+        when the crop does not qualify (see :meth:`takes_cookies`) or does not
+        drop the item.
+        """
+        if not self.takes_cookies(name):
+            return None
+        per_harvest = self.per_harvest(name, item)
+        grow_time = self.grow_time(name)
+        if not per_harvest or grow_time is None:
+            return None
+        natural = timedelta(days=1) / grow_time
+        boosted = natural + COOKIE_SET_MULTIPLIER * self.grape_juices_per_day
+        return boosted * per_harvest
 
     def time_to_grow(
         self, name: str, quantity: int, item: str | None = None
@@ -271,6 +317,7 @@ def load_farm(
     speed: float = 1.0,
     corn_speed: float = 1.0,
     grape_juices_per_day: float = 0.0,
+    cookie_time_threshold: timedelta | None = None,
 ) -> Farm:
     """Build a :class:`Farm` from the crop CSVs and the player's settings."""
     crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
@@ -284,6 +331,7 @@ def load_farm(
         speed=speed,
         corn_speed=corn_speed,
         grape_juices_per_day=grape_juices_per_day,
+        cookie_time_threshold=cookie_time_threshold,
     )
 
 
@@ -300,13 +348,18 @@ def farm_from_config(
     ``corn_speed_reduction`` (corn's further reduction). The reductions become
     growth-time factors of ``1 - reduction`` (a 90% reduction leaves a 0.1
     factor). ``grape_juices_per_day`` is a plain count of daily instant grows.
-    Crop and drop data come from the CSVs.
+    ``cookies_grow_time_threshold`` is a duration (e.g. ``"18m"``) below which a
+    crop is too fast to be worth a cookie set; omit it to disable cookies. Crop
+    and drop data come from the CSVs.
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
     speed = 1 - float(config_section.get("speed_reduction", 0)) / PERCENT
     corn_speed = 1 - float(config_section.get("corn_speed_reduction", 0)) / PERCENT
     grape_juices = float(config_section.get("grape_juices_per_day", 0))
+    threshold_text = config_section.get("cookies_grow_time_threshold")
+    threshold = parse_duration(threshold_text) if threshold_text else None
     return load_farm(
-        crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices
+        crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices,
+        threshold,
     )

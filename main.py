@@ -158,6 +158,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="drop frontier plans that spend more than N Large Nets",
     )
+    parser.add_argument(
+        "--cookie-sets",
+        type=int,
+        metavar="N",
+        help=(
+            "number of full cookie sets available to speed up farming, "
+            "overriding the count taken from inventory (the fewest of Happy, "
+            "Spooky and Lovely Cookies). A set boosts one day of a slow crop's "
+            "Grape Juice grows ninefold"
+        ),
+    )
 
     # Which frontier plan to expand in full: the fastest (the default), the
     # cheapest (fewest Arnold Palmers and Large Nets), or a specific one by its
@@ -466,20 +477,29 @@ def _harvest_alls(count: int) -> str:
     return f"{count:,} Harvest All{'' if count == 1 else 's'}"
 
 
+def _farming_action(draw: sources.Draw) -> str:
+    """The action and crop a farming draw stands for, cookie days included."""
+    units = math.ceil(draw.units)
+    if draw.offer.cookies:
+        crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+        noun = "day" if units == 1 else "days"
+        return f"{units:,} cookie-boosted {noun} of {crop}"
+    crop = draw.offer.name.removeprefix("grow ")
+    return f"{_harvest_alls(units)} of {crop}"
+
+
 def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
     """Describe the farming sequence that runs the makespan (grown one at a time)."""
     farming_draws = [d for d in plan.draws if d.offer.track == sources.FARMING_TRACK]
     biggest = max(farming_draws, key=lambda d: d.time)
-    crop = biggest.offer.name.removeprefix("grow ")
     duration = passive.format_duration(total)
     if len(farming_draws) == 1:
         return (
-            f"{_harvest_alls(math.ceil(biggest.units))} of {crop} ({duration}) "
-            "— crops grow one at a time"
+            f"{_farming_action(biggest)} ({duration}) — crops grow one at a time"
         )
     return (
         f"{len(farming_draws)} crops grown back-to-back ({duration}), "
-        f"longest {_harvest_alls(math.ceil(biggest.units))} of {crop}"
+        f"longest {_farming_action(biggest)}"
     )
 
 
@@ -605,6 +625,35 @@ def _passive_sources(
     )
     parts = [f"{count:,} from {name}{_season_note(name)}" for count, _, name in labelled]
     return " (" + ", ".join(parts) + ")"
+
+
+def _print_cookie_farming(
+    draw: sources.Draw,
+    juices: float,
+    interesting: set[str],
+    display: dict[str, str],
+) -> None:
+    """Render one cookie-boosted farming draw: whole days of a crop under a set.
+
+    One unit is a single day farming the crop with a full cookie set active, so
+    the day's Grape Juice grows yield :data:`crops.COOKIE_SET_MULTIPLIER` times as
+    much. The unit count is both the days spent and the cookie sets used.
+    """
+    crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+    days = math.ceil(draw.units)
+    noun = "day" if days == 1 else "days"
+    line = (
+        f"  {days:,} cookie-boosted {noun} of {crop}"
+        f" in {passive.format_duration(draw.time)}"
+    )
+    if round(juices) >= 1:
+        line += (
+            f" using {round(juices):,} Grape Juice"
+            f" (yield {crops.COOKIE_SET_MULTIPLIER}x)"
+        )
+    print(f"{line}:")
+    for key in sorted(k for k in draw.offer.yields if k in interesting):
+        print(f"    {round(draw.produced[key]):,}x {display.get(key, key)}")
 
 
 def print_plan(
@@ -753,14 +802,21 @@ def print_plan(
     if farming_draws:
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))
-        print(f"\nFarming ({passive.format_duration(total_farming)}):")
+        heading = f"\nFarming ({passive.format_duration(total_farming)}"
+        total_sets = sum(d.cookies for d in farming_draws)
+        if round(total_sets) >= 1:
+            heading += f", {round(total_sets):,} cookie sets"
+        print(heading + "):")
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
+            juices = farm.grape_juices_used(draw.time)
+            if draw.offer.cookies:
+                _print_cookie_farming(draw, juices, interesting, display)
+                continue
             crop = draw.offer.name.removeprefix("grow ")
             line = (
                 f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"
             )
-            juices = farm.grape_juices_used(draw.time)
             if round(juices) >= 1:
                 line += f" using {round(juices):,} Grape Juice"
             print(f"{line}:")
@@ -863,6 +919,25 @@ def print_crafts(
                 print(f"  {round(count * quantity):,}x {material}")
 
 
+# A full cookie set is one of each type active at once; the number of sets is
+# limited by whichever type is scarcest.
+COOKIE_ITEMS = ("happy cookies", "spooky cookies", "lovely cookies")
+
+
+def cookie_sets_available(
+    inventory: dict[str, float], override: int | None
+) -> float:
+    """How many full cookie sets a plan may spend on farming.
+
+    ``override`` (the ``--cookie-sets`` flag) wins when given, in either
+    direction; otherwise it is the fewest of the three cookie types held, since a
+    set needs one of each. With none held and no override, it is zero.
+    """
+    if override is not None:
+        return max(0, override)
+    return min((inventory.get(item, 0.0) for item in COOKIE_ITEMS), default=0.0)
+
+
 def load_config() -> dict:
     """Read the config file, or an empty config if there is none."""
     try:
@@ -927,6 +1002,7 @@ def run(args: argparse.Namespace) -> int:
     inventory = {
         key: float(entry.quantity) for key, entry in state.inventory.items.items()
     }
+    cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
 
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
@@ -948,7 +1024,7 @@ def run(args: argparse.Namespace) -> int:
         offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
-            inventory,
+            inventory, cookie_sets,
         )
         if not plans:
             return 0  # nothing left to source

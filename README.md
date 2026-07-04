@@ -264,6 +264,7 @@ double_crop_chance = 25    # percent chance a seed drops a second item
 speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 14  # instant whole-field grows available each day
+cookies_grow_time_threshold = "18m"  # slowest crop worth a cookie set (omit to disable)
 ```
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
@@ -277,3 +278,17 @@ Farming (5y 202d):
 ```
 
 The `Farming` heading's time is the whole track's total — crops grow one at a time, so their waits add up.
+
+### Cookies
+
+Farming can be sped up further with **Cookies**. There are three types — Happy, Spooky and Lovely — and each active cookie triples a harvest's yield, so all three at once (a full **set**) makes it ninefold. A set lasts five minutes, long enough to pour a day's Grape Juice grows through at nine times the yield, so the model uses them only in full sets and only on the Grape Juice grows (never on ordinary growth). One set is modelled as a single **cookie-boosted day**: a real day of farming a crop, but with that day's Grape Juice harvests boosted ninefold.
+
+Sets are scarce, so they are spent carefully. Only crops whose grow time reaches `cookies_grow_time_threshold` qualify — a fast crop's harvest is mostly natural growth, which cookies don't touch, so boosting its Grape Juice share is barely worth a set (at the sample perks a `18m` threshold lets them go to Corn but not quicker crops). The solver then spends its sets where a boosted day shortens the farming critical path the most, and never on a plan where farming isn't the bottleneck (a set that wouldn't finish the plan any sooner is kept in the cupboard).
+
+The number of sets available is the fewest of the three cookie types in your inventory; `--cookie-sets N` overrides it in either direction (`--cookie-sets 0` turns cookies off). When a plan spends them, the `Farming` heading totals the sets used and each boosted crop reports its cookie-boosted days:
+
+```text
+Farming (11d 37m, 11 cookie sets):
+  11 cookie-boosted days of Pine Tree in 10d 16h 15m using 149 Grape Juice (yield 9x):
+    108,267x Pine Tree
+```

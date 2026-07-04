@@ -196,6 +196,40 @@ def test_open_flows_skips_empty_openables():
     assert open_flows(smith) == []
 
 
+def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
+    farm = Farm(
+        crops={"slow": Crop("Slow", timedelta(hours=1), {"slow": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    offers = farming_offers(farm)
+    names = {o.name for o in offers}
+    assert names == {"grow Slow", "grow Slow with cookies"}
+    cookie = next(o for o in offers if o.cookies)
+    assert cookie.cookies == 1
+    assert cookie.track == "farming"
+    assert cookie.time_per_unit == timedelta(days=1)
+    # A boosted day: 24 natural + 9*2 grape-juice harvests, per_harvest 1.
+    assert cookie.yields == {"slow": pytest.approx(42)}
+
+
+def test_farming_offers_skip_cookies_for_fast_crops():
+    farm = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert all(not o.cookies for o in farming_offers(farm))
+
+
+def test_draw_scales_cookie_cost():
+    offer = Offer("grow Slow with cookies", "farming", {"slow": 42}, cookies=1,
+                  time_per_unit=timedelta(days=1))
+    assert Draw(offer, units=3).cookies == 3
+
+
 def test_farming_offer_time_matches_time_to_grow():
     farm = Farm(
         crops={"beet": Crop("Beet", timedelta(days=9), {"beet": 4})},

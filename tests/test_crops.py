@@ -310,3 +310,57 @@ def test_load_farm_merges_growth_and_drops(tmp_path):
     assert farm.per_harvest("Carrot") == pytest.approx(60)
     # per_seed gold = 1.2/12 = 0.1; per_harvest = 12 * 0.1 * 1.25 = 1.5.
     assert farm.per_harvest("Carrot", "Gold Carrot") == pytest.approx(1.5)
+
+
+def test_takes_cookies_needs_a_threshold_and_a_slow_enough_crop():
+    crops = {"slow": Crop("Slow", timedelta(hours=1), {"slow": 1})}
+    # No threshold set: cookies are off for every crop.
+    assert not Farm(crops=crops).takes_cookies("Slow")
+    # A crop at or above the threshold qualifies; a faster one does not.
+    farm = Farm(crops=crops, cookie_time_threshold=timedelta(minutes=18))
+    assert farm.takes_cookies("Slow")
+    fast = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert not fast.takes_cookies("Fast")
+
+
+def test_takes_cookies_uses_the_effective_grow_time():
+    # Corn's base 4h with full perks (0.1 * 0.8) is 19.2m, just over an 18m
+    # threshold; without the speed perks its 4h would qualify trivially.
+    crops = {"corn": Crop("Corn", timedelta(hours=4), {"corn": 1})}
+    farm = Farm(
+        crops=crops, speed=0.1, corn_speed=0.8,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.grow_time("Corn") == timedelta(minutes=19, seconds=12)
+    assert farm.takes_cookies("Corn")
+
+
+def test_cookie_day_yield_boosts_only_the_grape_juice_share():
+    # A 1h crop grows 24 natural harvests a day; with 2 Grape Juices boosted 9x
+    # that is 24 + 9*2 = 42 harvests' worth, times a per_harvest of 1.
+    farm = Farm(
+        crops={"x": Crop("X", timedelta(hours=1), {"x": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_day_yield("X") == pytest.approx(42)
+
+
+def test_cookie_day_yield_is_none_when_the_crop_does_not_qualify():
+    farm = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_day_yield("Fast") is None
+
+
+def test_farm_from_config_reads_the_cookie_threshold():
+    farm = farm_from_config({"cookies_grow_time_threshold": "18m"})
+    assert farm.cookie_time_threshold == timedelta(minutes=18)
+    assert farm_from_config({}).cookie_time_threshold is None
