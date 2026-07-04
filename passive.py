@@ -134,15 +134,15 @@ def total_time(uses: list[PassiveUse]) -> timedelta:
     return max((use.time for use in uses), default=timedelta())
 
 
-_DURATION_RE = re.compile(r"(\d+)\s*([ydhm])")
+_DURATION_RE = re.compile(r"(\d+)\s*([ydhms])")
 
 
 def parse_duration(text: str) -> timedelta:
-    """Parse a duration like ``"5d"``, ``"3h"``, ``"90m"``, ``"2y"`` or ``"1d6h30m"``.
+    """Parse a duration like ``"5d"``, ``"3h"``, ``"90m"``, ``"3s"`` or ``"1d6h30m"``.
 
     Units are ``y`` (years, of :data:`DAYS_PER_YEAR` days), ``d`` (days), ``h``
-    (hours) and ``m`` (minutes); years and days both feed the day count, matching
-    what :func:`format_duration` prints.
+    (hours), ``m`` (minutes) and ``s`` (seconds); years and days both feed the day
+    count, matching what :func:`format_duration` prints.
     """
     cleaned = text.strip().lower()
     matches = _DURATION_RE.findall(cleaned)
@@ -150,7 +150,7 @@ def parse_duration(text: str) -> timedelta:
     if not matches or _DURATION_RE.sub("", cleaned).strip():
         raise ValueError(f"invalid duration: {text!r}")
 
-    days = hours = minutes = 0
+    days = hours = minutes = seconds = 0
     for value, unit in matches:
         if unit == "y":
             days += int(value) * DAYS_PER_YEAR
@@ -158,9 +158,11 @@ def parse_duration(text: str) -> timedelta:
             days += int(value)
         elif unit == "h":
             hours += int(value)
-        else:
+        elif unit == "m":
             minutes += int(value)
-    return timedelta(days=days, hours=hours, minutes=minutes)
+        else:
+            seconds += int(value)
+    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 DAYS_PER_YEAR = 365

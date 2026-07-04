@@ -378,3 +378,26 @@ def test_farm_from_config_reads_the_cookie_threshold():
     farm = farm_from_config({"cookies_grow_time_threshold": "18m"})
     assert farm.cookie_time_threshold == timedelta(minutes=18)
     assert farm_from_config({}).cookie_time_threshold is None
+
+
+def test_grow_time_uses_the_instant_time_for_fast_crops():
+    crops = {
+        "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+        "eggplant": Crop("Eggplant", timedelta(minutes=5), {"eggplant": 1}),
+        "corn": Crop("Corn", timedelta(hours=4), {"corn": 1}),
+    }
+    farm = Farm(crops=crops, speed=0.1, instant_grow_time=timedelta(seconds=3))
+    # Base growth at or under five minutes: the instant time, not the formula.
+    assert farm.grow_time("Peppers") == timedelta(seconds=3)
+    assert farm.grow_time("Eggplant") == timedelta(seconds=3)
+    # A slower crop keeps the speed formula (4h base * 0.1 = 24m).
+    assert farm.grow_time("Corn") == timedelta(minutes=24)
+    # Without an instant time set, even a fast crop uses the formula.
+    plain = Farm(crops=crops, speed=0.1)
+    assert plain.grow_time("Peppers") == timedelta(minutes=1) * 0.1
+
+
+def test_farm_from_config_reads_the_instant_grow_time():
+    farm = farm_from_config({"instant_grow_time": "3s"})
+    assert farm.instant_grow_time == timedelta(seconds=3)
+    assert farm_from_config({}).instant_grow_time is None

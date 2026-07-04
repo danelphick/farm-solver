@@ -81,6 +81,7 @@ speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 14
 cookies_grow_time_threshold = "18m"  # min grow time a cookie set may boost
+instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
 
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true

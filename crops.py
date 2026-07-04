@@ -64,6 +64,12 @@ DEFAULT_DROPS_CSV = Path(__file__).with_name("seed_drops.csv")
 # The one crop with a growth-speed modifier of its own, beyond the global one.
 CORN = "corn"
 
+# A crop whose *base* growth is at most this grows almost instantly with full
+# perks, so its real cost is the few seconds it takes to click a harvest rather
+# than any wait (see :attr:`Farm.instant_grow_time`). Eggplant, at five minutes,
+# is the slowest such crop.
+INSTANT_GROW_MAX_BASE = timedelta(minutes=5)
+
 # A full cookie set (one Happy, one Spooky and one Lovely Cookie active at once)
 # multiplies the crop yield of any harvest taken while it lasts by this. One
 # cookie triples the yield, so three stacked give nine times (see :meth:`Farm.
@@ -140,6 +146,11 @@ class Farm:
     whose grow time is at least this benefit enough to be worth a scarce set (a
     fast crop's harvest is dominated by natural growth, which cookies do not
     touch). ``None`` disables cookies entirely (see :meth:`cookie_day_yield`).
+
+    ``instant_grow_time`` is the near-instant effective grow time of the very fast
+    crops (base growth at most :data:`INSTANT_GROW_MAX_BASE`), which with full
+    perks grow quicker than you can click; when set it replaces the speed formula
+    for those crops (see :meth:`grow_time`). ``None`` leaves them on the formula.
     """
 
     crops: dict[str, Crop] = field(default_factory=dict)
@@ -149,15 +160,23 @@ class Farm:
     corn_speed: float = 1.0
     grape_juices_per_day: float = 0.0
     cookie_time_threshold: timedelta | None = None
+    instant_grow_time: timedelta | None = None
 
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
 
     def grow_time(self, name: str) -> timedelta | None:
-        """Time for one planting of ``name`` to mature, with speed modifiers."""
+        """Time for one planting of ``name`` to mature, with speed modifiers.
+
+        A very fast crop (base growth at most :data:`INSTANT_GROW_MAX_BASE`) grows
+        almost instantly with full perks, so when ``instant_grow_time`` is set it
+        takes that fixed time -- the harvest cadence, not the speed formula.
+        """
         crop = self.crop(name)
         if crop is None:
             return None
+        if self.instant_grow_time is not None and crop.growth <= INSTANT_GROW_MAX_BASE:
+            return self.instant_grow_time
         factor = self.speed
         if name.lower() == CORN:
             factor *= self.corn_speed
@@ -331,6 +350,7 @@ def load_farm(
     corn_speed: float = 1.0,
     grape_juices_per_day: float = 0.0,
     cookie_time_threshold: timedelta | None = None,
+    instant_grow_time: timedelta | None = None,
 ) -> Farm:
     """Build a :class:`Farm` from the crop CSVs and the player's settings."""
     crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
@@ -345,6 +365,7 @@ def load_farm(
         corn_speed=corn_speed,
         grape_juices_per_day=grape_juices_per_day,
         cookie_time_threshold=cookie_time_threshold,
+        instant_grow_time=instant_grow_time,
     )
 
 
@@ -362,8 +383,10 @@ def farm_from_config(
     growth-time factors of ``1 - reduction`` (a 90% reduction leaves a 0.1
     factor). ``grape_juices_per_day`` is a plain count of daily instant grows.
     ``cookies_grow_time_threshold`` is a duration (e.g. ``"18m"``) below which a
-    crop is too fast to be worth a cookie set; omit it to disable cookies. Crop
-    and drop data come from the CSVs.
+    crop is too fast to be worth a cookie set; omit it to disable cookies.
+    ``instant_grow_time`` (e.g. ``"3s"``) is how long the very fast crops
+    effectively take; omit it to leave them on the speed formula. Crop and drop
+    data come from the CSVs.
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
@@ -372,7 +395,9 @@ def farm_from_config(
     grape_juices = float(config_section.get("grape_juices_per_day", 0))
     threshold_text = config_section.get("cookies_grow_time_threshold")
     threshold = parse_duration(threshold_text) if threshold_text else None
+    instant_text = config_section.get("instant_grow_time")
+    instant = parse_duration(instant_text) if instant_text else None
     return load_farm(
         crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices,
-        threshold,
+        threshold, instant,
     )

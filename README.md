@@ -265,6 +265,7 @@ speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 14  # instant whole-field grows available each day
 cookies_grow_time_threshold = "18m"  # slowest crop worth a cookie set (omit to disable)
+instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth (omit to disable)
 ```
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
@@ -278,6 +279,8 @@ Farming (5y 202d):
 ```
 
 The `Farming` heading's time is the whole track's total — crops grow one at a time, so their waits add up.
+
+The very fast crops — those with a base growth of five minutes or less (Peppers, Carrot, Peas, Cucumber and Eggplant, the slowest at exactly 5m) — grow quicker than you can click once the speed perks are on, so `instant_grow_time` (default `"3s"`) sets their effective harvest cadence instead of the speed formula. Omit it to leave them on the formula.
 
 ### Cookies
 
