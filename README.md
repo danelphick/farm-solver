@@ -280,7 +280,7 @@ Farming (5y 202d):
 
 The `Farming` heading's time is the whole track's total — crops grow one at a time, so their waits add up.
 
-The very fast crops — those with a base growth of five minutes or less (Peppers, Carrot, Peas, Cucumber and Eggplant, the slowest at exactly 5m) — grow quicker than you can click once the speed perks are on, so `instant_grow_time` (default `"3s"`) sets their effective harvest cadence instead of the speed formula. Omit it to leave them on the formula.
+The very fast crops — those with a base growth of five minutes or less (Peppers, Carrot, Peas, Cucumber and Eggplant, the slowest at exactly 5m) — grow quicker than you can click once the speed perks are on, so `instant_grow_time` (default `"3s"`) sets their effective harvest cadence instead of the speed formula. Omit it to leave them on the formula. These crops are never given Grape Juice: they already grow faster than a wait, so an instant grow would be wasted on them (the daily allowance is saved for the slow crops that gain from it).
 
 ### Cookies
 

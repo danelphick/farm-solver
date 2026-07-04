@@ -214,6 +214,18 @@ def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
     assert cookie.yields == {"slow": pytest.approx(50)}
 
 
+def test_farming_offer_excludes_grape_juice_for_instant_crops():
+    farm = Farm(
+        crops={"peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1})},
+        rows=1,
+        grape_juices_per_day=14,
+        instant_grow_time=timedelta(seconds=3),
+    )
+    (offer,) = farming_offers(farm)  # fast crop, so no cookie offer either
+    # No Grape Juice folded in, so a planting is exactly the instant grow time.
+    assert offer.time_per_unit == timedelta(seconds=3)
+
+
 def test_farming_offers_skip_cookies_for_fast_crops():
     farm = Farm(
         crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},

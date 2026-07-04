@@ -223,7 +223,9 @@ def farming_offers(farm: Farm) -> list[Offer]:
     The plain offer's ``time_per_unit`` is the effective time for one full-field
     planting, folding in the daily Grape Juice allowance the same way
     :meth:`Farm.time_to_grow` does: a day yields its natural harvests plus the
-    instant grows, so one planting effectively takes ``day / harvests_per_day``.
+    instant grows, so one planting effectively takes ``day / harvests_per_day``. A
+    near-instant crop gets no Grape Juice (:meth:`Farm.grape_juices_for`) -- it
+    already grows faster than a wait, so a grow would be wasted on it.
 
     A qualifying crop (slow enough -- see :meth:`Farm.takes_cookies`) also gets a
     cookie-day offer: one unit is a single day of farming that crop under a full
@@ -242,7 +244,7 @@ def farming_offers(farm: Farm) -> list[Offer]:
         grow_time = farm.grow_time(crop.name)
         if grow_time is None:
             continue
-        harvests_per_day = day / grow_time + farm.grape_juices_per_day
+        harvests_per_day = day / grow_time + farm.grape_juices_for(crop.name)
         bundle = {item: farm.per_harvest(crop.name, item) for item in crop.drops}
         offers.append(
             Offer(

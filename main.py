@@ -808,11 +808,13 @@ def print_plan(
             heading += f", {round(total_sets):,} cookie sets"
         print(heading + "):")
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
-            juices = farm.grape_juices_used(draw.time)
             if draw.offer.cookies:
+                crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+                juices = farm.grape_juices_used(draw.time, crop)
                 _print_cookie_farming(draw, juices, interesting, display)
                 continue
             crop = draw.offer.name.removeprefix("grow ")
+            juices = farm.grape_juices_used(draw.time, crop)
             line = (
                 f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"

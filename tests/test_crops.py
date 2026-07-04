@@ -401,3 +401,23 @@ def test_farm_from_config_reads_the_instant_grow_time():
     farm = farm_from_config({"instant_grow_time": "3s"})
     assert farm.instant_grow_time == timedelta(seconds=3)
     assert farm_from_config({}).instant_grow_time is None
+
+
+def test_instant_crops_are_never_given_grape_juice():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "beet": Crop("Beet", timedelta(days=1), {"beet": 1}),
+        },
+        rows=1,
+        grape_juices_per_day=14,
+        instant_grow_time=timedelta(seconds=3),
+    )
+    assert farm.is_instant("Peppers") and not farm.is_instant("Beet")
+    # The near-instant crop gets no Grape Juice; the slow one gets the allowance.
+    assert farm.grape_juices_for("Peppers") == 0
+    assert farm.grape_juices_for("Beet") == 14
+    assert farm.grape_juices_used(timedelta(days=1), "Peppers") == 0
+    assert farm.grape_juices_used(timedelta(days=1), "Beet") == 14
+    # So a Peppers planting just takes the instant grow time, unshortened.
+    assert farm.time_to_grow("Peppers", 28800) == timedelta(days=1)

@@ -165,6 +165,23 @@ class Farm:
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
 
+    def is_instant(self, name: str) -> bool:
+        """Whether crop ``name`` is grown near-instantly (see :attr:`instant_grow_time`).
+
+        True only when an ``instant_grow_time`` is set and the crop's *base* growth
+        is at most :data:`INSTANT_GROW_MAX_BASE`. Grape Juice is never spent on such
+        a crop -- it already grows faster than a wait, so an instant grow would be
+        wasted (see :meth:`grape_juices_for`).
+        """
+        crop = self.crop(name)
+        if crop is None or self.instant_grow_time is None:
+            return False
+        return crop.growth <= INSTANT_GROW_MAX_BASE
+
+    def grape_juices_for(self, name: str) -> float:
+        """The daily Grape Juice allowance spent growing ``name`` -- zero if instant."""
+        return 0.0 if self.is_instant(name) else self.grape_juices_per_day
+
     def grow_time(self, name: str) -> timedelta | None:
         """Time for one planting of ``name`` to mature, with speed modifiers.
 
@@ -175,7 +192,7 @@ class Farm:
         crop = self.crop(name)
         if crop is None:
             return None
-        if self.instant_grow_time is not None and crop.growth <= INSTANT_GROW_MAX_BASE:
+        if self.is_instant(name):
             return self.instant_grow_time
         factor = self.speed
         if name.lower() == CORN:
@@ -257,16 +274,18 @@ class Farm:
             return None
         plantings = math.ceil(quantity / per_harvest)
         day = timedelta(days=1)
-        harvests_per_day = day / grow_time + self.grape_juices_per_day
+        harvests_per_day = day / grow_time + self.grape_juices_for(name)
         return day * (plantings / harvests_per_day)
 
-    def grape_juices_used(self, time: timedelta) -> float:
-        """Grape juices spent farming for ``time`` at the daily allowance.
+    def grape_juices_used(self, time: timedelta, name: str | None = None) -> float:
+        """Grape juices spent farming ``name`` for ``time`` at the daily allowance.
 
-        Whichever crop is being farmed gets the full daily allowance, so the
-        count is simply the rate times the duration in days, regardless of crop.
+        Whichever crop is being farmed gets the full daily allowance, so the count
+        is the rate times the duration in days -- but an instant-grow crop gets
+        none, since a Grape Juice would be wasted on it (see :meth:`is_instant`).
         """
-        return self.grape_juices_per_day * (time / timedelta(days=1))
+        rate = self.grape_juices_for(name) if name is not None else self.grape_juices_per_day
+        return rate * (time / timedelta(days=1))
 
     def growers(self, item: str) -> list[Crop]:
         """The crops whose seed can drop ``item`` (its primary or a rarer drop)."""
