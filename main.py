@@ -616,10 +616,13 @@ def print_plan(
     production: passive.PassiveProduction | None = None,
     open_flows: list[sources.OpenFlow] | None = None,
     openable_names: dict[str, str] | None = None,
+    inventory: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
     open_flows = open_flows or []
+    inventory = inventory or {}
     flows_by_name = {flow.name.lower(): flow for flow in open_flows}
+    demanded = {item.lower() for item in demand}
 
     # Display names for everything that can appear (demand plus every recipe item
     # and material, plus openable names, keys and contents), keyed lower-cased.
@@ -683,6 +686,11 @@ def print_plan(
     elsewhere: dict[str, float] = dict(crafted)
     for item, quantity in opened.items():
         elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    # Stock on hand covers intermediates the plan does not produce (as in the LP,
+    # a directly-demanded item gets no credit -- its need is already net of stock).
+    for item, quantity in inventory.items():
+        if item not in demanded:
+            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
     for draw in plan.draws:
         if draw.offer.track == sources.PASSIVE_TRACK:
             continue
@@ -913,6 +921,12 @@ def run(args: argparse.Namespace) -> int:
     smith = locksmith.load_openables()
     open_flows = sources.open_flows(smith)
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
+    # Items already in stock are free supply for the intermediates a plan would
+    # otherwise gather, craft or open (the optimiser skips crediting the directly
+    # demanded items, whose shortfall is already net of what is held).
+    inventory = {
+        key: float(entry.quantity) for key, entry in state.inventory.items.items()
+    }
 
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
@@ -933,7 +947,8 @@ def run(args: argparse.Namespace) -> int:
         )
         offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(
-            offers, demand, recipes, args.crafting_bonus, args.plans, open_flows
+            offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
+            inventory,
         )
         if not plans:
             return 0  # nothing left to source
@@ -966,7 +981,7 @@ def run(args: argparse.Namespace) -> int:
     solution.large_nets = round(chosen.large_nets)
     print_plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
-        open_flows, smith.names,
+        open_flows, smith.names, inventory,
     )
 
     if args.breakdown:

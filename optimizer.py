@@ -193,6 +193,7 @@ def minimize(
     price_ln: float = 0.0,
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
+    inventory: dict[str, float] | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand`` at least cost for the given prices.
 
@@ -206,6 +207,15 @@ def minimize(
     ``T``. A demanded item that is neither gatherable, craftable nor openable
     lands in the ``remainder``.
 
+    ``inventory`` (lower-cased item -> quantity held) is free supply the plan need
+    not produce: it is credited to every item's balance *except* those directly
+    demanded, since the demand is already net of what is held (mastery progress or
+    the acquired count). So an intermediate material already in stock -- Red
+    Shields to craft Frost Shields, say -- is drawn from inventory rather than
+    gathered or opened for anew. The credit is a constant, so surplus stock simply
+    leaves the balance slack; it never makes an otherwise-unproducible item
+    obtainable (that could render the LP infeasible once stock ran out).
+
     Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
     default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
     With ``time_cap`` set it instead minimises the consumables ``AP + LN`` subject
@@ -216,6 +226,7 @@ def minimize(
     """
     recipes = recipes or {}
     openables = openables or []
+    inventory = inventory or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
     offer_items = {key for offer in offers for key in offer.yields}
@@ -292,8 +303,11 @@ def minimize(
             for f, o in zip(opened, opens)
             if f.consumes.get(item, 0.0)
         )
+        # Stock on hand is free supply for intermediates; a directly-demanded
+        # item's balance is already net of what is held, so it gets no credit.
+        held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
-        problem += gathered + made - consumed + unpacked - emptied >= need
+        problem += gathered + made - consumed + unpacked - emptied + held >= need
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
@@ -404,6 +418,7 @@ def frontier(
     crafting_bonus: float = 1.0,
     count: int = 5,
     openables: list[OpenFlow] | None = None,
+    inventory: dict[str, float] | None = None,
 ) -> list[SourcingPlan]:
     """The ``(time, AP, LN)`` Pareto frontier of sourcing plans, fastest first.
 
@@ -420,11 +435,11 @@ def frontier(
     """
     fast = minimize(
         offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
-        openables=openables,
+        openables=openables, inventory=inventory,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
-        openables=openables,
+        openables=openables, inventory=inventory,
     )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
@@ -433,7 +448,7 @@ def frontier(
     plans += [
         minimize(
             offers, demand, recipes, crafting_bonus,
-            time_cap=timedelta(seconds=cap), openables=openables,
+            time_cap=timedelta(seconds=cap), openables=openables, inventory=inventory,
         )
         for cap in caps
     ]

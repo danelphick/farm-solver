@@ -185,6 +185,57 @@ def test_minimize_ignores_openables_for_items_it_does_not_help():
     assert plan.large_nets == pytest.approx(10)
 
 
+def test_minimize_draws_intermediate_materials_from_inventory():
+    # Widget crafts from one Gear each. With 100 Gears already in stock, covering
+    # 100 Widgets needs no Gears fished at all.
+    offers = [Offer("fish Gears", "fishing", {"gear": 1}, ln=1)]
+    recipes = {"widget": {"gear": 1}}
+    plan = minimize(
+        offers, {"Widget": 100}, recipes, 1.0,
+        price_ap=1e-6, price_ln=1e-6, inventory={"gear": 100},
+    )
+    assert plan.crafts.get("widget") == pytest.approx(100)
+    assert plan.large_nets == pytest.approx(0)  # all Gears came from stock
+
+
+def test_minimize_gathers_only_the_shortfall_beyond_inventory():
+    # 100 Widgets need 100 Gears but only 30 are in stock, so 70 must be fished.
+    offers = [Offer("fish Gears", "fishing", {"gear": 1}, ln=1)]
+    recipes = {"widget": {"gear": 1}}
+    plan = minimize(
+        offers, {"Widget": 100}, recipes, 1.0,
+        price_ap=1e-6, price_ln=1e-6, inventory={"gear": 30},
+    )
+    assert plan.large_nets == pytest.approx(70)
+
+
+def test_minimize_does_not_credit_inventory_against_the_direct_demand():
+    # The demand itself is already net of what is held (mastery progress or the
+    # acquired count), so stock of a *demanded* item earns no extra credit: all
+    # 100 are still gathered.
+    plan = minimize(
+        [FISH_ITEM], {"It": 100}, price_ap=1e-6, price_ln=1e-6, inventory={"it": 100}
+    )
+    assert plan.large_nets == pytest.approx(100)
+
+
+def test_minimize_does_not_open_a_chest_when_inventory_covers_the_contents():
+    # A Gem needs opening a chest, but 100 Gems are already held, so no chest is
+    # fished or opened.
+    offers = [Offer("fish Vault", "fishing", {"treasure chest": 1}, ln=1)]
+    chest = OpenFlow(
+        name="Treasure Chest", consumes={"treasure chest": 1}, yields={"gem": 100}
+    )
+    recipes = {"trinket": {"gem": 1}}
+    plan = minimize(
+        offers, {"Trinket": 100}, recipes, 1.0,
+        price_ap=1e-6, price_ln=1e-6, openables=[chest], inventory={"gem": 100},
+    )
+    assert plan.opens == {}
+    assert plan.large_nets == pytest.approx(0)
+    assert plan.crafts.get("trinket") == pytest.approx(100)
+
+
 def test_minimize_leaves_items_needing_unobtainable_materials_in_remainder():
     # Widget is only craftable, and its material has no source, so it cannot be
     # made -- it falls to the remainder rather than making the LP infeasible.

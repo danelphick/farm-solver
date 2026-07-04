@@ -395,6 +395,20 @@ def test_print_plan_reports_opening_chests(capsys):
     assert "Locked Chest" in out.split("Fishing:")[1]
 
 
+def test_print_plan_reduces_passive_residual_by_inventory(capsys):
+    # 100 Widgets each consume a Gear that passive makes. With 40 Gears in stock,
+    # passive need only build the 60 shortfall.
+    demand = {"Widget": 100}
+    workshop = Workshop(recipes={"widget": WorkshopRecipe("Widget", {"Gear": 1})})
+    passive_offer = Offer(
+        "passive", "passive", {"gear": 1}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive_offer, 60)], crafts={"widget": 100})
+    print_plan(plan, demand, Farm(), workshop, 1.0, inventory={"gear": 40})
+    out = capsys.readouterr().out
+    assert "60x Gear" in out  # 100 needed minus 40 already held
+
+
 def test_print_plan_drops_residue_opens(capsys):
     # A sliver of an open whose interesting yields all round to zero is LP residue.
     demand = {"Gem": 50}

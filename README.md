@@ -110,6 +110,8 @@ Two bonuses affect how many crafts (and therefore materials) are needed:
 - `--crafting-bonus <num>` (default `1.45`): the average number of items produced per craft. A higher bonus means fewer crafts, and so fewer materials, are required.
 - `--mastery-bonus <num>` (default `1.1`): the mastery gained per item crafted or otherwise found. This only reduces the crafts needed to satisfy a *mastery* shortfall (the tower or `-m`); it does not apply to a plain item count (`-i`), nor to the quantity of an item consumed as a material by another craft.
 
+Whatever is already in your **inventory** is drawn on before anything is gathered, crafted or opened: the quantity held is credited to each intermediate material, so a plan that needs 2,000 Red Shields to craft Frost Shields but already holds 37,000 makes none (and does not fish the chests it would have opened for them). The directly demanded items get no such credit, since their shortfall is already measured against what you hold — mastery progress for the tower and `-m` goals, the current count for `-i`.
+
 A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded.
 
 Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base and gathered materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
