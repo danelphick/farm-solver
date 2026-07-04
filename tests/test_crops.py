@@ -338,16 +338,30 @@ def test_takes_cookies_uses_the_effective_grow_time():
     assert farm.takes_cookies("Corn")
 
 
-def test_cookie_day_yield_boosts_only_the_grape_juice_share():
-    # A 1h crop grows 24 natural harvests a day; with 2 Grape Juices boosted 9x
-    # that is 24 + 9*2 = 42 harvests' worth, times a per_harvest of 1.
+def test_cookie_day_yield_boosts_the_windowed_harvests():
+    # A 1h crop grows 24 natural harvests a day. In the cookie window one natural
+    # harvest and both Grape Juice grows are boosted 9x, the other 23 natural
+    # harvests are not: (24 - 1) + 9 * (1 + 2) = 23 + 27 = 50, per_harvest 1.
     farm = Farm(
         crops={"x": Crop("X", timedelta(hours=1), {"x": 1})},
         rows=1,
         grape_juices_per_day=2,
         cookie_time_threshold=timedelta(minutes=18),
     )
-    assert farm.cookie_day_yield("X") == pytest.approx(42)
+    assert farm.cookie_day_yield("X") == pytest.approx(50)
+
+
+def test_cookie_day_yield_crams_a_fast_crop_into_the_window():
+    # A 1-minute crop regrows five times inside the 5-minute window, so with the
+    # initial harvest six natural harvests plus the 2 Grape Juices are boosted.
+    # Natural is 1440 a day: (1440 - 6) + 9 * (6 + 2) = 1434 + 72 = 1506.
+    farm = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=1), {"fast": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=1),
+    )
+    assert farm.cookie_day_yield("Fast") == pytest.approx(1506)
 
 
 def test_cookie_day_yield_is_none_when_the_crop_does_not_qualify():

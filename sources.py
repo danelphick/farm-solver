@@ -227,12 +227,14 @@ def farming_offers(farm: Farm) -> list[Offer]:
 
     A qualifying crop (slow enough -- see :meth:`Farm.takes_cookies`) also gets a
     cookie-day offer: one unit is a single day of farming that crop under a full
-    cookie set, which triples-thrice (:data:`crops.COOKIE_SET_MULTIPLIER`) that
-    day's Grape Juice yield. It takes a real day on the farming track and costs
-    one cookie set, so the optimiser spends its scarce sets on the crops where a
-    boosted day saves the most farming time. Modelling a whole day (natural
-    harvests included) rather than only the boost keeps it a standalone action,
-    needing no coupling back to the plain planting offer.
+    cookie set, whose five-minute window boosts the harvests taken in it --
+    ninefold (:data:`crops.COOKIE_SET_MULTIPLIER`) on the timed harvest and the
+    day's Grape Juice grows (see :meth:`Farm.cookie_day_yield`). It takes a real
+    day on the farming track and costs one cookie set, so the optimiser spends its
+    scarce sets on the crops where a boosted day saves the most farming time.
+    Modelling a whole day (natural harvests included) rather than only the boost
+    keeps it a standalone action, needing no coupling back to the plain planting
+    offer.
     """
     day = timedelta(days=1)
     offers: list[Offer] = []

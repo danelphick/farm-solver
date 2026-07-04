@@ -210,8 +210,8 @@ def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
     assert cookie.cookies == 1
     assert cookie.track == "farming"
     assert cookie.time_per_unit == timedelta(days=1)
-    # A boosted day: 24 natural + 9*2 grape-juice harvests, per_harvest 1.
-    assert cookie.yields == {"slow": pytest.approx(42)}
+    # A boosted day: (24 - 1) plain + 9*(1 natural + 2 grape-juice) boosted = 50.
+    assert cookie.yields == {"slow": pytest.approx(50)}
 
 
 def test_farming_offers_skip_cookies_for_fast_crops():

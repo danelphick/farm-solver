@@ -65,10 +65,15 @@ DEFAULT_DROPS_CSV = Path(__file__).with_name("seed_drops.csv")
 CORN = "corn"
 
 # A full cookie set (one Happy, one Spooky and one Lovely Cookie active at once)
-# multiplies the crop yield of a harvest by this while it lasts. One cookie
-# triples the yield, so three stacked give nine times (see :meth:`Farm.
-# cookie_day_yield`). Sets are used only to boost Grape Juice instant grows.
+# multiplies the crop yield of any harvest taken while it lasts by this. One
+# cookie triples the yield, so three stacked give nine times (see :meth:`Farm.
+# cookie_day_yield`).
 COOKIE_SET_MULTIPLIER = 9
+
+# How long one cookie set's effect lasts -- the window during which harvests are
+# boosted. You time it around a natural harvest and burn your Grape Juice inside
+# it, so it bounds how many boosted harvests one set buys.
+COOKIE_WINDOW = timedelta(minutes=5)
 
 # Config gives modifiers as whole-number percentages.
 PERCENT = 100
@@ -176,10 +181,12 @@ class Farm:
     def takes_cookies(self, name: str) -> bool:
         """Whether crop ``name`` is slow enough for a cookie set to be worth it.
 
-        Cookies boost only Grape Juice grows, so they help most where natural
-        growth (which they do not touch) is a small share of the day's harvests --
-        i.e. slow crops. A crop qualifies when its grow time reaches the farm's
-        ``cookie_time_threshold``; with no threshold set, cookies are off.
+        A cookie set boosts a fixed few harvests (the one or handful taken in its
+        five-minute window, plus the day's Grape Juice grows). On a slow crop each
+        of those boosted harvests stands in for a long grow, so the set saves a lot
+        of farming time; on a fast crop the same harvests are cheap to grow anyway,
+        so a scarce set is wasted. A crop qualifies when its grow time reaches the
+        farm's ``cookie_time_threshold``; with no threshold set, cookies are off.
         """
         threshold = self.cookie_time_threshold
         if threshold is None:
@@ -190,12 +197,15 @@ class Farm:
     def cookie_day_yield(self, name: str, item: str | None = None) -> float | None:
         """Expected ``item`` from one day of farming ``name`` under a cookie set.
 
-        A cookie set lasts long enough to boost that day's Grape Juice grows to
-        :data:`COOKIE_SET_MULTIPLIER` times their yield, while the day's natural
-        harvests (a day over the grow time) are unaffected. So the day yields
-        ``(natural + multiplier * grape_juices) * per_harvest``. Returns ``None``
-        when the crop does not qualify (see :meth:`takes_cookies`) or does not
-        drop the item.
+        The boost applies to whatever is *harvested* during the set's
+        :data:`COOKIE_WINDOW`, at :data:`COOKIE_SET_MULTIPLIER` times the yield. In
+        that window you harvest the crop you timed to finish plus any that regrow
+        naturally inside it (many for a fast crop, just the one for a slow crop),
+        and burn the day's Grape Juice instant grows -- all boosted. The day's
+        other natural harvests, outside the window, are not. So the day yields
+        ``(natural - in_window + multiplier * (in_window + grape_juices)) *
+        per_harvest``. Returns ``None`` when the crop does not qualify (see
+        :meth:`takes_cookies`) or does not drop the item.
         """
         if not self.takes_cookies(name):
             return None
@@ -204,8 +214,11 @@ class Farm:
         if not per_harvest or grow_time is None:
             return None
         natural = timedelta(days=1) / grow_time
-        boosted = natural + COOKIE_SET_MULTIPLIER * self.grape_juices_per_day
-        return boosted * per_harvest
+        # Harvests boosted inside the window: the one timed to it, plus any natural
+        # regrowth that fits (fast crops), capped at the day's natural harvests.
+        in_window = min(natural, 1 + math.floor(COOKIE_WINDOW / grow_time))
+        boosted = in_window + self.grape_juices_per_day
+        return (natural - in_window + COOKIE_SET_MULTIPLIER * boosted) * per_harvest
 
     def time_to_grow(
         self, name: str, quantity: int, item: str | None = None
