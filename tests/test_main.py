@@ -266,6 +266,28 @@ def test_slowest_passive_item_keeps_pet_when_it_is_primary_source():
     assert item is not None and item[0] == "Horn"
 
 
+def test_print_plan_passive_section_leads_with_building_over_pet_topup(capsys):
+    # Oak (sawmill) takes 10 min; Horn's pet residual takes 100 min but is a top-up
+    # of an item exploring mostly supplies. The critical path names Oak, so the
+    # passive section leads with Oak too — not the raw-slowest pet Horn.
+    demand = {"Oak": 1000, "Horn": 1000}
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("sawmill", MINUTE, {"oak": 100.0}),
+            PassiveProducer("pet Dog", MINUTE, {"horn": 1.0}),
+        ]
+    )
+    passive_offer = Offer(
+        "passive", "passive", {"oak": 100.0, "horn": 1.0}, time_per_unit=MINUTE
+    )
+    explore = Offer("explore Cave", "exploring", {"horn": 900}, ap=1)
+    plan = SourcingPlan(draws=[Draw(passive_offer, 1), Draw(explore, 1)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production=production)
+    tail = capsys.readouterr().out.split("Passive production (concurrent):")[1]
+    lines = [line for line in tail.splitlines() if line.strip()]
+    assert "Oak" in lines[0] and "Horn" in lines[1]
+
+
 def test_print_plan_lists_critical_passive_item_first(capsys):
     # Passive makes 1 Slow and 100 Big a minute. 50 Slow needs 50 min (the critical
     # path); 1000 Big needs only 10 min. Big has more items, but Slow is on the

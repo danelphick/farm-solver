@@ -513,8 +513,8 @@ def _slowest_passive_item(
     elsewhere: dict[str, float],
     display: dict[str, str],
     production: passive.PassiveProduction | None = None,
-) -> tuple[str, int, timedelta] | None:
-    """The passive item that caps the plan's time: ``(name, quantity, wait)``.
+) -> tuple[str, int, timedelta, str] | None:
+    """The passive item that caps the plan's time: ``(name, quantity, wait, key)``.
 
     Each item's wait is its residual (what other channels and crafting did not
     cover) over its per-minute rate; the longest of these is the passive track's
@@ -531,8 +531,8 @@ def _slowest_passive_item(
     if not passive_draws:
         return None
     offer = passive_draws[0].offer
-    best: tuple[str, int, timedelta] | None = None  # slowest non-pet-top-up item
-    fallback: tuple[str, int, timedelta] | None = None  # slowest of any, as backup
+    best: tuple[str, int, timedelta, str] | None = None  # slowest non-pet-top-up
+    fallback: tuple[str, int, timedelta, str] | None = None  # slowest of any, backup
     for key, rate in offer.yields.items():
         if rate <= 0:
             continue
@@ -541,7 +541,7 @@ def _slowest_passive_item(
         if residual <= 1e-6:
             continue
         wait = timedelta(minutes=residual / rate)
-        row = (display.get(key, key), round(residual), wait)
+        row = (display.get(key, key), round(residual), wait, key)
         if fallback is None or wait > fallback[2]:
             fallback = row
         # A pet top-up: pets make most of this item's passive supply yet supply
@@ -656,7 +656,7 @@ def print_critical_path(
         item = _slowest_passive_item(plan, need, elsewhere, display, production)
         if item is None:
             return
-        name, quantity, wait = item
+        name, quantity, wait, _ = item
         line = (
             f"{quantity:,}x {name} from passive production "
             f"({passive.format_duration(wait)}) — the slowest item to build up"
@@ -990,12 +990,17 @@ def print_plan(
                 rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
-            # The item on the critical path is the slowest to build up, and only
-            # when passive is the plan's bottleneck track. List it first, then the
-            # rest by quantity, then by how long they take.
+            # List the item on the critical path first (only when passive is the
+            # plan's bottleneck track), then the rest by quantity, then by how long
+            # they take. The critical item is whatever print_critical_path names --
+            # not simply the slowest, since a pet top-up is skipped over a building.
             critical_key = None
             if _passive_is_critical(plan):
-                critical_key = max(rows)[3]  # (wait, name, quantity, key): max wait
+                critical = _slowest_passive_item(
+                    plan, need, elsewhere, display, production
+                )
+                if critical is not None:
+                    critical_key = critical[3]
             width = _num_width(quantity for _, _, quantity, _ in rows)
             ordered = sorted(
                 rows, key=lambda r: (r[3] != critical_key, -r[2], -r[0])
