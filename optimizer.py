@@ -473,26 +473,26 @@ def _thin(
     return [plans[i] for i in sorted(keep)]
 
 
-def _passive_completion_caps(
+def passive_residuals(
     plan: SourcingPlan,
     demand: dict[str, float],
     recipes: dict[str, dict[str, float]],
     crafting_bonus: float,
     openables: list[OpenFlow],
     inventory: dict[str, float],
-) -> list[float]:
-    """Makespan seconds at which each passively-made item finishes, in ``plan``.
+) -> dict[str, float]:
+    """How much of each passively-made item ``plan`` leaves to passive production.
 
-    Each item passive must supply (its net requirement after crafting, opening,
-    stock and the other tracks) finishes after ``residual / rate`` -- and those
-    times are the natural plateaus of the frontier: cap the makespan just at one
-    and every slower item must be sped up with consumables while that item, and
-    all faster ones, still come for free. Computed on the cheapest plan, where
-    passive does the most work, so the requirements are the full ones.
+    An item's residual is its net requirement (demand plus what crafting and
+    opening consume) less what crafting, opening, stock and the other tracks
+    already supply. Computed on the cheapest plan -- which crafts the most and
+    buys the least -- it is that item's *full* requirement, the most passive ever
+    has to make; a plan whose residual for an item reaches this has that item at
+    its full completion (see :func:`main.print_critical_path`).
     """
     passive = next((d for d in plan.draws if d.offer.track == PASSIVE_TRACK), None)
     if passive is None:
-        return []
+        return {}
     demanded = {item.lower() for item in demand}
     # What must be produced: demand, plus crafting materials and open tokens/keys.
     need = {item.lower(): float(qty) for item, qty in demand.items() if qty > 0}
@@ -520,12 +520,45 @@ def _passive_completion_caps(
             continue
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
-    caps = []
+    residuals = {}
     for item, rate in passive.offer.yields.items():
         if rate <= 0:
             continue
         residual = need.get(item, 0.0) - elsewhere.get(item, 0.0)
         if residual > 1e-6:
+            residuals[item] = residual
+    return residuals
+
+
+def _passive_completion_caps(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+    exclude: set[str] = frozenset(),
+) -> list[float]:
+    """Makespan seconds at which each passively-made item finishes, in ``plan``.
+
+    Each item finishes after ``residual / rate`` (see :func:`passive_residuals`) --
+    the natural plateaus of the frontier: cap the makespan at one and every slower
+    item must be sped up with consumables while that item, and all faster ones,
+    still come for free. Items in ``exclude`` -- those a pet mostly supplies, a
+    slow last-resort trickle rather than a real gathering plateau -- are skipped.
+    """
+    passive = next((d for d in plan.draws if d.offer.track == PASSIVE_TRACK), None)
+    if passive is None:
+        return []
+    residuals = passive_residuals(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    caps = []
+    for item, residual in residuals.items():
+        if item in exclude:
+            continue
+        rate = passive.offer.yields.get(item, 0.0)
+        if rate > 0:
             caps.append(residual / rate * 60.0)  # rate is per minute -> seconds
     return caps
 
@@ -553,6 +586,7 @@ def frontier(
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
+    passive_pet_items: set[str] = frozenset(),
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans, fastest first.
 
@@ -593,7 +627,7 @@ def frontier(
     breakpoints = [
         cap for cap in _passive_completion_caps(
             cheap, demand, recipes or {}, crafting_bonus, openables or [],
-            inventory or {},
+            inventory or {}, passive_pet_items,
         )
         if lo < cap < hi
     ]

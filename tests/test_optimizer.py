@@ -12,6 +12,7 @@ from optimizer import (
     all_offers,
     frontier,
     minimize,
+    passive_residuals,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
@@ -446,3 +447,24 @@ def test_frontier_clamps_to_a_passive_completion_breakpoint():
     plans = frontier(offers, {"Oak": 100, "Horn": 100}, count=5)
     times = [p.time.total_seconds() for p in plans]
     assert any(abs(t - 600) < 1 for t in times)  # a plan clamped at Horn's 10 min
+
+
+def test_passive_residuals_are_net_of_other_channels():
+    # 100 Oak needed; fishing lands 30, so passive is left to make the other 70.
+    passive = Offer("passive", "passive", {"oak": 10.0}, time_per_unit=timedelta(minutes=1))
+    fished = Draw(Offer("fish Oak", "fishing", {"oak": 1}, ln=1), 30)
+    plan = SourcingPlan(draws=[Draw(passive, 1), fished])
+    assert passive_residuals(plan, {"Oak": 100}, {}, 1.0, [], {}) == {"oak": 70.0}
+
+
+def test_passive_completion_caps_skip_excluded_items():
+    # Oak completes at 100/10 = 10 min; Horn is a pet trickle we exclude, so only
+    # Oak's breakpoint is returned.
+    passive = Offer(
+        "passive", "passive", {"oak": 10.0, "horn": 1.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 100)])
+    caps = _passive_completion_caps(
+        plan, {"Oak": 100, "Horn": 60}, {}, 1.0, [], {}, exclude={"horn"}
+    )
+    assert [round(c) for c in caps] == [600]

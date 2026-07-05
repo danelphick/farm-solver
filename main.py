@@ -224,6 +224,11 @@ _MAX_SEASON_ITERS = 5
 # critical path (the rest being passive fill); see :func:`print_critical_path`.
 _FARMING_COMAX_MARGIN = 0.01
 
+# How close to its full (cheapest-plan) requirement a passive item's residual must
+# be to count as fully gathered -- the resource whose completion gates the plan
+# (see :func:`_defining_passive_resource`).
+_FULL_REQUIREMENT_MARGIN = 0.02
+
 
 def _makespans_close(a: timedelta, b: timedelta) -> bool:
     """Whether two makespans agree closely enough to stop the seasonal iteration."""
@@ -507,6 +512,19 @@ def _pet_passive_rate(
     return total
 
 
+def _pet_dominated_items(production: passive.PassiveProduction) -> set[str]:
+    """Passive items a pet mostly makes -- a slow trickle, not a real plateau.
+
+    Their completion times are the multi-decade pet tail, not the gathering
+    breakpoints worth building a plan around (see :func:`optimizer.frontier`).
+    """
+    items = {key for producer in production.producers for key in producer.outputs}
+    return {
+        key for key in items
+        if _pet_passive_rate(production, key) > production.rate_per_minute(key) / 2
+    }
+
+
 def _slowest_passive_item(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
@@ -651,6 +669,54 @@ def _binding_crop_is_fill(
     return crop in sourceable_elsewhere
 
 
+def _defining_passive_resource(
+    plan: optimizer.SourcingPlan,
+    need: dict[str, float],
+    elsewhere: dict[str, float],
+    display: dict[str, str],
+    makespan: timedelta,
+    tolerance: timedelta,
+    max_passive_residuals: dict[str, float] | None,
+    production: passive.PassiveProduction | None,
+) -> tuple[str, int, timedelta, str] | None:
+    """The passive item at its full requirement whose completion sets the makespan.
+
+    A material like Steel Wire is needed only up to its products' full demand;
+    gather that much passively and no more is required, so the time it takes is a
+    hard gate -- and a plan clamped there is *its* plan. It qualifies when its
+    residual has reached its full (cheapest-plan) requirement and it completes at
+    the makespan; a resource still being sped up sits below its full requirement,
+    and one that finishes early is not co-maximal. Pets are skipped (see
+    :func:`_slowest_passive_item`).
+    """
+    if not max_passive_residuals:
+        return None
+    passive_draw = next(
+        (d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK), None
+    )
+    if passive_draw is None:
+        return None
+    best: tuple[str, int, timedelta, str] | None = None
+    for key, rate in passive_draw.offer.yields.items():
+        if rate <= 0:
+            continue
+        residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
+        full = max_passive_residuals.get(key, 0.0)
+        if residual <= 1e-6 or full <= 0:
+            continue
+        if residual < full * (1 - _FULL_REQUIREMENT_MARGIN):
+            continue  # still being sped up with consumables, not the gate
+        wait = timedelta(minutes=residual / rate)
+        if wait < makespan - tolerance:
+            continue  # finishes early, so it is not what caps the plan
+        pet_rate = _pet_passive_rate(production, key)
+        if pet_rate > rate / 2 and residual < need.get(key, 0.0) / 2:
+            continue  # a pet trickle topping up a mostly-elsewhere item
+        if best is None or wait > best[2]:
+            best = (display.get(key, key), round(residual), wait, key)
+    return best
+
+
 def print_critical_path(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
@@ -658,6 +724,7 @@ def print_critical_path(
     display: dict[str, str],
     production: passive.PassiveProduction | None = None,
     sourceable_elsewhere: set[str] | None = None,
+    max_passive_residuals: dict[str, float] | None = None,
 ) -> None:
     """Highlight the track that truly caps how fast the plan can run.
 
@@ -686,12 +753,27 @@ def print_critical_path(
     if makespan <= timedelta(0):
         return  # everything is instant; there is no wait to explain
 
-    item = _slowest_passive_item(plan, need, elsewhere, display, production)
-    if _farming_drives(
+    tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
+    defining = _defining_passive_resource(
+        plan, need, elsewhere, display, makespan, tolerance,
+        max_passive_residuals, production,
+    )
+    if defining is not None:
+        # A resource gathered to its full requirement exactly here: its completion
+        # is the gate, and this is its plan (more time gathers no more of it).
+        name, quantity, wait, _ = defining
+        line = (
+            f"{quantity:,}x {name} from passive production "
+            f"({passive.format_duration(wait)}) — its full requirement, "
+            "after which no more is needed"
+        )
+    elif _farming_drives(
         plan, need, elsewhere, display, production, sourceable_elsewhere
     ):
         line = _farming_bottleneck(plan, makespan)
-    elif item is not None:
+    elif (item := _slowest_passive_item(
+        plan, need, elsewhere, display, production
+    )) is not None:
         # Passive sets the pace: it is the sole longest track, or farming beside it
         # is merely filling the wait this item forces with free crops.
         name, quantity, wait, _ = item
@@ -820,6 +902,7 @@ def print_plan(
     openable_names: dict[str, str] | None = None,
     inventory: dict[str, float] | None = None,
     sourceable_elsewhere: set[str] | None = None,
+    max_passive_residuals: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
     open_flows = open_flows or []
@@ -901,7 +984,8 @@ def print_plan(
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
 
     print_critical_path(
-        plan, need, elsewhere, display, production, sourceable_elsewhere
+        plan, need, elsewhere, display, production, sourceable_elsewhere,
+        max_passive_residuals,
     )
 
     fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
@@ -1220,7 +1304,7 @@ def run(args: argparse.Namespace) -> int:
         offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
-            inventory, cookie_sets,
+            inventory, cookie_sets, _pet_dominated_items(production),
         )
         if not plans:
             return 0  # nothing left to source
@@ -1260,9 +1344,16 @@ def run(args: argparse.Namespace) -> int:
     }
     for flow in open_flows:
         sourceable_elsewhere |= set(flow.yields)
+    # The cheapest plan crafts the most, so its passive residuals are each item's
+    # full requirement -- the yardstick for whether a resource is at its complete
+    # gathering point in the chosen plan (see print_critical_path).
+    max_passive_residuals = optimizer.passive_residuals(
+        plans[-1], demand, recipes, args.crafting_bonus, open_flows, inventory
+    )
     print_plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
         open_flows, smith.names, inventory, sourceable_elsewhere,
+        max_passive_residuals,
     )
 
     if args.breakdown:

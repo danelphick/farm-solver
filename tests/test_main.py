@@ -319,6 +319,27 @@ def test_print_plan_right_aligns_farming_yields(capsys):
     assert "        5x Small" in out
 
 
+def test_critical_path_names_the_resource_at_its_full_requirement(capsys):
+    # Passive makes 10 Steel Wire and 10 Oak a minute, both finishing the plan's 100
+    # each at 10 min. But Oak's full requirement is 1000 (it is reduced here, sped up
+    # with consumables), while Steel Wire is at its full 100 -- so Steel Wire is the
+    # resource whose complete gathering gates this makespan.
+    passive = Offer(
+        "passive", "passive", {"steel wire": 10.0, "oak": 10.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 10)])
+    print_critical_path(
+        plan, {"steel wire": 100, "oak": 100}, {},
+        {"steel wire": "Steel Wire", "oak": "Oak"}, None, None,
+        max_passive_residuals={"steel wire": 100, "oak": 1000},
+    )
+    out = capsys.readouterr().out
+    assert "Steel Wire from passive production" in out
+    assert "full requirement" in out
+    assert "Oak" not in out
+
+
 def test_critical_path_names_passive_when_the_farming_is_fill(capsys):
     # Farming grows Mushroom (which exploring could supply) to 10 min; passive makes
     # Oak (building-only) also to 10 min. The Mushroom farming is free fill of the
