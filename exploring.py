@@ -74,7 +74,7 @@ class CiderModifiers:
     have_cinnamon_sticks: bool = False
     wanderer_level: int = 0
     have_neigh_neigh: bool = False
-    have_neigh: bool = False
+    use_neigh: bool = False
 
     def explores_per_cider(self, effectiveness: int) -> int:
         """Explores one Apple Cider does at the given Exploring Effectiveness.
@@ -93,7 +93,7 @@ class CiderModifiers:
         stamina = 1.0 - WANDERER_STAMINA_REDUCTION.get(self.wanderer_level, 0.0)
         if self.have_neigh_neigh:
             stamina *= 1.0 - NEIGH_STAMINA_REDUCTION
-        if self.have_neigh:
+        if self.use_neigh:
             stamina *= 1.0 - NEIGH_STAMINA_REDUCTION
         return stamina
 
@@ -187,7 +187,7 @@ def exploring_from_config(
         have_cinnamon_sticks=bool(section.get("have_cinnamon_sticks")),
         wanderer_level=int(section.get("wanderer_level", 0)),
         have_neigh_neigh=bool(section.get("have_neigh_neigh")),
-        have_neigh=bool(section.get("have_neigh")),
+        use_neigh=bool(section.get("use_neigh")),
     )
     effectiveness = {
         zone.lower(): int(value)

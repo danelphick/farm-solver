@@ -298,7 +298,7 @@ use_quandary_chowder = true      # then ×1.1 (550 with the squeezer)
 have_cinnamon_sticks = true      # 12.5 explores per Effectiveness point, not 10
 wanderer_level = 4               # cider stamina −4/11/20/33% at level 1/2/3/4
 have_neigh_neigh = true          # then ×0.8 stamina (perk)
-have_neigh = true                # then ×0.8 stamina again (meal)
+use_neigh = true                 # then ×0.8 stamina again (meal)
 
 [exploring.effectiveness]        # per-zone Exploring Effectiveness for cider
 Forest = 136
