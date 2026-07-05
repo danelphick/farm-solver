@@ -126,6 +126,27 @@ Three ceilings drop plans that exceed them: `--passive-limit <duration>` on tota
 python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a century
 ```
 
+## Plan modes: unlimited vs inventory
+
+By default (`--plan-mode unlimited`) Arnold Palmers, Large Nets and Grape Juices are abstract, unbounded costs — you can spend as many as a plan wants, and the frontier just trades them against time. `--plan-mode inventory` instead sources **only from your inventory and passive economy**: every consumable has to actually be crafted or held. Exploring now consumes real **Arnold Palmers** (Iced Tea + Lemonade, down to Orchard Lemons and explored Tea Leaves / Shimmer Stone), fishing consumes real **Large Nets** (down to passive stone/wood/straw/antlers), and Grape-Juice grows consume real **Grape Juice** (from Vineyard Grapes). So a consumable is only as plentiful as the passive materials beneath it, and the frontier trades makespan against how much of your **AP / LN / GJ / cider** stockpile a plan burns — the thrifty end leaves the most in reserve.
+
+Inventory mode adds a second way to explore: **Apple Cider**. Each cider spends **stamina** to explore a zone many times at a fixed 0.40 drop rate. Stamina is banked by drinking **Orange Juice** (100 each, from Orchard Oranges); `--current-stamina N` seeds a starting balance. How many explores a cider does depends on the zone's Exploring Effectiveness and your cider perks/meals (see [Fishing and exploring](#fishing-and-exploring)). The frontier shows an **Apple Cider** column when a plan uses ciders, and the breakdown gains an *Exploring (Apple Cider)* section and a *Drinking (stamina)* line:
+
+```shell
+python main.py --plan-mode inventory --current-stamina 200000 -i 'Mushroom:2000000'
+```
+
+```text
+Sourcing plans (time / Arnold Palmers / Large Nets / Grape Juice / Apple Cider):
+ > 3. 1h 4m / 3,196 AP / 0 LN / 1 GJ / 235 cider
+
+Exploring (Apple Cider):
+  235x Apple Cider at Gary's Crushroom (246,375 stamina, Mushroom)
+
+Drinking (stamina):
+  Drink 464x Orange Juice -> 46,375 stamina
+```
+
 ## Materials and crafting
 
 To reach a tower requirement the solver expands each needed item into the workshop materials that craft it. Crafting stops at any item that can be **gathered** (produced passively, fished, explored or farmed): rather than craft such an item from its own materials, the solver sources it directly — so a passively-made Board stays free instead of being crafted from Wood. Everything else is expanded down to its base materials, which the sourcing plans then gather.
@@ -272,7 +293,20 @@ use_sea_pincher = true           # then ×1.1
 [exploring]    # how many items one Arnold Palmer yields
 have_lemon_squeezer = true       # base yield 500 instead of 200
 use_quandary_chowder = true      # then ×1.1 (550 with the squeezer)
+
+# Apple Cider perks/meals (used only in --plan-mode inventory)
+have_cinnamon_sticks = true      # 12.5 explores per Effectiveness point, not 10
+wanderer_level = 4               # cider stamina −4/11/20/33% at level 1/2/3/4
+have_neigh_neigh = true          # then ×0.8 stamina (perk)
+have_neigh = true                # then ×0.8 stamina again (meal)
+
+[exploring.effectiveness]        # per-zone Exploring Effectiveness for cider
+Forest = 136
+"Small Cave" = 104
+# ... one line per explorable zone
 ```
+
+Each Apple Cider does `1000 + 10 × Effectiveness` explores in a zone (`1250 + 12.5 ×` with Cinnamon Sticks), each costing one stamina before the multiplicative Wanderer / Neigh Neigh / Neigh reductions. A zone with no configured Effectiveness gets no cider offer.
 
 ## Farming
 

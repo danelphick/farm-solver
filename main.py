@@ -130,6 +130,28 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--plan-mode",
+        choices=(sources.UNLIMITED, sources.INVENTORY),
+        default=sources.UNLIMITED,
+        help=(
+            "how consumables are sourced. 'unlimited' (the default) spends "
+            "abstract Arnold Palmers / Large Nets / Grape Juice freely; "
+            "'inventory' grounds them in real crafted/held items (from the "
+            "passive economy) and adds the Apple Cider exploring channel fed by "
+            "stamina from drinking Orange Juice"
+        ),
+    )
+    parser.add_argument(
+        "--current-stamina",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "stamina already banked, spendable on Apple Cider explores "
+            "(inventory plan mode only; default: 0)"
+        ),
+    )
+    parser.add_argument(
         "--plans",
         type=int,
         default=5,
@@ -427,7 +449,8 @@ def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
             plans[i].arnold_palmers
             + plans[i].large_nets
             + plans[i].cookie_sets
-            + plans[i].grape_juices,
+            + plans[i].grape_juices
+            + plans[i].apple_ciders,
             plans[i].time.total_seconds(),
         ),
     )
@@ -469,12 +492,15 @@ def print_frontier(
     """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
+    show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
 
     columns = ["time", "Arnold Palmers", "Large Nets"]
     if show_cookies:
         columns.append("cookie sets")
     if show_juices:
         columns.append("Grape Juice")
+    if show_ciders:
+        columns.append("Apple Cider")
     print(f"\nSourcing plans ({' / '.join(columns)}):")
 
     for i, plan in enumerate(plans):
@@ -500,6 +526,8 @@ def print_frontier(
             parts.append(f"{_cookie_sets_used(plan):,} sets")
         if show_juices:
             parts.append(f"{round(plan.grape_juices):,} GJ")
+        if show_ciders:
+            parts.append(f"{round(plan.apple_ciders):,} cider")
         print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
 
 
@@ -1056,9 +1084,15 @@ def print_plan(
             )
 
     exploring_draws = sourced(draws_on(sources.EXPLORING_TRACK))
-    if exploring_draws:
+    # Two ways to explore: Arnold Palmers (ap cost / consumes a palmer) and, in
+    # the inventory plan mode, Apple Cider (consumes stamina and part of a cider).
+    palmer_draws = [
+        d for d in exploring_draws if not d.offer.consumes.get("apple cider")
+    ]
+    cider_draws = [d for d in exploring_draws if d.offer.consumes.get("apple cider")]
+    if palmer_draws:
         print("\nExploring:")
-        ordered = sorted(exploring_draws, key=lambda d: d.ap, reverse=True)
+        ordered = sorted(palmer_draws, key=lambda d: d.ap, reverse=True)
         width = _num_width(math.ceil(d.units) for d in ordered)
         for draw in ordered:
             location = draw.offer.name.removeprefix("explore ")
@@ -1066,6 +1100,36 @@ def print_plan(
                 f"  {math.ceil(draw.units):>{width},}x Arnold Palmer at {location}"
                 f" ({wanted(draw.offer)})"
             )
+    if cider_draws:
+        print("\nExploring (Apple Cider):")
+        # A cider draw's units are explores; ciders used and stamina spent are its
+        # per-explore consumes scaled up.
+        def ciders(d: sources.Draw) -> float:
+            return d.units * d.offer.consumes.get("apple cider", 0.0)
+
+        ordered = sorted(cider_draws, key=ciders, reverse=True)
+        width = _num_width(math.ceil(ciders(d)) for d in ordered)
+        for draw in ordered:
+            zone = draw.offer.name.removeprefix("cider ")
+            stamina = draw.units * draw.offer.consumes.get("stamina", 0.0)
+            print(
+                f"  {math.ceil(ciders(draw)):>{width},}x Apple Cider at {zone}"
+                f" ({round(stamina):,} stamina, {wanted(draw.offer)})"
+            )
+
+    # Drinking Orange Juice for stamina (inventory plan mode). One instant flow;
+    # report the Orange Juice drunk and the stamina it banks for cider explores.
+    drinking_draws = draws_on(sources.DRINKING_TRACK)
+    total_oj = sum(
+        d.units * d.offer.consumes.get("orange juice", 0.0) for d in drinking_draws
+    )
+    if round(total_oj) >= 1:
+        total_stamina = sum(d.produced.get("stamina", 0.0) for d in drinking_draws)
+        print("\nDrinking (stamina):")
+        print(
+            f"  Drink {round(total_oj):,}x Orange Juice"
+            f" -> {round(total_stamina):,} stamina"
+        )
 
     # Opening chests and bags at the Locksmith. Skip residue opens that yield less
     # than one of anything wanted (CBC can leave a sliver, as with draws).
@@ -1337,6 +1401,10 @@ def run(args: argparse.Namespace) -> int:
     inventory = {
         key: float(entry.quantity) for key, entry in state.inventory.items.items()
     }
+    # Stamina already banked seeds the inventory so Apple Cider explores can spend
+    # it (inventory plan mode); the drink-Orange-Juice flow tops it up over time.
+    if args.plan_mode == sources.INVENTORY and args.current_stamina:
+        inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
     cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
 
     if args.plans < 1:
@@ -1356,7 +1424,7 @@ def run(args: argparse.Namespace) -> int:
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon
         )
-        offers = optimizer.all_offers(production, fish, explore, farm)
+        offers = optimizer.all_offers(production, fish, explore, farm, args.plan_mode)
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, _pet_dominated_items(production),

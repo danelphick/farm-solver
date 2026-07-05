@@ -3,14 +3,23 @@ from datetime import timedelta
 import pytest
 
 from crops import Crop, Farm
-from exploring import Exploring, ExploringLocation, ExploringModifiers
+from exploring import (
+    CiderModifiers,
+    Exploring,
+    ExploringLocation,
+    ExploringModifiers,
+)
 from fishing import Fishing, FishingModifiers, FishingZone
 from locksmith import Locksmith, Openable, PoolItem
 from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import (
+    CIDER_DROP_RATE,
+    DRINKING_TRACK,
     Draw,
     Offer,
     aggregate,
+    cider_offers,
+    drink_offers,
     exploring_offers,
     farming_offers,
     fishing_offers,
@@ -268,3 +277,76 @@ def test_farming_offer_time_matches_time_to_grow():
     assert (offer.time_per_unit * 10).total_seconds() == pytest.approx(
         grown.total_seconds()
     )
+
+
+# --- Inventory plan mode: grounded consumables + Apple Cider -------------------
+
+
+def test_grounded_exploring_consumes_a_real_arnold_palmer():
+    exploring = Exploring(locations={"cave": ExploringLocation("Cave", {"wood": 0.4})})
+    [offer] = exploring_offers(exploring, ground=True)
+    assert offer.ap == 1  # still tallied/priced
+    assert offer.consumes == {"arnold palmer": 1.0}
+
+
+def test_ungrounded_exploring_has_no_consumes():
+    exploring = Exploring(locations={"cave": ExploringLocation("Cave", {"wood": 0.4})})
+    [offer] = exploring_offers(exploring)
+    assert offer.consumes == {}
+
+
+def test_grounded_fishing_consumes_a_real_large_net():
+    fishing = Fishing(zones={"lake": FishingZone("Lake", {"trout": 0.4})})
+    [offer] = fishing_offers(fishing, ground=True)
+    assert offer.ln == 1
+    assert offer.consumes == {"large net": 1.0}
+
+
+def test_grounded_farming_consumes_grape_juice_matching_its_gj_cost():
+    farm = Farm(
+        crops={"grape": Crop("Grape", timedelta(hours=6), {"grape": 1})},
+        rows=1,
+        grape_juices_per_day=14,
+    )
+    offers = {o.name: o for o in farming_offers(farm, ground=True)}
+    gj_offer = offers["grow Grape"]
+    assert gj_offer.gj > 0
+    assert gj_offer.consumes == {"grape juice": gj_offer.gj}
+    # The grape-juice-free variant spends none, so it grounds nothing.
+    assert offers["grow Grape without grape juice"].consumes == {}
+
+
+def test_cider_offer_yields_drop_rate_times_zone_rates_and_consumes_stamina():
+    exploring = Exploring(
+        locations={"cave": ExploringLocation("Cave", {"wood": 0.5, "stone": 0.25})},
+        cider=CiderModifiers(),  # 1 stamina/explore, 1010 explores at ee=1
+        effectiveness={"cave": 1},
+    )
+    [offer] = cider_offers(exploring)
+    assert offer.name == "cider Cave"
+    assert offer.yields == {
+        "wood": CIDER_DROP_RATE * 0.5,
+        "stone": CIDER_DROP_RATE * 0.25,
+    }
+    # One explore costs one stamina and 1/1010 of a cider (ee=1, no cinnamon).
+    assert offer.consumes["stamina"] == 1.0
+    assert offer.consumes["apple cider"] == pytest.approx(1 / 1010)
+
+
+def test_cider_offers_skip_zones_without_configured_effectiveness():
+    exploring = Exploring(
+        locations={
+            "cave": ExploringLocation("Cave", {"wood": 0.5}),
+            "forest": ExploringLocation("Forest", {"fern": 0.5}),
+        },
+        effectiveness={"cave": 10},
+    )
+    assert [o.name for o in cider_offers(exploring)] == ["cider Cave"]
+
+
+def test_drink_offer_turns_orange_juice_into_stamina():
+    [offer] = drink_offers()
+    assert offer.track == DRINKING_TRACK
+    assert offer.yields == {"stamina": 100.0}
+    assert offer.consumes == {"orange juice": 1.0}
+    assert offer.time_per_unit == timedelta(0)

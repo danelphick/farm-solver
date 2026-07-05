@@ -10,8 +10,23 @@ drift.
 Given a FarmRPG mastery/inventory state and a goal (tower level, `-m` mastery, or
 `-i` item counts), work out the cheapest ways to source everything — trading
 **time** against **Arnold Palmers (AP)**, **Large Nets (LN)**, **cookie sets**,
-and **Grape Juices (GJ)** — and print a Pareto **frontier** of plans plus a
-per-channel breakdown of a chosen one.
+**Grape Juices (GJ)**, and (inventory mode) **Apple Ciders** — and print a Pareto
+**frontier** of plans plus a per-channel breakdown of a chosen one.
+
+**Plan modes** (`--plan-mode`, see `sources.UNLIMITED/INVENTORY` and
+`optimizer.all_offers`): `unlimited` (default) spends AP/LN/GJ as abstract,
+unbounded costs. `inventory` grounds every consumable in real crafted/held items
+— exploring/fishing/GJ-farming offers gain a `consumes` input (Arnold Palmer /
+Large Net / Grape Juice, chained down to Orchard Lemons, passive
+stone/wood/straw/antlers, and Vineyard Grapes) — and adds the **Apple Cider**
+exploring channel (`sources.cider_offers`), fed by **stamina** from drinking
+Orange Juice (`sources.drink_offers`, the `DRINKING_TRACK`; `--current-stamina`
+seeds a starting balance). Cider math (`exploring.CiderModifiers`): each stamina
+buys one explore at drop rate `CIDER_DROP_RATE` (0.40); explores per cider scale
+with per-zone Exploring Effectiveness (`[exploring.effectiveness]`) and Cinnamon
+Sticks; stamina per explore is cut by Wanderer / Neigh Neigh / Neigh. The frontier
+then trades makespan against how much of the AP/LN/GJ/cider stockpile is burned
+(i.e. what is left over).
 
 ## Pipeline (one run)
 
@@ -48,7 +63,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction`, `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size` |
-| `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `*_from_config` |
+| `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
 
@@ -57,17 +72,21 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 
 ## Core data types
 
-- **`sources.Offer(name, track, yields, ap, ln, cookies, gj, time_per_unit)`** —
-  one way to gather; `yields` is `{item: qty_or_rate}`. `track` is one of
-  `FARMING/FISHING/EXPLORING/PASSIVE_TRACK`. Cost fields are per unit.
+- **`sources.Offer(name, track, yields, consumes, ap, ln, cookies, gj,
+  time_per_unit)`** — one way to gather; `yields` is `{item: qty_or_rate}`.
+  `consumes` is `{item: qty}` an activity **uses up** as an input (empty in the
+  unlimited mode; in the inventory mode an explore consumes an Arnold Palmer, a
+  cider explore consumes stamina + part of an Apple Cider, a net a Large Net, a
+  GJ grow a Grape Juice — grounding those in real crafted/held items). `track` is
+  `FARMING/FISHING/EXPLORING/PASSIVE_TRACK/DRINKING_TRACK`. Cost fields per unit.
 - **`sources.Draw(offer, units)`** — an offer used at scale. Properties:
   `produced` (`rate*units` per item — **overproduces** fast passive items),
   `ap/ln/cookies/gj`, `time` (`time_per_unit*units`).
 - **`optimizer.SourcingPlan`** — `draws`, `crafts` (`{item: count}`), `opens`
   (`{openable_name: count}`), `time`, `arnold_palmers/large_nets/cookie_sets/
-  grape_juices`, `remainder`. `.cost` is the 5-tuple
-  `(time, AP, LN, cookie_sets, GJ)` — **all traded resources must be in it** or
-  the Pareto prune drops thrifty plans.
+  grape_juices/apple_ciders`, `remainder`. `.cost` is the 6-tuple
+  `(time, AP, LN, cookie_sets, GJ, cider)` — **all traded resources must be in
+  it** or the Pareto prune drops thrifty plans (cider is 0 outside inventory mode).
 - **`sources.OpenFlow(name, consumes, yields)`** — opening a chest/bag: a free,
   instant multi-output LP flow.
 - **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
@@ -83,9 +102,16 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
     `makespan ≤ time_cap`. This is what reaches the **interior** of a flat
     frontier segment; the price sweep alone collapses onto endpoints.
   Crafting/opening are free LP flows; passive is one aggregate offer whose bundle
-  is per-minute rates (drives on the slowest bound item). `inventory` credits
-  every item's balance **except directly-demanded ones** (their need is already
-  net of stock). `cookie_sets` caps total cookie-offer usage.
+  is per-minute rates (drives on the slowest bound item). An offer's `consumes`
+  are subtracted in each item's balance like a craft's materials, so a grounded
+  explore/fish/GJ-grow must itself source the Arnold Palmer / Large Net / Grape
+  Juice it burns; `_obtainable` therefore only counts an offer's yields once its
+  `consumes` are obtainable (an item only an *unusable* offer could make falls to
+  the remainder, not an infeasible LP), and `_reachable` walks from a wanted drop
+  into the consumables it burns. `inventory` credits every item's balance
+  **except directly-demanded ones** (their need is already net of stock; stamina
+  is seeded here by `--current-stamina`). `cookie_sets` caps total cookie-offer
+  usage.
 - **`frontier(...)`** = fast endpoint (spend freely) + cheap endpoint (avoid all)
   + an epsilon sweep of makespan caps, then `_non_dominated` then `_thin` to
   `count`. Two cap sources feed the sweep:

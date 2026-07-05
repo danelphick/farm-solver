@@ -42,6 +42,22 @@ FARMING_TRACK = "farming"
 FISHING_TRACK = "fishing"
 EXPLORING_TRACK = "exploring"
 PASSIVE_TRACK = "passive"
+# Drinking Orange Juice for stamina is instant, like fishing/exploring, so its
+# track never costs time (inventory plan mode only).
+DRINKING_TRACK = "drinking"
+
+# Plan modes (see :func:`optimizer.all_offers`). ``UNLIMITED`` is the original
+# behaviour -- exploring/fishing/farming spend abstract, unbounded Arnold
+# Palmers / Large Nets / Grape Juice. ``INVENTORY`` grounds those consumables in
+# real crafted/stocked items (the offers gain ``consumes``) and adds the Apple
+# Cider exploring channel fed by stamina from drinking Orange Juice.
+UNLIMITED = "unlimited"
+INVENTORY = "inventory"
+
+# The drop rate Apple Cider forces in every zone: 0.40 items discovered per
+# explore (one stamina). The zone's own drop-rate distribution then says which
+# item each discovery is (see :func:`cider_offers`).
+CIDER_DROP_RATE = 0.40
 
 
 @dataclass
@@ -49,8 +65,13 @@ class Offer:
     """One joint-production activity and what performing it once costs and yields.
 
     ``yields`` maps each lower-cased item the activity produces to how many one
-    unit of it yields (the bundle). ``ap``, ``ln``, ``cookies`` and ``gj`` are the
-    Arnold Palmers, Large Nets, cookie sets and Grape Juices one unit consumes,
+    unit of it yields (the bundle). ``consumes`` maps each lower-cased item one
+    unit *uses up* to how many (an input the plan must itself source -- e.g. in
+    the inventory plan mode an exploring unit consumes one Arnold Palmer, a cider
+    explore consumes stamina and part of an Apple Cider); it is empty in the
+    unlimited mode, where consumables are the abstract costs below instead.
+    ``ap``, ``ln``, ``cookies`` and ``gj`` are the Arnold Palmers, Large Nets,
+    cookie sets and Grape Juices one unit costs (the priced/reported tally),
     ``time_per_unit`` the time one unit takes on its ``track``. Everything scales
     linearly with the number of units used.
     """
@@ -58,6 +79,7 @@ class Offer:
     name: str
     track: str
     yields: dict[str, float] = field(default_factory=dict)
+    consumes: dict[str, float] = field(default_factory=dict)
     ap: float = 0.0
     ln: float = 0.0
     cookies: float = 0.0
@@ -156,31 +178,93 @@ def aggregate(draws: list[Draw]) -> tuple[timedelta, float, float]:
     return total_time, arnold_palmers, large_nets
 
 
-def fishing_offers(fishing: Fishing) -> list[Offer]:
-    """An offer per fishing zone: one Large Net catches the zone's bundle."""
+def fishing_offers(fishing: Fishing, ground: bool = False) -> list[Offer]:
+    """An offer per fishing zone: one Large Net catches the zone's bundle.
+
+    With ``ground`` (the inventory plan mode) each net is also a real item the
+    plan must craft or hold (``consumes``), grounding fishing in passive
+    stone/wood/straw/antlers; otherwise the Large Net is an abstract cost.
+    """
     catch = fishing.modifiers.net_catch()
     return [
         Offer(
             name=f"fish {zone.name}",
             track=FISHING_TRACK,
             yields=zone.catch(catch),
+            consumes={"large net": 1.0} if ground else {},
             ln=1,
         )
         for zone in fishing.zones.values()
     ]
 
 
-def exploring_offers(exploring: Exploring) -> list[Offer]:
-    """An offer per location: one Arnold Palmer yields the location's bundle."""
+def exploring_offers(exploring: Exploring, ground: bool = False) -> list[Offer]:
+    """An offer per location: one Arnold Palmer yields the location's bundle.
+
+    With ``ground`` (the inventory plan mode) each Arnold Palmer is also a real
+    item the plan must craft or hold (``consumes``), grounding exploring in the
+    Lemonade/Iced Tea chain; otherwise the Arnold Palmer is an abstract cost.
+    """
     palmer_yield = exploring.modifiers.palmer_yield()
     return [
         Offer(
             name=f"explore {location.name}",
             track=EXPLORING_TRACK,
             yields=location.explore(palmer_yield),
+            consumes={"arnold palmer": 1.0} if ground else {},
             ap=1,
         )
         for location in exploring.locations.values()
+    ]
+
+
+def cider_offers(exploring: Exploring) -> list[Offer]:
+    """An Apple Cider exploring offer per zone that has an Effectiveness set.
+
+    One unit is a single *explore* (one stamina before reductions): it finds
+    :data:`CIDER_DROP_RATE` items on average, split across the zone's items by
+    their drop rates, and spends ``stamina_per_explore`` stamina and ``1/E`` of an
+    Apple Cider (``E`` = explores one cider does here). Driving the offer in
+    explores keeps stamina, cider count and yield all linear in the usage level.
+    Zones with no configured Exploring Effectiveness are skipped.
+    """
+    stamina = exploring.cider.stamina_per_explore()
+    offers: list[Offer] = []
+    for location in exploring.locations.values():
+        effectiveness = exploring.effectiveness.get(location.name.lower())
+        if not effectiveness:
+            continue
+        per_cider = exploring.cider.explores_per_cider(effectiveness)
+        if per_cider <= 0:
+            continue
+        offers.append(
+            Offer(
+                name=f"cider {location.name}",
+                track=EXPLORING_TRACK,
+                yields={
+                    item: CIDER_DROP_RATE * rate
+                    for item, rate in location.drop_rates.items()
+                },
+                consumes={"stamina": stamina, "apple cider": 1.0 / per_cider},
+            )
+        )
+    return offers
+
+
+def drink_offers() -> list[Offer]:
+    """The instant Orange-Juice-to-stamina flow (inventory plan mode).
+
+    Drinking one Orange Juice yields 100 stamina at no time or consumable cost,
+    so stamina is bounded only by the Orange Juice the plan can craft from Orchard
+    Oranges. Modelled as an offer that consumes Orange Juice and yields stamina.
+    """
+    return [
+        Offer(
+            name="drink orange juice",
+            track=DRINKING_TRACK,
+            yields={"stamina": 100.0},
+            consumes={"orange juice": 1.0},
+        )
     ]
 
 
@@ -222,7 +306,7 @@ def passive_offers(production: PassiveProduction) -> list[Offer]:
     ]
 
 
-def farming_offers(farm: Farm) -> list[Offer]:
+def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
     """Offers for growing each crop, trading farming time against Grape Juice.
 
     Each crop that grows Grape Juice gets two ways to farm it so the optimiser can
@@ -257,12 +341,14 @@ def farming_offers(farm: Farm) -> list[Offer]:
         juices = farm.grape_juices_for(crop.name)
         harvests_per_day = day / grow_time + juices
         bundle = {item: farm.per_harvest(crop.name, item) for item in crop.drops}
+        gj_per_unit = juices / (day / grow_time + juices)
         offers.append(
             Offer(
                 name=f"grow {crop.name}",
                 track=FARMING_TRACK,
                 yields=bundle,
-                gj=juices / (day / grow_time + juices),
+                consumes={"grape juice": gj_per_unit} if ground and gj_per_unit else {},
+                gj=gj_per_unit,
                 time_per_unit=day / harvests_per_day,
             )
         )
@@ -285,6 +371,7 @@ def farming_offers(farm: Farm) -> list[Offer]:
                     name=f"grow {crop.name} with cookies",
                     track=FARMING_TRACK,
                     yields=cookie_bundle,
+                    consumes={"grape juice": juices} if ground and juices else {},
                     cookies=1,
                     gj=juices,
                     time_per_unit=day,

@@ -54,11 +54,15 @@ from exploring import Exploring
 from fishing import Fishing
 from passive import PassiveProduction
 from sources import (
+    INVENTORY,
     PASSIVE_TRACK,
+    UNLIMITED,
     Draw,
     Offer,
     OpenFlow,
     aggregate,
+    cider_offers,
+    drink_offers,
     exploring_offers,
     farming_offers,
     fishing_offers,
@@ -93,14 +97,27 @@ def all_offers(
     fishing: Fishing,
     exploring: Exploring,
     farm: Farm,
+    mode: str = UNLIMITED,
 ) -> list[Offer]:
-    """Every production offer across the channels, ready for the optimiser."""
-    return [
+    """Every production offer across the channels, ready for the optimiser.
+
+    In the ``INVENTORY`` mode the exploring/fishing/farming offers are *grounded*
+    -- they consume real Arnold Palmers / Large Nets / Grape Juice the plan must
+    craft or hold -- and the Apple Cider exploring channel (fed by stamina from
+    drinking Orange Juice) is added. In ``UNLIMITED`` mode those consumables stay
+    abstract, unbounded costs (the original behaviour).
+    """
+    ground = mode == INVENTORY
+    offers = [
         *passive_offers(production),
-        *fishing_offers(fishing),
-        *exploring_offers(exploring),
-        *farming_offers(farm),
+        *fishing_offers(fishing, ground=ground),
+        *exploring_offers(exploring, ground=ground),
+        *farming_offers(farm, ground=ground),
     ]
+    if ground:
+        offers += cider_offers(exploring)
+        offers += drink_offers()
+    return offers
 
 
 @dataclass
@@ -124,16 +141,18 @@ class SourcingPlan:
     large_nets: float = 0.0
     cookie_sets: float = 0.0
     grape_juices: float = 0.0
+    apple_ciders: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     @property
-    def cost(self) -> tuple[float, float, float, float, float]:
-        """The objective ``(time seconds, AP, LN, cookie sets, GJ)`` for comparisons.
+    def cost(self) -> tuple[float, float, float, float, float, float]:
+        """The objective ``(time, AP, LN, cookie sets, GJ, cider)`` for comparisons.
 
-        Cookie sets and Grape Juices are scarce resources traded against time like
-        the consumables, so they belong in the Pareto cost -- otherwise a slower
-        plan that conserves them would look dominated by a faster one that spends
-        them, and get pruned from the frontier.
+        Cookie sets, Grape Juices and Apple Ciders are scarce resources traded
+        against time like the consumables, so they belong in the Pareto cost --
+        otherwise a slower plan that conserves them would look dominated by a
+        faster one that spends them, and get pruned from the frontier. Apple
+        Ciders are only spent in the inventory plan mode (zero otherwise).
         """
         return (
             self.time.total_seconds(),
@@ -141,6 +160,7 @@ class SourcingPlan:
             self.large_nets,
             self.cookie_sets,
             self.grape_juices,
+            self.apple_ciders,
         )
 
 
@@ -149,22 +169,30 @@ def _minutes(time: timedelta) -> float:
 
 
 def _obtainable(
-    offer_items: set[str],
+    offers: list[Offer],
     recipes: dict[str, dict[str, float]],
     openables: list[OpenFlow],
 ) -> set[str]:
     """Every item that can be produced: gathered, crafted, or opened from such.
 
-    Starts from the items some offer yields and repeatedly marks obtainable any
-    craftable item whose materials are all obtainable, and every output of an
-    openable whose consumed items (the openable itself and its key) are all
-    obtainable -- a fixed point. Auto-supplied materials (iron, nails) are
-    expected to be stripped from ``recipes`` already.
+    A fixed point: an offer's yields are obtainable once its ``consumes`` inputs
+    all are (an offer with no inputs is unconditionally so); a craftable item once
+    its materials all are; an openable's outputs once its consumed items (the
+    openable and its key) all are. So an item only an *unusable* offer could make
+    -- one whose input can never be sourced -- is correctly *not* obtainable, and
+    a demand for it falls to the remainder rather than an infeasible LP.
+    Auto-supplied materials (iron, nails) are expected stripped from ``recipes``.
     """
-    obtainable = set(offer_items)
+    obtainable: set[str] = set()
     changed = True
     while changed:
         changed = False
+        for offer in offers:
+            if all(c in obtainable for c in offer.consumes):
+                for out in offer.yields:
+                    if out not in obtainable:
+                        obtainable.add(out)
+                        changed = True
         for item, materials in recipes.items():
             if item not in obtainable and all(m in obtainable for m in materials):
                 obtainable.add(item)
@@ -183,13 +211,18 @@ def _reachable(
     recipes: dict[str, dict[str, float]],
     craftable: set[str],
     openers: dict[str, list[OpenFlow]],
+    offer_inputs: dict[str, list[dict[str, float]]] | None = None,
 ) -> set[str]:
     """Every item touched by covering ``seeds``.
 
-    Follows recipes we may craft (down to their materials) and, for any item an
-    openable yields, the openable's consumed items (its own token and key), so
-    the chest and key behind a wanted drop are pulled into the LP too.
+    Follows recipes we may craft (down to their materials); for any item an
+    openable yields, the openable's consumed items (its own token and key); and
+    for any item an offer yields, that offer's consumed inputs (``offer_inputs``
+    maps a yielded item to the ``consumes`` bundles of the offers making it) --
+    so the Arnold Palmers an explore burns, and the crafts beneath them, are
+    pulled into the LP too.
     """
+    offer_inputs = offer_inputs or {}
     seen: set[str] = set()
     stack = list(seeds)
     while stack:
@@ -201,6 +234,8 @@ def _reachable(
             stack.extend(recipes[item])
         for flow in openers.get(item, ()):
             stack.extend(flow.consumes)
+        for consumes in offer_inputs.get(item, ()):
+            stack.extend(consumes)
     return seen
 
 
@@ -213,6 +248,7 @@ def minimize(
     price_ln: float = 0.0,
     price_cookie: float = 0.0,
     price_gj: float = 0.0,
+    price_cider: float = 0.0,
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
@@ -262,8 +298,7 @@ def minimize(
     inventory = inventory or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
-    offer_items = {key for offer in offers for key in offer.yields}
-    obtainable = _obtainable(offer_items, recipes, openables)
+    obtainable = _obtainable(offers, recipes, openables)
     craftable = {
         item
         for item, materials in recipes.items()
@@ -276,8 +311,19 @@ def minimize(
     for flow in openable_flows:
         for out in flow.yields:
             openers.setdefault(out, []).append(flow)
+    # Offers whose inputs are all obtainable can actually run; index their
+    # consumed bundles by each item they yield so reachability walks from a
+    # wanted drop into the consumables (Arnold Palmers, stamina, ...) it burns.
+    usable = [o for o in offers if all(c in obtainable for c in o.consumes)]
+    offer_inputs: dict[str, list[dict[str, float]]] = {}
+    for offer in usable:
+        if not offer.consumes:
+            continue
+        for out in offer.yields:
+            offer_inputs.setdefault(out, []).append(offer.consumes)
     items = _reachable(
-        {k for k in wanted if k in obtainable}, recipes, craftable, openers
+        {k for k in wanted if k in obtainable}, recipes, craftable, openers,
+        offer_inputs,
     )
 
     remainder = {
@@ -288,7 +334,7 @@ def minimize(
     if not items:
         return SourcingPlan(remainder=remainder)
 
-    used = [o for o in offers if any(o.yield_of(i) > 0 for i in items)]
+    used = [o for o in usable if any(o.yield_of(i) > 0 for i in items)]
     crafted = sorted(items & craftable)
     # Openables worth modelling: those touching a reachable item, either yielding
     # one or consuming one (a chest reached only as the thing a key gates still
@@ -314,11 +360,18 @@ def minimize(
     large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
     cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
     grape_juices = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
+    # Apple Ciders spent -- the count each cider explore burns (its
+    # ``consumes["apple cider"]``); zero outside the inventory plan mode.
+    ciders = pulp.lpSum(
+        o.consumes["apple cider"] * x
+        for o, x in zip(used, usage)
+        if o.consumes.get("apple cider", 0.0) > 0
+    )
     # Only so many full cookie sets are on hand to spend boosting farming days.
     problem += cookies <= cookie_sets
     if time_cap is not None:
         problem += makespan <= _minutes(time_cap)
-        problem += arnold_palmers + large_nets + cookies + grape_juices
+        problem += arnold_palmers + large_nets + cookies + grape_juices + ciders
     else:
         problem += (
             makespan
@@ -326,6 +379,7 @@ def minimize(
             + price_ln * large_nets
             + price_cookie * cookies
             + price_gj * grape_juices
+            + price_cider * ciders
         )
 
     # Net production of each item covers its demand:
@@ -333,6 +387,14 @@ def minimize(
     for item in items:
         gathered = pulp.lpSum(
             o.yield_of(item) * x for o, x in zip(used, usage) if o.yield_of(item) > 0
+        )
+        # What offers use up as inputs (Arnold Palmers an explore burns, the
+        # stamina and Apple Cider a cider explore spends) -- these must be
+        # sourced like any other need (empty in unlimited mode).
+        used_up = pulp.lpSum(
+            o.consumes[item] * x
+            for o, x in zip(used, usage)
+            if o.consumes.get(item, 0.0) > 0
         )
         made = crafting_bonus * craft[item] if item in craft else 0
         consumed = pulp.lpSum(qty * craft[j] for j, qty in consumers.get(item, []))
@@ -350,7 +412,9 @@ def minimize(
         # item's balance is already net of what is held, so it gets no credit.
         held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
-        problem += gathered + made - consumed + unpacked - emptied + held >= need
+        problem += (
+            gathered + made - consumed - used_up + unpacked - emptied + held >= need
+        )
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
@@ -377,14 +441,17 @@ def minimize(
         ln_star = pulp.value(large_nets) or 0.0
         cookie_star = pulp.value(cookies) or 0.0
         gj_star = pulp.value(grape_juices) or 0.0
+        cider_star = pulp.value(ciders) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
-        # Cookies and Grape Juices are priced, so the first solve already uses only
-        # ones that pay for themselves in time; lock them too, so the least-activity
-        # re-solve keeps the same thrifty mix and only sheds pointless surplus.
+        # Cookies, Grape Juices and Apple Ciders are priced, so the first solve
+        # already uses only ones that pay for themselves in time; lock them too, so
+        # the least-activity re-solve keeps the same thrifty mix and only sheds
+        # pointless surplus.
         problem += cookies <= cookie_star * (1 + 1e-9) + 1e-9
         problem += grape_juices <= gj_star * (1 + 1e-9) + 1e-9
+        problem += ciders <= cider_star * (1 + 1e-9) + 1e-9
         problem.setObjective(
             pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
         )
@@ -415,6 +482,9 @@ def minimize(
         large_nets=ln,
         cookie_sets=sum(d.cookies for d in draws),
         grape_juices=sum(d.gj for d in draws),
+        apple_ciders=sum(
+            d.offer.consumes.get("apple cider", 0.0) * d.units for d in draws
+        ),
         remainder=remainder,
     )
 
@@ -431,7 +501,7 @@ def _non_dominated(plans: list[SourcingPlan]) -> list[SourcingPlan]:
     for plan in plans:
         key = (round(plan.time.total_seconds()), round(plan.arnold_palmers),
                round(plan.large_nets), round(plan.cookie_sets),
-               round(plan.grape_juices))
+               round(plan.grape_juices), round(plan.apple_ciders))
         unique.setdefault(key, plan)
     kept = [
         p for p in unique.values()
@@ -605,12 +675,12 @@ def frontier(
     """
     fast = minimize(
         offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
-        price_cookie=_FAST_PRICE, price_gj=_FAST_PRICE,
+        price_cookie=_FAST_PRICE, price_gj=_FAST_PRICE, price_cider=_FAST_PRICE,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
-        price_cookie=_FREE_PRICE, price_gj=_FREE_PRICE,
+        price_cookie=_FREE_PRICE, price_gj=_FREE_PRICE, price_cider=_FREE_PRICE,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     plans = [fast, cheap]

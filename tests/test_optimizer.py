@@ -468,3 +468,75 @@ def test_passive_completion_caps_skip_excluded_items():
         plan, {"Oak": 100, "Horn": 60}, {}, 1.0, [], {}, exclude={"horn"}
     )
     assert [round(c) for c in caps] == [600]
+
+
+# --- Inventory plan mode: offer inputs (consumes) ------------------------------
+
+
+def test_all_offers_inventory_mode_grounds_and_adds_cider_and_drink():
+    from sources import INVENTORY
+
+    offers = all_offers(
+        PassiveProduction(producers=[PassiveProducer("mill", HOURLY, {"board": 60})]),
+        Fishing(zones={"lake": FishingZone("Lake", {"trout": 0.4})}),
+        Exploring(
+            locations={"cave": ExploringLocation("Cave", {"wood": 0.4})},
+            effectiveness={"cave": 10},
+        ),
+        Farm(crops={"corn": Crop("Corn", timedelta(hours=1), {"corn": 1})}, rows=1),
+        INVENTORY,
+    )
+    by_name = {o.name: o for o in offers}
+    assert by_name["fish Lake"].consumes == {"large net": 1.0}
+    assert by_name["explore Cave"].consumes == {"arnold palmer": 1.0}
+    # The Apple Cider channel and the drink-for-stamina flow are added.
+    assert "cider Cave" in by_name
+    assert "drink orange juice" in by_name
+
+
+def test_minimize_sources_a_consumed_input_through_its_recipe():
+    # Exploring the cave yields "wood" but burns an "arnold palmer", which is not
+    # gathered anywhere -- only crafted from "lemon" (a gathered passive item).
+    explore = Offer(
+        "explore Cave", "exploring", {"wood": 10}, consumes={"arnold palmer": 1.0}
+    )
+    lemon = Offer("passive", "passive", {"lemon": 1.0}, time_per_unit=timedelta(minutes=1))
+    recipes = {"arnold palmer": {"lemon": 6.0}}
+    plan = minimize([explore, lemon], {"Wood": 100}, recipes, crafting_bonus=1.0)
+    assert plan.remainder == {}
+    # 100 wood needs 10 explores -> 10 palmers -> 60 lemons gathered passively.
+    assert plan.crafts["arnold palmer"] == pytest.approx(10)
+    lemon_draw = next(d for d in plan.draws if d.offer.track == "passive")
+    assert lemon_draw.produced["lemon"] == pytest.approx(60)
+
+
+def test_minimize_drops_an_offer_whose_input_is_unobtainable():
+    # The palmer cannot be crafted (no recipe) nor gathered, so the explore offer
+    # is unusable and the wood demand is left in the remainder.
+    explore = Offer(
+        "explore Cave", "exploring", {"wood": 10}, consumes={"arnold palmer": 1.0}
+    )
+    plan = minimize([explore], {"Wood": 100})
+    assert [d.offer.name for d in plan.draws] == []
+    assert plan.remainder == {"Wood": 100}
+
+
+def test_minimize_counts_apple_ciders_spent():
+    # A cider explore consumes stamina (gathered) and a tenth of an Apple Cider
+    # (craftable from a gathered apple), yielding the wanted item.
+    cider = Offer(
+        "cider Cave",
+        "exploring",
+        {"wood": 4},
+        consumes={"stamina": 1.0, "apple cider": 0.1},
+    )
+    stamina = Offer(
+        "drink", "drinking", {"stamina": 100.0}, consumes={"orange juice": 1.0}
+    )
+    orange = Offer(
+        "passive", "passive", {"orange": 1.0}, time_per_unit=timedelta(minutes=1)
+    )
+    recipes = {"orange juice": {"orange": 6.0}, "apple cider": {"orange": 1.0}}
+    plan = minimize([cider, stamina, orange], {"Wood": 40}, recipes, crafting_bonus=1.0)
+    # 40 wood needs 10 explores -> 1 Apple Cider spent.
+    assert plan.apple_ciders == pytest.approx(1.0)

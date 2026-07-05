@@ -26,6 +26,13 @@ LEMON_SQUEEZER_YIELD = 500
 # Quandary chowder multiplies the yield.
 QUANDARY_CHOWDER_MULTIPLIER = 1.1
 
+# Stamina an Apple Cider explore saves per Wanderer level (a fraction of the
+# stamina one explore would otherwise cost), indexed by level 0..4.
+WANDERER_STAMINA_REDUCTION = {0: 0.0, 1: 0.04, 2: 0.11, 3: 0.20, 4: 0.33}
+# Both the Neigh Neigh perk and the Neigh meal cut cider stamina 20% each,
+# multiplicatively with Wanderer and each other.
+NEIGH_STAMINA_REDUCTION = 0.20
+
 
 @dataclass
 class ExploringModifiers:
@@ -50,6 +57,45 @@ class ExploringModifiers:
         if self.use_quandary_chowder:
             items *= QUANDARY_CHOWDER_MULTIPLIER
         return round(items)
+
+
+@dataclass
+class CiderModifiers:
+    """Player perks and meals that change how Apple Cider spends stamina.
+
+    An Apple Cider does ``explores_per_cider`` explores (a function of the zone's
+    Exploring Effectiveness, and larger with Cinnamon Sticks), each costing
+    ``stamina_per_explore`` stamina -- one before reductions, cut multiplicatively
+    by Wanderer, the Neigh Neigh perk and the Neigh meal. Cider always sets the
+    zone drop rate to :data:`~sources.CIDER_DROP_RATE`, so what each explore finds
+    comes from the zone's own drop-rate distribution.
+    """
+
+    have_cinnamon_sticks: bool = False
+    wanderer_level: int = 0
+    have_neigh_neigh: bool = False
+    have_neigh: bool = False
+
+    def explores_per_cider(self, effectiveness: int) -> int:
+        """Explores one Apple Cider does at the given Exploring Effectiveness.
+
+        Each point of effectiveness adds 10 explores (12.5 with Cinnamon Sticks)
+        over a base of 1010 (1263 with Cinnamon Sticks) -- matching the in-game
+        table (e.g. effectiveness 136 gives 2,360, or 2,950 with Cinnamon Sticks).
+        """
+        if self.have_cinnamon_sticks:
+            # Round half up (like the in-game table), not banker's rounding.
+            return int(1250 + 12.5 * effectiveness + 0.5)
+        return 1000 + 10 * effectiveness
+
+    def stamina_per_explore(self) -> float:
+        """Stamina one cider explore costs after Wanderer / Neigh reductions."""
+        stamina = 1.0 - WANDERER_STAMINA_REDUCTION.get(self.wanderer_level, 0.0)
+        if self.have_neigh_neigh:
+            stamina *= 1.0 - NEIGH_STAMINA_REDUCTION
+        if self.have_neigh:
+            stamina *= 1.0 - NEIGH_STAMINA_REDUCTION
+        return stamina
 
 
 @dataclass
@@ -78,6 +124,10 @@ class Exploring:
 
     modifiers: ExploringModifiers = field(default_factory=ExploringModifiers)
     locations: dict[str, ExploringLocation] = field(default_factory=dict)
+    cider: CiderModifiers = field(default_factory=CiderModifiers)
+    # Exploring Effectiveness per zone, keyed lower-cased -- drives how many
+    # explores an Apple Cider does there (see :func:`sources.cider_offers`).
+    effectiveness: dict[str, int] = field(default_factory=dict)
 
     def location(self, name: str) -> ExploringLocation | None:
         return self.locations.get(name.lower())
@@ -104,12 +154,17 @@ def read_locations(path: Path) -> dict[str, ExploringLocation]:
 
 
 def load_exploring(
-    path: Path | None = None, modifiers: ExploringModifiers | None = None
+    path: Path | None = None,
+    modifiers: ExploringModifiers | None = None,
+    cider: CiderModifiers | None = None,
+    effectiveness: dict[str, int] | None = None,
 ) -> Exploring:
     """Build an :class:`Exploring` from the location CSV and the player's perks."""
     return Exploring(
         modifiers=modifiers or ExploringModifiers(),
         locations=read_locations(path or DEFAULT_EXPLORING_CSV),
+        cider=cider or CiderModifiers(),
+        effectiveness=effectiveness or {},
     )
 
 
@@ -118,12 +173,24 @@ def exploring_from_config(
 ) -> Exploring:
     """Build an :class:`Exploring` from an ``[exploring]`` config section.
 
-    The section's boolean flags set the yield modifiers (see
-    :class:`ExploringModifiers`); location data comes from the CSV.
+    The section's boolean flags set the Arnold Palmer yield modifiers (see
+    :class:`ExploringModifiers`) and the Apple Cider perks/meals (see
+    :class:`CiderModifiers`); its ``[exploring.effectiveness]`` subtable maps each
+    zone to its Exploring Effectiveness. Location drop rates come from the CSV.
     """
     section = config_section or {}
     modifiers = ExploringModifiers(
         have_lemon_squeezer=bool(section.get("have_lemon_squeezer")),
         use_quandary_chowder=bool(section.get("use_quandary_chowder")),
     )
-    return load_exploring(path, modifiers)
+    cider = CiderModifiers(
+        have_cinnamon_sticks=bool(section.get("have_cinnamon_sticks")),
+        wanderer_level=int(section.get("wanderer_level", 0)),
+        have_neigh_neigh=bool(section.get("have_neigh_neigh")),
+        have_neigh=bool(section.get("have_neigh")),
+    )
+    effectiveness = {
+        zone.lower(): int(value)
+        for zone, value in (section.get("effectiveness") or {}).items()
+    }
+    return load_exploring(path, modifiers, cider, effectiveness)

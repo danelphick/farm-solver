@@ -1,5 +1,8 @@
+import pytest
+
 from exploring import (
     DEFAULT_EXPLORING_CSV,
+    CiderModifiers,
     Exploring,
     ExploringLocation,
     ExploringModifiers,
@@ -69,3 +72,48 @@ def test_exploring_from_config_sets_modifiers_and_loads_locations():
 
 def test_the_bundled_exploring_csv_parses():
     assert read_locations(DEFAULT_EXPLORING_CSV)
+
+
+def test_explores_per_cider_without_cinnamon_is_ten_per_effectiveness():
+    # Base 1010 at effectiveness 1, +10 each: 1000 + 10*ee (table values).
+    cider = CiderModifiers()
+    assert cider.explores_per_cider(1) == 1010
+    assert cider.explores_per_cider(136) == 2360
+    assert cider.explores_per_cider(104) == 2040
+
+
+def test_explores_per_cider_with_cinnamon_is_twelve_and_a_half_per_effectiveness():
+    # Base 1263 at effectiveness 1, +12.5 each (matching the in-game table).
+    cider = CiderModifiers(have_cinnamon_sticks=True)
+    assert cider.explores_per_cider(1) == 1263
+    assert cider.explores_per_cider(136) == 2950
+    assert cider.explores_per_cider(96) == 2450
+
+
+def test_stamina_per_explore_defaults_to_one():
+    assert CiderModifiers().stamina_per_explore() == 1.0
+
+
+def test_stamina_per_explore_applies_reductions_multiplicatively():
+    # Wanderer 4 (33%), Neigh Neigh (20%) and Neigh meal (20%): 0.67*0.8*0.8.
+    cider = CiderModifiers(
+        wanderer_level=4, have_neigh_neigh=True, have_neigh=True
+    )
+    assert cider.stamina_per_explore() == pytest.approx(0.67 * 0.8 * 0.8)
+
+
+def test_exploring_from_config_reads_cider_perks_and_effectiveness():
+    exploring = exploring_from_config(
+        {
+            "have_cinnamon_sticks": True,
+            "wanderer_level": 3,
+            "have_neigh_neigh": True,
+            "effectiveness": {"Forest": 136, "Small Cave": 104},
+        }
+    )
+    assert exploring.cider.have_cinnamon_sticks
+    assert exploring.cider.wanderer_level == 3
+    assert exploring.cider.have_neigh_neigh
+    assert not exploring.cider.have_neigh
+    # Effectiveness keys are lower-cased for case-insensitive zone lookup.
+    assert exploring.effectiveness == {"forest": 136, "small cave": 104}

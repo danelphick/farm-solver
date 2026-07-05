@@ -73,6 +73,28 @@ use_sea_pincher = true
 [exploring]
 have_lemon_squeezer = true
 use_quandary_chowder = true
+# Apple Cider perks/meals (inventory plan mode). Cinnamon Sticks raises explores
+# per cider; wanderer_level (1=4%, 2=11%, 3=20%, 4=33%), the Neigh Neigh perk and
+# the Neigh meal each cut the stamina a cider explore costs, multiplicatively.
+have_cinnamon_sticks = true
+wanderer_level = 4
+have_neigh_neigh = true
+have_neigh = true
+
+[exploring.effectiveness]  # per-zone Exploring Effectiveness for Apple Cider
+Forest = 136
+"Small Cave" = 104
+"Small Spring" = 120
+"Highland Hills" = 128
+"Cane Pole Ridge" = 104
+"Misty Forest" = 128
+"Black Rock Canyon" = 120
+"Mount Banon" = 104
+"Ember Lagoon" = 120
+"Whispering Creek" = 128
+"Jundland Desert" = 72
+"Gary's Crushroom" = 96
+"Sinking Swamp" = 152
 
 [farming]    # crop rows and growth modifiers; crops/drops come from the CSVs
 rows = 13
