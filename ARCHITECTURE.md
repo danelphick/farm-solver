@@ -21,7 +21,9 @@ Large Net / Grape Juice, chained down to Orchard Lemons, passive
 stone/wood/straw/antlers, and Vineyard Grapes) — and adds the **Apple Cider**
 exploring channel (`sources.cider_offers`), fed by **stamina** from drinking
 Orange Juice (`sources.drink_offers`, the `DRINKING_TRACK`; `--current-stamina`
-seeds a starting balance). Cider math (`exploring.CiderModifiers`): each stamina
+seeds a starting balance) and from the **Farmhouse** (`config._farmhouse_producer`
+— a daily passive stamina deposit, exempt from the storehouse cap via
+`passive.UNCAPPED_ITEMS`). Cider math (`exploring.CiderModifiers`): each stamina
 buys one explore at drop rate `CIDER_DROP_RATE` (0.40); explores per cider scale
 with per-zone Exploring Effectiveness (`[exploring.effectiveness]`) and Cinnamon
 Sticks; stamina per explore is cut by Wanderer / Neigh Neigh / Neigh. The frontier

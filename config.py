@@ -26,6 +26,13 @@ from passive import (
 # faster buildings and used only as a last-resort source (pets are slow).
 PET_PRODUCER_PREFIX = "pet "
 
+# The Farmhouse tops actual stamina up each day by this multiple of the natural
+# stamina cap, capped at :data:`FARMHOUSE_GAIN_CAP` (raised to
+# :data:`FARMHOUSE_GAIN_CAP_APPLE_PIE` with the Apple Pie Enthusiast perk).
+FARMHOUSE_DAILY_MULTIPLIER = 8
+FARMHOUSE_GAIN_CAP = 500_000
+FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
+
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
 
@@ -71,6 +78,8 @@ def passive_production(
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
       (rounded down).
+    * ``[farmhouse]`` -- a daily stamina deposit for the Apple Cider channel
+      (inventory plan mode); see :func:`_farmhouse_producer`.
     * ``[pets]`` -- each listed pet fetches its average daily haul of items (see
       :func:`_pet_producers` and :mod:`pets`), as a daily producer.
 
@@ -294,12 +303,47 @@ def passive_production(
             )
         )
 
+    farmhouse = config.get("farmhouse")
+    if farmhouse:
+        producers.append(_farmhouse_producer(farmhouse, today))
+
     pets_config = config.get("pets")
     if pets_config:
         producers.extend(_pet_producers(pets_config, start, horizon))
 
     return PassiveProduction(
         producers=producers, inventory_size=storehouse_size(config, today)
+    )
+
+
+def _farmhouse_producer(
+    farmhouse: dict[str, Any], today: date | None = None
+) -> PassiveProducer:
+    """A daily stamina producer for the ``[farmhouse]`` config section.
+
+    The Farmhouse raises the natural stamina cap by one each day (two with the
+    Mattress Pad perk), so the cap recorded on ``registered_on`` has grown by that
+    much per day since -- computed at ``today`` like the storehouse
+    (see :func:`storehouse_size`). Each day actual stamina then rises by
+    :data:`FARMHOUSE_DAILY_MULTIPLIER` times that cap, capped at
+    :data:`FARMHOUSE_GAIN_CAP` (:data:`FARMHOUSE_GAIN_CAP_APPLE_PIE` with the
+    Apple Pie Enthusiast perk). Stamina is exempt from the storehouse cap (see
+    :data:`passive.UNCAPPED_ITEMS`).
+    """
+    cap = int(farmhouse["stamina_cap"])
+    daily_increase = 2 if farmhouse.get("have_mattress_pad") else 1
+    registered_on = farmhouse.get("registered_on")
+    if registered_on is not None:
+        days = max(0, ((today or date.today()) - _as_date(registered_on)).days)
+        cap += daily_increase * days
+    gain_cap = (
+        FARMHOUSE_GAIN_CAP_APPLE_PIE
+        if farmhouse.get("have_apple_pie_enthusiast")
+        else FARMHOUSE_GAIN_CAP
+    )
+    daily_gain = min(FARMHOUSE_DAILY_MULTIPLIER * cap, gain_cap)
+    return PassiveProducer(
+        name="farmhouse", period=DAILY, outputs={"stamina": float(daily_gain)}
     )
 
 

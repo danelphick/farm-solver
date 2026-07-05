@@ -37,6 +37,12 @@ have_tree_shaker = true
 antlers = 2617810
 have_antler_snare = true
 
+[farmhouse]    # daily stamina for Apple Cider (inventory plan mode)
+stamina_cap = 98387          # natural max stamina on registered_on
+registered_on = "2026-07-05"
+have_mattress_pad = true     # cap grows +2/day instead of +1
+have_apple_pie_enthusiast = true  # daily stamina gain capped at 1M, not 500k
+
 [trout_bait_farm]
 trout = 25000
 grubs = 7000

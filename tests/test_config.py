@@ -418,3 +418,73 @@ def load_config_from_text(text: str) -> dict:
     import tomllib
 
     return tomllib.loads(textwrap.dedent(text))
+
+
+# --- Farmhouse (daily stamina for Apple Cider) --------------------------------
+
+
+def test_farmhouse_daily_stamina_is_eight_times_the_cap():
+    production = passive_production(
+        {"farmhouse": {"stamina_cap": 98387, "registered_on": "2026-07-05"}},
+        today=date(2026, 7, 5),
+    )
+    house = next(p for p in production.producers if p.name == "farmhouse")
+    assert house.period == DAILY
+    # 8 * 98387 = 787096, under the 500k... no: default cap is 500k, so clamped.
+    assert house.outputs == {"stamina": 500_000}
+
+
+def test_farmhouse_apple_pie_enthusiast_raises_the_gain_cap_to_one_million():
+    production = passive_production(
+        {
+            "farmhouse": {
+                "stamina_cap": 98387,
+                "registered_on": "2026-07-05",
+                "have_apple_pie_enthusiast": True,
+            }
+        },
+        today=date(2026, 7, 5),
+    )
+    house = next(p for p in production.producers if p.name == "farmhouse")
+    # 8 * 98387 = 787096 < 1,000,000, so it is not clamped.
+    assert house.outputs == {"stamina": 787_096}
+
+
+def test_farmhouse_mattress_pad_grows_the_cap_two_a_day():
+    # Ten days on, the cap has grown by 10 * 2; with Apple Pie the gain is uncapped.
+    production = passive_production(
+        {
+            "farmhouse": {
+                "stamina_cap": 1000,
+                "registered_on": "2026-06-25",
+                "have_mattress_pad": True,
+                "have_apple_pie_enthusiast": True,
+            }
+        },
+        today=date(2026, 7, 5),
+    )
+    house = next(p for p in production.producers if p.name == "farmhouse")
+    assert house.outputs == {"stamina": 8 * (1000 + 20)}
+
+
+def test_farmhouse_stamina_ignores_the_storehouse_cap():
+    # Stamina is not stored in the storehouse, so its per-cycle rate is not clamped
+    # to the (much smaller) storehouse size.
+    production = passive_production(
+        {
+            "storehouse": {"inventory": 50_000},
+            "farmhouse": {
+                "stamina_cap": 98387,
+                "registered_on": "2026-07-05",
+                "have_apple_pie_enthusiast": True,
+            },
+        },
+        today=date(2026, 7, 5),
+    )
+    # 787,096 a day, uncapped by the 50,000 storehouse: /1440 minutes.
+    assert production.rate_per_minute("stamina") == pytest.approx(787_096 / 1440)
+
+
+def test_no_farmhouse_section_produces_no_stamina():
+    production = passive_production({"vineyard": {"grapes": 100}})
+    assert production.rate_per_minute("stamina") == 0

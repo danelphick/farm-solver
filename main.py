@@ -1117,19 +1117,38 @@ def print_plan(
                 f" ({round(stamina):,} stamina, {wanted(draw.offer)})"
             )
 
-    # Drinking Orange Juice for stamina (inventory plan mode). One instant flow;
-    # report the Orange Juice drunk and the stamina it banks for cider explores.
+    # Stamina for Apple Cider (inventory plan mode): what the ciders spend, and
+    # where it comes from -- the banked start (--current-stamina), the Farmhouse's
+    # daily passive deposit, and any Orange Juice drunk to top it up.
     drinking_draws = draws_on(sources.DRINKING_TRACK)
-    total_oj = sum(
-        d.units * d.offer.consumes.get("orange juice", 0.0) for d in drinking_draws
+    cider_stamina = sum(
+        d.units * d.offer.consumes.get("stamina", 0.0) for d in cider_draws
     )
-    if round(total_oj) >= 1:
-        total_stamina = sum(d.produced.get("stamina", 0.0) for d in drinking_draws)
-        print("\nDrinking (stamina):")
-        print(
-            f"  Drink {round(total_oj):,}x Orange Juice"
-            f" -> {round(total_stamina):,} stamina"
+    if round(cider_stamina) >= 1:
+        print("\nStamina:")
+        print(f"  {round(cider_stamina):,} spent on Apple Cider")
+        banked = inventory.get("stamina", 0.0)
+        if round(banked) >= 1:
+            print(f"  {round(banked):,} banked at the start")
+        passive_draw = next(
+            (d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK), None
         )
+        rate = (
+            passive_draw.offer.yields.get("stamina", 0.0)
+            if passive_draw is not None
+            else 0.0
+        )
+        if rate > 0:
+            print(f"  {round(rate * 1440):,}/day from the Farmhouse (passive)")
+        total_oj = sum(
+            d.units * d.offer.consumes.get("orange juice", 0.0) for d in drinking_draws
+        )
+        if round(total_oj) >= 1:
+            total_stamina = sum(d.produced.get("stamina", 0.0) for d in drinking_draws)
+            print(
+                f"  Drink {round(total_oj):,}x Orange Juice"
+                f" -> {round(total_stamina):,} stamina"
+            )
 
     # Opening chests and bags at the Locksmith. Skip residue opens that yield less
     # than one of anything wanted (CBC can leave a sliver, as with draws).

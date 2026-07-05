@@ -19,6 +19,11 @@ TEN_MINUTES = timedelta(minutes=10)
 HOURLY = timedelta(hours=1)
 DAILY = timedelta(days=1)
 
+# Items that are not held in the storehouse, so its per-cycle cap does not apply
+# to them. Stamina is a separate stat (the Farmhouse tops it up daily, far above
+# the storehouse size), not a stored good.
+UNCAPPED_ITEMS = frozenset({"stamina"})
+
 
 @dataclass
 class PassiveProducer:
@@ -56,7 +61,7 @@ class PassiveProduction:
             quantity = producer.outputs.get(key)
             if quantity:
                 per_cycle = quantity
-                if self.inventory_size is not None:
+                if self.inventory_size is not None and key not in UNCAPPED_ITEMS:
                     per_cycle = min(quantity, self.inventory_size)
                 total += per_cycle / (producer.period.total_seconds() / 60)
         return total
@@ -85,7 +90,7 @@ class PassiveProduction:
         if len(sources) == 1:
             producer = sources[0]
             per_cycle = producer.outputs[key]
-            if self.inventory_size is not None:
+            if self.inventory_size is not None and key not in UNCAPPED_ITEMS:
                 per_cycle = min(per_cycle, self.inventory_size)
             if per_cycle <= 0:
                 return None
