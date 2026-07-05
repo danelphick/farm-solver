@@ -3,7 +3,7 @@
 Given the items still needed, this picks how to obtain them -- gathering across
 every channel (passive production, fishing, exploring, farming), crafting, *and*
 opening chests -- trading total time against the Arnold Palmers and Large Nets
-spent. As worked out in ``PLAN.md``, that choice is a small **linear program**:
+spent. That choice is a small **linear program**:
 one continuous usage level per :class:`~sources.Offer`, one craft count per
 craftable item, one open count per openable, plus a makespan ``T``. Because every
 objective is linear, the whole ``(time, AP, LN)`` Pareto frontier is recovered

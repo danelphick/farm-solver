@@ -1,9 +1,9 @@
 # Architecture — code map
 
 Navigational map of the FarmRPG **farm-solver** LP optimiser, for finding code
-fast. README.md covers *behaviour/config* (user-facing); PLAN.md is the original
-LP-design rationale. This file is the *where-does-X-live* index. Reference by
-function name (stable); line numbers drift.
+fast. README.md covers *behaviour/config* (user-facing); this file is the
+*where-does-X-live* index. Reference by function name (stable); line numbers
+drift.
 
 ## What it does
 
@@ -157,6 +157,16 @@ buildings.
   (iron, nails) stripped.
 - Any resource traded for time **must** be in `SourcingPlan.cost` and the dedup
   key, or thrifty plans get pruned.
+
+## Dependency
+
+One runtime dep: **PuLP** (with its bundled CBC solver). Chosen over SciPy/HiGHS
+because it installs from a pure-Python wheel on 3.14 with no numpy/BLAS/ABI risk,
+its declarative model reads like the codebase, and flipping units to integer
+(MILP — whole nets/palmers, instead of rounding the LP solution at reporting) is a
+one-keyword change. We solve only a handful of tiny LPs per run, so CBC's
+subprocess overhead is immaterial. NSGA-II/pymoo was rejected: the LP frontier is
+piecewise-linear/convex, so scalarise-and-sweep recovers every vertex exactly.
 
 ## Dev workflow
 

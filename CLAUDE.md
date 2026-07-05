@@ -3,7 +3,7 @@
 **Read [ARCHITECTURE.md](ARCHITECTURE.md) first** — it's the code map (module
 ownership, key functions by name, core types, and the critical-path / frontier
 decision logic). Use it to find code instead of re-reading files; the README is
-user-facing behaviour/config, PLAN.md is the original LP-design rationale.
+user-facing behaviour/config.
 
 **Keep the map current:** after a commit that changes structure — a new/renamed
 module or public function, a change to the LP/frontier or critical-path logic, a
