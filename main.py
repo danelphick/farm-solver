@@ -16,6 +16,7 @@ import calendar
 import csv
 import math
 import sys
+from collections.abc import Iterable
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -514,6 +515,31 @@ def _slowest_passive_item(
     return best
 
 
+def _num_width(counts: Iterable[int]) -> int:
+    """Width of the widest comma-formatted count, for right-aligning a column."""
+    return max((len(f"{n:,}") for n in counts), default=0)
+
+
+def _passive_is_critical(plan: optimizer.SourcingPlan) -> bool:
+    """Whether passive production is the plan's bottleneck track.
+
+    Mirrors :func:`print_critical_path`: passive sets the pace only when farming
+    falls outside the co-maximal margin below the makespan, otherwise the
+    critical path is farming and no passive item sits on it.
+    """
+    track_time: dict[str, timedelta] = {}
+    for draw in plan.draws:
+        track_time[draw.offer.track] = (
+            track_time.get(draw.offer.track, timedelta(0)) + draw.time
+        )
+    makespan = max(track_time.values(), default=timedelta(0))
+    if makespan <= timedelta(0):
+        return False
+    farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
+    tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
+    return farming_time < makespan - tolerance
+
+
 def _harvest_alls(count: int) -> str:
     """``count`` "Harvest All"s (the full-field harvest action), pluralised."""
     return f"{count:,} Harvest All{'' if count == 1 else 's'}"
@@ -682,6 +708,7 @@ def _print_cookie_farming(
     juices: float,
     interesting: set[str],
     display: dict[str, str],
+    width: int = 0,
 ) -> None:
     """Render one cookie-boosted farming draw: a crop grown under cookie sets.
 
@@ -699,7 +726,7 @@ def _print_cookie_farming(
         )
     print(f"{line}:")
     for key in sorted(k for k in draw.offer.yields if k in interesting):
-        print(f"    {round(draw.produced[key]):,}x {display.get(key, key)}")
+        print(f"    {round(draw.produced[key]):>{width},}x {display.get(key, key)}")
 
 
 def print_plan(
@@ -797,20 +824,24 @@ def print_plan(
     fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
     if fishing_draws:
         print("\nFishing:")
-        for draw in sorted(fishing_draws, key=lambda d: d.ln, reverse=True):
+        ordered = sorted(fishing_draws, key=lambda d: d.ln, reverse=True)
+        width = _num_width(math.ceil(d.units) for d in ordered)
+        for draw in ordered:
             zone = draw.offer.name.removeprefix("fish ")
             print(
-                f"  {math.ceil(draw.units):,}x Large Net at {zone}"
+                f"  {math.ceil(draw.units):>{width},}x Large Net at {zone}"
                 f" ({wanted(draw.offer)})"
             )
 
     exploring_draws = sourced(draws_on(sources.EXPLORING_TRACK))
     if exploring_draws:
         print("\nExploring:")
-        for draw in sorted(exploring_draws, key=lambda d: d.ap, reverse=True):
+        ordered = sorted(exploring_draws, key=lambda d: d.ap, reverse=True)
+        width = _num_width(math.ceil(d.units) for d in ordered)
+        for draw in ordered:
             location = draw.offer.name.removeprefix("explore ")
             print(
-                f"  {math.ceil(draw.units):,}x Arnold Palmer at {location}"
+                f"  {math.ceil(draw.units):>{width},}x Arnold Palmer at {location}"
                 f" ({wanted(draw.offer)})"
             )
 
@@ -828,7 +859,9 @@ def print_plan(
     ]
     if opens:
         print("\nOpening (Locksmith):")
-        for name, count in sorted(opens, key=lambda nc: nc[1], reverse=True):
+        ordered = sorted(opens, key=lambda nc: nc[1], reverse=True)
+        width = _num_width(math.ceil(count) for _, count in ordered)
+        for name, count in ordered:
             flow = flows_by_name[name.lower()]
             keys = [
                 f"{round(quantity * count):,} {display.get(item, item)}"
@@ -842,7 +875,10 @@ def print_plan(
                 if item in need and round(flow.yields[item] * count) >= 1
             )
             detail = f" -> {gained}" if gained else ""
-            print(f"  {math.ceil(count):,}x {display.get(name.lower(), name)}{cost}{detail}")
+            print(
+                f"  {math.ceil(count):>{width},}x"
+                f" {display.get(name.lower(), name)}{cost}{detail}"
+            )
 
     farming_draws = sourced(draws_on(sources.FARMING_TRACK))
     if farming_draws:
@@ -856,10 +892,18 @@ def print_plan(
         if total_sets >= 1:
             heading += f", {total_sets:,} cookie sets"
         print(heading + "):")
+        # Right-align the yield counts across the whole section (every crop's
+        # produced items), so the "x" lines up regardless of which crop.
+        width = _num_width(
+            round(d.produced[key])
+            for d in farming_draws
+            for key in d.offer.yields
+            if key in interesting
+        )
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             juices = draw.gj  # LP-tracked; zero for the without-grape-juice offer
             if draw.offer.cookies:
-                _print_cookie_farming(draw, juices, interesting, display)
+                _print_cookie_farming(draw, juices, interesting, display, width)
                 continue
             crop = draw.offer.name.removeprefix("grow ").removesuffix(
                 " without grape juice"
@@ -881,12 +925,12 @@ def print_plan(
                 if round(juices) >= 1:
                     from_gj = total * gj_share
                     print(
-                        f"    {round(total):,}x {name}"
+                        f"    {round(total):>{width},}x {name}"
                         f" ({round(from_gj):,} from Grape Juice,"
                         f" {round(total - from_gj):,} from normal farming)"
                     )
                 else:
-                    print(f"    {round(total):,}x {name}")
+                    print(f"    {round(total):>{width},}x {name}")
 
     passive_draws = draws_on(sources.PASSIVE_TRACK)
     if passive_draws:
@@ -906,14 +950,25 @@ def print_plan(
                 rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
-            for wait, name, quantity, key in sorted(rows, reverse=True):
+            # The item on the critical path is the slowest to build up, and only
+            # when passive is the plan's bottleneck track. List it first, then the
+            # rest by quantity, then by how long they take.
+            critical_key = None
+            if _passive_is_critical(plan):
+                critical_key = max(rows)[3]  # (wait, name, quantity, key): max wait
+            width = _num_width(quantity for _, _, quantity, _ in rows)
+            ordered = sorted(
+                rows, key=lambda r: (r[3] != critical_key, -r[2], -r[0])
+            )
+            for wait, name, quantity, key in ordered:
                 source = (
                     _passive_sources(production, key, quantity)
                     if production is not None
                     else ""
                 )
                 print(
-                    f"  {quantity:,}x {name} in {passive.format_duration(wait)}{source}"
+                    f"  {quantity:>{width},}x {name}"
+                    f" in {passive.format_duration(wait)}{source}"
                 )
 
     if plan.remainder:

@@ -232,6 +232,36 @@ def test_print_plan_highlights_the_passive_bottleneck(capsys):
     assert "Fast" not in out.split("Critical path")[1].split("Passive")[0]
 
 
+def test_print_plan_lists_critical_passive_item_first(capsys):
+    # Passive makes 1 Slow and 100 Big a minute. 50 Slow needs 50 min (the critical
+    # path); 1000 Big needs only 10 min. Big has more items, but Slow is on the
+    # critical path, so Slow is listed first, then the rest by quantity.
+    demand = {"Slow": 50, "Big": 1000}
+    offer = Offer(
+        "passive", "passive", {"slow": 1, "big": 100}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 50)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    tail = capsys.readouterr().out.split("Passive production (concurrent):")[1]
+    lines = [line for line in tail.splitlines() if line.strip()]
+    assert "Slow" in lines[0] and "Big" in lines[1]
+
+
+def test_print_plan_right_aligns_farming_yields(capsys):
+    # Yield counts of different widths line up their "x" within the section.
+    demand = {"Big": 1000, "Small": 5}
+    plan = SourcingPlan(
+        draws=[
+            Draw(Offer("grow Big", "farming", {"big": 1000}, time_per_unit=timedelta(hours=1)), 1),
+            Draw(Offer("grow Small", "farming", {"small": 5}, time_per_unit=timedelta(hours=2)), 1),
+        ]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "    1,000x Big" in out
+    assert "        5x Small" in out
+
+
 def test_print_plan_highlights_the_farming_bottleneck(capsys):
     # A single crop grown over 100 hours is the whole makespan, so the critical
     # path names it and notes crops grow one at a time.

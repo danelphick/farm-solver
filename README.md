@@ -89,7 +89,7 @@ Critical path (sets the 293y 319d total):
   2,574,345x Horn from passive production (293y 319d) — the slowest item to build up
 ```
 
-The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, farming by how long each crop takes, and the passive section by each item's own wait — all longest/largest-first, so the runner-up bottlenecks are visible too. Chests and bags the plan opens for their contents get their own section (see [Openables](#openables)). Each passive line also names the producer that makes the item; when several producers make it, the quantity is split between them by their per-minute rate share, largest first. A seasonal pet only fetches during its calendar window, so it counts only for the part of the plan that overlaps that window (given the plan's start date — see below) and its window is flagged (`[seasonal: Mar–Apr]`); a pet out of season for the whole plan drops out entirely:
+The plan is then broken down by channel, each ordered so the heaviest lines lead: fishing and exploring by the Large Nets and Arnold Palmers they spend, and farming by how long each crop takes. The passive section leads with the item on the critical path (the slowest to build up, when passive is the bottleneck track), then orders the rest by quantity and finally by wait, so the runner-up bottlenecks are still visible. Within a section the counts are right-aligned so the `x` lines up. Chests and bags the plan opens for their contents get their own section (see [Openables](#openables)). Each passive line also names the producer that makes the item; when several producers make it, the quantity is split between them by their per-minute rate share, largest first. A seasonal pet only fetches during its calendar window, so it counts only for the part of the plan that overlaps that window (given the plan's start date — see below) and its window is flagged (`[seasonal: Mar–Apr]`); a pet out of season for the whole plan drops out entirely:
 
 ```text
 Exploring:
@@ -158,7 +158,7 @@ Opening is folded into the same linear program as crafting: it is a free, instan
 ```text
 Opening (Locksmith):
   4,664x Large Chest 03 using 4,663 Treasure Key -> 46,631x Corn, 23,316x Glass Bottle
-  802x Grab Bag 08 -> 200x Skeleton Key, 401x Treasure Key
+    802x Grab Bag 08 -> 200x Skeleton Key, 401x Treasure Key
 ```
 
 ## Configuration
