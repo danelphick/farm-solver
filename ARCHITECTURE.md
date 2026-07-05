@@ -107,6 +107,9 @@ finishes gathering — a natural plateau. So the frontier segments by resource:
 fast crop-bound → Steel Wire's full completion → Oak's → cheapest. `main.run`
 passes `_pet_dominated_items(production)` to exclude pet materials, and passes the
 cheapest plan's `passive_residuals` into `print_plan` as `max_passive_residuals`.
+It also builds the frontier table's per-plan **reason** (`_frontier_reasons` →
+"all Steel Wire from passive") from the same `_defining_passive_resource`, so the
+table label and the chosen plan's critical path agree.
 
 ## Critical-path naming (main.print_critical_path) — read this before touching it
 
@@ -114,11 +117,13 @@ This logic took many iterations; the precedence is deliberate. Tracks run
 concurrently; fishing/exploring are instant, so the makespan is a **farming** or
 **passive** wait. Decision order in `print_critical_path`:
 
-1. **Defining passive resource** (`_defining_passive_resource`) — a passive item
-   whose residual has reached its **full** requirement (`max_passive_residuals`,
-   within `_FULL_REQUIREMENT_MARGIN`) **and** completes at the makespan. This is
-   the gate ("its full requirement, after which no more is needed"). At the 27d
-   plan Steel Wire is at full (named) while Oak is reduced/sped-up (not).
+1. **Defining passive resource** (`_defining_passive_resource`, takes the plan's
+   passive `residuals`) — a passive item whose residual has reached its **full**
+   requirement (`max_passive_residuals`, within `_FULL_REQUIREMENT_MARGIN`) **and**
+   completes at the makespan. This is the gate ("its full requirement, after which
+   no more is needed"). At the 27d plan Steel Wire is at full (named) while Oak is
+   reduced/sped-up (not). Pet-made items are skipped here (pet-primary falls to
+   step 3). Also drives the frontier table reason via `_frontier_reasons`.
 2. else **farming drives** (`_farming_drives`) — farming co-maximal within
    `_FARMING_COMAX_MARGIN` **and** its longest crop is *not* fill. A crop is
    **fill** (`_binding_crop_is_fill`) if a consumable channel could supply it

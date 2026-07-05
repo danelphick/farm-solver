@@ -103,7 +103,18 @@ Passive production (concurrent):
 
 Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--plans N` to spread more (or fewer) plans across the frontier when you want finer resolution — useful where the fast end swings wildly in cost (default 5).
 
-The frontier is built around the **long-gathering passive resources** — each building-made material is needed only up to its products' full demand, and the makespan at which that full amount finishes gathering is a natural plateau: cap the plan there and every slower material must be sped up with consumables, while that one, and all faster ones, still come for free. So the plans segment by resource, in order: a crop-bound fast plan, then the plan clamped to when Steel Wire finishes (~27 days, its full requirement), then the one waiting on Oak (~143 days), then the cheapest. Each such plan's critical path names its gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates are shown in between.
+The frontier is built around the **long-gathering passive resources** — each building-made material is needed only up to its products' full demand, and the makespan at which that full amount finishes gathering is a natural plateau: cap the plan there and every slower material must be sped up with consumables, while that one, and all faster ones, still come for free. So the plans segment by resource, in order, and the frontier table labels each resource plan with why it is there — the material it gathers to completion:
+
+```text
+Sourcing plans (time / Arnold Palmers / Large Nets / cookie sets / Grape Juice):
+ > 1. 10d 11h 40m / 209,031 AP / 48,511 LN / 11 sets / 147 GJ  [fastest]
+   2. 20d 17h 22m / 189,637 AP / 35,050 LN / 11 sets / 290 GJ
+   3. 27d 7h 39m / 178,119 AP / 29,265 LN / 10 sets / 136 GJ  — all Steel Wire from passive
+   4. 143d 17m / 90,406 AP / 0 LN / 0 sets / 0 GJ  — all Oak from passive
+   5. 251y 10d / 421 AP / 0 LN / 0 sets / 0 GJ  [cheapest]
+```
+
+Plan 3 is clamped to when Steel Wire finishes (its full requirement, ~27 days), plan 4 to Oak (~143 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plan 2 above) are shown in between with no resource label.
 
 By default a seasonal pet is scaled to its steady-state yearly share, so the plan's date does not matter. Set `model_calendar = true` under `[pets]` to instead model the calendar: how much a seasonal pet contributes then depends on how much of the plan runs while it is in season, given the plan's start (today, or `--start-date YYYY-MM-DD`). A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years still settles to the yearly share whatever the start date. So the same goal can source differently in March than in July.
 

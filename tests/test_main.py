@@ -5,6 +5,7 @@ from crops import Farm
 import pytest
 
 from main import (
+    _frontier_reasons,
     _should_model_calendar,
     _slowest_passive_item,
     build_parser,
@@ -135,6 +136,33 @@ def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
     lines = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
     assert "   1. 0m / 100 AP / 20 LN  [fastest]" in lines
     assert " > 3. 3d / 0 AP / 0 LN  [cheapest]" in lines
+
+
+def test_frontier_reasons_name_the_full_requirement_resource():
+    # Steel Wire is at its full 100 (max_passive_residuals) and finishes at the
+    # 10-min makespan, so the plan's reason is that it gathers all of it passively.
+    passive_offer = Offer(
+        "passive", "passive", {"steel wire": 10.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive_offer, 10)], time=timedelta(minutes=10))
+    reasons = _frontier_reasons(
+        [plan], {"steel wire": 100}, {}, 1.0, [], {},
+        max_passive_residuals={"steel wire": 100}, production=None,
+        display={"steel wire": "Steel Wire"},
+    )
+    assert reasons == ["all Steel Wire from passive"]
+
+
+def test_print_frontier_shows_per_plan_reasons(capsys):
+    # A resource plan's reason rides alongside its number (and any fastest/cheapest
+    # tag); a plan with no reason shows nothing extra.
+    print_frontier(
+        PLANS, selected=0, cheapest=2,
+        reasons=[None, "all Oak from passive", None],
+    )
+    out = capsys.readouterr().out
+    assert "2. 5h / 10 AP / 0 LN  — all Oak from passive" in out
+    assert "1. 0m / 100 AP / 20 LN  [fastest]" in out
 
 
 def test_print_frontier_omits_cookie_and_grape_juice_columns_when_unused(capsys):
