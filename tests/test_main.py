@@ -6,6 +6,7 @@ import pytest
 
 from main import (
     _should_model_calendar,
+    _slowest_passive_item,
     build_parser,
     cheapest_plan,
     cookie_sets_available,
@@ -230,6 +231,39 @@ def test_print_plan_highlights_the_passive_bottleneck(capsys):
     assert "Critical path (sets the 1h 40m total):" in out
     assert "100x Slow from passive production (1h 40m)" in out
     assert "Fast" not in out.split("Critical path")[1].split("Passive")[0]
+
+
+def test_slowest_passive_item_skips_pet_topups():
+    # A sawmill makes Oak; a slow pet makes Horn. Horn is mostly sourced elsewhere
+    # (e.g. exploring), so the pet only tops up a small residual. Even though that
+    # residual is marginally slower to trickle out, Oak from the building is the
+    # real bottleneck, so the pet top-up is not named as the critical path.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("sawmill", MINUTE, {"oak": 100.0}),
+            PassiveProducer("pet Dog", MINUTE, {"horn": 1.0}),
+        ]
+    )
+    offer = Offer("passive", "passive", {"oak": 100.0, "horn": 1.0}, time_per_unit=MINUTE)
+    plan = SourcingPlan(draws=[Draw(offer, 1)])
+    need = {"oak": 1000.0, "horn": 1000.0}
+    elsewhere = {"horn": 900.0}  # exploring supplies most Horn; 100 left to the pet
+    display = {"oak": "Oak", "horn": "Horn"}
+    # Oak wait 1000/100 = 10 min; Horn residual 100/1 = 100 min (slower) but a top-up.
+    item = _slowest_passive_item(plan, need, elsewhere, display, production)
+    assert item is not None and item[0] == "Oak"
+
+
+def test_slowest_passive_item_keeps_pet_when_it_is_primary_source():
+    # When a pet is the only (hence primary) source of an item, it legitimately
+    # caps the plan and is still named.
+    production = PassiveProduction(
+        producers=[PassiveProducer("pet Dog", MINUTE, {"horn": 1.0})]
+    )
+    offer = Offer("passive", "passive", {"horn": 1.0}, time_per_unit=MINUTE)
+    plan = SourcingPlan(draws=[Draw(offer, 1)])
+    item = _slowest_passive_item(plan, {"horn": 100.0}, {}, {"horn": "Horn"}, production)
+    assert item is not None and item[0] == "Horn"
 
 
 def test_print_plan_lists_critical_passive_item_first(capsys):

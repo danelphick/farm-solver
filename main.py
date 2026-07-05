@@ -487,32 +487,71 @@ def print_frontier(
         print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
 
 
+def _pet_passive_rate(
+    production: passive.PassiveProduction | None, item: str
+) -> float:
+    """Per-minute rate at which pets (not buildings) passively make ``item``."""
+    if production is None:
+        return 0.0
+    key = item.lower()
+    total = 0.0
+    for producer in production.producers:
+        if not producer.name.startswith(config.PET_PRODUCER_PREFIX):
+            continue
+        quantity = producer.outputs.get(key)
+        if quantity:
+            per_cycle = quantity
+            if production.inventory_size is not None:
+                per_cycle = min(per_cycle, production.inventory_size)
+            total += per_cycle / (producer.period.total_seconds() / 60)
+    return total
+
+
 def _slowest_passive_item(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
     elsewhere: dict[str, float],
     display: dict[str, str],
+    production: passive.PassiveProduction | None = None,
 ) -> tuple[str, int, timedelta] | None:
-    """The passive item with the longest wait: ``(name, quantity, wait)``.
+    """The passive item that caps the plan's time: ``(name, quantity, wait)``.
 
     Each item's wait is its residual (what other channels and crafting did not
-    cover) over its per-minute rate; the longest of these is the whole passive
-    track's time, so it is what caps a passive-bound plan.
+    cover) over its per-minute rate; the longest of these is the passive track's
+    time, so it is what caps a passive-bound plan.
+
+    A pet slowly trickling out a small top-up is skipped, though: pets are a last
+    resort, so unless a pet is the *primary* source of an item it should not be
+    named as the critical path over a building doing the real work (a pet finishing
+    a 2,302 residual of Horn just after a sawmill makes 13M Oak is co-maximal noise,
+    not the bottleneck). Only if every passive item is such a pet top-up do we fall
+    back to the slowest of them, so a genuinely pet-bound plan still reports one.
     """
     passive_draws = [d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK]
     if not passive_draws:
         return None
     offer = passive_draws[0].offer
-    best: tuple[str, int, timedelta] | None = None
+    best: tuple[str, int, timedelta] | None = None  # slowest non-pet-top-up item
+    fallback: tuple[str, int, timedelta] | None = None  # slowest of any, as backup
     for key, rate in offer.yields.items():
         if rate <= 0:
             continue
-        residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
-        if residual > 1e-6:
-            wait = timedelta(minutes=residual / rate)
-            if best is None or wait > best[2]:
-                best = (display.get(key, key), round(residual), wait)
-    return best
+        total_need = need.get(key, 0.0)
+        residual = total_need - elsewhere.get(key, 0.0)
+        if residual <= 1e-6:
+            continue
+        wait = timedelta(minutes=residual / rate)
+        row = (display.get(key, key), round(residual), wait)
+        if fallback is None or wait > fallback[2]:
+            fallback = row
+        # A pet top-up: pets make most of this item's passive supply yet supply
+        # less than half of the item overall (another channel is its main source).
+        pet_rate = _pet_passive_rate(production, key)
+        pet_made = residual * (pet_rate / rate)
+        pet_topup = pet_rate > rate / 2 and pet_made < total_need / 2
+        if not pet_topup and (best is None or wait > best[2]):
+            best = row
+    return best or fallback
 
 
 def _num_width(counts: Iterable[int]) -> int:
@@ -578,6 +617,7 @@ def print_critical_path(
     need: dict[str, float],
     elsewhere: dict[str, float],
     display: dict[str, str],
+    production: passive.PassiveProduction | None = None,
 ) -> None:
     """Highlight the track that truly caps how fast the plan can run.
 
@@ -613,7 +653,7 @@ def print_critical_path(
         line = _farming_bottleneck(plan, makespan)
     else:
         # Passive is the sole longest track, so it genuinely sets the pace.
-        item = _slowest_passive_item(plan, need, elsewhere, display)
+        item = _slowest_passive_item(plan, need, elsewhere, display, production)
         if item is None:
             return
         name, quantity, wait = item
@@ -819,7 +859,7 @@ def print_plan(
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
 
-    print_critical_path(plan, need, elsewhere, display)
+    print_critical_path(plan, need, elsewhere, display, production)
 
     fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
     if fishing_draws:
