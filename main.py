@@ -400,10 +400,13 @@ def limit_shortfall(
 def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:
     """Whole cookie sets a plan spends — partial sets aren't usable, so round up.
 
-    Each cookie draw rounds up on its own (you can't deploy a fraction of a set),
-    so the plan's total is the sum of those whole-set counts.
+    One cookie set covers one real day, boosting whichever crops you harvest that
+    day alongside the day's Grape Juice allocation. Crops grow one after another,
+    so the sets a plan needs is the whole number of days its cookie-boosted
+    farming spans (``ceil`` of the total), not the sum of each crop's rounded-up
+    days — that would double-count a day two crops share.
     """
-    return sum(math.ceil(d.cookies) for d in plan.draws if d.cookies)
+    return math.ceil(plan.cookie_sets)
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
@@ -680,21 +683,15 @@ def _print_cookie_farming(
     interesting: set[str],
     display: dict[str, str],
 ) -> None:
-    """Render one cookie-boosted farming draw: whole days of a crop under a set.
+    """Render one cookie-boosted farming draw: a crop grown under cookie sets.
 
-    One unit is a single day farming the crop with a full cookie set active, so
-    the day's Grape Juice grows yield :data:`crops.COOKIE_SET_MULTIPLIER` times as
-    much. The unit count is both the days spent and the cookie sets used.
+    A cookie set covers a whole real day, boosting the day's Grape Juice
+    allocation :data:`crops.COOKIE_SET_MULTIPLIER`-fold. Sets are a farm-wide
+    daily resource shared across crops, so the whole-set count lives in the
+    Farming heading; each crop line just shows its span, juice and yield.
     """
     crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
-    # A partial cookie set still consumes a whole one, so round the day (and the
-    # set it spends) up — never down.
-    days = math.ceil(draw.units)
-    noun = "day" if days == 1 else "days"
-    line = (
-        f"  {days:,} cookie-boosted {noun} of {crop}"
-        f" in {passive.format_duration(draw.time)}"
-    )
+    line = f"  Cookie-boosted {crop} in {passive.format_duration(draw.time)}"
     if round(juices) >= 1:
         line += (
             f" using {round(juices):,} Grape Juice"
@@ -852,9 +849,10 @@ def print_plan(
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))
         heading = f"\nFarming ({passive.format_duration(total_farming)}"
-        # Each cookie draw's sets round up on their own (partial sets aren't
-        # usable), so total by summing those whole-set counts.
-        total_sets = sum(math.ceil(d.cookies) for d in farming_draws if d.cookies)
+        # One cookie set covers one real day, shared across whatever crops are
+        # harvested that day, so the count is the whole days the cookie-boosted
+        # farming spans (ceil of the total) — not each crop's days rounded up.
+        total_sets = math.ceil(sum(d.cookies for d in farming_draws if d.cookies))
         if total_sets >= 1:
             heading += f", {total_sets:,} cookie sets"
         print(heading + "):")

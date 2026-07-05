@@ -484,9 +484,28 @@ def test_print_plan_reports_cookie_boosted_farming(capsys):
     print_plan(plan, demand, Farm(grape_juices_per_day=2), Workshop(), 1.0)
     out = capsys.readouterr().out
     assert "Farming (10d, 10 cookie sets):" in out
-    assert "10 cookie-boosted days of Slow" in out
+    assert "Cookie-boosted Slow in 10d" in out
     assert "420x Slow" in out
     assert "20 Grape Juice" in out  # 2 a day over 10 days
+
+
+def test_print_plan_shares_cookie_days_between_crops(capsys):
+    # Two crops spanning 10.16 + 0.33 = 10.49 cookie-days share the boundary day,
+    # so the plan spends ceil(10.49) = 11 sets, not ceil(10.16) + ceil(0.33) = 12.
+    demand = {"Big": 100, "Small": 100}
+    big = Offer(
+        "grow Big with cookies", "farming", {"big": 10}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    small = Offer(
+        "grow Small with cookies", "farming", {"small": 300}, cookies=1,
+        time_per_unit=timedelta(days=1),
+    )
+    plan = SourcingPlan(draws=[Draw(big, 10.16), Draw(small, 0.33)], cookie_sets=10.49)
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "11 cookie sets" in out
+    assert "12 cookie sets" not in out
 
 
 def test_print_plan_drops_residue_opens(capsys):

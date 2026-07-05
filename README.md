@@ -300,10 +300,12 @@ Farming can be sped up further with **Cookies**. There are three types — Happy
 
 Sets are scarce, so they are spent carefully. Only crops whose grow time reaches `cookies_grow_time_threshold` qualify — on a slow crop each boosted harvest stands in for a long grow, so a set saves a lot of farming time, whereas a fast crop is cheap to grow anyway and a scarce set is wasted (at the sample perks a `18m` threshold lets them go to Corn but not quicker crops). The solver then spends its sets where a boosted day shortens the farming critical path the most, and never on a plan where farming isn't the bottleneck (a set that wouldn't finish the plan any sooner is kept in the cupboard).
 
-The number of sets available is the fewest of the three cookie types in your inventory; `--cookie-sets N` overrides it in either direction (`--cookie-sets 0` turns cookies off). When a plan spends them, the `Farming` heading totals the sets used and each boosted crop reports its cookie-boosted days:
+The number of sets available is the fewest of the three cookie types in your inventory; `--cookie-sets N` overrides it in either direction (`--cookie-sets 0` turns cookies off). A cookie set covers one real day and boosts whichever crops you harvest that day alongside the day's Grape Juice allocation, so the sets a plan spends is the whole number of days its cookie-boosted farming spans — the `Farming` heading totals them (`ceil` of the total, so crops that share a boundary day don't each round it up) and each boosted crop reports its span, juice and yield:
 
 ```text
-Farming (10d 11h 40m, 10 cookie sets):
-  11 cookie-boosted days of Pine Tree in 10d 3h 47m using 142 Grape Juice (yield 9x):
+Farming (10d 11h 40m, 11 cookie sets):
+  Cookie-boosted Pine Tree in 10d 3h 47m using 142 Grape Juice (yield 9x):
     108,280x Pine Tree
+  Cookie-boosted Mega Cotton in 7h 53m using 5 Grape Juice (yield 9x):
+    29,138x Cotton
 ```
