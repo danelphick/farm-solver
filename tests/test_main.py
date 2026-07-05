@@ -12,6 +12,7 @@ from main import (
     cookie_sets_available,
     limit_shortfall,
     print_crafts,
+    print_critical_path,
     print_frontier,
     print_plan,
     selected_plan,
@@ -316,6 +317,37 @@ def test_print_plan_right_aligns_farming_yields(capsys):
     out = capsys.readouterr().out
     assert "    1,000x Big" in out
     assert "        5x Small" in out
+
+
+def test_critical_path_names_passive_when_the_farming_is_fill(capsys):
+    # Farming grows Mushroom (which exploring could supply) to 10 min; passive makes
+    # Oak (building-only) also to 10 min. The Mushroom farming is free fill of the
+    # Oak-forced wait, so Oak is the driver, not the farming.
+    farming = Offer("grow Mushroom", "farming", {"mushroom": 1}, time_per_unit=timedelta(minutes=1))
+    passive = Offer("passive", "passive", {"oak": 1.0}, time_per_unit=timedelta(minutes=1))
+    plan = SourcingPlan(draws=[Draw(farming, 10), Draw(passive, 10)])
+    print_critical_path(
+        plan, {"mushroom": 10, "oak": 10}, {},
+        {"mushroom": "Mushroom", "oak": "Oak"}, None, sourceable_elsewhere={"mushroom"},
+    )
+    out = capsys.readouterr().out
+    assert "Oak from passive production" in out
+    assert "Mushroom" not in out
+
+
+def test_critical_path_keeps_farming_when_the_crop_is_not_fill(capsys):
+    # Pine cannot be sourced elsewhere, so even with Oak co-maximal the farming that
+    # grows it is the genuine driver.
+    farming = Offer("grow Pine Tree", "farming", {"pine tree": 1}, time_per_unit=timedelta(minutes=1))
+    passive = Offer("passive", "passive", {"oak": 1.0}, time_per_unit=timedelta(minutes=1))
+    plan = SourcingPlan(draws=[Draw(farming, 10), Draw(passive, 10)])
+    print_critical_path(
+        plan, {"pine tree": 10, "oak": 10}, {},
+        {"pine tree": "Pine Tree", "oak": "Oak"}, None, sourceable_elsewhere={"mushroom"},
+    )
+    out = capsys.readouterr().out
+    assert "Pine Tree" in out
+    assert "passive production" not in out
 
 
 def test_print_plan_highlights_the_farming_bottleneck(capsys):

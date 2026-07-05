@@ -559,12 +559,21 @@ def _num_width(counts: Iterable[int]) -> int:
     return max((len(f"{n:,}") for n in counts), default=0)
 
 
-def _passive_is_critical(plan: optimizer.SourcingPlan) -> bool:
-    """Whether passive production is the plan's bottleneck track.
+def _farming_drives(
+    plan: optimizer.SourcingPlan,
+    need: dict[str, float],
+    elsewhere: dict[str, float],
+    display: dict[str, str],
+    production: passive.PassiveProduction | None = None,
+    sourceable_elsewhere: set[str] | None = None,
+) -> bool:
+    """Whether the farming track, not passive production, sets the makespan.
 
-    Mirrors :func:`print_critical_path`: passive sets the pace only when farming
-    falls outside the co-maximal margin below the makespan, otherwise the
-    critical path is farming and no passive item sits on it.
+    Farming that reaches the makespan is usually the driver, but if its longest
+    crop is fill that a consumable channel could supply and a passive item is
+    co-maximal, that passive item drives instead (see :func:`print_critical_path`).
+    Both the critical-path line and the passive section's ordering use this so they
+    agree on which track is the bottleneck.
     """
     track_time: dict[str, timedelta] = {}
     for draw in plan.draws:
@@ -576,7 +585,11 @@ def _passive_is_critical(plan: optimizer.SourcingPlan) -> bool:
         return False
     farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
-    return farming_time < makespan - tolerance
+    if farming_time < makespan - tolerance:
+        return False
+    item = _slowest_passive_item(plan, need, elsewhere, display, production)
+    passive_comaximal = item is not None and item[2] >= makespan - tolerance
+    return not (passive_comaximal and _binding_crop_is_fill(plan, sourceable_elsewhere))
 
 
 def _harvest_alls(count: int) -> str:
@@ -612,12 +625,39 @@ def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
     )
 
 
+def _binding_crop_is_fill(
+    plan: optimizer.SourcingPlan, sourceable_elsewhere: set[str] | None
+) -> bool:
+    """Whether the longest-grown crop could instead be sourced with consumables.
+
+    A crop that fishing, exploring or opening can supply is grown only because
+    doing so is free and fits inside a wait another track already forces -- so the
+    farming that reaches the makespan is fill, not the real driver (see
+    :func:`print_critical_path`). A crop with no such source (Pine, say) is
+    genuinely farming-bound.
+    """
+    if not sourceable_elsewhere:
+        return False
+    farming = [d for d in plan.draws if d.offer.track == sources.FARMING_TRACK]
+    if not farming:
+        return False
+    biggest = max(farming, key=lambda d: d.time)
+    crop = (
+        biggest.offer.name.removeprefix("grow ")
+        .removesuffix(" with cookies")
+        .removesuffix(" without grape juice")
+        .lower()
+    )
+    return crop in sourceable_elsewhere
+
+
 def print_critical_path(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
     elsewhere: dict[str, float],
     display: dict[str, str],
     production: passive.PassiveProduction | None = None,
+    sourceable_elsewhere: set[str] | None = None,
 ) -> None:
     """Highlight the track that truly caps how fast the plan can run.
 
@@ -626,12 +666,16 @@ def print_critical_path(
     not symmetric, though: passive runs for free alongside everything, so it
     opportunistically fills whatever wait another track already forces -- an item
     that could be fished or explored instead is made passively just to save a
-    consumable, expanding the passive track to exactly the makespan. Farming, by
-    contrast, is grown deliberately and only as much as needed. So when farming is
-    (co-)maximal it is the real driver and the passive track beside it is fill;
-    only when passive is the sole longest track does it genuinely set the pace.
-    Naming the driver shows what to attack (source it with consumables, or pick a
-    faster plan) to finish sooner.
+    consumable, expanding the passive track to exactly the makespan. So when
+    farming is (co-)maximal it is usually the real driver and the passive track
+    beside it is fill.
+
+    The reverse happens too, though: on a plan clamped to a passive item's
+    completion, farming grows free crops to fill the passive-forced wait. So if the
+    longest-grown crop could itself be sourced with consumables (it is fill, see
+    :func:`_binding_crop_is_fill`) and a passive item is co-maximal, that passive
+    item is the driver instead. Naming the driver shows what to attack (source it
+    with consumables, or pick a faster plan) to finish sooner.
     """
     track_time: dict[str, timedelta] = {}
     for draw in plan.draws:
@@ -642,25 +686,21 @@ def print_critical_path(
     if makespan <= timedelta(0):
         return  # everything is instant; there is no wait to explain
 
-    # Farming counts as co-maximal within a small relative margin: passive fill
-    # often overshoots it by a sliver (making a last handful of an item slightly
-    # faster than another planting would), which should still read as farming-bound
-    # rather than crediting the pace to a few passively-made items. A genuine
-    # passive bottleneck leaves farming far below the makespan, outside the margin.
-    farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
-    tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
-    if farming_time >= makespan - tolerance:
+    item = _slowest_passive_item(plan, need, elsewhere, display, production)
+    if _farming_drives(
+        plan, need, elsewhere, display, production, sourceable_elsewhere
+    ):
         line = _farming_bottleneck(plan, makespan)
-    else:
-        # Passive is the sole longest track, so it genuinely sets the pace.
-        item = _slowest_passive_item(plan, need, elsewhere, display, production)
-        if item is None:
-            return
+    elif item is not None:
+        # Passive sets the pace: it is the sole longest track, or farming beside it
+        # is merely filling the wait this item forces with free crops.
         name, quantity, wait, _ = item
         line = (
             f"{quantity:,}x {name} from passive production "
             f"({passive.format_duration(wait)}) — the slowest item to build up"
         )
+    else:
+        return
     print(f"\nCritical path (sets the {passive.format_duration(makespan)} total):")
     print(f"  {line}")
 
@@ -779,6 +819,7 @@ def print_plan(
     open_flows: list[sources.OpenFlow] | None = None,
     openable_names: dict[str, str] | None = None,
     inventory: dict[str, float] | None = None,
+    sourceable_elsewhere: set[str] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
     open_flows = open_flows or []
@@ -859,7 +900,9 @@ def print_plan(
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
 
-    print_critical_path(plan, need, elsewhere, display, production)
+    print_critical_path(
+        plan, need, elsewhere, display, production, sourceable_elsewhere
+    )
 
     fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
     if fishing_draws:
@@ -995,7 +1038,9 @@ def print_plan(
             # they take. The critical item is whatever print_critical_path names --
             # not simply the slowest, since a pet top-up is skipped over a building.
             critical_key = None
-            if _passive_is_critical(plan):
+            if not _farming_drives(
+                plan, need, elsewhere, display, production, sourceable_elsewhere
+            ):
                 critical = _slowest_passive_item(
                     plan, need, elsewhere, display, production
                 )
@@ -1206,9 +1251,18 @@ def run(args: argparse.Namespace) -> int:
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)
+    # Items a consumable channel can supply: growing one of these is optional fill,
+    # not a farming bottleneck (see print_critical_path).
+    sourceable_elsewhere = {
+        key for offer in offers
+        if offer.track in (sources.FISHING_TRACK, sources.EXPLORING_TRACK)
+        for key in offer.yields
+    }
+    for flow in open_flows:
+        sourceable_elsewhere |= set(flow.yields)
     print_plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
-        open_flows, smith.names, inventory,
+        open_flows, smith.names, inventory, sourceable_elsewhere,
     )
 
     if args.breakdown:
