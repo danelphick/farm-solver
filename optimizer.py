@@ -54,6 +54,7 @@ from exploring import Exploring
 from fishing import Fishing
 from passive import PassiveProduction
 from sources import (
+    PASSIVE_TRACK,
     Draw,
     Offer,
     OpenFlow,
@@ -80,6 +81,11 @@ _FREE_PRICE = 1e9
 # well above the requested plan count so thinning has a dense frontier to spread
 # over; the LPs are tiny, so a few dozen extra solves are cheap.
 _MIN_CAP_SAMPLES = 40
+
+# Passive-completion breakpoints this close (fraction of the endpoint) to either
+# frontier end are dropped: the slowest one always coincides with the cheap plan's
+# own makespan, and one hugging an endpoint would just duplicate it.
+_CAP_MARGIN = 0.005
 
 
 def all_offers(
@@ -434,14 +440,94 @@ def _non_dominated(plans: list[SourcingPlan]) -> list[SourcingPlan]:
     return sorted(kept, key=lambda p: p.cost)
 
 
-def _thin(plans: list[SourcingPlan], count: int) -> list[SourcingPlan]:
-    """Keep ``count`` plans spread across the frontier, including both ends."""
+def _thin(
+    plans: list[SourcingPlan], count: int, anchors: tuple[float, ...] = ()
+) -> list[SourcingPlan]:
+    """Keep ``count`` plans spread across the frontier, including both ends.
+
+    ``anchors`` are makespan seconds worth landing on -- the passive-completion
+    breakpoints where an item stops needing consumables (see
+    :func:`_passive_completion_caps`). The plan nearest each anchor is kept before
+    the remaining slots are filled by an even spread, so a meaningful intermediate
+    (say the plan clamped to when Steel Wire finishes) is not thinned away.
+    """
     if len(plans) <= count:
         return plans
-    # Even indices across the sorted list, always keeping first and last.
+    keep = {0, len(plans) - 1}  # always both ends
+    for target in sorted(anchors):
+        if len(keep) >= count:
+            break
+        keep.add(min(range(len(plans)), key=lambda i: abs(
+            plans[i].time.total_seconds() - target)))
+    # Fill any remaining slots with an even spread across the whole frontier.
     step = (len(plans) - 1) / (count - 1)
-    picked = {round(i * step) for i in range(count)}
-    return [plans[i] for i in sorted(picked)]
+    for i in range(count):
+        if len(keep) >= count:
+            break
+        keep.add(round(i * step))
+    # Collisions with already-kept indices can leave us short; top up in order.
+    for i in range(len(plans)):
+        if len(keep) >= count:
+            break
+        keep.add(i)
+    return [plans[i] for i in sorted(keep)]
+
+
+def _passive_completion_caps(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> list[float]:
+    """Makespan seconds at which each passively-made item finishes, in ``plan``.
+
+    Each item passive must supply (its net requirement after crafting, opening,
+    stock and the other tracks) finishes after ``residual / rate`` -- and those
+    times are the natural plateaus of the frontier: cap the makespan just at one
+    and every slower item must be sped up with consumables while that item, and
+    all faster ones, still come for free. Computed on the cheapest plan, where
+    passive does the most work, so the requirements are the full ones.
+    """
+    passive = next((d for d in plan.draws if d.offer.track == PASSIVE_TRACK), None)
+    if passive is None:
+        return []
+    demanded = {item.lower() for item in demand}
+    # What must be produced: demand, plus crafting materials and open tokens/keys.
+    need = {item.lower(): float(qty) for item, qty in demand.items() if qty > 0}
+    for item, count in plan.crafts.items():
+        for material, quantity in recipes.get(item, {}).items():
+            need[material] = need.get(material, 0.0) + quantity * count
+    flows = {flow.name.lower(): flow for flow in openables}
+    for name, count in plan.opens.items():
+        flow = flows.get(name.lower())
+        if flow is not None:
+            for item, quantity in flow.consumes.items():
+                need[item] = need.get(item, 0.0) + quantity * count
+    # What the other channels, crafting, opening and stock already supply.
+    elsewhere = {item: crafting_bonus * count for item, count in plan.crafts.items()}
+    for name, count in plan.opens.items():
+        flow = flows.get(name.lower())
+        if flow is not None:
+            for item, quantity in flow.yields.items():
+                elsewhere[item] = elsewhere.get(item, 0.0) + quantity * count
+    for item, quantity in inventory.items():
+        if item not in demanded:  # demand is already net of held stock
+            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    for draw in plan.draws:
+        if draw.offer.track == PASSIVE_TRACK:
+            continue
+        for item, quantity in draw.produced.items():
+            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    caps = []
+    for item, rate in passive.offer.yields.items():
+        if rate <= 0:
+            continue
+        residual = need.get(item, 0.0) - elsewhere.get(item, 0.0)
+        if residual > 1e-6:
+            caps.append(residual / rate * 60.0)  # rate is per minute -> seconds
+    return caps
 
 
 def _time_caps(t_fast: float, t_slow: float, count: int) -> list[float]:
@@ -496,7 +582,22 @@ def frontier(
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
-    caps = _time_caps(fast.time.total_seconds(), cheap.time.total_seconds(), samples)
+    t_fast, t_slow = fast.time.total_seconds(), cheap.time.total_seconds()
+    caps = _time_caps(t_fast, t_slow, samples)
+    # Add the passive-completion breakpoints (see _passive_completion_caps): a plan
+    # clamped to each is a natural intermediate the geometric sweep can miss. Keep
+    # only those comfortably inside the endpoints -- the slowest breakpoint is the
+    # cheap plan's own binding item, so it coincides with that endpoint -- and use
+    # them as thinning anchors so they survive to the shown set.
+    lo, hi = t_fast * (1 + _CAP_MARGIN), t_slow * (1 - _CAP_MARGIN)
+    breakpoints = [
+        cap for cap in _passive_completion_caps(
+            cheap, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {},
+        )
+        if lo < cap < hi
+    ]
+    caps += breakpoints
     plans += [
         minimize(
             offers, demand, recipes, crafting_bonus,
@@ -505,4 +606,4 @@ def frontier(
         )
         for cap in caps
     ]
-    return _thin(_non_dominated(plans), count)
+    return _thin(_non_dominated(plans), count, tuple(breakpoints))

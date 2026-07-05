@@ -5,9 +5,16 @@ import pytest
 from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
-from optimizer import SourcingPlan, all_offers, frontier, minimize
+from optimizer import (
+    SourcingPlan,
+    _passive_completion_caps,
+    _thin,
+    all_offers,
+    frontier,
+    minimize,
+)
 from passive import HOURLY, PassiveProducer, PassiveProduction
-from sources import Offer, OpenFlow
+from sources import Draw, Offer, OpenFlow
 
 # A free-but-slow farming offer and a fast-but-costly fishing offer for the same
 # item, the basic time-vs-consumable tradeoff.
@@ -393,3 +400,49 @@ def test_frontier_thins_to_the_requested_count():
     ]
     plans = frontier(offers, {"It": 1000}, count=3)
     assert 1 <= len(plans) <= 3
+
+
+def test_passive_completion_caps_are_each_item_finish_time():
+    # Passive makes 10 Oak and 1 Horn a minute; 100 Oak finishes in 10 min, 60 Horn
+    # in 60 min. The caps are those completion times, in seconds.
+    passive = Offer(
+        "passive", "passive", {"oak": 10.0, "horn": 1.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 100)])
+    caps = _passive_completion_caps(plan, {"Oak": 100, "Horn": 60}, {}, 1.0, [], {})
+    assert sorted(round(c) for c in caps) == [600, 3600]
+
+
+def test_passive_completion_caps_net_of_other_channels():
+    # Fishing already lands 90 of the 100 Oak, so passive need only finish the last
+    # 10 -- its completion is 10/10 = 1 min, not the full 10.
+    passive = Offer("passive", "passive", {"oak": 10.0}, time_per_unit=timedelta(minutes=1))
+    fished = Draw(Offer("fish Oak", "fishing", {"oak": 1}, ln=1), 90)
+    plan = SourcingPlan(draws=[Draw(passive, 1), fished])
+    caps = _passive_completion_caps(plan, {"Oak": 100}, {}, 1.0, [], {})
+    assert [round(c) for c in caps] == [60]
+
+
+def test_thin_keeps_anchor_plans():
+    plans = [SourcingPlan(time=timedelta(days=d)) for d in range(1, 11)]  # 1..10 days
+    # count=3 would keep just the ends and the middle; the anchor at 3 days pins a
+    # plan the even spread would drop.
+    kept = _thin(plans, 3, anchors=(timedelta(days=3).total_seconds(),))
+    days = [p.time.days for p in kept]
+    assert days[0] == 1 and days[-1] == 10  # both ends kept
+    assert 3 in days  # the anchored breakpoint survives
+    assert len(kept) == 3
+
+
+def test_frontier_clamps_to_a_passive_completion_breakpoint():
+    # Oak and Horn can be fished (fast, costly) or made passively (free, slow). Horn
+    # finishes passively at 100/10 = 10 min; Oak only at 100/1 = 100 min (the cheap
+    # end). So 10 min is a breakpoint, and a plan should land there.
+    offers = [
+        Offer("passive", "passive", {"oak": 1.0, "horn": 10.0}, time_per_unit=timedelta(minutes=1)),
+        Offer("fish Oak", "fishing", {"oak": 1}, ln=1),
+        Offer("fish Horn", "fishing", {"horn": 1}, ln=1),
+    ]
+    plans = frontier(offers, {"Oak": 100, "Horn": 100}, count=5)
+    times = [p.time.total_seconds() for p in plans]
+    assert any(abs(t - 600) < 1 for t in times)  # a plan clamped at Horn's 10 min
