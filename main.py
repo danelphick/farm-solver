@@ -397,6 +397,15 @@ def limit_shortfall(
     return f"No plan fits {fits}; showing the full frontier."
 
 
+def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:
+    """Whole cookie sets a plan spends — partial sets aren't usable, so round up.
+
+    Each cookie draw rounds up on its own (you can't deploy a fraction of a set),
+    so the plan's total is the sum of those whole-set counts.
+    """
+    return sum(math.ceil(d.cookies) for d in plan.draws if d.cookies)
+
+
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
     """Index of the plan spending the fewest scarce resources (ties: least time).
 
@@ -444,7 +453,7 @@ def print_frontier(
     actually spends them, so a plan that uses neither keeps the plain time/AP/LN
     table.
     """
-    show_cookies = any(round(p.cookie_sets) >= 1 for p in plans)
+    show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
 
     columns = ["time", "Arnold Palmers", "Large Nets"]
@@ -468,7 +477,7 @@ def print_frontier(
             f"{round(plan.large_nets):,} LN",
         ]
         if show_cookies:
-            parts.append(f"{round(plan.cookie_sets):,} sets")
+            parts.append(f"{_cookie_sets_used(plan):,} sets")
         if show_juices:
             parts.append(f"{round(plan.grape_juices):,} GJ")
         print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
@@ -509,13 +518,15 @@ def _harvest_alls(count: int) -> str:
 
 def _farming_action(draw: sources.Draw) -> str:
     """The action and crop a farming draw stands for, cookie days included."""
-    units = math.ceil(draw.units)
     if draw.offer.cookies:
+        # A partial cookie set still consumes a whole one, so round days (and the
+        # sets they stand for) up — never down.
+        days = math.ceil(draw.units)
         crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
-        noun = "day" if units == 1 else "days"
-        return f"{units:,} cookie-boosted {noun} of {crop}"
+        noun = "day" if days == 1 else "days"
+        return f"{days:,} cookie-boosted {noun} of {crop}"
     crop = draw.offer.name.removeprefix("grow ").removesuffix(" without grape juice")
-    return f"{_harvest_alls(units)} of {crop}"
+    return f"{_harvest_alls(math.ceil(draw.units))} of {crop}"
 
 
 def _farming_bottleneck(plan: optimizer.SourcingPlan, total: timedelta) -> str:
@@ -676,6 +687,8 @@ def _print_cookie_farming(
     much. The unit count is both the days spent and the cookie sets used.
     """
     crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+    # A partial cookie set still consumes a whole one, so round the day (and the
+    # set it spends) up — never down.
     days = math.ceil(draw.units)
     noun = "day" if days == 1 else "days"
     line = (
@@ -839,9 +852,11 @@ def print_plan(
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))
         heading = f"\nFarming ({passive.format_duration(total_farming)}"
-        total_sets = sum(d.cookies for d in farming_draws)
-        if round(total_sets) >= 1:
-            heading += f", {round(total_sets):,} cookie sets"
+        # Each cookie draw's sets round up on their own (partial sets aren't
+        # usable), so total by summing those whole-set counts.
+        total_sets = sum(math.ceil(d.cookies) for d in farming_draws if d.cookies)
+        if total_sets >= 1:
+            heading += f", {total_sets:,} cookie sets"
         print(heading + "):")
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             juices = draw.gj  # LP-tracked; zero for the without-grape-juice offer

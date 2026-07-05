@@ -144,12 +144,30 @@ def test_print_frontier_omits_cookie_and_grape_juice_columns_when_unused(capsys)
 
 
 def test_print_frontier_shows_cookie_sets_and_grape_juice(capsys):
-    plan = SourcingPlan(time=timedelta(days=1), cookie_sets=5, grape_juices=14)
+    cookie_draw = Draw(
+        Offer("grow Beet", "farming", {"beet": 1}, cookies=1, time_per_unit=timedelta(days=1)),
+        5,
+    )
+    plan = SourcingPlan(
+        draws=[cookie_draw], time=timedelta(days=1), cookie_sets=5, grape_juices=14
+    )
     print_frontier([plan], selected=0, cheapest=0)
     out = capsys.readouterr().out
     assert "time / Arnold Palmers / Large Nets / cookie sets / Grape Juice" in out
     assert "5 sets" in out
     assert "14 GJ" in out
+
+
+def test_print_frontier_rounds_partial_cookie_sets_up(capsys):
+    # A partial cookie set still consumes a whole one, so 11.4 sets reads as 12.
+    cookie_draw = Draw(
+        Offer("grow Beet", "farming", {"beet": 1}, cookies=1, time_per_unit=timedelta(days=1)),
+        11.4,
+    )
+    plan = SourcingPlan(draws=[cookie_draw], time=timedelta(days=1), cookie_sets=11.4)
+    print_frontier([plan], selected=0, cheapest=0)
+    out = capsys.readouterr().out
+    assert "12 sets" in out
 
 
 def test_print_plan_renders_each_channel_and_the_remainder(capsys):
