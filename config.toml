@@ -113,12 +113,14 @@ instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
 
 [trading]    # player-to-player gold trade prices, to rank plans by real gold cost
 # Priced in gold per 1000 units ("gk"); the solver divides by 1000 for the
-# per-unit gold. Grape Juice is not tradable, so it is treated as free (it is so
-# widely available it costs nothing as long as it is not wasted on fast crops).
+# per-unit gold. Grape Juice is not traded directly -- its price is derived from
+# grapes (200 to a juice, its workshop recipe), which trade for Arnold Palmers
+# rather than gold, so `grapes` is in "apk" (Arnold Palmers per 1000).
 orange_juice  = 8
 apple_cider   = 20
 arnold_palmer = 60
 large_net     = 10
+grapes        = 5    # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
 cookie_set    = 20   # priced individually, in gold each (not gk)
 
 [pets]    # each pet's current level; tier items come from pets.csv

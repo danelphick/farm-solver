@@ -27,13 +27,17 @@ lets the solver acquire a chest by fishing or exploring and open it whenever tha
 beats gathering the contents directly, chaining through chests whose contents are
 themselves openable.
 
-Because activity that costs no time or consumable is free in the objective, the
-least-cost plan is degenerate: surplus gathered material can be spun into items
-the demand never asked for, and a crop farmed off the bottleneck track adds no
-time either, so either can appear as slack at no penalty. So :func:`minimize`
-solves twice -- first for the least cost, then, with that cost locked, for the
-least total activity (crafts plus gathering) -- reporting only what the demand
-actually needs (see the second stage there).
+The least-cost plan is degenerate, so :func:`minimize` refines it in three
+lexicographic solves (see there). First it minimises the weighted cost. Then,
+with the makespan pinned, it minimises the priced consumables: a weighted-sum
+endpoint prices them too faintly (~1e-6) for the solver to distinguish against
+the makespan constraint, so the first solve parks them on an arbitrary vertex --
+one that can waste consumables that buy no time (the fastest plan spent Large
+Nets and Grape Juice it did not need). Finally, with cost and consumables locked,
+it minimises total activity: surplus gathered material can be spun into items the
+demand never asked for, and a crop farmed off the bottleneck track adds no time,
+so either can sit as slack at no penalty -- dropping it leaves only what the
+demand actually needs.
 
 To keep every coverage constraint satisfiable (so no shortfall slack is needed),
 the LP is built only over **obtainable** items -- those gatherable, or craftable
@@ -434,7 +438,14 @@ def minimize(
 
     # Net production of each item covers its demand:
     # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
-    for item in items:
+    # Iterate in a fixed (sorted) order: ``items`` is a set, whose iteration
+    # order varies with PYTHONHASHSEED across processes, and that is the order
+    # constraints enter the LP. The two refinement solves below pin every
+    # *reported* metric, but plans identical on all of them can still differ in
+    # which equivalent draws fill the same time/activity (grow crop A vs crop B);
+    # constraint order is what CBC breaks those ties by, so a fixed order keeps
+    # the printed plan reproducible run to run.
+    for item in sorted(items):
         gathered = pulp.lpSum(
             o.yield_of(item) * x for o, x in zip(used, usage) if o.yield_of(item) > 0
         )
@@ -475,38 +486,80 @@ def minimize(
 
     problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
-    # The objective is indifferent to any activity that costs no time or
-    # consumable. Surplus gathered material can be spun into items the demand never
-    # asked for (a craft is free), and gathering that fits under the makespan is
-    # free too -- a crop farmed on a track that is not the bottleneck adds no time,
-    # so the first solve may leave a whole field of an unneeded crop as slack. Both
-    # are degenerate loops CBC may pick at random. Re-solve for the least total
-    # activity among the least-cost plans: lock the realised time/AP/LN (with a
-    # hair of slack for float noise), then minimise crafts plus gathering units. No
-    # reported metric moves, but pointless surplus -- crafted or farmed -- drops
-    # out, leaving only what the demand actually needs.
+    # The first solve fixes the *cost* but not a unique plan: it has alternate
+    # optima CBC picks between at random across processes. Refine it in a
+    # lexicographic tower, each stage minimising one objective then locking it at
+    # its optimum so the next cannot spoil it:
+    #
+    #   1. cost           -- the first solve above (weighted sum, or epsilon cap)
+    #   2. priced spend   -- least gold-weighted consumables at that cost
+    #   3. unpriced spend -- least of the consumables the prices ignore (Grape
+    #                        Juice is gold-free, so stage 2 leaves it unbounded)
+    #   4. activity       -- least crafts + gathering, shedding pointless surplus
+    #
+    # Stage 2 is the crux. In a weighted-sum endpoint the makespan term (~1e5
+    # minutes) dwarfs the price-weighted consumables (~1e-6 each for the fastest
+    # plan), so within CBC's tolerance they are free and the first solve parks
+    # them on an arbitrary degenerate vertex -- the fastest plan spent Large Nets
+    # and Grape Juice that bought no time, and its Grape-Juice count flapped
+    # 144<->151 run to run. Every consumable is a Pareto cost, so a plan spending
+    # more of one for no time gain is strictly worse: with the makespan pinned we
+    # re-minimise them alone (the objective is now just the consumables, at a scale
+    # CBC resolves -- see the normalisation), pinning the genuinely thriftiest
+    # plan, for any config, not an arbitrary-but-fixed vertex. Stage 3 then reins
+    # in the consumables stage 2's weights price at zero (Grape Juice), which it
+    # would otherwise leave free to drift; stage 4 sheds surplus crafts / off-track
+    # farming. Stages 3-4 move no priced metric.
     if used or craft or opens:
         t_star = makespan.value() or 0.0
-        ap_star = pulp.value(arnold_palmers) or 0.0
-        ln_star = pulp.value(large_nets) or 0.0
-        cookie_star = pulp.value(cookies) or 0.0
-        gj_star = pulp.value(grape_juices) or 0.0
-        cider_star = pulp.value(ciders) or 0.0
-        oj_star = pulp.value(orange_juice) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
-        problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
-        problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
-        # Cookies, Grape Juices, Apple Ciders and Orange Juice are priced, so the
-        # first solve already uses only ones that pay for themselves; lock them too,
-        # so the least-activity re-solve keeps the same thrifty mix and only sheds
-        # pointless surplus. Orange Juice is only locked when actually priced
-        # (``price_oj``): the extra constraint would otherwise perturb which
-        # equal-cost degenerate vertex CBC returns for no benefit.
-        problem += cookies <= cookie_star * (1 + 1e-9) + 1e-9
-        problem += grape_juices <= gj_star * (1 + 1e-9) + 1e-9
-        problem += ciders <= cider_star * (1 + 1e-9) + 1e-9
-        if price_oj:
-            problem += orange_juice <= oj_star * (1 + 1e-9) + 1e-9
+
+        # Each consumable, its price, and whether any used offer actually spends
+        # it. Only a spent consumable gives an objective a variable term -- an
+        # unspent one is a constant 0, which CBC rejects as an empty objective, and
+        # is nothing to minimise anyway.
+        consumables = [
+            (price_ap, arnold_palmers, any(o.ap for o in used)),
+            (price_ln, large_nets, any(o.ln for o in used)),
+            (price_cookie, cookies, any(o.cookies for o in used)),
+            (price_gj, grape_juices, any(o.gj for o in used)),
+            (price_cider, ciders, any(o.consumes.get("apple cider") for o in used)),
+            (price_oj, orange_juice,
+             any(o.consumes.get("orange juice") for o in used)),
+        ]
+
+        def minimise_then_lock(terms: list[tuple[float, object]]) -> None:
+            """Minimise ``sum(weight * expr)`` then pin each ``expr`` at its optimum."""
+            if not terms:
+                return
+            problem.setObjective(pulp.lpSum(w * expr for w, expr in terms))
+            problem.solve(pulp.PULP_CBC_CMD(msg=0))
+            for _, expr in terms:
+                problem.addConstraint(
+                    expr <= (pulp.value(expr) or 0.0) * (1 + 1e-9) + 1e-9
+                )
+
+        # Stage 2 -- priced consumables, weights normalised to O(1) so they sit on
+        # the makespan constraint's scale. At the raw endpoint magnitudes (~1e-6
+        # fast, ~1e9 cheap) the coefficients fall below CBC's tolerance against
+        # that ~1e5 constraint, so it cannot minimise them (it returned a *worse*
+        # total than the first solve's own vertex); dividing by the largest price
+        # keeps every relative weight -- gold ratios interior, uniform at an
+        # endpoint -- at a resolvable scale. With nothing priced (a direct
+        # weighted-sum call), both stages 2 and 3 are empty and the first solve's
+        # consumable levels stand.
+        scale = max((p for p, _, spent in consumables if spent and p > 0), default=0.0)
+        if scale > 0:
+            minimise_then_lock(
+                [(p / scale, expr) for p, expr, spent in consumables if spent and p > 0]
+            )
+            # Stage 3 -- the gold-free spent consumables (Grape Juice), which stage
+            # 2 does not price and so leaves free to sit high.
+            minimise_then_lock(
+                [(1.0, expr) for p, expr, spent in consumables if spent and p == 0]
+            )
+
+        # Stage 4 -- least activity, so no reported metric moves.
         problem.setObjective(
             pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
         )
@@ -552,8 +605,8 @@ def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
 
     ``prices`` is the per-unit gold map from :func:`config.trading_prices`; the
     result is the dot product of that map with the plan's consumable tally, so
-    plans can be ranked by real gold cost. Grape Juice priced at 0 (not tradable)
-    drops out.
+    plans can be ranked by real gold cost. Grape Juice, priced from its grape
+    content (or 0 if no grape price is configured), is included like the rest.
     """
     return (
         plan.arnold_palmers * prices.get("arnold palmer", 0.0)
@@ -793,8 +846,10 @@ def frontier(
     ``prices`` (per-unit gold, from :func:`config.trading_prices`) makes "cheap"
     mean **least gold**: the cheap endpoint and every interior cap minimise the
     gold-weighted consumables, so the frontier trades makespan against real gold
-    (Grape Juice, priced 0, stays free). Without it the weights are a uniform 1
-    -- the plain consumable count, the original gold-agnostic behaviour.
+    (Grape Juice is priced from its grape content, or 0 if no grape price is set --
+    then :func:`minimize`'s stage-3 refinement still reins it in). Without it the
+    weights are a uniform 1 -- the plain consumable count, the original
+    gold-agnostic behaviour.
     """
     # Per-consumable weight for the cheap side: per-unit gold, or a uniform 1
     # (plain count, Orange Juice ignored) when untraded.

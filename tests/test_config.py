@@ -491,8 +491,9 @@ def test_no_farmhouse_section_produces_no_stamina():
 
 
 def test_trading_prices_converts_gk_and_cookie():
-    # gk values are gold per 1000 (divided by 1000); cookie sets are gold each;
-    # Grape Juice is not tradable, so it is free.
+    # gk values are gold per 1000 (divided by 1000); cookie sets are gold each.
+    # With crafting_bonus 1, a juice is its full 200 grapes at 5 apk, each grape
+    # worth the Arnold Palmer's per-unit gold: 200 * (5/1000) * 0.06 = 0.06.
     prices = trading_prices(
         {
             "trading": {
@@ -500,18 +501,35 @@ def test_trading_prices_converts_gk_and_cookie():
                 "apple_cider": 20,
                 "arnold_palmer": 60,
                 "large_net": 10,
+                "grapes": 5,
                 "cookie_set": 20,
             }
-        }
+        },
+        crafting_bonus=1.0,
     )
     assert prices == {
         "arnold palmer": 0.06,
         "large net": 0.01,
         "apple cider": 0.02,
         "orange juice": 0.008,
-        "grape juice": 0.0,
+        "grape juice": 0.06,
         "cookie set": 20.0,
     }
+
+
+def test_trading_prices_grape_juice_is_a_production_cost():
+    # Grape Juice is priced at its production cost: 200 grapes make crafting_bonus
+    # juices, so a juice is 200/1.45 grapes -- 0.06 / 1.45 gold at the above rates.
+    prices = trading_prices(
+        {"trading": {"arnold_palmer": 60, "grapes": 5}}, crafting_bonus=1.45
+    )
+    assert prices["grape juice"] == pytest.approx(0.06 / 1.45)
+
+
+def test_trading_prices_grape_juice_free_without_grape_price():
+    # Absent a grape price, Grape Juice stays free (the earlier behaviour).
+    prices = trading_prices({"trading": {"arnold_palmer": 60}})
+    assert prices["grape juice"] == 0.0
 
 
 def test_trading_prices_absent_section_is_none():

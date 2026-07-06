@@ -299,10 +299,11 @@ orange_juice  = 8     # gold per 1000 ("gk")
 apple_cider   = 20
 arnold_palmer = 60
 large_net     = 10
+grapes        = 5     # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
 cookie_set    = 20    # priced individually, in gold each (not gk)
 ```
 
-The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. Grape Juice is not tradable, so it is treated as free. With this section present the frontier trades makespan against gold (not an abstract consumable count), the table gains a **gold** column, and `--cheapest-plan` picks the least-gold plan. Omit the section and the solver stays on its earlier gold-agnostic behaviour.
+The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. Grape Juice is not traded directly — it is priced at its **production cost** in grapes, and grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk" (Arnold Palmers per 1000). Pressing 200 grapes yields `--crafting-bonus` juices, so a juice costs `200 / crafting_bonus` grapes, each worth `grapes/1000` Arnold Palmers, converted to gold through the Arnold Palmer's own price (with the defaults, `200/1.45` grapes ≈ 0.69 AP ≈ 0.041 gold). Omit `grapes` and Grape Juice stays free. With this section present the frontier trades makespan against gold (not an abstract consumable count), the table gains a **gold** column, and `--cheapest-plan` picks the least-gold plan. Omit the section and the solver stays on its earlier gold-agnostic behaviour.
 
 ### Fishing and exploring
 

@@ -528,7 +528,7 @@ def run(args: argparse.Namespace) -> int:
     # Per-unit gold prices for the tradable consumables (the [trading] config).
     # When present, the frontier trades makespan against real gold and "cheapest"
     # means least gold; absent, the solver stays on its gold-agnostic behaviour.
-    prices = config.trading_prices(cfg)
+    prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
 
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")

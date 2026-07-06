@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import crafting
 import pets
 from passive import (
     DAILY,
@@ -420,17 +421,32 @@ def storehouse_size(
 # exception -- priced individually, in plain gold each.
 GK_UNITS = 1000
 
+# Grape Juice is not traded directly; its price is derived from grapes, which
+# *are* traded (for Arnold Palmers, not gold -- hence the ``grapes`` price is in
+# "apk", Arnold Palmers per 1000). Its workshop recipe presses 200 grapes (plus a
+# Glass Bottle, whose cost is ignored) per craft, and a craft yields
+# ``crafting_bonus`` juices, so one Grape Juice costs this many grapes to produce.
+GRAPES_PER_JUICE = 200
 
-def trading_prices(config: dict[str, Any]) -> dict[str, float] | None:
+
+def trading_prices(
+    config: dict[str, Any],
+    crafting_bonus: float = crafting.DEFAULT_CRAFTING_BONUS,
+) -> dict[str, float] | None:
     """Per-unit gold prices for the tradable consumables, or None if unpriced.
 
     Reads the ``[trading]`` section: ``orange_juice``, ``apple_cider``,
     ``arnold_palmer`` and ``large_net`` are gold per 1000 units (divided by
-    :data:`GK_UNITS`), and ``cookie_set`` is gold each. Grape Juice is not
-    tradable, so it is always free (``0``). Keys are the lower-cased item names
-    the solver uses, so a plan's gold is a direct dot product with its consumable
-    tally. Returns ``None`` when the section is absent, leaving the solver on its
-    unweighted (gold-agnostic) behaviour.
+    :data:`GK_UNITS`), and ``cookie_set`` is gold each. Grape Juice is not traded
+    directly; its price is its **production cost** in grapes: pressing
+    :data:`GRAPES_PER_JUICE` grapes yields ``crafting_bonus`` juices, so a juice is
+    ``GRAPES_PER_JUICE / crafting_bonus`` grapes, each worth ``grapes/1000`` Arnold
+    Palmers (``grapes`` is in "apk" -- AP per 1000, since grapes trade for AP, not
+    gold), each worth the Arnold Palmer's own per-unit gold. Absent ``grapes`` it
+    stays free (``0``). Keys are the lower-cased item names the solver uses, so a
+    plan's gold is a direct dot product with its consumable tally. Returns ``None``
+    when the section is absent, leaving the solver on its unweighted (gold-agnostic)
+    behaviour.
     """
     section = config.get("trading")
     if not section:
@@ -439,11 +455,14 @@ def trading_prices(config: dict[str, Any]) -> dict[str, float] | None:
     def per_unit(key: str) -> float:
         return float(section.get(key, 0.0)) / GK_UNITS
 
+    arnold_palmer = per_unit("arnold_palmer")
+    grape = float(section.get("grapes", 0.0)) / GK_UNITS * arnold_palmer  # gold/grape
     return {
-        "arnold palmer": per_unit("arnold_palmer"),
+        "arnold palmer": arnold_palmer,
         "large net": per_unit("large_net"),
         "apple cider": per_unit("apple_cider"),
         "orange juice": per_unit("orange_juice"),
-        "grape juice": 0.0,  # not tradable -- effectively free
+        # Production cost: grapes per juice (recipe / crafting bonus) at grape gold.
+        "grape juice": GRAPES_PER_JUICE / crafting_bonus * grape,
         "cookie set": float(section.get("cookie_set", 0.0)),  # priced per unit
     }

@@ -119,7 +119,8 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 - **Gold weighting** (`frontier`/`minimize` `prices`): with a `[trading]` config
   section, `config.trading_prices` gives a per-unit **gold** price for each
   tradable consumable (AP/LN/cider/OJ per-1000 → ÷1000; cookie sets per unit;
-  Grape Juice free). The cheap endpoint and every epsilon cap then minimise the
+  Grape Juice at its production cost — `GRAPES_PER_JUICE`/`crafting_bonus` grapes,
+  `grapes` in apk × the AP's gold — or 0 when `grapes` is unset). The cheap endpoint and every epsilon cap then minimise the
   **gold-weighted** consumables, so the frontier trades makespan against real
   gold and `main.cheapest_plan` ranks by `optimizer.plan_gold`. Absent, the
   weights are a uniform 1 (plain consumable count — the original behaviour). OJ
