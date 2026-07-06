@@ -53,18 +53,32 @@ class PassiveProduction:
     producers: list[PassiveProducer] = field(default_factory=list)
     inventory_size: int | None = None
 
-    def rate_per_minute(self, item: str) -> float:
-        """How many of ``item`` are produced per minute across all producers."""
+    def producer_rates(self, item: str) -> list[tuple[str, float]]:
+        """Each producer's per-minute rate for ``item`` as ``(name, rate)``.
+
+        Only producers that actually make the item are listed. The same per-cycle
+        storehouse cap and :data:`UNCAPPED_ITEMS` exemption as
+        :meth:`rate_per_minute` are applied, so this is the single place that rule
+        lives; callers wanting a total sum the rates, and callers wanting the
+        per-building breakdown (see :func:`main._passive_sources`,
+        :func:`main._pet_passive_rate`) read them directly.
+        """
         key = item.lower()
-        total = 0.0
+        capped = self.inventory_size is not None and key not in UNCAPPED_ITEMS
+        rates: list[tuple[str, float]] = []
         for producer in self.producers:
             quantity = producer.outputs.get(key)
-            if quantity:
-                per_cycle = quantity
-                if self.inventory_size is not None and key not in UNCAPPED_ITEMS:
-                    per_cycle = min(quantity, self.inventory_size)
-                total += per_cycle / (producer.period.total_seconds() / 60)
-        return total
+            if not quantity:
+                continue
+            per_cycle = min(quantity, self.inventory_size) if capped else quantity
+            rate = per_cycle / (producer.period.total_seconds() / 60)
+            if rate > 0:
+                rates.append((producer.name, rate))
+        return rates
+
+    def rate_per_minute(self, item: str) -> float:
+        """How many of ``item`` are produced per minute across all producers."""
+        return sum(rate for _, rate in self.producer_rates(item))
 
     def produces(self, item: str) -> bool:
         """Whether anything generates ``item`` passively."""

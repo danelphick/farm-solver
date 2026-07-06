@@ -54,6 +54,20 @@ def _round_to_nearest(value: float) -> int:
     return int(value + 0.5)
 
 
+def _shortfalls(needs: list[ItemNeed]) -> dict[str, tuple[int, bool]]:
+    """Each item's largest shortfall, and whether it is a mastery shortfall.
+
+    An item required at several tower levels appears once, at its largest
+    shortfall, since crafting is cumulative. Shared by :func:`required_materials`
+    and :func:`top_level_demand`.
+    """
+    shortfalls: dict[str, tuple[int, bool]] = {}
+    for need in needs:
+        previous = shortfalls.get(need.item, (0, need.is_mastery))
+        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+    return shortfalls
+
+
 def required_materials(
     needs: list[ItemNeed],
     workshop: Workshop,
@@ -78,11 +92,7 @@ def required_materials(
     through the tree and only the final totals are rounded, so rounding errors do
     not accumulate. The non-recursive path rounds each item's crafts as before.
     """
-    # Each item's largest shortfall, plus whether it is a mastery shortfall.
-    shortfalls: dict[str, tuple[int, bool]] = {}
-    for need in needs:
-        previous = shortfalls.get(need.item, (0, need.is_mastery))
-        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+    shortfalls = _shortfalls(needs)
 
     if recursive:
         return _required_materials_recursive(
@@ -163,10 +173,7 @@ def top_level_demand(
     item grants the mastery bonus; a plain item-count shortfall needs ``n``. The
     optimiser then works out all the crafting and gathering beneath these.
     """
-    shortfalls: dict[str, tuple[int, bool]] = {}
-    for need in needs:
-        previous = shortfalls.get(need.item, (0, need.is_mastery))
-        shortfalls[need.item] = (max(previous[0], need.extra), need.is_mastery)
+    shortfalls = _shortfalls(needs)
     return {
         item: (count / mastery_bonus if is_mastery else float(count))
         for item, (count, is_mastery) in shortfalls.items()

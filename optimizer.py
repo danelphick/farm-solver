@@ -46,6 +46,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import NamedTuple
 
 import pulp
 
@@ -143,6 +144,32 @@ class SourcingPlan:
     grape_juices: float = 0.0
     apple_ciders: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
+
+    def track_times(self) -> dict[str, timedelta]:
+        """Total time each track spends, summed across this plan's draws.
+
+        Tracks run concurrently, so ``self.time`` (the makespan) is the max of
+        these; within a track (notably farming, grown one crop at a time) the
+        draws add up. Shared by the critical-path helpers in :mod:`main`.
+        """
+        times: dict[str, timedelta] = {}
+        for draw in self.draws:
+            times[draw.offer.track] = (
+                times.get(draw.offer.track, timedelta(0)) + draw.time
+            )
+        return times
+
+    @property
+    def passive_draw(self) -> Draw | None:
+        """The single aggregate passive draw in this plan, or ``None``.
+
+        Passive production is one combined offer (see
+        :func:`~sources.passive_offers`), so a plan has at most one draw on the
+        passive track. Centralised here since many callers need to reach it.
+        """
+        return next(
+            (d for d in self.draws if d.offer.track == PASSIVE_TRACK), None
+        )
 
     @property
     def cost(self) -> tuple[float, float, float, float, float, float]:
@@ -543,28 +570,41 @@ def _thin(
     return [plans[i] for i in sorted(keep)]
 
 
-def passive_residuals(
+class PlanBalance(NamedTuple):
+    """A plan's per-item production accounting (all keys lower-cased).
+
+    ``need`` is everything the plan must produce: the demand, plus what its crafts
+    consume as materials and what its opens consume (chest tokens and keys).
+    ``elsewhere`` is everything the non-passive channels supply for free: crafting
+    output, open yields, held stock (except directly-demanded items, whose demand
+    is already net of stock), and every non-passive draw. ``crafted`` is the
+    crafting output alone (``crafting_bonus`` per craft). An item's residual left
+    for passive production is ``need - elsewhere``.
+    """
+
+    need: dict[str, float]
+    elsewhere: dict[str, float]
+    crafted: dict[str, float]
+
+
+def plan_balance(
     plan: SourcingPlan,
     demand: dict[str, float],
     recipes: dict[str, dict[str, float]],
     crafting_bonus: float,
     openables: list[OpenFlow],
     inventory: dict[str, float],
-) -> dict[str, float]:
-    """How much of each passively-made item ``plan`` leaves to passive production.
+) -> PlanBalance:
+    """The plan's ``need``/``elsewhere``/``crafted`` accounting (see
+    :class:`PlanBalance`).
 
-    An item's residual is its net requirement (demand plus what crafting and
-    opening consume) less what crafting, opening, stock and the other tracks
-    already supply. Computed on the cheapest plan -- which crafts the most and
-    buys the least -- it is that item's *full* requirement, the most passive ever
-    has to make; a plan whose residual for an item reaches this has that item at
-    its full completion (see :func:`main.print_critical_path`).
+    This is the single source of that accounting, shared by
+    :func:`passive_residuals` and :func:`main.print_plan` (which both work in the
+    residual ``need - elsewhere``) so the two cannot drift. ``recipes`` are the
+    lower-cased, IGNORED-stripped recipe flows (see
+    :func:`crafting.recipe_flows`).
     """
-    passive = next((d for d in plan.draws if d.offer.track == PASSIVE_TRACK), None)
-    if passive is None:
-        return {}
     demanded = {item.lower() for item in demand}
-    # What must be produced: demand, plus crafting materials and open tokens/keys.
     need = {item.lower(): float(qty) for item, qty in demand.items() if qty > 0}
     for item, count in plan.crafts.items():
         for material, quantity in recipes.get(item, {}).items():
@@ -575,8 +615,8 @@ def passive_residuals(
         if flow is not None:
             for item, quantity in flow.consumes.items():
                 need[item] = need.get(item, 0.0) + quantity * count
-    # What the other channels, crafting, opening and stock already supply.
-    elsewhere = {item: crafting_bonus * count for item, count in plan.crafts.items()}
+    crafted = {item: crafting_bonus * count for item, count in plan.crafts.items()}
+    elsewhere = dict(crafted)
     for name, count in plan.opens.items():
         flow = flows.get(name.lower())
         if flow is not None:
@@ -590,11 +630,38 @@ def passive_residuals(
             continue
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    return PlanBalance(need=need, elsewhere=elsewhere, crafted=crafted)
+
+
+def passive_residuals(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> dict[str, float]:
+    """How much of each passively-made item ``plan`` leaves to passive production.
+
+    An item's residual is its net requirement (demand plus what crafting and
+    opening consume) less what crafting, opening, stock and the other tracks
+    already supply -- i.e. ``need - elsewhere`` from :func:`plan_balance`, taken
+    over the passive offer's yields. Computed on the cheapest plan -- which crafts
+    the most and buys the least -- it is that item's *full* requirement, the most
+    passive ever has to make; a plan whose residual for an item reaches this has
+    that item at its full completion (see :func:`main.print_critical_path`).
+    """
+    passive = plan.passive_draw
+    if passive is None:
+        return {}
+    balance = plan_balance(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
     residuals = {}
     for item, rate in passive.offer.yields.items():
         if rate <= 0:
             continue
-        residual = need.get(item, 0.0) - elsewhere.get(item, 0.0)
+        residual = balance.need.get(item, 0.0) - balance.elsewhere.get(item, 0.0)
         if residual > 1e-6:
             residuals[item] = residual
     return residuals
@@ -617,7 +684,7 @@ def _passive_completion_caps(
     still come for free. Items in ``exclude`` -- those a pet mostly supplies, a
     slow last-resort trickle rather than a real gathering plateau -- are skipped.
     """
-    passive = next((d for d in plan.draws if d.offer.track == PASSIVE_TRACK), None)
+    passive = plan.passive_draw
     if passive is None:
         return []
     residuals = passive_residuals(

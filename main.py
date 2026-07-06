@@ -566,18 +566,11 @@ def _pet_passive_rate(
     """Per-minute rate at which pets (not buildings) passively make ``item``."""
     if production is None:
         return 0.0
-    key = item.lower()
-    total = 0.0
-    for producer in production.producers:
-        if not producer.name.startswith(config.PET_PRODUCER_PREFIX):
-            continue
-        quantity = producer.outputs.get(key)
-        if quantity:
-            per_cycle = quantity
-            if production.inventory_size is not None:
-                per_cycle = min(per_cycle, production.inventory_size)
-            total += per_cycle / (producer.period.total_seconds() / 60)
-    return total
+    return sum(
+        rate
+        for name, rate in production.producer_rates(item)
+        if name.startswith(config.PET_PRODUCER_PREFIX)
+    )
 
 
 def _pet_dominated_items(production: passive.PassiveProduction) -> set[str]:
@@ -613,10 +606,10 @@ def _slowest_passive_item(
     not the bottleneck). Only if every passive item is such a pet top-up do we fall
     back to the slowest of them, so a genuinely pet-bound plan still reports one.
     """
-    passive_draws = [d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK]
-    if not passive_draws:
+    passive_draw = plan.passive_draw
+    if passive_draw is None:
         return None
-    offer = passive_draws[0].offer
+    offer = passive_draw.offer
     best: tuple[str, int, timedelta, str] | None = None  # slowest non-pet-top-up
     fallback: tuple[str, int, timedelta, str] | None = None  # slowest of any, backup
     for key, rate in offer.yields.items():
@@ -661,11 +654,7 @@ def _farming_drives(
     Both the critical-path line and the passive section's ordering use this so they
     agree on which track is the bottleneck.
     """
-    track_time: dict[str, timedelta] = {}
-    for draw in plan.draws:
-        track_time[draw.offer.track] = (
-            track_time.get(draw.offer.track, timedelta(0)) + draw.time
-        )
+    track_time = plan.track_times()
     makespan = max(track_time.values(), default=timedelta(0))
     if makespan <= timedelta(0):
         return False
@@ -683,16 +672,29 @@ def _harvest_alls(count: int) -> str:
     return f"{count:,} Harvest All{'' if count == 1 else 's'}"
 
 
+def _crop_of(offer: sources.Offer) -> str:
+    """The crop a farming offer grows, from its ``grow X[ variant]`` name.
+
+    The single place farming offer names are parsed; the ``with cookies`` /
+    ``without grape juice`` variant suffixes (an offer has at most one) are
+    stripped, leaving the crop's display name.
+    """
+    return (
+        offer.name.removeprefix("grow ")
+        .removesuffix(" with cookies")
+        .removesuffix(" without grape juice")
+    )
+
+
 def _farming_action(draw: sources.Draw) -> str:
     """The action and crop a farming draw stands for, cookie days included."""
+    crop = _crop_of(draw.offer)
     if draw.offer.cookies:
         # A partial cookie set still consumes a whole one, so round days (and the
         # sets they stand for) up — never down.
         days = math.ceil(draw.units)
-        crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
         noun = "day" if days == 1 else "days"
         return f"{days:,} cookie-boosted {noun} of {crop}"
-    crop = draw.offer.name.removeprefix("grow ").removesuffix(" without grape juice")
     return f"{_harvest_alls(math.ceil(draw.units))} of {crop}"
 
 
@@ -728,13 +730,7 @@ def _binding_crop_is_fill(
     if not farming:
         return False
     biggest = max(farming, key=lambda d: d.time)
-    crop = (
-        biggest.offer.name.removeprefix("grow ")
-        .removesuffix(" with cookies")
-        .removesuffix(" without grape juice")
-        .lower()
-    )
-    return crop in sourceable_elsewhere
+    return _crop_of(biggest.offer).lower() in sourceable_elsewhere
 
 
 def _defining_passive_resource(
@@ -760,9 +756,7 @@ def _defining_passive_resource(
     """
     if not max_passive_residuals:
         return None
-    passive_draw = next(
-        (d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK), None
-    )
+    passive_draw = plan.passive_draw
     if passive_draw is None:
         return None
     best: tuple[str, int, timedelta, str] | None = None
@@ -789,9 +783,7 @@ def _passive_residuals_of(
     plan: optimizer.SourcingPlan, need: dict[str, float], elsewhere: dict[str, float]
 ) -> dict[str, float]:
     """Each passive item's residual (net requirement) in ``plan``, from need/elsewhere."""
-    passive_draw = next(
-        (d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK), None
-    )
+    passive_draw = plan.passive_draw
     if passive_draw is None:
         return {}
     return {
@@ -827,12 +819,9 @@ def print_critical_path(
     item is the driver instead. Naming the driver shows what to attack (source it
     with consumables, or pick a faster plan) to finish sooner.
     """
-    track_time: dict[str, timedelta] = {}
-    for draw in plan.draws:
-        track_time[draw.offer.track] = (
-            track_time.get(draw.offer.track, timedelta(0)) + draw.time
-        )
-    makespan = max(track_time.values(), default=timedelta(0))
+    # Concurrent tracks; the makespan is the longest one (derived from the draws,
+    # not plan.time, so directly-built plans without a cached time still work).
+    makespan = max(plan.track_times().values(), default=timedelta(0))
     if makespan <= timedelta(0):
         return  # everything is instant; there is no wait to explain
 
@@ -922,18 +911,7 @@ def _passive_sources(
     the breakdown flags its active window (see :func:`_season_note`). Returns an
     empty string when nothing known produces the item.
     """
-    key = item.lower()
-    contributors: list[tuple[float, str]] = []  # (rate, name)
-    for producer in production.producers:
-        output = producer.outputs.get(key)
-        if not output:
-            continue
-        per_cycle = output
-        if production.inventory_size is not None:
-            per_cycle = min(per_cycle, production.inventory_size)
-        rate = per_cycle / (producer.period.total_seconds() / 60)
-        if rate > 0:
-            contributors.append((rate, producer.name))
+    contributors = [(rate, name) for name, rate in production.producer_rates(item)]
     if not contributors:
         return ""
     if len(contributors) == 1:
@@ -962,7 +940,7 @@ def _print_cookie_farming(
     daily resource shared across crops, so the whole-set count lives in the
     Farming heading; each crop line just shows its span, juice and yield.
     """
-    crop = draw.offer.name.removeprefix("grow ").removesuffix(" with cookies")
+    crop = _crop_of(draw.offer)
     line = f"  Cookie-boosted {crop} in {passive.format_duration(draw.time)}"
     if round(juices) >= 1:
         line += (
@@ -972,6 +950,27 @@ def _print_cookie_farming(
     print(f"{line}:")
     for key in sorted(k for k in draw.offer.yields if k in interesting):
         print(f"    {round(draw.produced[key]):>{width},}x {display.get(key, key)}")
+
+
+def build_display(
+    demand: dict[str, float],
+    workshop: crafting.Workshop,
+    openable_names: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Lower-cased key -> original-case display name for everything reportable.
+
+    Covers the demand, every recipe's item and its materials, and (when given)
+    the openable names, keys and contents. Shared by :func:`run` (for the frontier
+    reasons) and :func:`print_plan`, which additionally passes ``openable_names``.
+    """
+    display = {item.lower(): item for item in demand}
+    for key, recipe in workshop.recipes.items():
+        display.setdefault(key, recipe.name)
+        for material in recipe.materials:
+            display.setdefault(material.lower(), material)
+    for key, name in (openable_names or {}).items():
+        display.setdefault(key, name)
+    return display
 
 
 def print_plan(
@@ -991,42 +990,19 @@ def print_plan(
     open_flows = open_flows or []
     inventory = inventory or {}
     flows_by_name = {flow.name.lower(): flow for flow in open_flows}
-    demanded = {item.lower() for item in demand}
+    recipes = crafting.recipe_flows(workshop)
 
     # Display names for everything that can appear (demand plus every recipe item
     # and material, plus openable names, keys and contents), keyed lower-cased.
-    display = {item.lower(): item for item in demand}
-    for key, recipe in workshop.recipes.items():
-        display.setdefault(key, recipe.name)
-        for material in recipe.materials:
-            display.setdefault(material.lower(), material)
-    for key, name in (openable_names or {}).items():
-        display.setdefault(key, name)
+    display = build_display(demand, workshop, openable_names)
 
-    # What the plan actually needs of each item: the direct demand, whatever the
-    # chosen crafts consume as materials, and whatever opening chests consumes
-    # (the chest tokens and their keys).
-    need: dict[str, float] = {item.lower(): float(qty) for item, qty in demand.items()}
-    for item, count in plan.crafts.items():
-        recipe = workshop.get(item)
-        if recipe is None:
-            continue
-        for material, quantity in recipe.materials.items():
-            key = material.lower()
-            if key not in crafting.IGNORED_MATERIALS:
-                need[key] = need.get(key, 0.0) + quantity * count
-    # What crafting produces (crafting_bonus per craft) and what opening yields;
-    # both are free, instant supply that spares the passive/farming channels.
-    crafted = {item: crafting_bonus * count for item, count in plan.crafts.items()}
-    opened: dict[str, float] = {}
-    for name, count in plan.opens.items():
-        flow = flows_by_name.get(name.lower())
-        if flow is None:
-            continue
-        for item, quantity in flow.consumes.items():
-            need[item] = need.get(item, 0.0) + quantity * count
-        for item, quantity in flow.yields.items():
-            opened[item] = opened.get(item, 0.0) + quantity * count
+    # What the plan must produce (need) and what the non-passive channels,
+    # crafting, opening and stock already supply (elsewhere) -- the accounting the
+    # passive track and the critical-path summary both work in. Shared with the
+    # optimiser's residual maths (see :func:`optimizer.plan_balance`).
+    need, elsewhere, crafted = optimizer.plan_balance(
+        plan, demand, recipes, crafting_bonus, open_flows, inventory
+    )
     # Only genuinely-needed items (demand, craft materials, and the chests/keys
     # opens consume) are worth showing; an openable's other contents are byproducts.
     interesting = set(need) | set(crafted)
@@ -1048,23 +1024,6 @@ def print_plan(
 
     def draws_on(track: str) -> list[sources.Draw]:
         return [d for d in plan.draws if d.offer.track == track]
-
-    # What every non-passive channel, crafting and opening already supplies. The
-    # passive track and the critical-path summary both work in residuals -- an item
-    # fully sourced elsewhere adds no passive wait -- so compute it once, up front.
-    elsewhere: dict[str, float] = dict(crafted)
-    for item, quantity in opened.items():
-        elsewhere[item] = elsewhere.get(item, 0.0) + quantity
-    # Stock on hand covers intermediates the plan does not produce (as in the LP,
-    # a directly-demanded item gets no credit -- its need is already net of stock).
-    for item, quantity in inventory.items():
-        if item not in demanded:
-            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
-    for draw in plan.draws:
-        if draw.offer.track == sources.PASSIVE_TRACK:
-            continue
-        for item, quantity in draw.produced.items():
-            elsewhere[item] = elsewhere.get(item, 0.0) + quantity
 
     print_critical_path(
         plan, need, elsewhere, display, production, sourceable_elsewhere,
@@ -1130,9 +1089,7 @@ def print_plan(
         banked = inventory.get("stamina", 0.0)
         if round(banked) >= 1:
             print(f"  {round(banked):,} banked at the start")
-        passive_draw = next(
-            (d for d in plan.draws if d.offer.track == sources.PASSIVE_TRACK), None
-        )
+        passive_draw = plan.passive_draw
         rate = (
             passive_draw.offer.yields.get("stamina", 0.0)
             if passive_draw is not None
@@ -1210,9 +1167,7 @@ def print_plan(
             if draw.offer.cookies:
                 _print_cookie_farming(draw, juices, interesting, display, width)
                 continue
-            crop = draw.offer.name.removeprefix("grow ").removesuffix(
-                " without grape juice"
-            )
+            crop = _crop_of(draw.offer)
             line = (
                 f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"
@@ -1237,9 +1192,9 @@ def print_plan(
                 else:
                     print(f"    {round(total):>{width},}x {name}")
 
-    passive_draws = draws_on(sources.PASSIVE_TRACK)
-    if passive_draws:
-        offer = passive_draws[0].offer
+    passive_draw = plan.passive_draw
+    if passive_draw is not None:
+        offer = passive_draw.offer
         # Passive only covers what the other channels and crafting did not (see
         # `elsewhere` above), so an item fully fished, explored or crafted adds no
         # passive wait. Each item's own wait is its residual over its per-minute
@@ -1474,11 +1429,7 @@ def run(args: argparse.Namespace) -> int:
     if not within:
         print(f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln)}")
     # Display names for the items a reason or the plan report may mention.
-    display = {item.lower(): item for item in demand}
-    for key, recipe in workshop.recipes.items():
-        display.setdefault(key, recipe.name)
-        for material in recipe.materials:
-            display.setdefault(material.lower(), material)
+    display = build_display(demand, workshop)
     # The cheapest plan crafts the most, so its passive residuals are each item's
     # full requirement -- the yardstick for whether a resource is at its complete
     # gathering point (see print_critical_path, and the frontier reasons).
