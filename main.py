@@ -12,7 +12,6 @@ The mastery and inventory files default to the ``[solver]`` config section.
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -233,9 +232,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-FISHING_CSV = Path(__file__).with_name("fishing.csv")
-EXPLORING_CSV = Path(__file__).with_name("exploring.csv")
-
 # Seasonal pet availability depends on the plan's makespan, which depends back on
 # it; iterate the solve at most this many times to settle that loop.
 _MAX_SEASON_ITERS = 5
@@ -259,30 +255,30 @@ def _should_model_calendar(pets_config: dict, average_seasons: bool) -> bool:
     return any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
 
 
-def _csv_items(path: Path) -> set[str]:
-    """Lower-cased item names from the ``Item`` column of a drop-rate CSV."""
-    if not path.exists():
-        return set()
-    with path.open(newline="") as f:
-        return {row["Item"].strip().lower() for row in csv.DictReader(f)}
-
-
 def obtainable_items(
-    production: passive.PassiveProduction, farm: crops.Farm | None = None
+    production: passive.PassiveProduction,
+    farm: crops.Farm | None = None,
+    fish: fishing.Fishing | None = None,
+    explore: exploring.Exploring | None = None,
 ) -> set[str]:
     """Lower-cased items obtainable without crafting.
 
-    Covers passive production (which includes pets), fishing, exploring, farming
-    (the fixed farmed items plus everything the crop model can grow, including
-    rare seed drops), and the materials the game supplies automatically.
+    Covers passive production (which includes pets), farming (the fixed farmed
+    items plus everything the crop model can grow, including rare seed drops),
+    the fishing/exploring drops (from the built models, when given), and the
+    materials the game supplies automatically.
     """
     items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
         items |= set(producer.outputs)
     if farm is not None:
         items |= farm.growable_items()
-    items |= _csv_items(FISHING_CSV)
-    items |= _csv_items(EXPLORING_CSV)
+    if fish is not None:
+        for zone in fish.zones.values():
+            items |= set(zone.drop_rates)
+    if explore is not None:
+        for location in explore.locations.values():
+            items |= set(location.drop_rates)
     return items
 
 
@@ -465,7 +461,7 @@ def run(args: argparse.Namespace) -> int:
     # steady-state producers (no plan span) so every pet's items are counted.
     if args.unobtainable:
         production = config.passive_production(cfg, today=start)
-        obtainable = obtainable_items(production, farm)
+        obtainable = obtainable_items(production, farm, fish, explore)
         report.print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
 
@@ -527,7 +523,12 @@ def run(args: argparse.Namespace) -> int:
     model_calendar = _should_model_calendar(cfg.get("pets", {}), args.average_seasons)
     horizon: timedelta | None = None
     production = config.passive_production(cfg, today=start)
+    # Assigned in the loop below (which always runs at least once); declared here
+    # so the data flow past the loop is explicit rather than leaking out of it.
     shown: list[optimizer.SourcingPlan] = []
+    offers: list[sources.Offer] = []
+    plans: list[optimizer.SourcingPlan] = []
+    within: list[optimizer.SourcingPlan] = []
     for _ in range(_MAX_SEASON_ITERS):
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon
