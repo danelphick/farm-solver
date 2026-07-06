@@ -45,8 +45,9 @@ then trades makespan against how much of the AP/LN/GJ/cider stockpile is burned
    one `list[Offer]`; `sources.open_flows` builds the Locksmith `OpenFlow`s.
 4. **Solve frontier** — `optimizer.frontier(...)` → list of `SourcingPlan`,
    fastest first.
-5. **Print** — `main.print_frontier` (the table), then `main.print_plan` for the
-   selected plan (critical path + per-channel actions), optional `print_crafts`.
+5. **Print** — `report.print_frontier` (the table), then `report.print_plan` for
+   the selected plan (critical path + per-channel actions), optional
+   `report.print_crafts`. All printing lives in `report.py`; `main.run` calls it.
 
 The whole thing loops up to `_MAX_SEASON_ITERS` when `model_calendar` is on, since
 a seasonal pet's yield depends on the plan span (a fixed point).
@@ -55,14 +56,15 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 
 | File | Owns | Key names |
 |---|---|---|
-| `main.py` | CLI, orchestration, **all printing** | `run`, `build_parser`, `print_frontier`, `print_plan`, `print_critical_path` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan`, `minimize`, `frontier`, `all_offers`, `passive_residuals` |
+| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
+| `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow) | `Crop`, `Farm`, `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
-| `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction`, `parse_duration`, `format_duration` |
+| `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size` |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
@@ -139,7 +141,7 @@ It also builds the frontier table's per-plan **reason** (`_frontier_reasons` →
 "all Steel Wire from passive") from the same `_defining_passive_resource`, so the
 table label and the chosen plan's critical path agree.
 
-## Critical-path naming (main.print_critical_path) — read this before touching it
+## Critical-path naming (report.print_critical_path) — read this before touching it
 
 This logic took many iterations; the precedence is deliberate. Tracks run
 concurrently; fishing/exploring are instant, so the makespan is a **farming** or
@@ -167,7 +169,7 @@ production** section's ordering (lead item = the critical one) so they agree.
 `_pet_passive_rate` distinguishes pets (name-prefixed `PET_PRODUCER_PREFIX`) from
 buildings.
 
-## Printing conventions (main.print_plan)
+## Printing conventions (report.print_plan)
 
 - Sections: Fishing, Exploring, Opening (Locksmith), Farming, Passive production,
   remainder. Counts are **right-aligned per section** (`_num_width`; the `x`

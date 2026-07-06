@@ -5,19 +5,21 @@ from crops import Farm
 import pytest
 
 from main import (
-    _frontier_reasons,
     _should_model_calendar,
-    _slowest_passive_item,
     build_parser,
     cheapest_plan,
     cookie_sets_available,
     limit_shortfall,
+    selected_plan,
+    within_limits,
+)
+from report import (
+    _frontier_reasons,
+    _slowest_passive_item,
     print_crafts,
     print_critical_path,
     print_frontier,
     print_plan,
-    selected_plan,
-    within_limits,
 )
 from optimizer import SourcingPlan
 from passive import MINUTE, PassiveProducer, PassiveProduction
