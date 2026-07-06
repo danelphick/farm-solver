@@ -597,7 +597,17 @@ def run(args: argparse.Namespace) -> int:
         shown, demand, recipes, args.crafting_bonus, open_flows, inventory,
         max_passive_residuals, production, display,
     )
-    report.print_frontier(shown, selected, cheapest, reasons, prices)
+    # Split each plan's gold into what must still be bought vs. what the plan makes
+    # or holds passively (Large Nets from straw/wood/stone/antlers, cookie sets from
+    # held cookies, etc.). Cookie sets come from held cookies, so credit the plan's
+    # allowance as a holding (there is no "cookie set" inventory line).
+    golds = None
+    if prices is not None:
+        holdings = {**inventory, "cookie set": cookie_sets}
+        golds = [
+            optimizer.plan_gold_breakdown(p, prices, holdings) for p in shown
+        ]
+    report.print_frontier(shown, selected, cheapest, reasons, prices, golds)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)

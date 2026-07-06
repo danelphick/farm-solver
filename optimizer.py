@@ -600,6 +600,22 @@ def minimize(
     )
 
 
+def _consumable_spend(plan: SourcingPlan) -> dict[str, float]:
+    """Each tradable consumable's spent tally, keyed by its lower-cased item name.
+
+    The single list the gold maths iterate over, so :func:`plan_gold` and
+    :func:`plan_gold_breakdown` price exactly the same set of consumables.
+    """
+    return {
+        "arnold palmer": plan.arnold_palmers,
+        "large net": plan.large_nets,
+        "apple cider": plan.apple_ciders,
+        "orange juice": plan.orange_juice,
+        "grape juice": plan.grape_juices,
+        "cookie set": plan.cookie_sets,
+    }
+
+
 def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
     """Total gold ``plan`` spends on tradable consumables.
 
@@ -608,14 +624,45 @@ def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
     plans can be ranked by real gold cost. Grape Juice, priced from its grape
     content (or 0 if no grape price is configured), is included like the rest.
     """
-    return (
-        plan.arnold_palmers * prices.get("arnold palmer", 0.0)
-        + plan.large_nets * prices.get("large net", 0.0)
-        + plan.apple_ciders * prices.get("apple cider", 0.0)
-        + plan.orange_juice * prices.get("orange juice", 0.0)
-        + plan.cookie_sets * prices.get("cookie set", 0.0)
-        + plan.grape_juices * prices.get("grape juice", 0.0)
+    return sum(
+        spent * prices.get(item, 0.0)
+        for item, spent in _consumable_spend(plan).items()
     )
+
+
+def plan_gold_breakdown(
+    plan: SourcingPlan,
+    prices: dict[str, float],
+    holdings: dict[str, float],
+) -> tuple[float, float]:
+    """Split :func:`plan_gold` into ``(to_buy, passive)`` gold.
+
+    A consumable a plan sources for itself costs no gold: its market value is the
+    *passive* subtotal. Only what a plan must still acquire by trading is the
+    *to-buy* subtotal -- the gold to spend on top of what you have. The split turns
+    on whether a consumable is **grounded** in this plan (some draw ``consumes`` it,
+    the inventory plan mode where a net/palmer/juice is a real item sourced from
+    your inventory and passive economy). A grounded consumable is fully self-sourced
+    by construction, so all of its value is passive; an abstract one (the unlimited
+    mode, where the consumable is unbounded spend) is passive only up to what you
+    already hold (``holdings``), the rest to-buy. Cookie sets are never grounded but
+    come from held cookies, so their allowance is passed in ``holdings`` too. The
+    two subtotals always sum to :func:`plan_gold`.
+    """
+    grounded = {item for draw in plan.draws for item in draw.offer.consumes}
+    to_buy = passive = 0.0
+    for item, spent in _consumable_spend(plan).items():
+        price = prices.get(item, 0.0)
+        if spent <= 0 or price <= 0:
+            continue
+        if item in grounded:
+            passive += spent * price  # sourced entirely from inventory + passive
+            continue
+        held = holdings.get(item, 0.0)
+        bought = max(0.0, spent - held)
+        to_buy += bought * price
+        passive += (spent - bought) * price
+    return to_buy, passive
 
 
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:

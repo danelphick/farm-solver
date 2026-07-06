@@ -14,6 +14,7 @@ from optimizer import (
     minimize,
     passive_residuals,
     plan_gold,
+    plan_gold_breakdown,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
@@ -561,6 +562,23 @@ def test_plan_gold_is_the_priced_consumable_total():
     )
     # 100*.06 + 200*.01 + 50*.02 + 1000*.008 + 3*20 + 999*0 = 77
     assert plan_gold(plan, GOLD) == pytest.approx(77.0)
+
+
+def test_plan_gold_breakdown_splits_grounded_and_held_from_bought():
+    # A grounded consumable (some draw ``consumes`` it, as in the inventory plan
+    # mode where a net is a real item from your passive economy) is fully self-
+    # sourced -> all passive. An abstract one (unlimited-mode spend) is passive only
+    # up to what you already hold; the shortfall is what you must still buy.
+    net_from_passive = Draw(
+        Offer("fish Z", "fishing", {"it": 1}, consumes={"large net": 1.0}, ln=1), 500
+    )
+    plan = SourcingPlan(draws=[net_from_passive], arnold_palmers=100, large_nets=500)
+    to_buy, passive = plan_gold_breakdown(plan, GOLD, {"arnold palmer": 30})
+    # Large Nets grounded -> 500*.01 passive; AP abstract -> (100-30)*.06 to-buy.
+    assert to_buy == pytest.approx(70 * 0.06)
+    assert passive == pytest.approx(30 * 0.06 + 500 * 0.01)
+    # The two subtotals always sum to the plan's total gold.
+    assert to_buy + passive == pytest.approx(plan_gold(plan, GOLD))
 
 
 def test_frontier_prices_pick_the_cheaper_gold_channel():

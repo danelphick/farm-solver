@@ -58,7 +58,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 |---|---|---|
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -125,7 +125,13 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   gold and `main.cheapest_plan` ranks by `optimizer.plan_gold`. Absent, the
   weights are a uniform 1 (plain consumable count — the original behaviour). OJ
   is tracked on `SourcingPlan.orange_juice`; the frontier table gains a gold
-  column (`report.print_frontier`).
+  column (`report.print_frontier`). **`plan_gold_breakdown`** splits that total
+  into `(to_buy, passive)`: a consumable **grounded** in the plan (some draw
+  `consumes` it — the inventory mode, sourced from inventory + the passive
+  economy) is fully passive, an abstract one (unlimited mode) is passive only up
+  to held stock and to-buy beyond it. `main.run` passes per-plan `holdings`
+  (`inventory` plus the cookie-set allowance) so the table reads
+  `to_buy + passive = total`. The two always sum to `plan_gold`.
 - **`frontier(...)`** = fast endpoint (spend freely) + cheap endpoint (least gold,
   or avoid-all when unpriced) + an epsilon sweep of makespan caps, then
   `_non_dominated` then `_thin` to `count`. Two cap sources feed the sweep:

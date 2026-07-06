@@ -136,8 +136,8 @@ def test_within_limits_checks_time_and_consumables():
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
     print_frontier(PLANS, selected=2, cheapest=2)
     lines = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
-    assert "   1. 0m / 100 AP / 20 LN  [fastest]" in lines
-    assert " > 3. 3d / 0 AP / 0 LN  [cheapest]" in lines
+    assert "   1. 0m + 100 AP + 20 LN  [fastest]" in lines
+    assert " > 3. 3d + 0 AP + 0 LN  [cheapest]" in lines
 
 
 def test_frontier_reasons_name_the_full_requirement_resource():
@@ -163,15 +163,15 @@ def test_print_frontier_shows_per_plan_reasons(capsys):
         reasons=[None, "all Oak from passive", None],
     )
     out = capsys.readouterr().out
-    assert "2. 5h / 10 AP / 0 LN  — all Oak from passive" in out
-    assert "1. 0m / 100 AP / 20 LN  [fastest]" in out
+    assert "2. 5h + 10 AP + 0 LN  — all Oak from passive" in out
+    assert "1. 0m + 100 AP + 20 LN  [fastest]" in out
 
 
 def test_print_frontier_omits_cookie_and_grape_juice_columns_when_unused(capsys):
     # PLANS spend no cookies or Grape Juices, so the table stays plain.
     print_frontier(PLANS, selected=0, cheapest=2)
     out = capsys.readouterr().out
-    assert "Sourcing plans (time / Arnold Palmers / Large Nets):" in out
+    assert "Sourcing plans (time + Arnold Palmers + Large Nets):" in out
     assert "cookie sets" not in out and "Grape Juice" not in out
 
 
@@ -185,7 +185,7 @@ def test_print_frontier_shows_cookie_sets_and_grape_juice(capsys):
     )
     print_frontier([plan], selected=0, cheapest=0)
     out = capsys.readouterr().out
-    assert "time / Arnold Palmers / Large Nets / cookie sets / Grape Juice" in out
+    assert "time + Arnold Palmers + Large Nets + cookie sets + Grape Juice" in out
     assert "5 sets" in out
     assert "14 GJ" in out
 
@@ -864,3 +864,13 @@ def test_print_frontier_omits_gold_column_without_prices(capsys):
     out = capsys.readouterr().out
     assert "gold" not in out
     assert " g" not in out
+
+
+def test_print_frontier_splits_gold_into_to_buy_and_passive(capsys):
+    # With per-plan (to_buy, passive) gold the row shows both subtotals and their
+    # total, and the header flags the split.
+    plans = [SourcingPlan(time=timedelta(0), arnold_palmers=1000, large_nets=0)]
+    print_frontier(plans, 0, 0, None, _GOLD, golds=[(48.0, 12.0)])
+    out = capsys.readouterr().out
+    assert "gold, as to-buy + passive" in out
+    assert "= 48 + 12 = 60 g" in out

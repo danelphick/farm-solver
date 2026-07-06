@@ -81,16 +81,21 @@ def print_frontier(
     cheapest: int,
     reasons: list[str | None] | None = None,
     prices: dict[str, float] | None = None,
+    golds: list[tuple[float, float]] | None = None,
 ) -> None:
     """The frontier table: each plan's time and consumables, fastest first.
 
     Cookie sets and Grape Juices are shown as extra columns only when some plan
     actually spends them, so a plan that uses neither keeps the plain time/AP/LN
     table. With trading ``prices`` a trailing **gold** column shows each plan's
-    real gold cost (what "cheapest" now ranks by). ``reasons`` annotates why each
-    plan is on the frontier -- a resource plan says "all Steel Wire from passive"
-    (its gathering plateau); endpoints and farming intermediates carry only their
-    fastest/cheapest tag.
+    real gold cost (what "cheapest" ranks by). When ``golds`` is given (one
+    ``(to_buy, passive)`` pair per plan, see :func:`optimizer.plan_gold_breakdown`)
+    that total is split into the gold you must still **buy** and the gold value of
+    what the plan makes/holds **passively** -- so a plan that accumulates its Large
+    Nets from straw/wood/stone/antlers shows them in the total but not the to-buy
+    figure. ``reasons`` annotates why each plan is on the frontier -- a resource
+    plan says "all Steel Wire from passive" (its gathering plateau); endpoints and
+    farming intermediates carry only their fastest/cheapest tag.
     """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
@@ -103,9 +108,10 @@ def print_frontier(
         columns.append("Grape Juice")
     if show_ciders:
         columns.append("Apple Cider")
+    legend = ""
     if prices is not None:
-        columns.append("gold")
-    print(f"\nSourcing plans ({' / '.join(columns)}):")
+        legend = " = gold, as to-buy + passive" if golds is not None else " = gold"
+    print(f"\nSourcing plans ({' + '.join(columns)}{legend}):")
 
     for i, plan in enumerate(plans):
         marker = ">" if i == selected else " "
@@ -133,8 +139,12 @@ def print_frontier(
         if show_ciders:
             parts.append(f"{round(plan.apple_ciders):,} cider")
         if prices is not None:
-            parts.append(f"{round(optimizer.plan_gold(plan, prices)):,} g")
-        print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
+            if golds is not None:
+                buy, passv = (round(g) for g in golds[i])
+                note = f" = {buy:,} + {passv:,} = {buy + passv:,} g"
+            else:
+                note = f" = {round(optimizer.plan_gold(plan, prices)):,} g"
+        print(f" {marker} {i + 1}. {' + '.join(parts)}{note}")
 
 
 def _frontier_reasons(

@@ -57,19 +57,19 @@ On top of the four channels, chests and bags can be **opened** at the Locksmith 
 Spending a net or a palmer buys speed: it lifts an item out of the slow farming/passive queues for zero time, at the cost of one consumable. Cookie sets and Grape Juices (see [Cookies](#cookies)) are the same kind of scarce speed-for-time trade on the farming track. So there is a genuine tradeoff between time and all four. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another, spanning "all free but slow" to "fast but costly":
 
 ```text
-Sourcing plans (time / Arnold Palmers / Large Nets):
- > 1. 87y 62d / 71,136 AP / 0 LN  [fastest]
-   2. 293y 319d / 3,931 AP / 0 LN  [cheapest]
+Sourcing plans (time + Arnold Palmers + Large Nets):
+ > 1. 87y 62d + 71,136 AP + 0 LN  [fastest]
+   2. 293y 319d + 3,931 AP + 0 LN  [cheapest]
 ```
 
 Each of cookie sets and Grape Juices is priced and swept like the consumables, so the frontier offers plans that spend more of them to finish sooner or none of them to save them — a goal grown entirely by farming (say a heap of Beet) is no longer a single take-it-or-leave-it plan. When some plan spends them, each gets its own column:
 
 ```text
-Sourcing plans (time / Arnold Palmers / Large Nets / cookie sets / Grape Juice):
- > 1. 11d 8h 47m / 0 AP / 0 LN / 11 sets / 159 GJ  [fastest]
-   2. 36d 8h 46m / 0 AP / 0 LN / 11 sets / 156 GJ
+Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice):
+ > 1. 11d 8h 47m + 0 AP + 0 LN + 11 sets + 159 GJ  [fastest]
+   2. 36d 8h 46m + 0 AP + 0 LN + 11 sets + 156 GJ
    ...
-   5. 3y 242d / 0 AP / 0 LN / 0 sets / 0 GJ  [cheapest]
+   5. 3y 242d + 0 AP + 0 LN + 0 sets + 0 GJ  [cheapest]
 ```
 
 The **cheapest** plan is the one spending the fewest of all four (leaning hardest on free farming and passive production), so it is not always the slowest overall.
@@ -106,12 +106,12 @@ Anything no channel can supply is listed as a remainder to craft or provide your
 The frontier is built around the **long-gathering passive resources** — each building-made material is needed only up to its products' full demand, and the makespan at which that full amount finishes gathering is a natural plateau: cap the plan there and every slower material must be sped up with consumables, while that one, and all faster ones, still come for free. So the plans segment by resource, in order, and the frontier table labels each resource plan with why it is there — the material it gathers to completion:
 
 ```text
-Sourcing plans (time / Arnold Palmers / Large Nets / cookie sets / Grape Juice):
- > 1. 10d 11h 40m / 209,031 AP / 48,511 LN / 11 sets / 147 GJ  [fastest]
-   2. 20d 17h 22m / 189,637 AP / 35,050 LN / 11 sets / 290 GJ
-   3. 27d 7h 39m / 178,119 AP / 29,265 LN / 10 sets / 136 GJ  — all Steel Wire from passive
-   4. 143d 17m / 90,406 AP / 0 LN / 0 sets / 0 GJ  — all Oak from passive
-   5. 251y 10d / 421 AP / 0 LN / 0 sets / 0 GJ  [cheapest]
+Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice):
+ > 1. 10d 11h 40m + 209,031 AP + 48,511 LN + 11 sets + 147 GJ  [fastest]
+   2. 20d 17h 22m + 189,637 AP + 35,050 LN + 11 sets + 290 GJ
+   3. 27d 7h 39m + 178,119 AP + 29,265 LN + 10 sets + 136 GJ  — all Steel Wire from passive
+   4. 143d 17m + 90,406 AP + 0 LN + 0 sets + 0 GJ  — all Oak from passive
+   5. 251y 10d + 421 AP + 0 LN + 0 sets + 0 GJ  [cheapest]
 ```
 
 Plan 3 is clamped to when Steel Wire finishes (its full requirement, ~27 days), plan 4 to Oak (~143 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plan 2 above) are shown in between with no resource label.
@@ -137,8 +137,8 @@ python main.py --plan-mode inventory --current-stamina 200000 -i 'Mushroom:20000
 ```
 
 ```text
-Sourcing plans (time / Arnold Palmers / Large Nets / Grape Juice / Apple Cider):
- > 3. 1h 4m / 3,196 AP / 0 LN / 1 GJ / 235 cider
+Sourcing plans (time + Arnold Palmers + Large Nets + Grape Juice + Apple Cider):
+ > 3. 1h 4m + 3,196 AP + 0 LN + 1 GJ + 235 cider
 
 Exploring (Apple Cider):
   200x Apple Cider at Gary's Crushroom (209,555 stamina, Mushroom)
@@ -304,6 +304,8 @@ cookie_set    = 20    # priced individually, in gold each (not gk)
 ```
 
 The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. Grape Juice is not traded directly — it is priced at its **production cost** in grapes, and grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk" (Arnold Palmers per 1000). Pressing 200 grapes yields `--crafting-bonus` juices, so a juice costs `200 / crafting_bonus` grapes, each worth `grapes/1000` Arnold Palmers, converted to gold through the Arnold Palmer's own price (with the defaults, `200/1.45` grapes ≈ 0.69 AP ≈ 0.041 gold). Omit `grapes` and Grape Juice stays free. With this section present the frontier trades makespan against gold (not an abstract consumable count), the table gains a **gold** column, and `--cheapest-plan` picks the least-gold plan. Omit the section and the solver stays on its earlier gold-agnostic behaviour.
+
+Each plan's gold is shown as **`to-buy + passive = total`**. The *total* is the market value of every consumable the plan spends; the *passive* subtotal is the value of what the plan sources for itself and so pays no gold for — anything it already holds, and (in `--plan-mode inventory`) every consumable grounded in your passive economy, so Large Nets accumulated from straw/wood/stone/antlers, Arnold Palmers down to Orchard Lemons, and cookie sets baked from held cookies all land here. What remains, the *to-buy* subtotal, is the gold you would still have to spend — on top of what you already have — to acquire the rest by trading. In the inventory mode everything is self-sourced, so to-buy is ~0; in the unlimited mode a plan spends consumables it may not have, so to-buy is what it wants beyond your stock.
 
 ### Fishing and exploring
 
