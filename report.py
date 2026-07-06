@@ -80,14 +80,17 @@ def print_frontier(
     selected: int,
     cheapest: int,
     reasons: list[str | None] | None = None,
+    prices: dict[str, float] | None = None,
 ) -> None:
     """The frontier table: each plan's time and consumables, fastest first.
 
     Cookie sets and Grape Juices are shown as extra columns only when some plan
     actually spends them, so a plan that uses neither keeps the plain time/AP/LN
-    table. ``reasons`` annotates why each plan is on the frontier -- a resource
-    plan says "all Steel Wire from passive" (its gathering plateau); endpoints and
-    farming intermediates carry only their fastest/cheapest tag.
+    table. With trading ``prices`` a trailing **gold** column shows each plan's
+    real gold cost (what "cheapest" now ranks by). ``reasons`` annotates why each
+    plan is on the frontier -- a resource plan says "all Steel Wire from passive"
+    (its gathering plateau); endpoints and farming intermediates carry only their
+    fastest/cheapest tag.
     """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
@@ -100,6 +103,8 @@ def print_frontier(
         columns.append("Grape Juice")
     if show_ciders:
         columns.append("Apple Cider")
+    if prices is not None:
+        columns.append("gold")
     print(f"\nSourcing plans ({' / '.join(columns)}):")
 
     for i, plan in enumerate(plans):
@@ -127,6 +132,8 @@ def print_frontier(
             parts.append(f"{round(plan.grape_juices):,} GJ")
         if show_ciders:
             parts.append(f"{round(plan.apple_ciders):,} cider")
+        if prices is not None:
+            parts.append(f"{round(optimizer.plan_gold(plan, prices)):,} g")
         print(f" {marker} {i + 1}. {' / '.join(parts)}{note}")
 
 

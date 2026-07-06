@@ -383,12 +383,26 @@ def limit_shortfall(
     return f"No plan fits {fits}; showing the full frontier."
 
 
-def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
-    """Index of the plan spending the fewest scarce resources (ties: least time).
+def cheapest_plan(
+    plans: list[optimizer.SourcingPlan],
+    prices: dict[str, float] | None = None,
+) -> int:
+    """Index of the cheapest plan (ties: least time).
 
-    Cookie sets and Grape Juices count alongside the Arnold Palmers and Large
-    Nets, so the thriftiest plan is the one that leans hardest on free farming.
+    With trading ``prices`` (per-unit gold, see :func:`config.trading_prices`)
+    "cheapest" is the least real gold spent -- the principled ranking. Without
+    them it falls back to the fewest scarce resources counted equally (cookie
+    sets and Grape Juices alongside Arnold Palmers, Large Nets and Apple Ciders),
+    so the thriftiest plan is the one leaning hardest on free farming.
     """
+    if prices is not None:
+        return min(
+            range(len(plans)),
+            key=lambda i: (
+                optimizer.plan_gold(plans[i], prices),
+                plans[i].time.total_seconds(),
+            ),
+        )
     return min(
         range(len(plans)),
         key=lambda i: (
@@ -406,19 +420,20 @@ def selected_plan(
     plans: list[optimizer.SourcingPlan],
     plan: int | None,
     cheapest: bool,
+    prices: dict[str, float] | None = None,
 ) -> int:
     """Index of the plan to expand, from ``--plan`` / ``--cheapest-plan``.
 
     Explicit ``--plan N`` wins (1-based, validated); ``--cheapest-plan`` picks
-    the fewest-consumable plan; otherwise the default is the fastest, which is
-    plan 0 since the frontier is sorted fastest first.
+    the cheapest plan (by gold when ``prices`` are given); otherwise the default
+    is the fastest, which is plan 0 since the frontier is sorted fastest first.
     """
     if plan is not None:
         if not 1 <= plan <= len(plans):
             raise ValueError(f"--plan must be between 1 and {len(plans)}")
         return plan - 1
     if cheapest:
-        return cheapest_plan(plans)
+        return cheapest_plan(plans, prices)
     return 0
 
 
@@ -510,6 +525,10 @@ def run(args: argparse.Namespace) -> int:
     if args.plan_mode == sources.INVENTORY and args.current_stamina:
         inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
     cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
+    # Per-unit gold prices for the tradable consumables (the [trading] config).
+    # When present, the frontier trades makespan against real gold and "cheapest"
+    # means least gold; absent, the solver stays on its gold-agnostic behaviour.
+    prices = config.trading_prices(cfg)
 
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
@@ -537,6 +556,7 @@ def run(args: argparse.Namespace) -> int:
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
+            prices=prices,
         )
         if not plans:
             return 0  # nothing left to source
@@ -546,15 +566,17 @@ def run(args: argparse.Namespace) -> int:
             p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
         ]
         shown = within or plans
-        new_horizon = shown[selected_plan(shown, args.plan, args.cheapest_plan)].time
+        new_horizon = shown[
+            selected_plan(shown, args.plan, args.cheapest_plan, prices)
+        ].time
         if not model_calendar or (
             horizon is not None and _makespans_close(new_horizon, horizon)
         ):
             break
         horizon = new_horizon
 
-    cheapest = cheapest_plan(shown)
-    selected = selected_plan(shown, args.plan, args.cheapest_plan)
+    cheapest = cheapest_plan(shown, prices)
+    selected = selected_plan(shown, args.plan, args.cheapest_plan, prices)
 
     if model_calendar:
         print(
@@ -575,7 +597,7 @@ def run(args: argparse.Namespace) -> int:
         shown, demand, recipes, args.crafting_bonus, open_flows, inventory,
         max_passive_residuals, production, display,
     )
-    report.print_frontier(shown, selected, cheapest, reasons)
+    report.print_frontier(shown, selected, cheapest, reasons, prices)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)

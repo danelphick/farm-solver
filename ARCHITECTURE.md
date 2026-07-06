@@ -58,7 +58,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 |---|---|---|
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -66,7 +66,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow) | `Crop`, `Farm`, `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
-| `config.py` | `config.toml` → producers/pets/storehouse | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size` |
+| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size`, `trading_prices` |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
@@ -116,9 +116,18 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   **except directly-demanded ones** (their need is already net of stock; stamina
   is seeded here by `--current-stamina`). `cookie_sets` caps total cookie-offer
   usage.
-- **`frontier(...)`** = fast endpoint (spend freely) + cheap endpoint (avoid all)
-  + an epsilon sweep of makespan caps, then `_non_dominated` then `_thin` to
-  `count`. Two cap sources feed the sweep:
+- **Gold weighting** (`frontier`/`minimize` `prices`): with a `[trading]` config
+  section, `config.trading_prices` gives a per-unit **gold** price for each
+  tradable consumable (AP/LN/cider/OJ per-1000 → ÷1000; cookie sets per unit;
+  Grape Juice free). The cheap endpoint and every epsilon cap then minimise the
+  **gold-weighted** consumables, so the frontier trades makespan against real
+  gold and `main.cheapest_plan` ranks by `optimizer.plan_gold`. Absent, the
+  weights are a uniform 1 (plain consumable count — the original behaviour). OJ
+  is tracked on `SourcingPlan.orange_juice`; the frontier table gains a gold
+  column (`report.print_frontier`).
+- **`frontier(...)`** = fast endpoint (spend freely) + cheap endpoint (least gold,
+  or avoid-all when unpriced) + an epsilon sweep of makespan caps, then
+  `_non_dominated` then `_thin` to `count`. Two cap sources feed the sweep:
   - `_time_caps` — geometric spacing between the endpoints.
   - `_passive_completion_caps` — the **passive-resource breakpoints** (see
     below), also passed to `_thin` as **anchors** so they survive thinning

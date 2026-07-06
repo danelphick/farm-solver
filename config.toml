@@ -111,6 +111,16 @@ grape_juices_per_day = 14
 cookies_grow_time_threshold = "18m"  # min grow time a cookie set may boost
 instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
 
+[trading]    # player-to-player gold trade prices, to rank plans by real gold cost
+# Priced in gold per 1000 units ("gk"); the solver divides by 1000 for the
+# per-unit gold. Grape Juice is not tradable, so it is treated as free (it is so
+# widely available it costs nothing as long as it is not wasted on fast crops).
+orange_juice  = 8
+apple_cider   = 20
+arnold_palmer = 60
+large_net     = 10
+cookie_set    = 20   # priced individually, in gold each (not gk)
+
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
 # Model the calendar so a seasonal pet only counts while in season (uses the

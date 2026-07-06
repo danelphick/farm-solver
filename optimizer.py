@@ -143,6 +143,7 @@ class SourcingPlan:
     cookie_sets: float = 0.0
     grape_juices: float = 0.0
     apple_ciders: float = 0.0
+    orange_juice: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     def track_times(self) -> dict[str, timedelta]:
@@ -276,6 +277,7 @@ def minimize(
     price_cookie: float = 0.0,
     price_gj: float = 0.0,
     price_cider: float = 0.0,
+    price_oj: float = 0.0,
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
@@ -312,13 +314,16 @@ def minimize(
     slower, thriftier plan. The frontier sweeps these prices to offer plans that
     spend more or fewer of them (see :func:`frontier`).
 
-    Two modes trace the same ``(time, AP, LN)`` frontier from different sides. By
-    default the LP minimises ``T + price_ap*AP + price_ln*LN`` (a weighted sum).
-    With ``time_cap`` set it instead minimises the consumables ``AP + LN`` subject
-    to ``T <= time_cap`` -- an epsilon-constraint solve, which unlike the weighted
-    sum can land on the *interior* of a flat frontier segment (see
-    :func:`frontier`), so it surfaces the moderate-consumable plans a price sweep
-    would skip. ``price_ap``/``price_ln`` are ignored when ``time_cap`` is given.
+    Two modes trace the frontier from different sides. By default the LP minimises
+    ``T + sum(price_i * consumable_i)`` (a weighted sum). With ``time_cap`` set it
+    instead minimises just the price-weighted consumables ``sum(price_i *
+    consumable_i)`` subject to ``T <= time_cap`` -- an epsilon-constraint solve,
+    which unlike the weighted sum can land on the *interior* of a flat frontier
+    segment (see :func:`frontier`), so it surfaces the moderate-consumable plans a
+    price sweep would skip. The ``price_*`` are the objective weights in both
+    modes: the frontier passes per-unit **gold** for them (so the interior trades
+    time against real gold, :func:`frontier`), or a uniform 1 for the plain
+    consumable count. ``T`` drops out of the objective when ``time_cap`` is given.
     """
     recipes = recipes or {}
     openables = openables or []
@@ -394,11 +399,28 @@ def minimize(
         for o, x in zip(used, usage)
         if o.consumes.get("apple cider", 0.0) > 0
     )
+    # Orange Juice drunk for stamina (the drinking track) -- a tradable input the
+    # cider channel spends; zero outside the inventory plan mode.
+    orange_juice = pulp.lpSum(
+        o.consumes["orange juice"] * x
+        for o, x in zip(used, usage)
+        if o.consumes.get("orange juice", 0.0) > 0
+    )
     # Only so many full cookie sets are on hand to spend boosting farming days.
     problem += cookies <= cookie_sets
     if time_cap is not None:
         problem += makespan <= _minutes(time_cap)
-        problem += arnold_palmers + large_nets + cookies + grape_juices + ciders
+        # Minimise the price-weighted consumables under the time cap. The frontier
+        # passes gold prices here (so the interior trades time against real gold);
+        # with uniform weight-1 prices it reduces to the plain consumable count.
+        problem += (
+            price_ap * arnold_palmers
+            + price_ln * large_nets
+            + price_cookie * cookies
+            + price_gj * grape_juices
+            + price_cider * ciders
+            + price_oj * orange_juice
+        )
     else:
         problem += (
             makespan
@@ -407,6 +429,7 @@ def minimize(
             + price_cookie * cookies
             + price_gj * grape_juices
             + price_cider * ciders
+            + price_oj * orange_juice
         )
 
     # Net production of each item covers its demand:
@@ -469,16 +492,21 @@ def minimize(
         cookie_star = pulp.value(cookies) or 0.0
         gj_star = pulp.value(grape_juices) or 0.0
         cider_star = pulp.value(ciders) or 0.0
+        oj_star = pulp.value(orange_juice) or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
         problem += arnold_palmers <= ap_star * (1 + 1e-9) + 1e-9
         problem += large_nets <= ln_star * (1 + 1e-9) + 1e-9
-        # Cookies, Grape Juices and Apple Ciders are priced, so the first solve
-        # already uses only ones that pay for themselves in time; lock them too, so
-        # the least-activity re-solve keeps the same thrifty mix and only sheds
-        # pointless surplus.
+        # Cookies, Grape Juices, Apple Ciders and Orange Juice are priced, so the
+        # first solve already uses only ones that pay for themselves; lock them too,
+        # so the least-activity re-solve keeps the same thrifty mix and only sheds
+        # pointless surplus. Orange Juice is only locked when actually priced
+        # (``price_oj``): the extra constraint would otherwise perturb which
+        # equal-cost degenerate vertex CBC returns for no benefit.
         problem += cookies <= cookie_star * (1 + 1e-9) + 1e-9
         problem += grape_juices <= gj_star * (1 + 1e-9) + 1e-9
         problem += ciders <= cider_star * (1 + 1e-9) + 1e-9
+        if price_oj:
+            problem += orange_juice <= oj_star * (1 + 1e-9) + 1e-9
         problem.setObjective(
             pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
         )
@@ -512,7 +540,28 @@ def minimize(
         apple_ciders=sum(
             d.offer.consumes.get("apple cider", 0.0) * d.units for d in draws
         ),
+        orange_juice=sum(
+            d.offer.consumes.get("orange juice", 0.0) * d.units for d in draws
+        ),
         remainder=remainder,
+    )
+
+
+def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
+    """Total gold ``plan`` spends on tradable consumables.
+
+    ``prices`` is the per-unit gold map from :func:`config.trading_prices`; the
+    result is the dot product of that map with the plan's consumable tally, so
+    plans can be ranked by real gold cost. Grape Juice priced at 0 (not tradable)
+    drops out.
+    """
+    return (
+        plan.arnold_palmers * prices.get("arnold palmer", 0.0)
+        + plan.large_nets * prices.get("large net", 0.0)
+        + plan.apple_ciders * prices.get("apple cider", 0.0)
+        + plan.orange_juice * prices.get("orange juice", 0.0)
+        + plan.cookie_sets * prices.get("cookie set", 0.0)
+        + plan.grape_juices * prices.get("grape juice", 0.0)
     )
 
 
@@ -724,6 +773,7 @@ def frontier(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     passive_pet_items: set[str] = frozenset(),
+    prices: dict[str, float] | None = None,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans, fastest first.
 
@@ -739,15 +789,37 @@ def frontier(
     explore a slow-farmed crop rather than all or none). The non-dominated results
     are thinned to about ``count`` plans spread across the frontier. Returns a
     single plan when consumables buy no speed (the two ends coincide).
+
+    ``prices`` (per-unit gold, from :func:`config.trading_prices`) makes "cheap"
+    mean **least gold**: the cheap endpoint and every interior cap minimise the
+    gold-weighted consumables, so the frontier trades makespan against real gold
+    (Grape Juice, priced 0, stays free). Without it the weights are a uniform 1
+    -- the plain consumable count, the original gold-agnostic behaviour.
     """
+    # Per-consumable weight for the cheap side: per-unit gold, or a uniform 1
+    # (plain count, Orange Juice ignored) when untraded.
+    if prices is None:
+        w = {"ap": 1.0, "ln": 1.0, "cookie": 1.0, "gj": 1.0, "cider": 1.0, "oj": 0.0}
+    else:
+        w = {
+            "ap": prices.get("arnold palmer", 0.0),
+            "ln": prices.get("large net", 0.0),
+            "cookie": prices.get("cookie set", 0.0),
+            "gj": prices.get("grape juice", 0.0),
+            "cider": prices.get("apple cider", 0.0),
+            "oj": prices.get("orange juice", 0.0),
+        }
     fast = minimize(
         offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
         price_cookie=_FAST_PRICE, price_gj=_FAST_PRICE, price_cider=_FAST_PRICE,
+        price_oj=_FAST_PRICE if w["oj"] else 0.0,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     cheap = minimize(
-        offers, demand, recipes, crafting_bonus, _FREE_PRICE, _FREE_PRICE,
-        price_cookie=_FREE_PRICE, price_gj=_FREE_PRICE, price_cider=_FREE_PRICE,
+        offers, demand, recipes, crafting_bonus,
+        w["ap"] * _FREE_PRICE, w["ln"] * _FREE_PRICE,
+        price_cookie=w["cookie"] * _FREE_PRICE, price_gj=w["gj"] * _FREE_PRICE,
+        price_cider=w["cider"] * _FREE_PRICE, price_oj=w["oj"] * _FREE_PRICE,
         openables=openables, inventory=inventory, cookie_sets=cookie_sets,
     )
     plans = [fast, cheap]
@@ -772,6 +844,8 @@ def frontier(
     plans += [
         minimize(
             offers, demand, recipes, crafting_bonus,
+            price_ap=w["ap"], price_ln=w["ln"], price_cookie=w["cookie"],
+            price_gj=w["gj"], price_cider=w["cider"], price_oj=w["oj"],
             time_cap=timedelta(seconds=cap), openables=openables,
             inventory=inventory, cookie_sets=cookie_sets,
         )

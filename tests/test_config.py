@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from config import load_config, passive_production, storehouse_size
+from config import load_config, passive_production, storehouse_size, trading_prices
 from passive import DAILY, HOURLY, MINUTE
 
 
@@ -488,3 +488,31 @@ def test_farmhouse_stamina_ignores_the_storehouse_cap():
 def test_no_farmhouse_section_produces_no_stamina():
     production = passive_production({"vineyard": {"grapes": 100}})
     assert production.rate_per_minute("stamina") == 0
+
+
+def test_trading_prices_converts_gk_and_cookie():
+    # gk values are gold per 1000 (divided by 1000); cookie sets are gold each;
+    # Grape Juice is not tradable, so it is free.
+    prices = trading_prices(
+        {
+            "trading": {
+                "orange_juice": 8,
+                "apple_cider": 20,
+                "arnold_palmer": 60,
+                "large_net": 10,
+                "cookie_set": 20,
+            }
+        }
+    )
+    assert prices == {
+        "arnold palmer": 0.06,
+        "large net": 0.01,
+        "apple cider": 0.02,
+        "orange juice": 0.008,
+        "grape juice": 0.0,
+        "cookie set": 20.0,
+    }
+
+
+def test_trading_prices_absent_section_is_none():
+    assert trading_prices({"vineyard": {"grapes": 1}}) is None

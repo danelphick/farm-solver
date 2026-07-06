@@ -289,6 +289,21 @@ growth = 20
 
 The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles.
 
+### Trading (gold prices)
+
+The scarce consumables can be bought and sold between players for gold, so an optional `[trading]` section prices them and lets the solver rank plans by the **real gold** each one costs:
+
+```toml
+[trading]
+orange_juice  = 8     # gold per 1000 ("gk")
+apple_cider   = 20
+arnold_palmer = 60
+large_net     = 10
+cookie_set    = 20    # priced individually, in gold each (not gk)
+```
+
+The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. Grape Juice is not tradable, so it is treated as free. With this section present the frontier trades makespan against gold (not an abstract consumable count), the table gains a **gold** column, and `--cheapest-plan` picks the least-gold plan. Omit the section and the solver stays on its earlier gold-agnostic behaviour.
+
 ### Fishing and exploring
 
 The consumable channels have their own perk flags; the zones and drop rates come from `fishing.csv` and `exploring.csv`:

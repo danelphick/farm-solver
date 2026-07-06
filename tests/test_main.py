@@ -830,3 +830,37 @@ def test_print_plan_orders_passive_items_longest_wait_first(capsys):
     # Slow (100 min) is a longer wait than Fast (10 min), so it is listed first.
     assert lines[0].endswith("Slow in 1h 40m")
     assert lines[1].endswith("Fast in 10m")
+
+
+_GOLD = {
+    "arnold palmer": 0.06, "large net": 0.01, "apple cider": 0.02,
+    "orange juice": 0.008, "cookie set": 20.0, "grape juice": 0.0,
+}
+
+
+def test_cheapest_plan_ranks_by_gold_when_priced():
+    # Plan 0 spends fewer items (200 AP) but more gold (12); plan 1 spends more
+    # items (500 LN) but less gold (5). Gold pricing picks plan 1; the unpriced
+    # equal-weight count picks plan 0.
+    plans = [
+        SourcingPlan(time=timedelta(0), arnold_palmers=200, large_nets=0),
+        SourcingPlan(time=timedelta(0), arnold_palmers=0, large_nets=500),
+    ]
+    assert cheapest_plan(plans, _GOLD) == 1  # by gold: 5 < 12
+    assert cheapest_plan(plans) == 0  # by item count: 200 < 500
+
+
+def test_print_frontier_shows_a_gold_column_when_priced(capsys):
+    plans = [SourcingPlan(time=timedelta(0), arnold_palmers=1000, large_nets=0)]
+    print_frontier(plans, 0, 0, None, _GOLD)
+    out = capsys.readouterr().out
+    assert "gold" in out
+    assert "60 g" in out  # 1000 * 0.06
+
+
+def test_print_frontier_omits_gold_column_without_prices(capsys):
+    plans = [SourcingPlan(time=timedelta(0), arnold_palmers=1000, large_nets=0)]
+    print_frontier(plans, 0, 0)
+    out = capsys.readouterr().out
+    assert "gold" not in out
+    assert " g" not in out

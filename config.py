@@ -413,3 +413,37 @@ def storehouse_size(
         today = date.today()
     days = max(0, (today - _as_date(updated_on)).days)
     return inventory + growth * days
+
+
+# Gold prices in the ``[trading]`` section are quoted per 1000 units ("gk"), so
+# the per-unit gold is the config value divided by this. Cookie sets are the
+# exception -- priced individually, in plain gold each.
+GK_UNITS = 1000
+
+
+def trading_prices(config: dict[str, Any]) -> dict[str, float] | None:
+    """Per-unit gold prices for the tradable consumables, or None if unpriced.
+
+    Reads the ``[trading]`` section: ``orange_juice``, ``apple_cider``,
+    ``arnold_palmer`` and ``large_net`` are gold per 1000 units (divided by
+    :data:`GK_UNITS`), and ``cookie_set`` is gold each. Grape Juice is not
+    tradable, so it is always free (``0``). Keys are the lower-cased item names
+    the solver uses, so a plan's gold is a direct dot product with its consumable
+    tally. Returns ``None`` when the section is absent, leaving the solver on its
+    unweighted (gold-agnostic) behaviour.
+    """
+    section = config.get("trading")
+    if not section:
+        return None
+
+    def per_unit(key: str) -> float:
+        return float(section.get(key, 0.0)) / GK_UNITS
+
+    return {
+        "arnold palmer": per_unit("arnold_palmer"),
+        "large net": per_unit("large_net"),
+        "apple cider": per_unit("apple_cider"),
+        "orange juice": per_unit("orange_juice"),
+        "grape juice": 0.0,  # not tradable -- effectively free
+        "cookie set": float(section.get("cookie_set", 0.0)),  # priced per unit
+    }

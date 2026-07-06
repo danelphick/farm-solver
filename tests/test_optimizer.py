@@ -13,6 +13,7 @@ from optimizer import (
     frontier,
     minimize,
     passive_residuals,
+    plan_gold,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
@@ -540,3 +541,41 @@ def test_minimize_counts_apple_ciders_spent():
     plan = minimize([cider, stamina, orange], {"Wood": 40}, recipes, crafting_bonus=1.0)
     # 40 wood needs 10 explores -> 1 Apple Cider spent.
     assert plan.apple_ciders == pytest.approx(1.0)
+
+
+# Per-unit gold prices for the tradable consumables (see config.trading_prices).
+GOLD = {
+    "arnold palmer": 0.06,
+    "large net": 0.01,
+    "apple cider": 0.02,
+    "orange juice": 0.008,
+    "cookie set": 20.0,
+    "grape juice": 0.0,
+}
+
+
+def test_plan_gold_is_the_priced_consumable_total():
+    plan = SourcingPlan(
+        arnold_palmers=100, large_nets=200, apple_ciders=50,
+        orange_juice=1000, cookie_sets=3, grape_juices=999,
+    )
+    # 100*.06 + 200*.01 + 50*.02 + 1000*.008 + 3*20 + 999*0 = 77
+    assert plan_gold(plan, GOLD) == pytest.approx(77.0)
+
+
+def test_frontier_prices_pick_the_cheaper_gold_channel():
+    # The same item is obtainable by fishing (Large Net) or exploring (Arnold
+    # Palmer), both instant. Large Nets are far cheaper in gold, so the least-gold
+    # plan buys nets, not palmers -- even though a palmer plan uses fewer items.
+    fish = Offer("fish Z", "fishing", {"it": 1}, ln=1)
+    explore = Offer("explore L", "exploring", {"it": 1}, ap=1)
+    plans = frontier([fish, explore], {"it": 100}, prices=GOLD)
+    best = min(plans, key=lambda p: plan_gold(p, GOLD))
+    assert round(best.large_nets) == 100
+    assert round(best.arnold_palmers) == 0
+
+
+def test_frontier_without_prices_ignores_gold():
+    # No prices -> the gold-agnostic behaviour; still returns a usable frontier.
+    plans = frontier([FARM_ITEM, FISH_ITEM], {"It": 100})
+    assert plans  # sanity: the sweep still produces plans
