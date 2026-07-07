@@ -32,6 +32,30 @@ import report
 import sources
 
 
+def parse_gold_budget(value: str) -> int | None:
+    """Parse ``--max-gold``: ``inventory`` -> 0, ``unlimited`` -> no cap (None).
+
+    The two old plan modes survive as named budgets -- ``inventory`` is a zero
+    budget (self-source everything) and ``unlimited`` no cap -- alongside any
+    non-negative integer in between.
+    """
+    text = value.strip().lower()
+    if text == "unlimited":
+        return None
+    if text == "inventory":
+        return 0
+    try:
+        budget = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--max-gold must be a non-negative integer, 'inventory', or "
+            f"'unlimited', not {value!r}"
+        ) from None
+    if budget < 0:
+        raise argparse.ArgumentTypeError("--max-gold must be non-negative")
+    return budget
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="farm-solver",
@@ -127,15 +151,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--plan-mode",
-        choices=(sources.UNLIMITED, sources.INVENTORY),
-        default=sources.UNLIMITED,
+        "--max-gold",
+        type=parse_gold_budget,
+        default=None,
+        metavar="N",
         help=(
-            "how consumables are sourced. 'unlimited' (the default) spends "
-            "abstract Arnold Palmers / Large Nets / Grape Juice freely; "
-            "'inventory' grounds them in real crafted/held items (from the "
-            "passive economy) and adds the Apple Cider exploring channel fed by "
-            "stamina from drinking Orange Juice"
+            "cap the gold a plan may spend buying consumables, trading it against "
+            "time. The frontier always spans self-sourced (spend nothing, slowest) "
+            "to buy-freely (fastest); this drops plans over the cap. 'inventory' "
+            "means 0 (self-source everything), 'unlimited' (the default) means no "
+            "cap -- the whole frontier"
         ),
     )
     parser.add_argument(
@@ -145,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help=(
             "stamina already banked, spendable on Apple Cider explores "
-            "(inventory plan mode only; default: 0)"
+            "(default: 0)"
         ),
     )
     parser.add_argument(
@@ -340,12 +365,14 @@ def within_limits(
     time_limit: timedelta | None = None,
     max_ap: int | None = None,
     max_ln: int | None = None,
+    max_gold: int | None = None,
 ) -> bool:
-    """Whether a plan respects every given time and consumable ceiling."""
+    """Whether a plan respects every given time, consumable and gold ceiling."""
     return (
         (time_limit is None or plan.time <= time_limit)
         and (max_ap is None or round(plan.arnold_palmers) <= max_ap)
         and (max_ln is None or round(plan.large_nets) <= max_ln)
+        and (max_gold is None or round(plan.gold) <= max_gold)
     )
 
 
@@ -354,6 +381,7 @@ def limit_shortfall(
     time_limit: timedelta | None,
     max_ap: int | None,
     max_ln: int | None,
+    max_gold: int | None = None,
 ) -> str:
     """Explain why no plan met the limits, naming the best each axis reaches.
 
@@ -379,40 +407,24 @@ def limit_shortfall(
         fewest = round(min(p.large_nets for p in plans))
         if fewest > max_ln:
             parts.append(f"within {max_ln:,} LN (fewest is {fewest:,})")
+    if max_gold is not None:
+        least = round(min(p.gold for p in plans))
+        if least > max_gold:
+            parts.append(f"within {max_gold:,} gold (least is {least:,})")
     fits = " or ".join(parts) if parts else "every limit at once"
     return f"No plan fits {fits}; showing the full frontier."
 
 
-def cheapest_plan(
-    plans: list[optimizer.SourcingPlan],
-    prices: dict[str, float] | None = None,
-) -> int:
-    """Index of the cheapest plan (ties: least time).
+def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
+    """Index of the cheapest plan: least gold spent, ties broken by least time.
 
-    With trading ``prices`` (per-unit gold, see :func:`config.trading_prices`)
-    "cheapest" is the least real gold spent -- the principled ranking. Without
-    them it falls back to the fewest scarce resources counted equally (cookie
-    sets and Grape Juices alongside Arnold Palmers, Large Nets and Apple Ciders),
-    so the thriftiest plan is the one leaning hardest on free farming.
+    ``plan.gold`` is the real gold a plan spends buying consumables (the LP
+    decides make-vs-buy), so the cheapest plan is the one that buys least -- the
+    fully self-sourced end of the frontier when nothing is bought.
     """
-    if prices is not None:
-        return min(
-            range(len(plans)),
-            key=lambda i: (
-                optimizer.plan_gold(plans[i], prices),
-                plans[i].time.total_seconds(),
-            ),
-        )
     return min(
         range(len(plans)),
-        key=lambda i: (
-            plans[i].arnold_palmers
-            + plans[i].large_nets
-            + plans[i].cookie_sets
-            + plans[i].grape_juices
-            + plans[i].apple_ciders,
-            plans[i].time.total_seconds(),
-        ),
+        key=lambda i: (plans[i].gold, plans[i].time.total_seconds()),
     )
 
 
@@ -420,20 +432,19 @@ def selected_plan(
     plans: list[optimizer.SourcingPlan],
     plan: int | None,
     cheapest: bool,
-    prices: dict[str, float] | None = None,
 ) -> int:
     """Index of the plan to expand, from ``--plan`` / ``--cheapest-plan``.
 
     Explicit ``--plan N`` wins (1-based, validated); ``--cheapest-plan`` picks
-    the cheapest plan (by gold when ``prices`` are given); otherwise the default
-    is the fastest, which is plan 0 since the frontier is sorted fastest first.
+    the least-gold plan; otherwise the default is the fastest, which is plan 0
+    since the frontier is sorted fastest first.
     """
     if plan is not None:
         if not 1 <= plan <= len(plans):
             raise ValueError(f"--plan must be between 1 and {len(plans)}")
         return plan - 1
     if cheapest:
-        return cheapest_plan(plans, prices)
+        return cheapest_plan(plans)
     return 0
 
 
@@ -521,13 +532,13 @@ def run(args: argparse.Namespace) -> int:
         key: float(entry.quantity) for key, entry in state.inventory.items.items()
     }
     # Stamina already banked seeds the inventory so Apple Cider explores can spend
-    # it (inventory plan mode); the drink-Orange-Juice flow tops it up over time.
-    if args.plan_mode == sources.INVENTORY and args.current_stamina:
+    # it; the drink-Orange-Juice flow tops it up over time.
+    if args.current_stamina:
         inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
     cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
-    # Per-unit gold prices for the tradable consumables (the [trading] config).
-    # When present, the frontier trades makespan against real gold and "cheapest"
-    # means least gold; absent, the solver stays on its gold-agnostic behaviour.
+    # Per-unit gold prices for the buyable consumables (the [trading] config): what
+    # makes each buyable, so the frontier can trade makespan against real gold.
+    # Absent, nothing is buyable and every plan is fully self-sourced.
     prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
 
     if args.plans < 1:
@@ -563,11 +574,12 @@ def run(args: argparse.Namespace) -> int:
         # The limits drop plans over a time or consumable ceiling, unless that
         # would leave none (then the whole frontier is shown, with a warning below).
         within = [
-            p for p in plans if within_limits(p, time_limit, args.max_ap, args.max_ln)
+            p for p in plans
+            if within_limits(p, time_limit, args.max_ap, args.max_ln, args.max_gold)
         ]
         shown = within or plans
         new_horizon = shown[
-            selected_plan(shown, args.plan, args.cheapest_plan, prices)
+            selected_plan(shown, args.plan, args.cheapest_plan)
         ].time
         if not model_calendar or (
             horizon is not None and _makespans_close(new_horizon, horizon)
@@ -575,8 +587,8 @@ def run(args: argparse.Namespace) -> int:
             break
         horizon = new_horizon
 
-    cheapest = cheapest_plan(shown, prices)
-    selected = selected_plan(shown, args.plan, args.cheapest_plan, prices)
+    cheapest = cheapest_plan(shown)
+    selected = selected_plan(shown, args.plan, args.cheapest_plan)
 
     if model_calendar:
         print(
@@ -584,7 +596,9 @@ def run(args: argparse.Namespace) -> int:
             "part of the plan it is in season."
         )
     if not within:
-        print(f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln)}")
+        print(
+            f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln, args.max_gold)}"
+        )
     # Display names for the items a reason or the plan report may mention.
     display = report.build_display(demand, workshop)
     # The cheapest plan crafts the most, so its passive residuals are each item's

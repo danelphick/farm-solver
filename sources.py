@@ -43,16 +43,8 @@ FISHING_TRACK = "fishing"
 EXPLORING_TRACK = "exploring"
 PASSIVE_TRACK = "passive"
 # Drinking Orange Juice for stamina is instant, like fishing/exploring, so its
-# track never costs time (inventory plan mode only).
+# track never costs time.
 DRINKING_TRACK = "drinking"
-
-# Plan modes (see :func:`optimizer.all_offers`). ``UNLIMITED`` is the original
-# behaviour -- exploring/fishing/farming spend abstract, unbounded Arnold
-# Palmers / Large Nets / Grape Juice. ``INVENTORY`` grounds those consumables in
-# real crafted/stocked items (the offers gain ``consumes``) and adds the Apple
-# Cider exploring channel fed by stamina from drinking Orange Juice.
-UNLIMITED = "unlimited"
-INVENTORY = "inventory"
 
 # The drop rate Apple Cider forces in every zone: 0.40 items discovered per
 # explore (one stamina). The zone's own drop-rate distribution then says which
