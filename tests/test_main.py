@@ -4,12 +4,15 @@ from crafting import Workshop, WorkshopRecipe
 from crops import Farm
 import pytest
 
+import argparse
+
 from main import (
     _should_model_calendar,
     build_parser,
     cheapest_plan,
     cookie_sets_available,
     limit_shortfall,
+    parse_gold_budget,
     selected_plan,
     within_limits,
 )
@@ -26,14 +29,14 @@ from passive import MINUTE, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
 
 PLANS = [
-    SourcingPlan(time=timedelta(0), arnold_palmers=100, large_nets=20),
-    SourcingPlan(time=timedelta(hours=5), arnold_palmers=10, large_nets=0),
-    SourcingPlan(time=timedelta(days=3), arnold_palmers=0, large_nets=0),
+    SourcingPlan(time=timedelta(0), arnold_palmers=100, large_nets=20, gold=12),
+    SourcingPlan(time=timedelta(hours=5), arnold_palmers=10, large_nets=0, gold=5),
+    SourcingPlan(time=timedelta(days=3), arnold_palmers=0, large_nets=0, gold=0),
 ]
 
 
-def test_cheapest_plan_picks_the_fewest_consumables():
-    # The last plan spends nothing, so it is the cheapest despite being slowest.
+def test_cheapest_plan_picks_the_least_gold():
+    # The last plan buys nothing (gold 0), so it is cheapest despite being slowest.
     assert cheapest_plan(PLANS) == 2
 
 
@@ -131,6 +134,23 @@ def test_within_limits_checks_time_and_consumables():
     assert not within_limits(plan, time_limit=timedelta(days=1))  # too slow
     assert not within_limits(plan, max_ap=499)  # too many palmers
     assert not within_limits(plan, max_ln=49)  # too many nets
+
+
+def test_within_limits_checks_the_gold_ceiling():
+    plan = SourcingPlan(time=timedelta(days=2), gold=5000)
+    assert within_limits(plan, max_gold=5000)
+    assert not within_limits(plan, max_gold=4999)
+    assert within_limits(plan, max_gold=None)  # unlimited
+
+
+def test_parse_gold_budget_maps_the_named_aliases():
+    assert parse_gold_budget("inventory") == 0  # self-source everything
+    assert parse_gold_budget("unlimited") is None  # no cap
+    assert parse_gold_budget("5000") == 5000
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_gold_budget("-1")
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_gold_budget("lots")
 
 
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
@@ -838,16 +858,14 @@ _GOLD = {
 }
 
 
-def test_cheapest_plan_ranks_by_gold_when_priced():
-    # Plan 0 spends fewer items (200 AP) but more gold (12); plan 1 spends more
-    # items (500 LN) but less gold (5). Gold pricing picks plan 1; the unpriced
-    # equal-weight count picks plan 0.
+def test_cheapest_plan_ranks_by_gold_spent():
+    # Plan 0 spends more gold buying, plan 1 less; cheapest is the least-gold plan
+    # regardless of how many consumables each ends up using.
     plans = [
-        SourcingPlan(time=timedelta(0), arnold_palmers=200, large_nets=0),
-        SourcingPlan(time=timedelta(0), arnold_palmers=0, large_nets=500),
+        SourcingPlan(time=timedelta(0), arnold_palmers=200, gold=12),
+        SourcingPlan(time=timedelta(0), large_nets=500, gold=5),
     ]
-    assert cheapest_plan(plans, _GOLD) == 1  # by gold: 5 < 12
-    assert cheapest_plan(plans) == 0  # by item count: 200 < 500
+    assert cheapest_plan(plans) == 1  # 5 g < 12 g
 
 
 def test_print_frontier_shows_a_gold_column_when_priced(capsys):
@@ -886,24 +904,11 @@ def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
     assert "Surplus" not in capsys.readouterr().out
 
 
-def test_print_plan_omits_surplus_when_consumables_are_not_grounded(capsys):
-    # Unlimited mode: no draw grounds a consumable (nothing is crafted from the
-    # passive economy), so valuing surplus as sellable goods would contradict the
-    # bought consumables -- the section is suppressed even with prices.
-    workshop = Workshop({"large net": WorkshopRecipe("Large Net", {"Straw": 2})})
-    passive_offer = Offer(
-        "passive", "passive", {"straw": 10}, time_per_unit=timedelta(minutes=1)
-    )
-    plan = SourcingPlan(draws=[Draw(passive_offer, 100)])
-    print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
-    assert "Surplus" not in capsys.readouterr().out
-
-
-def test_print_frontier_splits_gold_into_to_buy_and_passive(capsys):
-    # With per-plan (to_buy, passive) gold the row shows both subtotals and their
-    # total, and the header flags the split.
+def test_print_frontier_splits_gold_into_buy_and_self_sourced(capsys):
+    # With per-plan (to_buy, self_sourced) gold the row shows both subtotals and
+    # their total, and the header flags the split.
     plans = [SourcingPlan(time=timedelta(0), arnold_palmers=1000, large_nets=0)]
     print_frontier(plans, 0, 0, None, _GOLD, golds=[(48.0, 12.0)])
     out = capsys.readouterr().out
-    assert "gold, as to-buy + passive" in out
-    assert "= 48 + 12 = 60 g" in out
+    assert "gold, as buy + self-sourced" in out
+    assert "-> 48 + 12 = 60 g" in out

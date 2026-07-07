@@ -203,18 +203,21 @@ def _obtainable(
     offers: list[Offer],
     recipes: dict[str, dict[str, float]],
     openables: list[OpenFlow],
+    buyable: set[str] = frozenset(),
 ) -> set[str]:
-    """Every item that can be produced: gathered, crafted, or opened from such.
+    """Every item that can be produced: gathered, crafted, opened, or bought.
 
     A fixed point: an offer's yields are obtainable once its ``consumes`` inputs
     all are (an offer with no inputs is unconditionally so); a craftable item once
     its materials all are; an openable's outputs once its consumed items (the
-    openable and its key) all are. So an item only an *unusable* offer could make
-    -- one whose input can never be sourced -- is correctly *not* obtainable, and
-    a demand for it falls to the remainder rather than an infeasible LP.
-    Auto-supplied materials (iron, nails) are expected stripped from ``recipes``.
+    openable and its key) all are. A ``buyable`` consumable is unconditionally
+    obtainable -- it can always be bought for gold, so a channel grounded in one is
+    usable even where nothing crafts or gathers it. So an item only an *unusable*
+    offer could make -- one whose input can never be sourced -- is correctly *not*
+    obtainable, and a demand for it falls to the remainder rather than an infeasible
+    LP. Auto-supplied materials (iron, nails) are expected stripped from ``recipes``.
     """
-    obtainable: set[str] = set()
+    obtainable: set[str] = set(buyable)
     changed = True
     while changed:
         changed = False
@@ -323,7 +326,10 @@ def minimize(
     prices = prices or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
-    obtainable = _obtainable(offers, recipes, openables)
+    # A buyable consumable can always be bought, so it is obtainable even where
+    # nothing crafts or gathers it (a channel grounded in one is then still usable).
+    buyable = {item for item in BUYABLE if prices.get(item, 0.0) > 0}
+    obtainable = _obtainable(offers, recipes, openables, buyable)
     craftable = {
         item
         for item, materials in recipes.items()
@@ -381,24 +387,10 @@ def minimize(
     opens = [pulp.LpVariable(f"o{i}", lowBound=0) for i in range(len(opened))]
     makespan = pulp.LpVariable("T", lowBound=0)
 
-    arnold_palmers = pulp.lpSum(o.ap * x for o, x in zip(used, usage))
-    large_nets = pulp.lpSum(o.ln * x for o, x in zip(used, usage))
+    # Cookie-boosted farming days used, capped below at held + bought sets. The
+    # other consumable tallies (Arnold Palmers, Large Nets, ...) are read off the
+    # solved draws in the plan built at the end, not needed as LP expressions here.
     cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
-    grape_juices = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
-    # Apple Ciders spent -- the count each cider explore burns (its
-    # ``consumes["apple cider"]``).
-    ciders = pulp.lpSum(
-        o.consumes["apple cider"] * x
-        for o, x in zip(used, usage)
-        if o.consumes.get("apple cider", 0.0) > 0
-    )
-    # Orange Juice drunk for stamina (the drinking track) -- a tradable input the
-    # cider channel spends.
-    orange_juice = pulp.lpSum(
-        o.consumes["orange juice"] * x
-        for o, x in zip(used, usage)
-        if o.consumes.get("orange juice", 0.0) > 0
-    )
 
     # Buy variables: a buyable consumable can be bought (free, instant supply) for
     # gold instead of self-sourced (which costs makespan). Only reachable, priced

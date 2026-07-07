@@ -2,7 +2,7 @@
 
 This is an attempt to find the optimal way to spend resources to climb the tower in FarmRPG.
 
-Farm Solver loads in the current state of your mastery and inventory, works out what each tower level still needs, expands the crafting, and then finds the best ways to gather everything — trading total **time** against the **Arnold Palmers** and **Large Nets** you spend. It reports a range of plans along that tradeoff, from "spend nothing and wait" to "spend freely and finish fast".
+Farm Solver loads in the current state of your mastery and inventory, works out what each tower level still needs, expands the crafting, and then finds the best ways to source everything — trading total **time** against **gold**: self-sourcing a consumable (Arnold Palmers, Large Nets, …) from your passive economy costs time, buying it costs gold. It reports a range of plans along that tradeoff, from "spend no gold and wait" to "buy freely and finish fast".
 
 ## Usage
 
@@ -126,19 +126,19 @@ Three ceilings drop plans that exceed them: `--passive-limit <duration>` on tota
 python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a century
 ```
 
-## Plan modes: unlimited vs inventory
+## Spending gold: make vs buy
 
-By default (`--plan-mode unlimited`) Arnold Palmers, Large Nets and Grape Juices are abstract, unbounded costs — you can spend as many as a plan wants, and the frontier just trades them against time. `--plan-mode inventory` instead sources **only from your inventory and passive economy**: every consumable has to actually be crafted or held. Exploring now consumes real **Arnold Palmers** (Iced Tea + Lemonade, down to Orchard Lemons and explored Tea Leaves / Shimmer Stone), fishing consumes real **Large Nets** (down to passive stone/wood/straw/antlers), and Grape-Juice grows consume real **Grape Juice** (from Vineyard Grapes). So a consumable is only as plentiful as the passive materials beneath it, and the frontier trades makespan against how much of your **AP / LN / GJ / cider** stockpile a plan burns — the thrifty end leaves the most in reserve.
+Every consumable is a real item you either **self-source** (costs time) or **buy** (costs gold). Exploring consumes real **Arnold Palmers** (Iced Tea + Lemonade, down to Orchard Lemons and explored Tea Leaves / Shimmer Stone), fishing consumes real **Large Nets** (down to passive stone/wood/straw/antlers), Grape-Juice grows consume real **Grape Juice** (from Vineyard Grapes). Given a **gold budget**, the solver decides make-vs-buy for each, and the frontier sweeps the budget from **`--max-gold inventory`** (0 — self-source everything, slowest) up to **`--max-gold unlimited`** (the default — no cap, buy whatever gets you to the fastest plan). Any number in between caps the gold a plan may spend. One catch: **buying an item never earns its own mastery**, so a Large Net or Orange Juice the tower wants *mastered* must be crafted or gathered — gold can only buy the nets/palmers a channel *burns as a tool*, not the deliverables.
 
-Inventory mode adds a second way to explore: **Apple Cider**. Each cider spends **stamina** to explore a zone many times at a fixed 0.40 drop rate. Stamina comes from three places: a starting balance (`--current-stamina N`), the **Farmhouse**'s daily passive deposit (see [Configuration](#configuration)), and drinking **Orange Juice** (100 each, from Orchard Oranges) to top up the rest. How many explores a cider does depends on the zone's Exploring Effectiveness and your cider perks/meals (see [Fishing and exploring](#fishing-and-exploring)). The frontier shows an **Apple Cider** column when a plan uses ciders, and the breakdown gains an *Exploring (Apple Cider)* section and a *Stamina* section accounting for where the stamina came from:
+There is a second way to explore: **Apple Cider**. Each cider spends **stamina** to explore a zone many times at a fixed 0.40 drop rate. Stamina comes from three places: a starting balance (`--current-stamina N`), the **Farmhouse**'s daily passive deposit (see [Configuration](#configuration)), and drinking **Orange Juice** (100 each, from Orchard Oranges) to top up the rest. How many explores a cider does depends on the zone's Exploring Effectiveness and your cider perks/meals (see [Fishing and exploring](#fishing-and-exploring)). The frontier shows an **Apple Cider** column when a plan uses ciders, and the breakdown gains an *Exploring (Apple Cider)* section and a *Stamina* section accounting for where the stamina came from:
 
 ```shell
-python main.py --plan-mode inventory --current-stamina 200000 -i 'Mushroom:2000000'
+python main.py --max-gold inventory --current-stamina 200000 -i 'Mushroom:2000000'
 ```
 
 ```text
-Sourcing plans (time + Arnold Palmers + Large Nets + Grape Juice + Apple Cider):
- > 3. 1h 4m + 3,196 AP + 0 LN + 1 GJ + 235 cider
+Sourcing plans (time + Arnold Palmers + Large Nets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
+ > 1. 1h 4m + 3,196 AP + 0 LN + 1 GJ + 235 cider -> 0 + 205 = 205 g
 
 Exploring (Apple Cider):
   200x Apple Cider at Gary's Crushroom (209,555 stamina, Mushroom)
@@ -243,7 +243,7 @@ milk = 5000
 [vineyard]    # grapes daily
 grapes = 43000
 
-[farmhouse]    # daily stamina for Apple Cider (inventory plan mode only)
+[farmhouse]    # daily stamina for Apple Cider
 stamina_cap = 98387               # natural max stamina on registered_on
 registered_on = "2026-07-05"
 have_mattress_pad = true          # the cap grows +2/day instead of +1
@@ -303,11 +303,11 @@ grapes        = 5     # in apk (Arnold Palmers per 1000); a juice presses 200 gr
 cookie_set    = 20    # priced individually, in gold each (not gk)
 ```
 
-The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. Grape Juice is not traded directly — it is priced at its **production cost** in grapes, and grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk" (Arnold Palmers per 1000). Pressing 200 grapes yields `--crafting-bonus` juices, so a juice costs `200 / crafting_bonus` grapes, each worth `grapes/1000` Arnold Palmers, converted to gold through the Arnold Palmer's own price (with the defaults, `200/1.45` grapes ≈ 0.69 AP ≈ 0.041 gold). Omit `grapes` and Grape Juice stays free. With this section present the frontier trades makespan against gold (not an abstract consumable count), the table gains a **gold** column, and `--cheapest-plan` picks the least-gold plan. Omit the section and the solver stays on its earlier gold-agnostic behaviour.
+The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. These are the **buyable** consumables. Grape Juice is not traded directly — it is priced at its **production cost** in grapes only so it can be valued (grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk", Arnold Palmers per 1000); it is never bought, always pressed from grapes. With this section present the solver can buy consumables (and the frontier trades makespan against real gold); without it nothing is buyable and every plan is fully self-sourced.
 
-Each plan's gold is shown as **`to-buy + passive = total`**. The *total* is the market value of every consumable the plan spends; the *passive* subtotal is the value of what the plan sources for itself and so pays no gold for — anything it already holds, and (in `--plan-mode inventory`) every consumable grounded in your passive economy, so Large Nets accumulated from straw/wood/stone/antlers, Arnold Palmers down to Orchard Lemons, and cookie sets baked from held cookies all land here. What remains, the *to-buy* subtotal, is the gold you would still have to spend — on top of what you already have — to acquire the rest by trading. In the inventory mode everything is self-sourced, so to-buy is ~0; in the unlimited mode a plan spends consumables it may not have, so to-buy is what it wants beyond your stock.
+Each plan's gold is shown as **`buy + self-sourced = total`**. The *total* is the market value of every consumable the plan spends; **buy** is the gold the solver actually spends buying them (exactly `plan.gold` — what `--max-gold` caps and `--cheapest-plan` ranks by), and **self-sourced** is the market value of everything it made or gathered instead. The two are exact — the LP decides which consumables to buy — and always sum to the total.
 
-With prices set, an expanded **`--plan-mode inventory`** plan also closes with a **Surplus** section. Passive production runs until the slowest resource finishes, so everything faster overshoots — a plan waiting weeks on Oak keeps banking straw, stone and wood far past what its goal needs. Assuming you craft those leftovers into the sellable priced goods (Arnold Palmers, Large Nets, Apple Cider, Orange Juice — Grape Juice is not sellable, and cookie sets are baked from held cookies), the solver finds the most gold they are worth, sending shared materials (straw/wood/stone/antlers all feed Large Nets, say) to whichever good pays best, and lists each good with its gold and the nominal total:
+An expanded priced plan also lists a **Buy (with gold)** section (what it purchases and each cost) and closes with a **Surplus** section. Passive production runs until the slowest resource finishes, so everything faster overshoots — a plan waiting weeks on Oak keeps banking straw, stone and wood far past what its goal needs. Assuming you craft those leftovers into the sellable priced goods (Arnold Palmers, Large Nets, Apple Cider, Orange Juice — Grape Juice is not sellable, and cookie sets are baked from held cookies), the solver finds the most gold they are worth, sending shared materials (straw/wood/stone/antlers all feed Large Nets, say) to whichever good pays best, and lists each good with its gold and the nominal total:
 
 ```text
 Surplus (accumulates past the goal), craftable into sellable goods:
@@ -315,7 +315,7 @@ Surplus (accumulates past the goal), craftable into sellable goods:
   nominal value = 5,201 g
 ```
 
-It appears only in the inventory mode, where consumables are *grounded* — sourced from your own passive economy — so the leftovers are genuine spare capacity. In the unlimited mode consumables are bought instead, so a plan pays for Large Nets while overproducing the very materials to make them; listing that surplus would contradict the to-buy gold, so it is left out.
+It is rigorous for every plan: consumables are always grounded, so a plan self-sources exactly what it needs (net of what it buys) and the leftovers are genuine spare capacity — naturally zero when the binding materials are all used up.
 
 ### Fishing and exploring
 
@@ -331,7 +331,7 @@ use_sea_pincher = true           # then ×1.1
 have_lemon_squeezer = true       # base yield 500 instead of 200
 use_quandary_chowder = true      # then ×1.1 (550 with the squeezer)
 
-# Apple Cider perks/meals (used only in --plan-mode inventory)
+# Apple Cider perks/meals
 have_cinnamon_sticks = true      # 12.5 explores per Effectiveness point, not 10
 wanderer_level = 4               # cider stamina −4/11/20/33% at level 1/2/3/4
 have_neigh_neigh = true          # then ×0.8 stamina (perk)
