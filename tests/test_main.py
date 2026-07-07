@@ -866,6 +866,39 @@ def test_print_frontier_omits_gold_column_without_prices(capsys):
     assert " g" not in out
 
 
+def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
+    # Passive banks 1,000 Straw that nothing needs; each Large Net (priced) crafts
+    # from 2 Straw, so the surplus is worth 500 nets. The grounded fishing draw (it
+    # consumes a net, as in the inventory mode) makes the section coherent.
+    workshop = Workshop({"large net": WorkshopRecipe("Large Net", {"Straw": 2})})
+    passive_offer = Offer(
+        "passive", "passive", {"straw": 10}, time_per_unit=timedelta(minutes=1)
+    )
+    grounded = Offer("fish Z", "fishing", {"cod": 1}, consumes={"large net": 1}, ln=1)
+    plan = SourcingPlan(draws=[Draw(passive_offer, 100), Draw(grounded, 1)])
+    print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
+    out = capsys.readouterr().out
+    assert "Surplus (accumulates past the goal)" in out
+    assert "500x Large Net = 5 g" in out
+    assert "nominal value = 5 g" in out
+
+    print_plan(plan, {}, Farm(), workshop, 1.0)  # no prices -> no surplus section
+    assert "Surplus" not in capsys.readouterr().out
+
+
+def test_print_plan_omits_surplus_when_consumables_are_not_grounded(capsys):
+    # Unlimited mode: no draw grounds a consumable (nothing is crafted from the
+    # passive economy), so valuing surplus as sellable goods would contradict the
+    # bought consumables -- the section is suppressed even with prices.
+    workshop = Workshop({"large net": WorkshopRecipe("Large Net", {"Straw": 2})})
+    passive_offer = Offer(
+        "passive", "passive", {"straw": 10}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive_offer, 100)])
+    print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
+    assert "Surplus" not in capsys.readouterr().out
+
+
 def test_print_frontier_splits_gold_into_to_buy_and_passive(capsys):
     # With per-plan (to_buy, passive) gold the row shows both subtotals and their
     # total, and the header flags the split.

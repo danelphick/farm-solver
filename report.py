@@ -589,6 +589,41 @@ def build_display(
     return display
 
 
+def _print_surplus_value(
+    plan: optimizer.SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    open_flows: list[sources.OpenFlow],
+    inventory: dict[str, float],
+    prices: dict[str, float],
+    display: dict[str, str],
+) -> None:
+    """The gold a plan's leftovers are worth if crafted into sellable goods.
+
+    Passive production overshoots every resource but the slowest, so a plan banks
+    materials far past what its goal needs (see :func:`optimizer.plan_leftovers`).
+    Assuming they are crafted into the sellable priced goods -- Arnold Palmers,
+    Large Nets, Apple Cider, Orange Juice -- :func:`optimizer.surplus_sale_value`
+    finds the most gold they are worth; this lists each good and the nominal total.
+    """
+    leftovers = optimizer.plan_leftovers(
+        plan, demand, recipes, crafting_bonus, open_flows, inventory
+    )
+    rows = optimizer.surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
+    if not rows:
+        return
+    total = sum(gold for _, _, gold in rows)
+    print("\nSurplus (accumulates past the goal), craftable into sellable goods:")
+    width = _num_width(round(count) for _, count, _ in rows)
+    for item, count, gold in rows:
+        print(
+            f"  {round(count):>{width},}x {display.get(item, item)}"
+            f" = {round(gold):,} g"
+        )
+    print(f"  nominal value = {round(total):,} g")
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
@@ -601,6 +636,7 @@ def print_plan(
     inventory: dict[str, float] | None = None,
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
+    prices: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials."""
     open_flows = open_flows or []
@@ -853,6 +889,20 @@ def print_plan(
                     f"  {quantity:>{width},}x {name}"
                     f" in {passive.format_duration(wait)}{source}"
                 )
+
+    # The surplus is only coherent when the plan *grounds* its consumables --
+    # sources every net/palmer/cider from the passive economy (the inventory plan
+    # mode, where a grounded draw carries a `consumes`). Then leftovers are genuine
+    # spare capacity and valuing them as more of those goods adds up. In the
+    # unlimited mode consumables are bought instead, so the plan would be paying for
+    # nets while overproducing the materials to make them -- listing that surplus
+    # would contradict the to-buy gold, so it is suppressed.
+    grounded = any(draw.offer.consumes for draw in plan.draws)
+    if prices is not None and grounded:
+        _print_surplus_value(
+            plan, demand, recipes, crafting_bonus, open_flows, inventory, prices,
+            display,
+        )
 
     if plan.remainder:
         print("\nMaterials with no known source (supply yourself):")

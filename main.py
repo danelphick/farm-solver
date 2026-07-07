@@ -552,7 +552,7 @@ def run(args: argparse.Namespace) -> int:
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon
         )
-        offers = optimizer.all_offers(production, fish, explore, farm, args.plan_mode)
+        offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
@@ -603,10 +603,7 @@ def run(args: argparse.Namespace) -> int:
     # allowance as a holding (there is no "cookie set" inventory line).
     golds = None
     if prices is not None:
-        holdings = {**inventory, "cookie set": cookie_sets}
-        golds = [
-            optimizer.plan_gold_breakdown(p, prices, holdings) for p in shown
-        ]
+        golds = [optimizer.plan_gold_breakdown(p, prices) for p in shown]
     report.print_frontier(shown, selected, cheapest, reasons, prices, golds)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
@@ -623,7 +620,7 @@ def run(args: argparse.Namespace) -> int:
     report.print_plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
         open_flows, smith.names, inventory, sourceable_elsewhere,
-        max_passive_residuals,
+        max_passive_residuals, prices,
     )
 
     if args.breakdown:

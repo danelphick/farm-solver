@@ -58,7 +58,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 |---|---|---|
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -195,6 +195,17 @@ buildings.
   (`_cookie_sets_used`), not per-crop rounding.
 - Passive lines name producers via `_passive_sources`; seasonal window flagged by
   `_season_note`. Only items the plan actually needs are shown.
+- **Surplus section** (`_print_surplus_value`, with trading `prices` **and** a
+  grounded plan — `any(draw.offer.consumes)`, i.e. the inventory mode): passive
+  overshoots every resource but the slowest, so a plan banks materials past its
+  goal. `optimizer.plan_leftovers` gives each item's leftover (supply past all
+  consumption); `optimizer.surplus_sale_value` then runs one small **max-gold LP**
+  crafting those leftovers into the sellable priced goods (AP, Large Net, Apple
+  Cider, Orange Juice — Grape Juice and cookie sets excluded, no sale recipe),
+  allocating shared materials to the richest good. Lists each good with its gold
+  and the nominal total. Gated on grounding because only when consumables are
+  self-sourced (not bought, as in unlimited mode) is valuing leftovers as more of
+  those goods coherent — otherwise it contradicts the to-buy gold.
 
 ## Invariants & gotchas
 

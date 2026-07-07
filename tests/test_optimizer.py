@@ -15,6 +15,8 @@ from optimizer import (
     passive_residuals,
     plan_gold,
     plan_gold_breakdown,
+    plan_leftovers,
+    surplus_sale_value,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
@@ -579,6 +581,33 @@ def test_plan_gold_breakdown_splits_grounded_and_held_from_bought():
     assert passive == pytest.approx(30 * 0.06 + 500 * 0.01)
     # The two subtotals always sum to the plan's total gold.
     assert to_buy + passive == pytest.approx(plan_gold(plan, GOLD))
+
+
+def test_plan_leftovers_are_supply_past_consumption():
+    # Passive banks 1,000 straw; a craft consumes 600 of it into 300 twine, leaving
+    # 400 straw and the 300 twine sitting as surplus.
+    passive = Offer(
+        "passive", "passive", {"straw": 10.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 100)], crafts={"twine": 300})
+    leftovers = plan_leftovers(plan, {}, {"twine": {"straw": 2}}, 1.0, [], {})
+    assert leftovers == pytest.approx({"straw": 400.0, "twine": 300.0})
+
+
+def test_surplus_sale_value_crafts_leftovers_into_the_richest_good():
+    # One straw makes either a Large Net or an Apple Cider; cider is worth more per
+    # unit, so all 100 surplus straw becomes 100 cider (not nets), valued in gold.
+    recipes = {"large net": {"straw": 1}, "apple cider": {"straw": 1}}
+    rows = surplus_sale_value({"straw": 100.0}, recipes, 1.0, GOLD)
+    assert rows == [("apple cider", pytest.approx(100.0), pytest.approx(2.0))]
+
+
+def test_surplus_sale_value_excludes_unsellable_grape_juice():
+    # Grape Juice has a recipe and (here) a price, but is not sellable, so surplus
+    # grapes whose only outlet is Grape Juice yield no gold.
+    prices = {**GOLD, "grape juice": 5.0}
+    recipes = {"grape juice": {"grapes": 2}}
+    assert surplus_sale_value({"grapes": 500.0}, recipes, 1.0, prices) == []
 
 
 def test_frontier_prices_pick_the_cheaper_gold_channel():

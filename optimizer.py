@@ -59,9 +59,7 @@ from exploring import Exploring
 from fishing import Fishing
 from passive import PassiveProduction
 from sources import (
-    INVENTORY,
     PASSIVE_TRACK,
-    UNLIMITED,
     Draw,
     Offer,
     OpenFlow,
@@ -76,6 +74,12 @@ from sources import (
 
 # Usage below this many units is treated as zero (CBC leaves tiny residuals).
 UNIT_EPSILON = 1e-6
+
+# Consumables that can be bought for gold instead of self-sourced (the items with
+# a player-to-player gold price). Cookie sets are buyable too, but handled apart
+# (they are a farming cap, not a balance item). Grape Juice is deliberately absent:
+# it is not traded, only pressed from grapes, so it is always self-sourced.
+BUYABLE = frozenset({"arnold palmer", "large net", "apple cider", "orange juice"})
 
 # Price-of-time anchors for the two frontier endpoints, in minutes saved per
 # consumable. A tiny price barely penalises consumables (the fastest plan, using
@@ -102,27 +106,24 @@ def all_offers(
     fishing: Fishing,
     exploring: Exploring,
     farm: Farm,
-    mode: str = UNLIMITED,
 ) -> list[Offer]:
     """Every production offer across the channels, ready for the optimiser.
 
-    In the ``INVENTORY`` mode the exploring/fishing/farming offers are *grounded*
-    -- they consume real Arnold Palmers / Large Nets / Grape Juice the plan must
-    craft or hold -- and the Apple Cider exploring channel (fed by stamina from
-    drinking Orange Juice) is added. In ``UNLIMITED`` mode those consumables stay
-    abstract, unbounded costs (the original behaviour).
+    Consumables are always **grounded**: the exploring/fishing/farming offers
+    consume real Arnold Palmers / Large Nets / Grape Juice the plan must craft,
+    hold, or *buy* (see :func:`minimize`), and the Apple Cider exploring channel
+    (fed by stamina from drinking Orange Juice) is always available. Whether a
+    consumable is self-sourced (costs time) or bought (costs gold) is the LP's
+    call, set by the gold budget the frontier sweeps.
     """
-    ground = mode == INVENTORY
-    offers = [
+    return [
         *passive_offers(production),
-        *fishing_offers(fishing, ground=ground),
-        *exploring_offers(exploring, ground=ground),
-        *farming_offers(farm, ground=ground),
+        *fishing_offers(fishing, ground=True),
+        *exploring_offers(exploring, ground=True),
+        *farming_offers(farm, ground=True),
+        *cider_offers(exploring),
+        *drink_offers(),
     ]
-    if ground:
-        offers += cider_offers(exploring)
-        offers += drink_offers()
-    return offers
 
 
 @dataclass
@@ -148,6 +149,11 @@ class SourcingPlan:
     grape_juices: float = 0.0
     apple_ciders: float = 0.0
     orange_juice: float = 0.0
+    # Consumables bought for gold (lower-cased name -> units) and the gold spent on
+    # them. The rest of each consumable's spend is self-sourced (costs time, not
+    # gold); ``gold`` is the plan's real cost, what the frontier trades against time.
+    bought: dict[str, float] = field(default_factory=dict)
+    gold: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     def track_times(self) -> dict[str, timedelta]:
@@ -177,23 +183,16 @@ class SourcingPlan:
         )
 
     @property
-    def cost(self) -> tuple[float, float, float, float, float, float]:
-        """The objective ``(time, AP, LN, cookie sets, GJ, cider)`` for comparisons.
+    def cost(self) -> tuple[float, float]:
+        """The objective ``(time, gold)`` for comparisons.
 
-        Cookie sets, Grape Juices and Apple Ciders are scarce resources traded
-        against time like the consumables, so they belong in the Pareto cost --
-        otherwise a slower plan that conserves them would look dominated by a
-        faster one that spends them, and get pruned from the frontier. Apple
-        Ciders are only spent in the inventory plan mode (zero otherwise).
+        The whole tradeoff is time against gold: self-sourcing a consumable costs
+        makespan, buying it costs gold, and everything else (which consumables, how
+        many) is just how a plan lands on that curve. So the Pareto cost is the
+        pair -- two plans with the same time and gold are equivalent however they
+        mix making and buying.
         """
-        return (
-            self.time.total_seconds(),
-            self.arnold_palmers,
-            self.large_nets,
-            self.cookie_sets,
-            self.grape_juices,
-            self.apple_ciders,
-        )
+        return (self.time.total_seconds(), self.gold)
 
 
 def _minutes(time: timedelta) -> float:
@@ -276,62 +275,52 @@ def minimize(
     demand: dict[str, float],
     recipes: dict[str, dict[str, float]] | None = None,
     crafting_bonus: float = 1.0,
-    price_ap: float = 0.0,
-    price_ln: float = 0.0,
-    price_cookie: float = 0.0,
-    price_gj: float = 0.0,
-    price_cider: float = 0.0,
-    price_oj: float = 0.0,
+    prices: dict[str, float] | None = None,
+    gold_weight: float = 0.0,
     time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
 ) -> SourcingPlan:
-    """Solve one LP: cover ``demand`` at least cost for the given prices.
+    """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
     ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
     (auto-supplied materials already stripped); one craft consumes those and
     yields ``crafting_bonus`` of the item. ``openables`` are Locksmith flows:
     opening one consumes its token (and key) and yields its average bundle, at no
-    time or consumable cost -- a free multi-output flow the LP drives like crafts.
-    Net production (gathered + crafted + opened - consumed) must cover ``demand``
-    for every obtainable item, and each track's time sums to at most the makespan
-    ``T``. A demanded item that is neither gatherable, craftable nor openable
-    lands in the ``remainder``.
+    time cost -- a free multi-output flow the LP drives like crafts. Net production
+    (gathered + crafted + opened + **bought** - consumed) must cover ``demand`` for
+    every obtainable item, and each track's time sums to at most the makespan
+    ``T``. A demanded item that is neither gatherable, craftable nor openable lands
+    in the ``remainder``.
 
     ``inventory`` (lower-cased item -> quantity held) is free supply the plan need
     not produce: it is credited to every item's balance *except* those directly
     demanded, since the demand is already net of what is held (mastery progress or
-    the acquired count). So an intermediate material already in stock -- Red
-    Shields to craft Frost Shields, say -- is drawn from inventory rather than
-    gathered or opened for anew. The credit is a constant, so surplus stock simply
-    leaves the balance slack; it never makes an otherwise-unproducible item
-    obtainable (that could render the LP infeasible once stock ran out).
+    the acquired count). The credit is a constant, so surplus stock simply leaves
+    the balance slack; it never makes an otherwise-unproducible item obtainable.
 
-    ``cookie_sets`` caps how many cookie-boosted farming days the plan may use
-    (see :func:`~sources.farming_offers`): the total of every cookie offer's usage
-    is held at or below it. Cookie sets and Grape Juices are scarce resources that
-    only shorten the farming track, so -- like Arnold Palmers and Large Nets --
-    they are priced (``price_cookie``, ``price_gj``) rather than spent freely: a
-    tiny price uses them wherever they cut the makespan (never gratuitously, since
-    a use that saves no time is a net cost), a large price avoids them for a
-    slower, thriftier plan. The frontier sweeps these prices to offer plans that
-    spend more or fewer of them (see :func:`frontier`).
+    **Buying.** Each buyable consumable (see :data:`BUYABLE`; cookie sets too, via
+    ``cookie_sets`` + a purchase) gets a ``buy`` variable that adds free, instant
+    supply at its ``prices`` gold cost -- the alternative to self-sourcing it, which
+    costs makespan. Buying cannot earn an item's own **mastery**, so where an item
+    is itself demanded (a tower/`-m`/`-i` goal) a ``buy <= derived`` floor keeps
+    purchases to its non-goal uses (as a craft material or a channel's tool), and
+    the goal must be crafted or gathered. ``gold`` is ``sum(buy * price)``.
 
     Two modes trace the frontier from different sides. By default the LP minimises
-    ``T + sum(price_i * consumable_i)`` (a weighted sum). With ``time_cap`` set it
-    instead minimises just the price-weighted consumables ``sum(price_i *
-    consumable_i)`` subject to ``T <= time_cap`` -- an epsilon-constraint solve,
-    which unlike the weighted sum can land on the *interior* of a flat frontier
-    segment (see :func:`frontier`), so it surfaces the moderate-consumable plans a
-    price sweep would skip. The ``price_*`` are the objective weights in both
-    modes: the frontier passes per-unit **gold** for them (so the interior trades
-    time against real gold, :func:`frontier`), or a uniform 1 for the plain
-    consumable count. ``T`` drops out of the objective when ``time_cap`` is given.
+    ``T + gold_weight * gold`` (a weighted sum): a tiny ``gold_weight`` buys freely
+    for the fastest plan, a huge one buys nothing for the slowest self-sourced one.
+    With ``time_cap`` set it instead minimises ``gold`` subject to ``T <= time_cap``
+    -- an epsilon-constraint solve, which unlike the weighted sum can land on the
+    *interior* of a flat frontier segment (see :func:`frontier`). ``prices`` are the
+    per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
+    the plan is fully self-sourced.
     """
     recipes = recipes or {}
     openables = openables or []
     inventory = inventory or {}
+    prices = prices or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
     obtainable = _obtainable(offers, recipes, openables)
@@ -397,44 +386,43 @@ def minimize(
     cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
     grape_juices = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
     # Apple Ciders spent -- the count each cider explore burns (its
-    # ``consumes["apple cider"]``); zero outside the inventory plan mode.
+    # ``consumes["apple cider"]``).
     ciders = pulp.lpSum(
         o.consumes["apple cider"] * x
         for o, x in zip(used, usage)
         if o.consumes.get("apple cider", 0.0) > 0
     )
     # Orange Juice drunk for stamina (the drinking track) -- a tradable input the
-    # cider channel spends; zero outside the inventory plan mode.
+    # cider channel spends.
     orange_juice = pulp.lpSum(
         o.consumes["orange juice"] * x
         for o, x in zip(used, usage)
         if o.consumes.get("orange juice", 0.0) > 0
     )
-    # Only so many full cookie sets are on hand to spend boosting farming days.
-    problem += cookies <= cookie_sets
+
+    # Buy variables: a buyable consumable can be bought (free, instant supply) for
+    # gold instead of self-sourced (which costs makespan). Only reachable, priced
+    # ones get a variable; cookie sets are bought by lifting their cap below.
+    buy = {
+        item: pulp.LpVariable(f"b{i}", lowBound=0)
+        for i, item in enumerate(sorted(items & BUYABLE))
+        if prices.get(item, 0.0) > 0
+    }
+    price_cookie = prices.get("cookie set", 0.0)
+    buy_cookie = pulp.LpVariable("bcookie", lowBound=0) if price_cookie > 0 else None
+    # Held cookie sets are free; beyond them a purchase lifts the cap at gold cost.
+    problem += cookies <= cookie_sets + (buy_cookie if buy_cookie is not None else 0)
+    gold = pulp.lpSum(prices[item] * var for item, var in buy.items())
+    if buy_cookie is not None:
+        gold = gold + price_cookie * buy_cookie
+
     if time_cap is not None:
         problem += makespan <= _minutes(time_cap)
-        # Minimise the price-weighted consumables under the time cap. The frontier
-        # passes gold prices here (so the interior trades time against real gold);
-        # with uniform weight-1 prices it reduces to the plain consumable count.
-        problem += (
-            price_ap * arnold_palmers
-            + price_ln * large_nets
-            + price_cookie * cookies
-            + price_gj * grape_juices
-            + price_cider * ciders
-            + price_oj * orange_juice
-        )
+        problem += gold  # least gold under the time cap (epsilon-constraint)
     else:
-        problem += (
-            makespan
-            + price_ap * arnold_palmers
-            + price_ln * large_nets
-            + price_cookie * cookies
-            + price_gj * grape_juices
-            + price_cider * ciders
-            + price_oj * orange_juice
-        )
+        # A tiny gold_weight buys freely for the fastest plan; a huge one buys
+        # nothing (gold 0) for the slowest, fully self-sourced plan.
+        problem += makespan + gold_weight * gold
 
     # Net production of each item covers its demand:
     # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
@@ -451,7 +439,7 @@ def minimize(
         )
         # What offers use up as inputs (Arnold Palmers an explore burns, the
         # stamina and Apple Cider a cider explore spends) -- these must be
-        # sourced like any other need (empty in unlimited mode).
+        # sourced like any other need.
         used_up = pulp.lpSum(
             o.consumes[item] * x
             for o, x in zip(used, usage)
@@ -473,9 +461,17 @@ def minimize(
         # item's balance is already net of what is held, so it gets no credit.
         held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
+        bought = buy.get(item, 0)
         problem += (
-            gathered + made - consumed - used_up + unpacked - emptied + held >= need
+            gathered + made - consumed - used_up + unpacked - emptied + held + bought
+            >= need
         )
+        # Buying can never earn an item's own mastery: a bought unit only covers a
+        # non-goal use (a craft material, or a channel's tool), so cap purchases at
+        # that derived demand. The goal ``need`` must then come from making or
+        # gathering. Slack for non-goal items (they can be bought up to their use).
+        if item in buy:
+            problem += buy[item] <= consumed + used_up + emptied
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
@@ -491,77 +487,34 @@ def minimize(
     # lexicographic tower, each stage minimising one objective then locking it at
     # its optimum so the next cannot spoil it:
     #
-    #   1. cost           -- the first solve above (weighted sum, or epsilon cap)
-    #   2. priced spend   -- least gold-weighted consumables at that cost
-    #   3. unpriced spend -- least of the consumables the prices ignore (Grape
-    #                        Juice is gold-free, so stage 2 leaves it unbounded)
-    #   4. activity       -- least crafts + gathering, shedding pointless surplus
+    #   1. cost      -- the first solve above (weighted sum, or epsilon cap)
+    #   2. gold      -- least gold at that makespan, the single priced axis
+    #   3. activity  -- least crafts + gathering + buying, shedding pointless slack
     #
     # Stage 2 is the crux. In a weighted-sum endpoint the makespan term (~1e5
-    # minutes) dwarfs the price-weighted consumables (~1e-6 each for the fastest
-    # plan), so within CBC's tolerance they are free and the first solve parks
-    # them on an arbitrary degenerate vertex -- the fastest plan spent Large Nets
-    # and Grape Juice that bought no time, and its Grape-Juice count flapped
-    # 144<->151 run to run. Every consumable is a Pareto cost, so a plan spending
-    # more of one for no time gain is strictly worse: with the makespan pinned we
-    # re-minimise them alone (the objective is now just the consumables, at a scale
-    # CBC resolves -- see the normalisation), pinning the genuinely thriftiest
-    # plan, for any config, not an arbitrary-but-fixed vertex. Stage 3 then reins
-    # in the consumables stage 2's weights price at zero (Grape Juice), which it
-    # would otherwise leave free to drift; stage 4 sheds surplus crafts / off-track
-    # farming. Stages 3-4 move no priced metric.
-    if used or craft or opens:
+    # minutes) dwarfs the tiny-weighted gold (~1e-6 for the fastest plan), so within
+    # CBC's tolerance it is free and the first solve parks the buys on an arbitrary
+    # degenerate vertex -- buying Large Nets or Grape Juice that bought no time. Gold
+    # is the Pareto cost, so a plan paying more for no time gain is strictly worse:
+    # with the makespan pinned we re-minimise gold alone (now the sole objective, at
+    # a scale CBC resolves), pinning the genuinely cheapest plan. Stage 3 then sheds
+    # surplus crafts / off-track farming without moving time or gold.
+    if used or craft or opens or buy or buy_cookie is not None:
         t_star = makespan.value() or 0.0
         problem += makespan <= t_star * (1 + 1e-9) + 1e-9
 
-        # Each consumable, its price, and whether any used offer actually spends
-        # it. Only a spent consumable gives an objective a variable term -- an
-        # unspent one is a constant 0, which CBC rejects as an empty objective, and
-        # is nothing to minimise anyway.
-        consumables = [
-            (price_ap, arnold_palmers, any(o.ap for o in used)),
-            (price_ln, large_nets, any(o.ln for o in used)),
-            (price_cookie, cookies, any(o.cookies for o in used)),
-            (price_gj, grape_juices, any(o.gj for o in used)),
-            (price_cider, ciders, any(o.consumes.get("apple cider") for o in used)),
-            (price_oj, orange_juice,
-             any(o.consumes.get("orange juice") for o in used)),
-        ]
-
-        def minimise_then_lock(terms: list[tuple[float, object]]) -> None:
-            """Minimise ``sum(weight * expr)`` then pin each ``expr`` at its optimum."""
-            if not terms:
-                return
-            problem.setObjective(pulp.lpSum(w * expr for w, expr in terms))
+        # Stage 2 -- least gold at the pinned makespan, then lock it. Skipped when
+        # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
+        if buy or buy_cookie is not None:
+            problem.setObjective(gold)
             problem.solve(pulp.PULP_CBC_CMD(msg=0))
-            for _, expr in terms:
-                problem.addConstraint(
-                    expr <= (pulp.value(expr) or 0.0) * (1 + 1e-9) + 1e-9
-                )
+            problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
 
-        # Stage 2 -- priced consumables, weights normalised to O(1) so they sit on
-        # the makespan constraint's scale. At the raw endpoint magnitudes (~1e-6
-        # fast, ~1e9 cheap) the coefficients fall below CBC's tolerance against
-        # that ~1e5 constraint, so it cannot minimise them (it returned a *worse*
-        # total than the first solve's own vertex); dividing by the largest price
-        # keeps every relative weight -- gold ratios interior, uniform at an
-        # endpoint -- at a resolvable scale. With nothing priced (a direct
-        # weighted-sum call), both stages 2 and 3 are empty and the first solve's
-        # consumable levels stand.
-        scale = max((p for p, _, spent in consumables if spent and p > 0), default=0.0)
-        if scale > 0:
-            minimise_then_lock(
-                [(p / scale, expr) for p, expr, spent in consumables if spent and p > 0]
-            )
-            # Stage 3 -- the gold-free spent consumables (Grape Juice), which stage
-            # 2 does not price and so leaves free to sit high.
-            minimise_then_lock(
-                [(1.0, expr) for p, expr, spent in consumables if spent and p == 0]
-            )
-
-        # Stage 4 -- least activity, so no reported metric moves.
+        # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
             pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
+            + pulp.lpSum(buy.values())
+            + (buy_cookie if buy_cookie is not None else 0)
         )
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
 
@@ -580,6 +533,13 @@ def minimize(
         for flow, o in zip(opened, opens)
         if (count := o.value() or 0.0) > UNIT_EPSILON
     }
+    bought = {
+        item: units
+        for item, var in buy.items()
+        if (units := var.value() or 0.0) > UNIT_EPSILON
+    }
+    if buy_cookie is not None and (bc := buy_cookie.value() or 0.0) > UNIT_EPSILON:
+        bought["cookie set"] = bc
     time, ap, ln = aggregate(draws)
     return SourcingPlan(
         draws=sorted(draws, key=lambda d: d.offer.name),
@@ -596,6 +556,8 @@ def minimize(
         orange_juice=sum(
             d.offer.consumes.get("orange juice", 0.0) * d.units for d in draws
         ),
+        bought=bought,
+        gold=pulp.value(gold) or 0.0,
         remainder=remainder,
     )
 
@@ -633,36 +595,124 @@ def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
 def plan_gold_breakdown(
     plan: SourcingPlan,
     prices: dict[str, float],
-    holdings: dict[str, float],
 ) -> tuple[float, float]:
-    """Split :func:`plan_gold` into ``(to_buy, passive)`` gold.
+    """Split a plan's consumable value into ``(to_buy, passive)`` gold.
 
-    A consumable a plan sources for itself costs no gold: its market value is the
-    *passive* subtotal. Only what a plan must still acquire by trading is the
-    *to-buy* subtotal -- the gold to spend on top of what you have. The split turns
-    on whether a consumable is **grounded** in this plan (some draw ``consumes`` it,
-    the inventory plan mode where a net/palmer/juice is a real item sourced from
-    your inventory and passive economy). A grounded consumable is fully self-sourced
-    by construction, so all of its value is passive; an abstract one (the unlimited
-    mode, where the consumable is unbounded spend) is passive only up to what you
-    already hold (``holdings``), the rest to-buy. Cookie sets are never grounded but
-    come from held cookies, so their allowance is passed in ``holdings`` too. The
-    two subtotals always sum to :func:`plan_gold`.
+    The LP decides exactly which consumables to buy, so the split is exact:
+    *to-buy* is ``plan.gold`` -- the gold actually spent buying -- and *passive* is
+    the market value of everything it self-sourced instead (made, gathered, or held
+    at no gold), i.e. :func:`plan_gold` less what was bought. The two sum to
+    :func:`plan_gold`, the total market value of every consumable the plan spends.
     """
-    grounded = {item for draw in plan.draws for item in draw.offer.consumes}
-    to_buy = passive = 0.0
-    for item, spent in _consumable_spend(plan).items():
-        price = prices.get(item, 0.0)
-        if spent <= 0 or price <= 0:
+    to_buy = plan.gold
+    return to_buy, plan_gold(plan, prices) - to_buy
+
+
+def plan_leftovers(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> dict[str, float]:
+    """Each item's leftover -- what a plan produces past everything it consumes.
+
+    Passive production runs to the makespan set by the slowest item, so faster
+    resources overshoot: a plan waiting on Oak keeps banking Straw, Stone and Wood
+    long past what its crafts need. The leftover of an item is its whole supply
+    (the passive draw, the other channels, crafting, opening and held stock) less
+    everything that consumes it (demand, craft materials, chest tokens/keys, and
+    the Arnold Palmers / Large Nets / stamina the draws burn): ``passive.produced
+    + elsewhere - need - draw-consumes`` in the terms of :func:`plan_balance`
+    (whose ``elsewhere`` excludes the passive draw and whose ``need`` excludes
+    offer inputs, both added back here). Only strictly-positive leftovers are
+    returned. Feed them to :func:`surplus_sale_value` to see what they are worth.
+    """
+    balance = plan_balance(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    passive = plan.passive_draw
+    produced = passive.produced if passive is not None else {}
+    consumed: dict[str, float] = {}
+    for draw in plan.draws:
+        for item, quantity in draw.offer.consumes.items():
+            consumed[item] = consumed.get(item, 0.0) + quantity * draw.units
+    leftovers: dict[str, float] = {}
+    keys = set(balance.need) | set(balance.elsewhere) | set(produced)
+    for key in keys:
+        supply = balance.elsewhere.get(key, 0.0) + produced.get(key, 0.0)
+        used = balance.need.get(key, 0.0) + consumed.get(key, 0.0)
+        if (left := supply - used) > UNIT_EPSILON:
+            leftovers[key] = left
+    return leftovers
+
+
+def surplus_sale_value(
+    leftovers: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    prices: dict[str, float],
+) -> list[tuple[str, float, float]]:
+    """The most gold a plan's leftovers are worth, as sellable goods to craft.
+
+    Assumes the player turns the leftover materials (see :func:`plan_leftovers`)
+    into the **sellable** priced consumables -- Arnold Palmers, Large Nets, Apple
+    Cider, Orange Juice: the priced items that have a recipe, so Grape Juice (not
+    sold, only a production-cost proxy) and cookie sets (baked from held cookies,
+    no recipe) are excluded. It is an allocation: shared materials
+    (straw/wood/stone/antlers all feed Large Nets, apples feed cider, ...) go to
+    whichever good yields the most gold, so this is one small LP maximising
+    ``sum(price * sold)`` over crafts bounded by the leftovers. Returns
+    ``(item, count, gold)`` per sellable good with a whole unit or more, gold
+    highest first; the total nominal value is their gold summed.
+    """
+    sellable = {
+        item
+        for item, price in prices.items()
+        if price > 0 and item in recipes and item != "grape juice"
+    }
+    if not sellable:
+        return []
+    # Only the goods and the materials beneath them matter; walk the recipes down.
+    items: set[str] = set()
+    stack = list(sellable)
+    while stack:
+        item = stack.pop()
+        if item in items:
             continue
-        if item in grounded:
-            passive += spent * price  # sourced entirely from inventory + passive
-            continue
-        held = holdings.get(item, 0.0)
-        bought = max(0.0, spent - held)
-        to_buy += bought * price
-        passive += (spent - bought) * price
-    return to_buy, passive
+        items.add(item)
+        stack.extend(recipes.get(item, {}))
+    craftable = sorted(item for item in items if item in recipes)
+    consumers: dict[str, list[tuple[str, float]]] = {}
+    for item in craftable:
+        for material, quantity in recipes[item].items():
+            consumers.setdefault(material, []).append((item, quantity))
+
+    problem = pulp.LpProblem("surplus_sale", pulp.LpMaximize)
+    craft = {item: pulp.LpVariable(f"s{i}", lowBound=0) for i, item in enumerate(craftable)}
+    # Net leftover of each item: what is on hand plus crafted, less crafted-away.
+    net = {
+        item: (
+            leftovers.get(item, 0.0)
+            + (crafting_bonus * craft[item] if item in craft else 0)
+            - pulp.lpSum(quantity * craft[j] for j, quantity in consumers.get(item, []))
+        )
+        for item in items
+    }
+    for expr in net.values():
+        problem += expr >= 0  # cannot consume more of a material than is available
+    problem += pulp.lpSum(prices[item] * net[item] for item in sellable)
+    problem.solve(pulp.PULP_CBC_CMD(msg=0))
+    if pulp.LpStatus[problem.status] != "Optimal":
+        return []
+    rows = [
+        (item, sold, sold * prices[item])
+        for item in sellable
+        if (sold := pulp.value(net[item]) or 0.0) >= 1
+    ]
+    rows.sort(key=lambda row: row[2], reverse=True)
+    return rows
 
 
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:
@@ -675,9 +725,7 @@ def _non_dominated(plans: list[SourcingPlan]) -> list[SourcingPlan]:
     """The Pareto-efficient plans, de-duplicated, sorted fastest first."""
     unique: dict[tuple, SourcingPlan] = {}
     for plan in plans:
-        key = (round(plan.time.total_seconds()), round(plan.arnold_palmers),
-               round(plan.large_nets), round(plan.cookie_sets),
-               round(plan.grape_juices), round(plan.apple_ciders))
+        key = (round(plan.time.total_seconds()), round(plan.gold))
         unique.setdefault(key, plan)
     kept = [
         p for p in unique.values()
@@ -875,54 +923,33 @@ def frontier(
     passive_pet_items: set[str] = frozenset(),
     prices: dict[str, float] | None = None,
 ) -> list[SourcingPlan]:
-    """The Pareto frontier of sourcing plans, fastest first.
+    """The Pareto frontier of sourcing plans over ``(time, gold)``, fastest first.
 
-    Every scarce resource is traded against time: Arnold Palmers, Large Nets,
-    cookie sets and Grape Juices. First finds the two endpoints -- the fastest
-    plan (spend them freely) and the cheapest, slowest one (avoid them) -- then
-    fills the frontier between them by an **epsilon-constraint sweep**: cap the
-    makespan at each of many times spanning the two ends and minimise the
-    consumables under that cap. This
-    is what a plain price sweep cannot do -- where the frontier has a flat
-    (linear) segment, every weighted-sum price collapses onto an endpoint, hiding
-    the moderate-consumable plans in between (e.g. spending some Arnold Palmers to
-    explore a slow-farmed crop rather than all or none). The non-dominated results
-    are thinned to about ``count`` plans spread across the frontier. Returns a
-    single plan when consumables buy no speed (the two ends coincide).
+    The whole tradeoff is makespan against gold: self-sourcing a consumable costs
+    time, buying it costs gold. First finds the two endpoints -- the fastest plan
+    (buy freely) and the cheapest, slowest one (buy nothing, self-source
+    everything) -- then fills the frontier between them by an **epsilon-constraint
+    sweep**: cap the makespan at each of many times spanning the two ends and
+    minimise the gold under that cap. This is what a plain price sweep cannot do --
+    where the frontier has a flat (linear) segment, every weighted-sum gold price
+    collapses onto an endpoint, hiding the moderate-spend plans in between (buying
+    some Arnold Palmers to explore a slow-farmed crop rather than all or none). The
+    non-dominated results are thinned to about ``count`` plans. Returns a single
+    plan when gold buys no speed (the two ends coincide).
 
-    ``prices`` (per-unit gold, from :func:`config.trading_prices`) makes "cheap"
-    mean **least gold**: the cheap endpoint and every interior cap minimise the
-    gold-weighted consumables, so the frontier trades makespan against real gold
-    (Grape Juice is priced from its grape content, or 0 if no grape price is set --
-    then :func:`minimize`'s stage-3 refinement still reins it in). Without it the
-    weights are a uniform 1 -- the plain consumable count, the original
-    gold-agnostic behaviour.
+    ``prices`` (per-unit gold, from :func:`config.trading_prices`) is what makes a
+    consumable buyable; without it nothing can be bought and the frontier is the
+    single fully self-sourced plan.
     """
-    # Per-consumable weight for the cheap side: per-unit gold, or a uniform 1
-    # (plain count, Orange Juice ignored) when untraded.
-    if prices is None:
-        w = {"ap": 1.0, "ln": 1.0, "cookie": 1.0, "gj": 1.0, "cider": 1.0, "oj": 0.0}
-    else:
-        w = {
-            "ap": prices.get("arnold palmer", 0.0),
-            "ln": prices.get("large net", 0.0),
-            "cookie": prices.get("cookie set", 0.0),
-            "gj": prices.get("grape juice", 0.0),
-            "cider": prices.get("apple cider", 0.0),
-            "oj": prices.get("orange juice", 0.0),
-        }
     fast = minimize(
-        offers, demand, recipes, crafting_bonus, _FAST_PRICE, _FAST_PRICE,
-        price_cookie=_FAST_PRICE, price_gj=_FAST_PRICE, price_cider=_FAST_PRICE,
-        price_oj=_FAST_PRICE if w["oj"] else 0.0,
-        openables=openables, inventory=inventory, cookie_sets=cookie_sets,
+        offers, demand, recipes, crafting_bonus, prices=prices,
+        gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
+        cookie_sets=cookie_sets,
     )
     cheap = minimize(
-        offers, demand, recipes, crafting_bonus,
-        w["ap"] * _FREE_PRICE, w["ln"] * _FREE_PRICE,
-        price_cookie=w["cookie"] * _FREE_PRICE, price_gj=w["gj"] * _FREE_PRICE,
-        price_cider=w["cider"] * _FREE_PRICE, price_oj=w["oj"] * _FREE_PRICE,
-        openables=openables, inventory=inventory, cookie_sets=cookie_sets,
+        offers, demand, recipes, crafting_bonus, prices=prices,
+        gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
+        cookie_sets=cookie_sets,
     )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
@@ -945,9 +972,7 @@ def frontier(
     caps += breakpoints
     plans += [
         minimize(
-            offers, demand, recipes, crafting_bonus,
-            price_ap=w["ap"], price_ln=w["ln"], price_cookie=w["cookie"],
-            price_gj=w["gj"], price_cider=w["cider"], price_oj=w["oj"],
+            offers, demand, recipes, crafting_bonus, prices=prices,
             time_cap=timedelta(seconds=cap), openables=openables,
             inventory=inventory, cookie_sets=cookie_sets,
         )

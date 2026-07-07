@@ -307,6 +307,16 @@ The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit g
 
 Each plan's gold is shown as **`to-buy + passive = total`**. The *total* is the market value of every consumable the plan spends; the *passive* subtotal is the value of what the plan sources for itself and so pays no gold for — anything it already holds, and (in `--plan-mode inventory`) every consumable grounded in your passive economy, so Large Nets accumulated from straw/wood/stone/antlers, Arnold Palmers down to Orchard Lemons, and cookie sets baked from held cookies all land here. What remains, the *to-buy* subtotal, is the gold you would still have to spend — on top of what you already have — to acquire the rest by trading. In the inventory mode everything is self-sourced, so to-buy is ~0; in the unlimited mode a plan spends consumables it may not have, so to-buy is what it wants beyond your stock.
 
+With prices set, an expanded **`--plan-mode inventory`** plan also closes with a **Surplus** section. Passive production runs until the slowest resource finishes, so everything faster overshoots — a plan waiting weeks on Oak keeps banking straw, stone and wood far past what its goal needs. Assuming you craft those leftovers into the sellable priced goods (Arnold Palmers, Large Nets, Apple Cider, Orange Juice — Grape Juice is not sellable, and cookie sets are baked from held cookies), the solver finds the most gold they are worth, sending shared materials (straw/wood/stone/antlers all feed Large Nets, say) to whichever good pays best, and lists each good with its gold and the nominal total:
+
+```text
+Surplus (accumulates past the goal), craftable into sellable goods:
+  520,115x Large Net = 5,201 g
+  nominal value = 5,201 g
+```
+
+It appears only in the inventory mode, where consumables are *grounded* — sourced from your own passive economy — so the leftovers are genuine spare capacity. In the unlimited mode consumables are bought instead, so a plan pays for Large Nets while overproducing the very materials to make them; listing that surplus would contradict the to-buy gold, so it is left out.
+
 ### Fishing and exploring
 
 The consumable channels have their own perk flags; the zones and drop rates come from `fishing.csv` and `exploring.csv`:
