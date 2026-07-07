@@ -124,24 +124,25 @@ python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a 
 
 Every consumable is a real item you either **self-source** (costs time) or **buy** (costs gold). Exploring consumes real **Arnold Palmers** (Iced Tea + Lemonade, down to Orchard Lemons and explored Tea Leaves / Shimmer Stone), fishing consumes real **Large Nets** (down to passive stone/wood/straw/antlers), Grape-Juice grows consume real **Grape Juice** (from Vineyard Grapes). Given a **gold budget**, the solver decides make-vs-buy for each, and the frontier sweeps the budget from **`--max-gold inventory`** (0 — self-source everything, slowest) up to **`--max-gold unlimited`** (the default — no cap, buy whatever gets you to the fastest plan). Any number in between caps the gold a plan may spend. One catch: **buying an item never earns its own mastery**, so a Large Net or Orange Juice the tower wants *mastered* must be crafted or gathered — gold can only buy the nets/palmers a channel *burns as a tool*, not the deliverables.
 
-There is a second way to explore: **Apple Cider**. Each cider spends **stamina** to explore a zone many times at a fixed 0.40 drop rate. Stamina comes from three places: a starting balance (`--current-stamina N`), the **Farmhouse**'s daily passive deposit (see [Configuration](#configuration)), and drinking **Orange Juice** (100 each, from Orchard Oranges) to top up the rest. How many explores a cider does depends on the zone's Exploring Effectiveness and your cider perks/meals (see [Fishing and exploring](#fishing-and-exploring)). The frontier shows an **Apple Cider** column when a plan uses ciders, and the breakdown gains an *Exploring (Apple Cider)* section and a *Stamina* section accounting for where the stamina came from:
+There is a second way to explore: **Apple Cider**. Each cider spends **stamina** to explore a zone many times at a fixed 0.40 drop rate. Stamina comes from four places: a starting balance (`--current-stamina N`), the **Farmhouse**'s daily passive deposit (see [Configuration](#configuration)), and two items consumed on demand to top up the rest — drinking **Orange Juice** (100 stamina each, from Orchard Oranges) or eating **Apples** (15 each, from the orchard or thrown off as a cider byproduct). The solver picks whichever is cheaper at the margin: eating the surplus Apples a cider explore already drops is near-free stamina, so it leans on those before pressing Oranges into juice. How many explores a cider does depends on the zone's Exploring Effectiveness and your cider perks/meals (see [Fishing and exploring](#fishing-and-exploring)). The frontier shows an **Apple Cider** column when a plan uses ciders, and the breakdown gains an *Exploring (Apple Cider)* section and a *Stamina* section accounting for where the stamina came from:
 
 ```shell
-python main.py --max-gold inventory --current-stamina 200000 -i 'Mushroom:2000000'
+python main.py -i 'Mushroom:20000000'
 ```
 
 ```text
 Sourcing plans (time + Arnold Palmers + Large Nets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
- > 1. 1h 4m + 3,196 AP + 0 LN + 1 GJ + 235 cider -> 0 + 205 = 205 g
+ > 1. 0m + 19,450 AP + 17,975 LN + 0 GJ + 9,357 cider -> 788 + 1,417 = 2,205 g  [fastest]
+   ...
+   5. 7d 1h 50m + 20,570 AP + 78,759 LN + 99 GJ + 7,467 cider -> 0 + 2,297 = 2,297 g  [cheapest] — all Lemon from passive
 
 Exploring (Apple Cider):
-  200x Apple Cider at Gary's Crushroom (209,555 stamina, Mushroom)
+  9,358x Apple Cider at Gary's Crushroom (9,830,107 stamina, Mushroom)
 
 Stamina:
-  209,555 spent on Apple Cider
-  50,000 banked at the start
-  787,096/day from the Farmhouse (passive)
-  Drink 634x Orange Juice -> 63,378 stamina
+  9,830,107 spent on Apple Cider
+  Drink 83,867x Orange Juice -> 8,386,657 stamina
+  Eat 96,230x Apple -> 1,443,450 stamina
 ```
 
 ## Materials and crafting
@@ -339,7 +340,7 @@ Forest = 136
 
 Each Apple Cider does `1000 + 10 × Effectiveness` explores in a zone (`1250 + 12.5 ×` with Cinnamon Sticks), each costing one stamina before the multiplicative Wanderer / Neigh Neigh / Neigh reductions. A zone with no configured Effectiveness gets no cider offer.
 
-The `[farmhouse]` section is the passive stamina source. The building raises your natural stamina cap by one a day (two with the Mattress Pad perk), so the cap recorded on `registered_on` has grown that much per day since (worked out for the plan's start date, like the storehouse). Each day your actual stamina then rises by `8 × cap`, limited to 500,000 (1,000,000 with the Apple Pie Enthusiast perk) — an automatic daily deposit the plan draws on before drinking Orange Juice for the rest. Stamina is a stat, not a stored good, so the storehouse cap does not apply to it.
+The `[farmhouse]` section is the passive stamina source. The building raises your natural stamina cap by one a day (two with the Mattress Pad perk), so the cap recorded on `registered_on` has grown that much per day since (worked out for the plan's start date, like the storehouse). Each day your actual stamina then rises by `8 × cap`, limited to 500,000 (1,000,000 with the Apple Pie Enthusiast perk) — an automatic daily deposit the plan draws on before eating Apples or drinking Orange Juice for the rest. Stamina is a stat, not a stored good, so the storehouse cap does not apply to it.
 
 ## Farming
 

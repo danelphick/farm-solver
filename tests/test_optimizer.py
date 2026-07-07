@@ -55,10 +55,10 @@ def test_all_offers_gathers_every_channel():
         Farm(crops={"corn": Crop("Corn", timedelta(hours=1), {"corn": 1})}, rows=1),
     )
     names = {o.name for o in offers}
-    # Every channel, and (always grounded now) the drink-Orange-Juice-for-stamina
-    # flow. No cider offer here since the cave has no Exploring Effectiveness set.
+    # Every channel, and (always grounded now) the item-to-stamina flows (drink
+    # Orange Juice, eat Apple). No cider offer here: the cave has no Effectiveness.
     assert names == {"passive", "fish Lake", "explore Cave", "grow Corn",
-                     "drink orange juice"}
+                     "drink orange juice", "eat apple"}
 
 
 def test_all_offers_grounds_consumables_and_adds_the_cider_channel():
@@ -74,9 +74,10 @@ def test_all_offers_grounds_consumables_and_adds_the_cider_channel():
     by_name = {o.name: o for o in offers}
     assert by_name["fish Lake"].consumes == {"large net": 1.0}
     assert by_name["explore Cave"].consumes == {"arnold palmer": 1.0}
-    # The Apple Cider channel (the cave has an Effectiveness) and drink flow.
+    # The Apple Cider channel (the cave has an Effectiveness) and stamina flows.
     assert "cider Cave" in by_name
     assert "drink orange juice" in by_name
+    assert "eat apple" in by_name
 
 
 def test_minimize_self_sources_when_gold_is_dear():
@@ -553,6 +554,32 @@ def test_minimize_counts_apple_ciders_spent():
     plan = minimize([cider, stamina, orange], {"Wood": 40}, recipes, crafting_bonus=1.0)
     # 40 wood needs 10 explores -> 1 Apple Cider spent.
     assert plan.apple_ciders == pytest.approx(1.0)
+
+
+def test_minimize_eats_apples_for_cider_stamina():
+    # Stamina for cider explores can also come from eating Apples (15 each). With
+    # no orange source, eating passive Apples is the only route to stamina here.
+    cider = Offer(
+        "cider Cave",
+        "exploring",
+        {"wood": 4},
+        consumes={"stamina": 15.0, "apple cider": 0.1},
+    )
+    eat_apple = Offer(
+        "eat apple", "drinking", {"stamina": 15.0}, consumes={"apple": 1.0}
+    )
+    apple = Offer(
+        "passive", "passive", {"apple": 1.0}, time_per_unit=timedelta(minutes=1)
+    )
+    recipes = {"apple cider": {"apple": 1.0}}
+    plan = minimize([cider, eat_apple, apple], {"Wood": 40}, recipes, crafting_bonus=1.0)
+    # 40 wood -> 10 explores -> 150 stamina -> eat 10 apples (each gives 15).
+    eaten = sum(
+        d.units * d.offer.consumes.get("apple", 0.0)
+        for d in plan.draws
+        if d.offer.name == "eat apple"
+    )
+    assert eaten == pytest.approx(10.0)
 
 
 # --- Gold accounting -----------------------------------------------------------

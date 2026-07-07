@@ -65,11 +65,11 @@ from sources import (
     OpenFlow,
     aggregate,
     cider_offers,
-    drink_offers,
     exploring_offers,
     farming_offers,
     fishing_offers,
     passive_offers,
+    stamina_offers,
 )
 
 # Usage below this many units is treated as zero (CBC leaves tiny residuals).
@@ -112,7 +112,8 @@ def all_offers(
     Consumables are always **grounded**: the exploring/fishing/farming offers
     consume real Arnold Palmers / Large Nets / Grape Juice the plan must craft,
     hold, or *buy* (see :func:`minimize`), and the Apple Cider exploring channel
-    (fed by stamina from drinking Orange Juice) is always available. Whether a
+    (fed by stamina from drinking Orange Juice or eating Apples) is always
+    available. Whether a
     consumable is self-sourced (costs time) or bought (costs gold) is the LP's
     call, set by the gold budget the frontier sweeps.
     """
@@ -122,7 +123,7 @@ def all_offers(
         *exploring_offers(exploring, ground=True),
         *farming_offers(farm, ground=True),
         *cider_offers(exploring),
-        *drink_offers(),
+        *stamina_offers(),
     ]
 
 

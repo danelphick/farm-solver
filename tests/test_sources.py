@@ -19,12 +19,12 @@ from sources import (
     Offer,
     aggregate,
     cider_offers,
-    drink_offers,
     exploring_offers,
     farming_offers,
     fishing_offers,
     open_flows,
     passive_offers,
+    stamina_offers,
 )
 
 
@@ -344,9 +344,18 @@ def test_cider_offers_skip_zones_without_configured_effectiveness():
     assert [o.name for o in cider_offers(exploring)] == ["cider Cave"]
 
 
-def test_drink_offer_turns_orange_juice_into_stamina():
-    [offer] = drink_offers()
-    assert offer.track == DRINKING_TRACK
-    assert offer.yields == {"stamina": 100.0}
-    assert offer.consumes == {"orange juice": 1.0}
-    assert offer.time_per_unit == timedelta(0)
+def test_stamina_offers_turn_orange_juice_and_apples_into_stamina():
+    by_name = {o.name: o for o in stamina_offers()}
+    assert set(by_name) == {"drink orange juice", "eat apple"}
+
+    juice = by_name["drink orange juice"]
+    assert juice.track == DRINKING_TRACK
+    assert juice.yields == {"stamina": 100.0}
+    assert juice.consumes == {"orange juice": 1.0}
+    assert juice.time_per_unit == timedelta(0)
+
+    apple = by_name["eat apple"]
+    assert apple.track == DRINKING_TRACK
+    assert apple.yields == {"stamina": 15.0}
+    assert apple.consumes == {"apple": 1.0}
+    assert apple.time_per_unit == timedelta(0)

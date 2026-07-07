@@ -728,9 +728,9 @@ def print_plan(
                 f" ({round(stamina):,} stamina, {wanted(draw.offer)})"
             )
 
-    # Stamina for Apple Cider (inventory plan mode): what the ciders spend, and
-    # where it comes from -- the banked start (--current-stamina), the Farmhouse's
-    # daily passive deposit, and any Orange Juice drunk to top it up.
+    # Stamina for Apple Cider: what the ciders spend, and where it comes from --
+    # the banked start (--current-stamina), the Farmhouse's daily passive deposit,
+    # and any items consumed to top it up (Orange Juice drunk, Apples eaten).
     drinking_draws = draws_on(sources.DRINKING_TRACK)
     cider_stamina = sum(
         d.units * d.offer.consumes.get("stamina", 0.0) for d in cider_draws
@@ -749,14 +749,26 @@ def print_plan(
         )
         if rate > 0:
             print(f"  {round(rate * 1440):,}/day from the Farmhouse (passive)")
-        total_oj = sum(
-            d.units * d.offer.consumes.get("orange juice", 0.0) for d in drinking_draws
-        )
-        if round(total_oj) >= 1:
-            total_stamina = sum(d.produced.get("stamina", 0.0) for d in drinking_draws)
+        # Each drinking-track draw consumes one item for stamina; tally the units
+        # and stamina per item so Orange Juice and Apples are reported apart.
+        topups: dict[str, list[float]] = {}
+        for draw in drinking_draws:
+            for item, per in draw.offer.consumes.items():
+                units, gained = topups.setdefault(item, [0.0, 0.0])
+                topups[item] = [
+                    units + per * draw.units,
+                    gained + draw.produced.get("stamina", 0.0),
+                ]
+        verbs = {"orange juice": "Drink", "apple": "Eat"}
+        for item, (units, gained) in sorted(
+            topups.items(), key=lambda kv: -kv[1][1]
+        ):
+            if round(units) < 1:
+                continue
+            verb = verbs.get(item, "Use")
             print(
-                f"  Drink {round(total_oj):,}x Orange Juice"
-                f" -> {round(total_stamina):,} stamina"
+                f"  {verb} {round(units):,}x {display.get(item, item)}"
+                f" -> {round(gained):,} stamina"
             )
 
     # Opening chests and bags at the Locksmith. Skip residue opens that yield less

@@ -18,8 +18,9 @@ freely, fastest", plus a per-channel breakdown of a chosen one.
 offers carry a `consumes` input (Arnold Palmer / Large Net / Grape Juice, chained
 down to Orchard Lemons, passive stone/wood/straw/antlers, and Vineyard Grapes), and
 the **Apple Cider** exploring channel (`sources.cider_offers`) is always present,
-fed by **stamina** from drinking Orange Juice (`sources.drink_offers`, the
-`DRINKING_TRACK`; `--current-stamina` seeds a starting balance) and from the
+fed by **stamina** from drinking Orange Juice (100 each) or eating Apples (15 each)
+(`sources.stamina_offers`, the `DRINKING_TRACK`; `--current-stamina` seeds a
+starting balance) and from the
 **Farmhouse** (`config._farmhouse_producer` — a daily passive stamina deposit,
 exempt from the storehouse cap via `passive.UNCAPPED_ITEMS`). Cider math
 (`exploring.CiderModifiers`): each stamina buys one explore at drop rate

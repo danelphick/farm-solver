@@ -42,9 +42,13 @@ FARMING_TRACK = "farming"
 FISHING_TRACK = "fishing"
 EXPLORING_TRACK = "exploring"
 PASSIVE_TRACK = "passive"
-# Drinking Orange Juice for stamina is instant, like fishing/exploring, so its
-# track never costs time.
+# Topping up stamina by drinking Orange Juice or eating an Apple is instant, like
+# fishing/exploring, so this track never costs time (see :func:`stamina_offers`).
 DRINKING_TRACK = "drinking"
+
+# Stamina restored by consuming one of each item, for the Apple Cider channel.
+ORANGE_JUICE_STAMINA = 100.0
+APPLE_STAMINA = 15.0
 
 # The drop rate Apple Cider forces in every zone: 0.40 items discovered per
 # explore (one stamina). The zone's own drop-rate distribution then says which
@@ -243,20 +247,29 @@ def cider_offers(exploring: Exploring) -> list[Offer]:
     return offers
 
 
-def drink_offers() -> list[Offer]:
-    """The instant Orange-Juice-to-stamina flow (inventory plan mode).
+def stamina_offers() -> list[Offer]:
+    """The instant item-to-stamina flows that fuel Apple Cider explores.
 
-    Drinking one Orange Juice yields 100 stamina at no time or consumable cost,
-    so stamina is bounded only by the Orange Juice the plan can craft from Orchard
-    Oranges. Modelled as an offer that consumes Orange Juice and yields stamina.
+    Two ways to top up stamina at no time cost: drinking one Orange Juice yields
+    100 stamina, eating one Apple yields 15. Each consumes a real item the plan
+    must source itself -- Orange Juice crafted from Orchard Oranges, Apples from
+    the orchard (or thrown off as a cider-explore byproduct) -- so stamina is
+    bounded by those, not free. Modelled as offers that consume the item and yield
+    stamina; the LP picks whichever is cheaper at the margin.
     """
     return [
         Offer(
             name="drink orange juice",
             track=DRINKING_TRACK,
-            yields={"stamina": 100.0},
+            yields={"stamina": ORANGE_JUICE_STAMINA},
             consumes={"orange juice": 1.0},
-        )
+        ),
+        Offer(
+            name="eat apple",
+            track=DRINKING_TRACK,
+            yields={"stamina": APPLE_STAMINA},
+            consumes={"apple": 1.0},
+        ),
     ]
 
 
