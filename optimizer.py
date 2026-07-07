@@ -295,6 +295,7 @@ def minimize(
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
+    favour_passive: bool = False,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -322,12 +323,16 @@ def minimize(
     purchases to its non-goal uses (as a craft material or a channel's tool), and
     the goal must be crafted or gathered. ``gold`` is ``sum(buy * price)``.
 
-    Two modes trace the frontier from different sides. By default the LP minimises
+    Three modes trace the frontier from different sides. By default the LP minimises
     ``T + gold_weight * gold`` (a weighted sum): a tiny ``gold_weight`` buys freely
     for the fastest plan, a huge one buys nothing for the slowest self-sourced one.
     With ``time_cap`` set it instead minimises ``gold`` subject to ``T <= time_cap``
     -- an epsilon-constraint solve, which unlike the weighted sum can land on the
-    *interior* of a flat frontier segment (see :func:`frontier`). ``prices`` are the
+    *interior* of a flat frontier segment. With ``favour_passive`` it minimises
+    ``spend_value`` (the market value of every consumable spent) instead of gold, so
+    the plan leans as hard as possible on free passive production and basic farming,
+    spending the fewest tools and banking the over-production; ``time_cap`` then
+    bounds how far it runs (see :func:`frontier`, the slow regime). ``prices`` are the
     per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
     the plan is fully self-sourced.
     """
@@ -419,7 +424,33 @@ def minimize(
     if buy_cookie is not None:
         gold = gold + price_cookie * buy_cookie
 
-    if time_cap is not None:
+    # Market value of every consumable the plan spends -- Arnold Palmers, Large Nets,
+    # Grape Juice, Apple Cider, Orange Juice (from the offers' per-unit tallies) and
+    # cookie sets. The ``favour_passive`` mode minimises this to push sourcing off the
+    # tool-hungry fishing/exploring/GJ channels and onto free passive production and
+    # basic farming -- the slow, resource-banking end of the frontier (see
+    # :func:`frontier`). Grape Juice carries no gold price, so a nominal weight keeps
+    # it penalised alongside the priced tools rather than free.
+    spend_value = pulp.lpSum(
+        (
+            o.ap * prices.get("arnold palmer", 0.0)
+            + o.ln * prices.get("large net", 0.0)
+            + o.gj * (prices.get("grape juice", 0.0) or 1e-4)
+            + o.consumes.get("apple cider", 0.0) * prices.get("apple cider", 0.0)
+            + o.consumes.get("orange juice", 0.0) * prices.get("orange juice", 0.0)
+        )
+        * x
+        for o, x in zip(used, usage)
+    ) + cookies * prices.get("cookie set", 0.0)
+
+    if favour_passive:
+        # Slowest, most passive-leaning end: fewest tools spent (so passive and
+        # farming carry the demand), makespan bounded by ``time_cap`` so it cannot
+        # run away onto a centuries-long pet trickle.
+        if time_cap is not None:
+            problem += makespan <= _minutes(time_cap)
+        problem += spend_value
+    elif time_cap is not None:
         problem += makespan <= _minutes(time_cap)
         problem += gold  # least gold under the time cap (epsilon-constraint)
     else:
@@ -490,8 +521,9 @@ def minimize(
     # lexicographic tower, each stage minimising one objective then locking it at
     # its optimum so the next cannot spoil it:
     #
-    #   1. cost      -- the first solve above (weighted sum, or epsilon cap)
-    #   2. gold      -- least gold at that makespan, the single priced axis
+    #   1. cost      -- the first solve above (weighted sum, epsilon cap, or, in
+    #                   favour_passive mode, least spend_value under the time cap)
+    #   2. gold      -- least gold at that point, the single priced axis
     #   3. activity  -- least crafts + gathering + buying, shedding pointless slack
     #
     # Stage 2 is the crux. In a weighted-sum endpoint the makespan term (~1e5
@@ -499,14 +531,24 @@ def minimize(
     # CBC's tolerance it is free and the first solve parks the buys on an arbitrary
     # degenerate vertex -- buying Large Nets or Grape Juice that bought no time. Gold
     # is the Pareto cost, so a plan paying more for no time gain is strictly worse:
-    # with the makespan pinned we re-minimise gold alone (now the sole objective, at
+    # with the primary pinned we re-minimise gold alone (now the sole objective, at
     # a scale CBC resolves), pinning the genuinely cheapest plan. Stage 3 then sheds
     # surplus crafts / off-track farming without moving time or gold.
+    #
+    # Stage 1's pin differs by mode. Normally the makespan is pinned (the first solve
+    # minimised it). In favour_passive mode it is spend_value that was minimised, so
+    # *that* is pinned and the makespan is left free -- stage 3's activity term then
+    # sheds any spare passive draw, settling the makespan at just what passive needs,
+    # rather than the plan buying tools to finish early and undoing the passive lean.
     if used or craft or opens or buy or buy_cookie is not None:
-        t_star = makespan.value() or 0.0
-        problem += makespan <= t_star * (1 + 1e-9) + 1e-9
+        if favour_passive:
+            sv_star = pulp.value(spend_value) or 0.0
+            problem += spend_value <= sv_star * (1 + 1e-9) + 1e-9
+        else:
+            t_star = makespan.value() or 0.0
+            problem += makespan <= t_star * (1 + 1e-9) + 1e-9
 
-        # Stage 2 -- least gold at the pinned makespan, then lock it. Skipped when
+        # Stage 2 -- least gold at the pinned primary, then lock it. Skipped when
         # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
         if buy or buy_cookie is not None:
             problem.setObjective(gold)
@@ -716,6 +758,34 @@ def surplus_sale_value(
     ]
     rows.sort(key=lambda row: row[2], reverse=True)
     return rows
+
+
+def self_sourced_endpoint(
+    offers: list[Offer],
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None = None,
+    crafting_bonus: float = 1.0,
+    openables: list[OpenFlow] | None = None,
+    inventory: dict[str, float] | None = None,
+    cookie_sets: float = 0.0,
+    prices: dict[str, float] | None = None,
+) -> SourcingPlan:
+    """The cheap endpoint: the fastest plan that buys nothing (fully self-sourced).
+
+    Solved with the buy-nothing weight (``_FREE_PRICE``). It is both the fast
+    regime's slow end and the **stable reference** for each passive item's *full*
+    requirement (see :func:`passive_residuals` and :func:`main.run`): it self-sources
+    with a moderate strategy, unlike the passive-leaning extension past it -- which
+    can source cider stamina from Apples rather than Orange Juice and so understate
+    the Orange requirement -- and unlike the fast plans, which over-buy net materials
+    like Antler. Recomputed rather than read off the thinned frontier, where it may
+    not survive as an interior point.
+    """
+    return minimize(
+        offers, demand, recipes, crafting_bonus, prices=prices,
+        gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
+        cookie_sets=cookie_sets,
+    )
 
 
 def plan_surplus_gold(
@@ -951,23 +1021,33 @@ def frontier(
     passive_pet_items: set[str] = frozenset(),
     prices: dict[str, float] | None = None,
 ) -> list[SourcingPlan]:
-    """The Pareto frontier of sourcing plans over ``(time, gold)``, fastest first.
+    """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
-    The whole tradeoff is makespan against gold: self-sourcing a consumable costs
-    time, buying it costs gold. First finds the two endpoints -- the fastest plan
-    (buy freely) and the cheapest, slowest one (buy nothing, self-source
-    everything) -- then fills the frontier between them by an **epsilon-constraint
-    sweep**: cap the makespan at each of many times spanning the two ends and
-    minimise the gold under that cap. This is what a plain price sweep cannot do --
-    where the frontier has a flat (linear) segment, every weighted-sum gold price
-    collapses onto an endpoint, hiding the moderate-spend plans in between (buying
-    some Arnold Palmers to explore a slow-farmed crop rather than all or none). The
-    non-dominated results are thinned to about ``count`` plans. Returns a single
-    plan when gold buys no speed (the two ends coincide).
+    The whole tradeoff is makespan against net gold (bought less banked surplus, see
+    :attr:`SourcingPlan.cost`). The frontier spans two regimes that meet at the
+    fastest fully self-sourced plan (``cheap`` -- buys nothing, finishes soonest):
+
+    * **Fast regime** ``[t_fast, t_cheap]`` -- trade gold for time. From ``fast`` (buy
+      freely, quickest) an **epsilon-constraint sweep** caps the makespan at each of
+      many times and minimises gold under the cap. This is what a plain price sweep
+      cannot do -- where the frontier is flat every weighted-sum gold price collapses
+      onto an endpoint, hiding the moderate-spend plans between (buying some Arnold
+      Palmers to explore a slow-farmed crop rather than all or none).
+    * **Slow regime** ``[t_cheap, t_bound]`` -- trade time for banked surplus. Past
+      ``cheap``, a ``favour_passive`` sweep sources ever more of the demand from free
+      passive production and basic farming (fewest tools spent), running longer and
+      banking the over-production, so the net gold falls below zero. Bounded at
+      ``t_bound``, the slowest **non-pet** passive completion, so it cannot chase a
+      centuries-long pet trickle; ``maxpassive`` is that endpoint (the "all passively
+      sourceable resources sourced passively" plan). Only built when ``prices`` make
+      the banked surplus worth gold.
+
+    The non-dominated results are thinned to about ``count`` plans. Returns a single
+    plan when gold buys no speed and there is nothing to bank (the ends coincide).
 
     ``prices`` (per-unit gold, from :func:`config.trading_prices`) is what makes a
-    consumable buyable; without it nothing can be bought and the frontier is the
-    single fully self-sourced plan.
+    consumable buyable and banked surplus sellable; without it nothing can be bought,
+    the slow regime is skipped, and the frontier is the single self-sourced plan.
     """
     fast = minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
@@ -982,14 +1062,15 @@ def frontier(
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
-    t_fast, t_slow = fast.time.total_seconds(), cheap.time.total_seconds()
-    caps = _time_caps(t_fast, t_slow, samples)
-    # Add the passive-completion breakpoints (see _passive_completion_caps): a plan
-    # clamped to each is a natural intermediate the geometric sweep can miss. Keep
-    # only those comfortably inside the endpoints -- the slowest breakpoint is the
-    # cheap plan's own binding item, so it coincides with that endpoint -- and use
-    # them as thinning anchors so they survive to the shown set.
-    lo, hi = t_fast * (1 + _CAP_MARGIN), t_slow * (1 - _CAP_MARGIN)
+    t_fast, t_cheap = fast.time.total_seconds(), cheap.time.total_seconds()
+
+    # Fast regime: the epsilon sweep between the two gold endpoints. Add the
+    # passive-completion breakpoints (see _passive_completion_caps): a plan clamped to
+    # each is a natural intermediate the geometric sweep can miss. Keep only those
+    # comfortably inside the endpoints -- the slowest coincides with the cheap plan's
+    # own binding item -- and use them as thinning anchors so they survive.
+    caps = _time_caps(t_fast, t_cheap, samples)
+    lo, hi = t_fast * (1 + _CAP_MARGIN), t_cheap * (1 - _CAP_MARGIN)
     breakpoints = [
         cap for cap in _passive_completion_caps(
             cheap, demand, recipes or {}, crafting_bonus, openables or [],
@@ -1006,6 +1087,39 @@ def frontier(
         )
         for cap in caps
     ]
+
+    # Slow regime: extend past the cheap endpoint with favour_passive plans that lean
+    # ever harder on passive/farming and bank the surplus. Bounded at t_bound, the
+    # slowest non-pet passive completion, found from one uncapped probe -- its own
+    # makespan would chase the pet tail (centuries), but its non-pet breakpoints are
+    # the real completions. Only worthwhile when surplus is priced (else banking is
+    # worth nothing and these slower plans are dominated).
+    anchors = list(breakpoints)
+    if prices:
+        probe = minimize(
+            offers, demand, recipes, crafting_bonus, prices=prices,
+            favour_passive=True, openables=openables, inventory=inventory,
+            cookie_sets=cookie_sets,
+        )
+        nonpet = _passive_completion_caps(
+            probe, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {}, passive_pet_items,
+        )
+        t_bound = max(nonpet, default=t_cheap)
+        if t_bound > t_cheap * (1 + _CAP_MARGIN):
+            ext_lo, ext_hi = t_cheap * (1 + _CAP_MARGIN), t_bound * (1 - _CAP_MARGIN)
+            ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
+            anchors += ext_breaks
+            ext_caps = _time_caps(t_cheap, t_bound, samples) + ext_breaks + [t_bound]
+            plans += [
+                minimize(
+                    offers, demand, recipes, crafting_bonus, prices=prices,
+                    favour_passive=True, time_cap=timedelta(seconds=cap),
+                    openables=openables, inventory=inventory, cookie_sets=cookie_sets,
+                )
+                for cap in ext_caps
+            ]
+
     # Credit each plan for the surplus it banks (see :func:`plan_surplus_gold`), so
     # its ``cost`` gold is net of what it can sell -- a slow, passive-leaning plan
     # dips below zero and the frontier extends past the "buy nothing" line. Done
@@ -1015,4 +1129,4 @@ def frontier(
             plan, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, prices or {},
         )
-    return _thin(_non_dominated(plans), count, tuple(breakpoints))
+    return _thin(_non_dominated(plans), count, tuple(anchors))

@@ -59,14 +59,14 @@ Every consumable a plan spends is either **self-sourced** from your passive econ
 ```text
 Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
  > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 4,245 + 4,533 = 8,778 g  [fastest]
-   2. 15d 6h 54m + 31,455 AP + 148,807 LN + 11 sets + 214 GJ + 81,439 cider -> 3,394 + 4,998 = 8,392 g
+   2. 23d 3h 28m + 32,109 AP + 32,926 LN + 11 sets + 323 GJ + 74,521 cider -> 2,139 + 3,957 = 6,096 g (bank 1,808, net 331)
    ...
-   5. 49d 4h 37m + 34,279 AP + 13,268 LN + 11 sets + 145 GJ + 61,992 cider -> 0 + 5,207 = 5,207 g (bank 4,180, net -4,180)  [cheapest] — all Orange from passive
+   5. 143d 17m + 0 AP + 0 LN + 0 sets + 0 GJ + 44,839 cider -> 0 + 897 = 897 g (bank 17,180, net -17,180)  [cheapest] — all Oak from passive
 ```
 
 Cookie sets, Grape Juices and Apple Ciders each earn their own column only when some plan spends them (a goal grown entirely by farming, say a heap of Beet, might show none). They are priced and swept like the buyable consumables, so the frontier offers plans that lean on them to finish sooner or save them to finish cheaper.
 
-The **cheapest** plan is the one with the lowest **net** gold — it buys nothing and banks the most surplus, leaning hardest on free farming and passive production. Credited for what it banks, its net cost goes negative (−4,180 g above), so "cheapest" is the patient, passive-leaning end of the frontier.
+The **cheapest** plan is the one with the lowest **net** gold — the far, patient end of the frontier, where the plan buys nothing, sources everything it can from free passive production (fishing nothing at all — note the 0 Large Nets above), and banks the most surplus. Credited for what it banks, its net cost goes well negative (−17,180 g above). This end is bounded so it cannot chase a resource only a pet trickles out over centuries: it runs only until the slowest **non-pet** passively-sourceable resource is done (Oak, ~143 days above), leaving that pet-only remainder to the faster channels.
 
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 
@@ -104,13 +104,13 @@ The frontier is built around the **long-gathering passive resources** — each b
 ```text
 Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
  > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 4,245 + 4,533 = 8,778 g  [fastest]
-   2. 15d 6h 54m + 31,455 AP + 148,807 LN + 11 sets + 214 GJ + 81,439 cider -> 3,394 + 4,998 = 8,392 g
-   3. 23d 3h 28m + 32,109 AP + 32,926 LN + 11 sets + 323 GJ + 74,521 cider -> 2,139 + 3,957 = 6,096 g (bank 1,808, net 331)
-   4. 27d 7h 39m + 32,457 AP + 29,265 LN + 11 sets + 146 GJ + 70,911 cider -> 1,480 + 3,974 = 5,454 g (bank 2,189, net -709)  — all Steel Wire from passive
-   5. 49d 4h 37m + 34,279 AP + 13,268 LN + 11 sets + 145 GJ + 61,992 cider -> 0 + 5,207 = 5,207 g (bank 4,180, net -4,180)  [cheapest] — all Orange from passive
+   2. 23d 3h 28m + 32,109 AP + 32,926 LN + 11 sets + 323 GJ + 74,521 cider -> 2,139 + 3,957 = 6,096 g (bank 1,808, net 331)
+   3. 27d 7h 39m + 32,457 AP + 29,265 LN + 11 sets + 146 GJ + 70,911 cider -> 1,480 + 3,974 = 5,454 g (bank 2,189, net -709)  — all Steel Wire from passive
+   4. 49d 4h 37m + 34,279 AP + 13,268 LN + 11 sets + 145 GJ + 61,992 cider -> 0 + 5,207 = 5,207 g (bank 4,180, net -4,180)  — all Orange from passive
+   5. 143d 17m + 0 AP + 0 LN + 0 sets + 0 GJ + 44,839 cider -> 0 + 897 = 897 g (bank 17,180, net -17,180)  [cheapest] — all Oak from passive
 ```
 
-Plan 4 is clamped to when Steel Wire finishes (its full requirement, ~27 days) and the cheapest to Orange (~49 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). As the plans slow, they buy less and bank more of the surplus passive throws off, so the net gold falls — crossing zero around plan 4 and reaching −4,180 g at the cheapest. Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plans 2 and 3 above) are shown in between with no resource label.
+Plan 3 is clamped to when Steel Wire finishes (its full requirement, ~27 days) and plan 4 to Orange (~49 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Plan 4 is the fastest **fully self-sourced** plan — it buys nothing (`0 +` gold). Past it the frontier keeps going: plan 5 sources yet more from passive, spending *no* fishing or exploring tools at all (0 AP, 0 LN), running out to when the slowest non-pet resource, Oak, is gathered in full (~143 days), and banking a large surplus along the way. So as the plans slow they buy less and bank more, and the net gold falls the whole way — crossing zero around plan 3 and reaching −17,180 g at the cheapest. Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau, and it is why the slow end stops at Oak rather than chasing a centuries-long pet item. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plan 2 above) are shown in between with no resource label.
 
 By default a seasonal pet is scaled to its steady-state yearly share, so the plan's date does not matter. Set `model_calendar = true` under `[pets]` to instead model the calendar: how much a seasonal pet contributes then depends on how much of the plan runs while it is in season, given the plan's start (today, or `--start-date YYYY-MM-DD`). A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years still settles to the yearly share whatever the start date. So the same goal can source differently in March than in July.
 

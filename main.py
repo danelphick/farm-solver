@@ -605,11 +605,19 @@ def run(args: argparse.Namespace) -> int:
         )
     # Display names for the items a reason or the plan report may mention.
     display = report.build_display(demand, workshop)
-    # The cheapest plan crafts the most, so its passive residuals are each item's
-    # full requirement -- the yardstick for whether a resource is at its complete
-    # gathering point (see print_critical_path, and the frontier reasons).
+    # Full requirement yardstick: the passive residuals of the cheap endpoint (the
+    # fastest fully self-sourced plan), for judging whether a resource is at its
+    # complete gathering point (see print_critical_path, and the frontier reasons).
+    # Recomputed via self_sourced_endpoint rather than read off the frontier: it is a
+    # stable, moderate-strategy reference, where the slow passive-leaning extension
+    # understates some items (cider stamina from Apples cuts the Orange requirement)
+    # and the fast plans overstate net materials (Antler) -- and thinning may drop it.
+    reference = optimizer.self_sourced_endpoint(
+        offers, demand, recipes, args.crafting_bonus, openables=open_flows,
+        inventory=inventory, cookie_sets=cookie_sets, prices=prices,
+    )
     max_passive_residuals = optimizer.passive_residuals(
-        plans[-1], demand, recipes, args.crafting_bonus, open_flows, inventory
+        reference, demand, recipes, args.crafting_bonus, open_flows, inventory
     )
     reasons = report._frontier_reasons(
         shown, demand, recipes, args.crafting_bonus, open_flows, inventory,

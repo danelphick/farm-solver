@@ -17,6 +17,7 @@ from optimizer import (
     plan_gold_breakdown,
     plan_leftovers,
     plan_surplus_gold,
+    self_sourced_endpoint,
     surplus_sale_value,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
@@ -652,6 +653,59 @@ def test_cost_is_time_and_gold_net_of_banked_surplus():
     # the surplus it banks -- which can carry it below zero.
     plan = SourcingPlan(time=timedelta(minutes=30), gold=100.0, surplus_gold=140.0)
     assert plan.cost == (pytest.approx(30 * 60), pytest.approx(-40.0))
+
+
+def test_self_sourced_endpoint_buys_nothing():
+    # The cheap endpoint self-sources everything, so it farms all 100 It (100 min)
+    # rather than buying nets to fish -- spending no gold.
+    endpoint = self_sourced_endpoint([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD)
+    assert endpoint.gold == 0
+    assert endpoint.time == timedelta(minutes=100)
+
+
+def test_minimize_favour_passive_leans_on_passive_over_tools():
+    # A gadget is either crafted from slow passive Wire or fished with a Large Net.
+    # favour_passive minimises tool spend, so it crafts all 100 from Wire (no nets,
+    # ~1,000 min); the fast plan instead buys nets and fishes them instantly.
+    passive = Offer(
+        "passive", "passive", {"wire": 0.1}, time_per_unit=timedelta(minutes=1)
+    )
+    fish = Offer("fish gadget", "fishing", {"gadget": 1},
+                 consumes={"large net": 1}, ln=1)
+    recipes = {"gadget": {"wire": 1.0}}
+    passive_plan = minimize([passive, fish], {"gadget": 100}, recipes, 1.0,
+                            prices=GOLD, favour_passive=True)
+    assert round(passive_plan.large_nets) == 0
+    assert passive_plan.crafts.get("gadget") == pytest.approx(100)
+    fast_plan = minimize([passive, fish], {"gadget": 100}, recipes, 1.0,
+                         prices=GOLD, gold_weight=BUY_FREELY)
+    assert round(fast_plan.large_nets) == 100
+
+
+def test_frontier_extends_past_cheap_endpoint_with_max_passive_plan():
+    # The fastest zero-gold plan fishes gadgets (nets self-sourced from fast straw),
+    # finishing quickly. The favour_passive extension crafts them from slow passive
+    # Wire instead -- spending no nets, running far longer, banking the surplus straw
+    # -- so the frontier reaches a slower plan with a lower (more negative) net gold.
+    passive = Offer(
+        "passive", "passive", {"wire": 0.1, "straw": 10.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    fish = Offer("fish gadget", "fishing", {"gadget": 1},
+                 consumes={"large net": 1}, ln=1)
+    recipes = {
+        "gadget": {"wire": 1.0},
+        "large net": {"straw": 1.0},
+        "apple cider": {"straw": 1.0},
+    }
+    plans = frontier([passive, fish], {"gadget": 100}, recipes, prices=GOLD)
+    cheap = minimize([passive, fish], {"gadget": 100}, recipes, 1.0,
+                     prices=GOLD, gold_weight=SELF_SOURCE)
+    slow = plans[-1]
+    assert round(cheap.large_nets) > 0      # cheap fishes (self-sourced nets)
+    assert slow.time > cheap.time           # the extension runs longer on passive
+    assert round(slow.large_nets) == 0      # spending no fishing tools
+    assert slow.cost[1] < cheap.cost[1]     # for a lower, more negative net gold
 
 
 def test_frontier_credits_banked_surplus_below_zero_gold():

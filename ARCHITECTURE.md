@@ -9,10 +9,12 @@ drift.
 
 Given a FarmRPG mastery/inventory state and a goal (tower level, `-m` mastery, or
 `-i` item counts), work out the ways to source everything, **trading time against
-gold**: self-sourcing a consumable (Arnold Palmer / Large Net / Apple Cider /
-Orange Juice / cookie set / Grape Juice) costs makespan, buying it costs gold. It
-prints a Pareto **frontier** of plans from "spend nothing, slowest" to "buy
-freely, fastest", plus a per-channel breakdown of a chosen one.
+net gold**: self-sourcing a consumable (Arnold Palmer / Large Net / Apple Cider /
+Orange Juice / cookie set / Grape Juice) costs makespan, buying it costs gold, and
+a slow plan that leans on passive production banks sellable surplus (a gold
+*credit*, so its net gold can go negative). It prints a Pareto **frontier** of
+plans from "buy freely, fastest" through "buy nothing, self-source" to "lean on
+passive, bank surplus, slowest", plus a per-channel breakdown of a chosen one.
 
 **Always grounded.** Every consumable is a real item: exploring/fishing/GJ-farming
 offers carry a `consumes` input (Arnold Palmer / Large Net / Grape Juice, chained
@@ -111,13 +113,20 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 
 ## The LP and frontier (optimizer.py)
 
-- **`minimize(...)`** solves one LP, trading makespan against **gold**. Two modes:
+- **`minimize(...)`** solves one LP, trading makespan against **gold**. Three modes:
   - *weighted-sum* (default): minimise `time + gold_weight*gold`. A tiny
     `gold_weight` (`_FAST_PRICE`) buys freely for the fastest plan; a huge one
-    (`_FREE_PRICE`) buys nothing (`gold = 0`) for the slowest self-sourced plan.
+    (`_FREE_PRICE`) buys nothing (`gold = 0`) for the fastest self-sourced plan.
   - *epsilon-constraint* (`time_cap` set): minimise `gold` subject to `makespan ≤
     time_cap`. This reaches the **interior** of a flat frontier segment; the price
     sweep alone collapses onto endpoints.
+  - *favour_passive* (`favour_passive=True`, the slow regime): minimise `spend_value`
+    — the market value of every consumable spent — so the plan leans as hard as it
+    can on free passive/farming, spends the fewest tools and banks the
+    over-production. `time_cap` bounds how far it runs. Its refinement pins
+    `spend_value` (not makespan), then gold, then activity — so it self-sources and
+    the makespan settles at just what passive needs, instead of buying tools to
+    finish early and undoing the passive lean.
   Crafting/opening are free LP flows; passive is one aggregate offer whose bundle
   is per-minute rates (drives on the slowest bound item). An offer's `consumes`
   are subtracted in each item's balance like a craft's materials, so a grounded
@@ -147,16 +156,24 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   value of what a plan banks; `frontier` stores it on each plan as `surplus_gold`,
   so `cost`'s net gold nets it off (see the `SourcingPlan` bullet). `main.cheapest_plan`
   ranks by **net** gold (`plan.gold − plan.surplus_gold`) — buys least, banks most.
-- **`frontier(...)`** = fast endpoint (`gold_weight=_FAST_PRICE`, buy freely) + cheap
-  endpoint (`_FREE_PRICE`, self-source, `gold = 0`) + an epsilon sweep of makespan
-  caps (each minimising gold), then it credits each plan's `surplus_gold`
-  (`plan_surplus_gold`) so `cost` is net, then `_non_dominated` then `_thin` to
-  `count`. Two cap sources feed the sweep:
-  - `_time_caps` — geometric spacing between the endpoints.
-  - `_passive_completion_caps` — the **passive-resource breakpoints** (see
-    below), also passed to `_thin` as **anchors** so they survive thinning
-    (smallest-first, since useful tradeoffs cluster at the fast end).
-    `passive_pet_items` are excluded (pet trickle isn't a real plateau).
+- **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
+  each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
+  `_non_dominated` then `_thin` to `count`:
+  - **Fast regime** `[t_fast, t_cheap]` — fast endpoint (`gold_weight=_FAST_PRICE`,
+    buy freely) + cheap endpoint (`_FREE_PRICE`, self-source, `gold = 0`) + an epsilon
+    sweep of makespan caps (each minimising gold). Two cap sources:
+    - `_time_caps` — geometric spacing between the endpoints.
+    - `_passive_completion_caps` — the **passive-resource breakpoints** (see below),
+      also passed to `_thin` as **anchors** so they survive thinning (smallest-first,
+      since useful tradeoffs cluster at the fast end). `passive_pet_items` excluded.
+  - **Slow regime** `[t_cheap, t_bound]` (only with `prices`) — a `favour_passive`
+    sweep past the cheap endpoint, leaning ever harder on passive and banking surplus
+    so the net gold drops below zero. `t_bound` = the slowest **non-pet** passive
+    completion, read from one uncapped `favour_passive` **probe** (whose own makespan
+    would chase the pet tail — centuries — but whose non-pet breakpoints are the real
+    completions). `maxpassive` is the `t_bound` endpoint; the extension breakpoints
+    join the `_thin` anchors. Bounding at `t_bound` is what stops the slow end
+    offloading demand onto a pet trickle.
 - `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, net gold)`; dedup key
   rounds both.
 
@@ -164,15 +181,20 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 
 A building material (Steel Wire, Oak) is needed only up to its products' full
 demand. **`passive_residuals(plan, ...)`** gives each passive item's net
-requirement in a plan; computed on the **cheapest plan** (crafts the most) it is
-that item's *full* requirement. `residual/rate` = the makespan at which it
-finishes gathering — a natural plateau. So the frontier segments by resource:
-fast crop-bound → Steel Wire's full completion → Oak's → cheapest. `main.run`
-passes `_pet_dominated_items(production)` to exclude pet materials, and passes the
-cheapest plan's `passive_residuals` into `print_plan` as `max_passive_residuals`.
-It also builds the frontier table's per-plan **reason** (`_frontier_reasons` →
-"all Steel Wire from passive") from the same `_defining_passive_resource`, so the
-table label and the chosen plan's critical path agree.
+requirement in a plan; computed on the **fastest fully self-sourced plan** (the
+cheap endpoint — buys nothing, moderate strategy) it is that item's *full*
+requirement. `residual/rate` = the makespan at which it finishes gathering — a
+natural plateau. So the frontier segments by resource: fast crop-bound → Steel
+Wire's full completion → Oak's → cheapest. `main.run` passes
+`_pet_dominated_items(production)` to exclude pet materials, and passes that
+reference plan's `passive_residuals` into `print_plan` as `max_passive_residuals`.
+It picks the reference as the fastest plan with `round(gold) == 0` — **not** the
+slowest (cheapest-net) plan: the slow, passive-leaning extension can adopt an
+extreme strategy (cider stamina from Apples not Orange Juice) that *understates* an
+item's requirement, so it is a poor yardstick. It also builds the frontier table's
+per-plan **reason** (`_frontier_reasons` → "all Steel Wire from passive") from the
+same `_defining_passive_resource`, so the table label and the chosen plan's
+critical path agree.
 
 ## Critical-path naming (report.print_critical_path) — read this before touching it
 
