@@ -8,8 +8,8 @@ updated_on = "2026-06-30"
 growth = 20
 
 [sawmill]
-wood = 46000
-board = 60000
+wood = 60000
+board = 46000
 oak = 6000
 have_pine_boost = true
 have_sturdy_saw = true
