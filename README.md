@@ -208,6 +208,7 @@ board = 60000
 oak = 6000
 have_sturdy_saw = true    # oak is only produced with the sturdy saw
 have_pine_boost = true    # two pine board a minute instead of one
+use_hickory_omelette = true  # +20% of the hourly output every ten minutes
 
 [chicken_coop]              # eggs and feathers daily
 produces = 18271

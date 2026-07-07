@@ -70,6 +70,43 @@ def test_pine_boost_doubles_pine_board():
     assert hourly.outputs == {"wood": 46000}  # boost flag excluded
 
 
+def test_hickory_omelette_boosts_the_hourly_run_and_adds_off_hour_deposits():
+    production = passive_production(
+        {"sawmill": {"board": 46000, "use_hickory_omelette": True}}
+    )
+    # The main hourly run is boosted to 1.2x (the top-of-hour combined deposit).
+    hourly = next(
+        p
+        for p in production.producers
+        if p.name == "sawmill" and p.period == HOURLY
+    )
+    assert hourly.outputs == {"board": 46000 * 1.2}
+    # A separate producer carries the five off-hour deposits, each 20% of the
+    # base output, on a fifth-of-an-hour cadence.
+    off_hour = next(p for p in production.producers if p.name == "sawmill_omelette")
+    assert off_hour.period == HOURLY / 5
+    assert off_hour.outputs == {"board": 46000 * 0.2}
+    # Uncapped: 1.2x on the hour plus 5 x 0.2x off-hour = 2.2x the base rate.
+    assert production.rate_per_minute("board") == pytest.approx(46000 * 2.2 / 60)
+
+
+def test_hickory_omelette_off_hour_deposits_are_capped_independently():
+    # With a storehouse smaller than the boosted on-hour deposit, that deposit
+    # is capped once at the storehouse size, while each 20% off-hour deposit is
+    # well under the cap and lands in full.
+    production = passive_production(
+        {
+            "sawmill": {"wood": 60000, "use_hickory_omelette": True},
+            "storehouse": {"inventory": 49440},
+        }
+    )
+    on_hour = min(60000 * 1.2, 49440)  # 49440, capped
+    off_hour = 5 * min(60000 * 0.2, 49440)  # 5 x 12000, uncapped
+    assert production.rate_per_minute("wood") == pytest.approx(
+        (on_hour + off_hour) / 60
+    )
+
+
 def test_passive_production_lowercases_item_names():
     config = {"sawmill": {"Board": 60000}}
     production = passive_production(config)

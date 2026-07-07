@@ -27,6 +27,11 @@ from passive import (
 # faster buildings and used only as a last-resort source (pets are slow).
 PET_PRODUCER_PREFIX = "pet "
 
+# The Hickory Omelette meal adds this fraction of the sawmill's hourly output as
+# an extra deposit every ten minutes (see the sawmill handling in
+# :func:`passive_production`).
+HICKORY_OMELETTE_FRACTION = 0.2
+
 # The Farmhouse tops actual stamina up each day by this multiple of the natural
 # stamina cap, capped at :data:`FARMHOUSE_GAIN_CAP` (raised to
 # :data:`FARMHOUSE_GAIN_CAP_APPLE_PIE` with the Apple Pie Enthusiast perk).
@@ -56,7 +61,11 @@ def passive_production(
 
     * ``[sawmill]`` -- hourly; its numeric keys are item names and values the
       hourly quantity (oak only with ``have_sturdy_saw``). It also makes pine
-      board a minute at a time, doubled with ``have_pine_boost``.
+      board a minute at a time, doubled with ``have_pine_boost``. The Hickory
+      Omelette (``use_hickory_omelette``) adds 20% of the hourly output every
+      ten minutes: the top-of-the-hour deposit merges with the main run into one
+      1.2x deposit (still storehouse-capped), and the other five deposits an
+      hour each land 20% separately (each capped on its own).
     * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
@@ -101,9 +110,40 @@ def passive_production(
         # Oak is only produced with the sturdy saw.
         if not sawmill.get("have_sturdy_saw"):
             outputs.pop("oak", None)
-        producers.append(
-            PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
-        )
+        if sawmill.get("use_hickory_omelette"):
+            # The Hickory Omelette deposits 20% of the hourly output every ten
+            # minutes. The deposit at the top of the hour coincides with the
+            # main run, so that combined deposit is 1.2x the base output (still
+            # subject to the storehouse cap, like any deposit). The other five
+            # deposits an hour each land 20% on their own, each capped
+            # independently, like the orchard shaker / raptor snare -- so they
+            # are a separate producer whose per-cycle output is one such deposit.
+            # A fifth-of-an-hour period makes each producer_rates cycle exactly
+            # one off-hour deposit, giving 5 x min(0.2*out, cap) an hour.
+            producers.append(
+                PassiveProducer(
+                    name="sawmill",
+                    period=HOURLY,
+                    outputs={
+                        item: qty * (1 + HICKORY_OMELETTE_FRACTION)
+                        for item, qty in outputs.items()
+                    },
+                )
+            )
+            producers.append(
+                PassiveProducer(
+                    name="sawmill_omelette",
+                    period=HOURLY / 5,
+                    outputs={
+                        item: qty * HICKORY_OMELETTE_FRACTION
+                        for item, qty in outputs.items()
+                    },
+                )
+            )
+        else:
+            producers.append(
+                PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
+            )
         # Pine board comes off the sawmill a minute at a time, like the flour
         # and feed mills, doubled with the pine boost.
         rate = 2 if sawmill.get("have_pine_boost") else 1

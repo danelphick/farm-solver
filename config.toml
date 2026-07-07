@@ -13,6 +13,7 @@ board = 46000
 oak = 6000
 have_pine_boost = true
 have_sturdy_saw = true
+use_hickory_omelette = true
 
 [chicken_coop]
 produces = 18271
