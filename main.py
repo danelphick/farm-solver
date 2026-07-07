@@ -216,7 +216,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # Which frontier plan to expand in full: the fastest (the default), the
-    # cheapest (least gold spent), or a specific one by its number in the table.
+    # cheapest (lowest net gold -- buys least, banks most), or a specific one by its
+    # number in the table.
     plan = parser.add_mutually_exclusive_group()
     plan.add_argument(
         "--fastest-plan",
@@ -226,7 +227,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument(
         "--cheapest-plan",
         action="store_true",
-        help="expand the plan that buys the least gold",
+        help="expand the plan with the lowest net gold (buys least, banks most)",
     )
     plan.add_argument(
         "--plan",
@@ -413,15 +414,21 @@ def limit_shortfall(
 
 
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
-    """Index of the cheapest plan: least gold spent, ties broken by least time.
+    """Index of the cheapest plan: least net gold, ties broken by least time.
 
-    ``plan.gold`` is the real gold a plan spends buying consumables (the LP
-    decides make-vs-buy), so the cheapest plan is the one that buys least -- the
-    fully self-sourced end of the frontier when nothing is bought.
+    A plan's net gold is ``plan.gold - plan.surplus_gold`` (see
+    :attr:`optimizer.SourcingPlan.cost`) -- the gold it spends buying consumables
+    less the sale value of the surplus it banks. The cheapest plan is the one lowest
+    on that axis: it buys least and banks most, the fully self-sourced, passive-
+    leaning end of the frontier, which credited for its banked surplus can sit below
+    zero gold.
     """
     return min(
         range(len(plans)),
-        key=lambda i: (plans[i].gold, plans[i].time.total_seconds()),
+        key=lambda i: (
+            plans[i].gold - plans[i].surplus_gold,
+            plans[i].time.total_seconds(),
+        ),
     )
 
 

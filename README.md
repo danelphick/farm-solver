@@ -54,23 +54,23 @@ Every item you still need can be obtained several ways, and the ways differ in w
 
 On top of the four channels, chests and bags can be **opened** at the Locksmith for their contents (see [Openables](#openables)). Opening costs no time or consumable of its own — the cost is having gathered the chest (and its key) in the first place, usually by fishing or exploring — so the solver acquires and opens a chest whenever that beats gathering its contents directly, and chains opens where the contents are themselves openable (a chest yielding a bag, a bag yielding keys).
 
-Every consumable a plan spends is either **self-sourced** from your passive economy — costing *time* — or **bought** for *gold* (see [Spending gold: make vs buy](#spending-gold-make-vs-buy)). So the real tradeoff each plan strikes is **time against gold**: buy freely and finish fast, or spend nothing and wait. Cookie sets and Grape Juices (see [Cookies](#cookies)) are a related scarce speed-up on the farming track. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another on both axes, spanning "spend no gold and wait" to "buy freely and finish fast". Each row shows its makespan, the consumables it spends, and — with trading [prices](#trading-gold-prices) — its gold as `buy + self-sourced = total`:
+Every consumable a plan spends is either **self-sourced** from your passive economy — costing *time* — or **bought** for *gold* (see [Spending gold: make vs buy](#spending-gold-make-vs-buy)). So the real tradeoff each plan strikes is **time against gold**: buy freely and finish fast, or spend nothing, wait, and let passive production carry the load — banking the surplus materials it throws off along the way, which are worth gold sold or spent on other tasks. Cookie sets and Grape Juices (see [Cookies](#cookies)) are a related scarce speed-up on the farming track. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another on both axes, spanning "buy freely and finish fast" to "bank surplus and wait", where the net gold goes *below zero*. Each row shows its makespan, the consumables it spends, and — with trading [prices](#trading-gold-prices) — its gold as `buy + self-sourced = total`; a plan that banks surplus adds `(bank B, net N)`, its **net** gold `buy − bank`, which is what the frontier trades against time and can fall past zero:
 
 ```text
 Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
- > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 6,519 + 6,078 = 12,597 g  [fastest]
-   2. 16d 2h 51m + 31,524 AP + 149,320 LN + 11 sets + 226 GJ + 80,622 cider -> 5,552 + 6,451 = 12,003 g
+ > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 4,245 + 4,533 = 8,778 g  [fastest]
+   2. 15d 6h 54m + 31,455 AP + 148,807 LN + 11 sets + 214 GJ + 81,439 cider -> 3,394 + 4,998 = 8,392 g
    ...
-   5. 61d 2h 45m + 35,273 AP + 13,602 LN + 11 sets + 145 GJ + 57,130 cider -> 0 + 5,289 = 5,289 g  [cheapest] — all Lemon from passive
+   5. 49d 4h 37m + 34,279 AP + 13,268 LN + 11 sets + 145 GJ + 61,992 cider -> 0 + 5,207 = 5,207 g (bank 4,180, net -4,180)  [cheapest] — all Orange from passive
 ```
 
 Cookie sets, Grape Juices and Apple Ciders each earn their own column only when some plan spends them (a goal grown entirely by farming, say a heap of Beet, might show none). They are priced and swept like the buyable consumables, so the frontier offers plans that lean on them to finish sooner or save them to finish cheaper.
 
-The **cheapest** plan is the one that buys the least gold — leaning hardest on free farming and passive production — so it need not be the slowest overall.
+The **cheapest** plan is the one with the lowest **net** gold — it buys nothing and banks the most surplus, leaning hardest on free farming and passive production. Credited for what it banks, its net cost goes negative (−4,180 g above), so "cheapest" is the patient, passive-leaning end of the frontier.
 
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 
-By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one that buys the least gold (`--fastest-plan` is the explicit form of the default):
+By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one with the lowest net gold — buys least, banks most (`--fastest-plan` is the explicit form of the default):
 
 ```shell
 python main.py --cheapest-plan        # expand the cheapest plan instead
@@ -103,14 +103,14 @@ The frontier is built around the **long-gathering passive resources** — each b
 
 ```text
 Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
- > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 6,519 + 6,078 = 12,597 g  [fastest]
-   2. 16d 2h 51m + 31,524 AP + 149,320 LN + 11 sets + 226 GJ + 80,622 cider -> 5,552 + 6,451 = 12,003 g
-   3. 25d 20h 46m + 32,336 AP + 30,540 LN + 11 sets + 146 GJ + 72,158 cider -> 4,027 + 5,238 = 9,265 g
-   4. 27d 7h 39m + 32,457 AP + 29,265 LN + 11 sets + 146 GJ + 70,911 cider -> 3,801 + 5,223 = 9,024 g  — all Steel Wire from passive
-   5. 61d 2h 45m + 35,273 AP + 13,602 LN + 11 sets + 145 GJ + 57,130 cider -> 0 + 5,289 = 5,289 g  [cheapest] — all Lemon from passive
+ > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 4,245 + 4,533 = 8,778 g  [fastest]
+   2. 15d 6h 54m + 31,455 AP + 148,807 LN + 11 sets + 214 GJ + 81,439 cider -> 3,394 + 4,998 = 8,392 g
+   3. 23d 3h 28m + 32,109 AP + 32,926 LN + 11 sets + 323 GJ + 74,521 cider -> 2,139 + 3,957 = 6,096 g (bank 1,808, net 331)
+   4. 27d 7h 39m + 32,457 AP + 29,265 LN + 11 sets + 146 GJ + 70,911 cider -> 1,480 + 3,974 = 5,454 g (bank 2,189, net -709)  — all Steel Wire from passive
+   5. 49d 4h 37m + 34,279 AP + 13,268 LN + 11 sets + 145 GJ + 61,992 cider -> 0 + 5,207 = 5,207 g (bank 4,180, net -4,180)  [cheapest] — all Orange from passive
 ```
 
-Plan 4 is clamped to when Steel Wire finishes (its full requirement, ~27 days) and the cheapest to Lemon (~61 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plans 2 and 3 above) are shown in between with no resource label.
+Plan 4 is clamped to when Steel Wire finishes (its full requirement, ~27 days) and the cheapest to Orange (~49 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). As the plans slow, they buy less and bank more of the surplus passive throws off, so the net gold falls — crossing zero around plan 4 and reaching −4,180 g at the cheapest. Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plans 2 and 3 above) are shown in between with no resource label.
 
 By default a seasonal pet is scaled to its steady-state yearly share, so the plan's date does not matter. Set `model_calendar = true` under `[pets]` to instead model the calendar: how much a seasonal pet contributes then depends on how much of the plan runs while it is in season, given the plan's start (today, or `--start-date YYYY-MM-DD`). A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years still settles to the yearly share whatever the start date. So the same goal can source differently in March than in July.
 
@@ -302,7 +302,7 @@ cookie_set    = 20    # priced individually, in gold each (not gk)
 
 The four `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. These are the **buyable** consumables. Grape Juice is not traded directly — it is priced at its **production cost** in grapes only so it can be valued (grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk", Arnold Palmers per 1000); it is never bought, always pressed from grapes. With this section present the solver can buy consumables (and the frontier trades makespan against real gold); without it nothing is buyable and every plan is fully self-sourced.
 
-Each plan's gold is shown as **`buy + self-sourced = total`**. The *total* is the market value of every consumable the plan spends; **buy** is the gold the solver actually spends buying them (exactly `plan.gold` — what `--max-gold` caps and `--cheapest-plan` ranks by), and **self-sourced** is the market value of everything it made or gathered instead. The two are exact — the LP decides which consumables to buy — and always sum to the total.
+Each plan's gold is shown as **`buy + self-sourced = total`**, and a plan that banks surplus adds **`(bank B, net N)`**. The *total* is the market value of every consumable the plan spends; **buy** is the gold the solver actually spends buying them (exactly `plan.gold` — what `--max-gold` caps), and **self-sourced** is the market value of everything it made or gathered instead. The two are exact — the LP decides which consumables to buy — and always sum to the total. **Bank** is the sale value of the surplus the plan produces past everything it consumes (the same figure as the **Surplus** section below), and **net** is `buy − bank`: the gold you are really out of pocket once those banked materials are sold or spent on other tasks. Net is the axis the frontier trades against time — and what `--cheapest-plan` ranks by — so a slow, passive-leaning plan that banks more than it buys sits at *negative* gold, extending the frontier past the "buy nothing" line.
 
 An expanded priced plan also lists a **Buy (with gold)** section (what it purchases and each cost) and closes with a **Surplus** section. Passive production runs until the slowest resource finishes, so everything faster overshoots — a plan waiting weeks on Oak keeps banking straw, stone and wood far past what its goal needs. Assuming you craft those leftovers into the sellable priced goods (Arnold Palmers, Large Nets, Apple Cider, Orange Juice — Grape Juice is not sellable, and cookie sets are baked from held cookies), the solver finds the most gold they are worth, sending shared materials (straw/wood/stone/antlers all feed Large Nets, say) to whichever good pays best, and lists each good with its gold and the nominal total:
 

@@ -155,6 +155,12 @@ class SourcingPlan:
     # gold); ``gold`` is the plan's real cost, what the frontier trades against time.
     bought: dict[str, float] = field(default_factory=dict)
     gold: float = 0.0
+    # Sale value of everything the plan produces past all it consumes -- surplus it
+    # banks (see :func:`plan_surplus_gold`), for other tasks or to sell. A credit
+    # against ``gold``: the plan's net cost, what the frontier really trades against
+    # time, is ``gold - surplus_gold``. Set by :func:`frontier`; a plan straight out
+    # of :func:`minimize` leaves it 0 (its net is just what it bought).
+    surplus_gold: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
 
     def track_times(self) -> dict[str, timedelta]:
@@ -185,15 +191,19 @@ class SourcingPlan:
 
     @property
     def cost(self) -> tuple[float, float]:
-        """The objective ``(time, gold)`` for comparisons.
+        """The objective ``(time, net gold)`` for comparisons.
 
         The whole tradeoff is time against gold: self-sourcing a consumable costs
         makespan, buying it costs gold, and everything else (which consumables, how
-        many) is just how a plan lands on that curve. So the Pareto cost is the
-        pair -- two plans with the same time and gold are equivalent however they
-        mix making and buying.
+        many) is just how a plan lands on that curve. The gold is **net** --
+        ``gold - surplus_gold``, the gold spent buying less the sale value of the
+        surplus the plan banks -- so a slower plan that leans on passive production
+        and banks sellable materials can fall *below* zero (resources reserved for
+        other tasks), extending the frontier past the "buy nothing" line. Two plans
+        with the same time and net gold are equivalent however they mix making,
+        buying and banking.
         """
-        return (self.time.total_seconds(), self.gold)
+        return (self.time.total_seconds(), self.gold - self.surplus_gold)
 
 
 def _minutes(time: timedelta) -> float:
@@ -708,6 +718,31 @@ def surplus_sale_value(
     return rows
 
 
+def plan_surplus_gold(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+    prices: dict[str, float],
+) -> float:
+    """Total gold ``plan``'s banked surplus is worth.
+
+    The sum of :func:`surplus_sale_value` over the plan's :func:`plan_leftovers` --
+    the sale value of everything the plan produces past all it consumes, as sellable
+    goods crafted from the leftovers. This is the credit :attr:`SourcingPlan.cost`
+    subtracts from bought gold, so :func:`frontier` sets it on every plan and the
+    gold axis can dip below zero for one that banks more than it buys. Zero when
+    nothing is priced or nothing is left over.
+    """
+    leftovers = plan_leftovers(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    rows = surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
+    return sum(gold for _, _, gold in rows)
+
+
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:
     """Whether ``a`` is at least as good as ``b`` on every objective, better on one
     -- so ``b`` is not worth keeping."""
@@ -718,7 +753,7 @@ def _non_dominated(plans: list[SourcingPlan]) -> list[SourcingPlan]:
     """The Pareto-efficient plans, de-duplicated, sorted fastest first."""
     unique: dict[tuple, SourcingPlan] = {}
     for plan in plans:
-        key = (round(plan.time.total_seconds()), round(plan.gold))
+        key = (round(plan.time.total_seconds()), round(plan.gold - plan.surplus_gold))
         unique.setdefault(key, plan)
     kept = [
         p for p in unique.values()
@@ -971,4 +1006,13 @@ def frontier(
         )
         for cap in caps
     ]
+    # Credit each plan for the surplus it banks (see :func:`plan_surplus_gold`), so
+    # its ``cost`` gold is net of what it can sell -- a slow, passive-leaning plan
+    # dips below zero and the frontier extends past the "buy nothing" line. Done
+    # before pruning: ``_non_dominated`` and ``_thin`` both rank by the net cost.
+    for plan in plans:
+        plan.surplus_gold = plan_surplus_gold(
+            plan, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {}, prices or {},
+        )
     return _thin(_non_dominated(plans), count, tuple(breakpoints))

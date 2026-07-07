@@ -91,10 +91,15 @@ def print_frontier(
     when some plan uses them), then, with trading ``prices``, its gold. ``golds``
     (one ``(to_buy, passive)`` pair per plan, from
     :func:`optimizer.plan_gold_breakdown`) splits that into what the plan **buys**
-    -- its real cost, what "cheapest" ranks by -- and the market value of what it
-    **self-sources** instead, summing to the total. ``reasons`` annotates why each
-    plan is on the frontier (a resource plan says "all Steel Wire from passive");
-    endpoints and farming intermediates carry only their fastest/cheapest tag.
+    and the market value of what it **self-sources** instead, summing to the total.
+    A plan that banks surplus then shows ``(bank B, net N)``: the sale value of what
+    it produces past all it consumes (``plan.surplus_gold``), and its **net** gold
+    ``buy - bank`` -- the real cost the frontier trades against time, which for a
+    slow, passive-leaning plan falls below zero (see
+    :attr:`optimizer.SourcingPlan.cost`); this is what "cheapest" ranks by.
+    ``reasons`` annotates why each plan is on the frontier (a resource plan says
+    "all Steel Wire from passive"); endpoints and farming intermediates carry only
+    their fastest/cheapest tag.
     """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
@@ -132,6 +137,13 @@ def print_frontier(
                 gold = f" -> {buy:,} + {passv:,} = {buy + passv:,} g"
             else:
                 gold = f" -> {round(optimizer.plan_gold(plan, prices)):,} g"
+            # Credit the surplus the plan banks: its net cost (what the frontier
+            # trades against time) is what it buys less what it can sell, which for a
+            # slow, passive-leaning plan drops below zero (see SourcingPlan.cost).
+            banked = round(plan.surplus_gold)
+            if banked:
+                net = round(plan.gold - plan.surplus_gold)
+                gold += f" (bank {banked:,}, net {net:,})"
         tags = []
         if i == 0:
             tags.append("fastest")

@@ -16,6 +16,7 @@ from optimizer import (
     plan_gold,
     plan_gold_breakdown,
     plan_leftovers,
+    plan_surplus_gold,
     surplus_sale_value,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
@@ -633,6 +634,45 @@ def test_surplus_sale_value_excludes_unsellable_grape_juice():
     prices = {**GOLD, "grape juice": 5.0}
     recipes = {"grape juice": {"grapes": 2}}
     assert surplus_sale_value({"grapes": 500.0}, recipes, 1.0, prices) == []
+
+
+def test_plan_surplus_gold_sums_the_sale_value_of_banked_surplus():
+    # Passive banks 1,000 straw; nothing consumes it and one straw crafts a Large Net
+    # (0.01 g each), so the leftover is worth 1,000 * 0.01 = 10 gold.
+    passive = Offer(
+        "passive", "passive", {"straw": 10.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 100)])
+    banked = plan_surplus_gold(plan, {}, {"large net": {"straw": 1}}, 1.0, [], {}, GOLD)
+    assert banked == pytest.approx(1000 * 0.01)
+
+
+def test_cost_is_time_and_gold_net_of_banked_surplus():
+    # The Pareto cost's gold axis is net: what the plan buys, less the sale value of
+    # the surplus it banks -- which can carry it below zero.
+    plan = SourcingPlan(time=timedelta(minutes=30), gold=100.0, surplus_gold=140.0)
+    assert plan.cost == (pytest.approx(30 * 60), pytest.approx(-40.0))
+
+
+def test_frontier_credits_banked_surplus_below_zero_gold():
+    # Passive makes slow Wire and fast straw together; the demanded gadget is either
+    # crafted from Wire (passive-only, ~1,000 min) or fished with a bought net. The
+    # slow, self-sourced plan waits on Wire and banks ~10,000 surplus straw, sellable
+    # as cider -- a gold credit that drives its net cost below zero, past "buy
+    # nothing".
+    passive = Offer(
+        "passive", "passive", {"wire": 0.1, "straw": 10.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    fish = Offer("fish gadget", "fishing", {"gadget": 1},
+                 consumes={"large net": 1}, ln=1)
+    recipes = {"gadget": {"wire": 1}, "apple cider": {"straw": 1}}
+    plans = frontier([passive, fish], {"gadget": 100}, recipes, prices=GOLD)
+    slow = plans[-1]
+    assert slow.gold < 1e-6                  # buys nothing (bar a solver residual)
+    assert slow.surplus_gold > 0             # but banks sellable surplus
+    assert slow.cost[1] < 0                  # so its net gold sits below zero
+    assert slow.cost[1] == pytest.approx(slow.gold - slow.surplus_gold)
 
 
 def test_frontier_prices_pick_the_cheaper_gold_channel():

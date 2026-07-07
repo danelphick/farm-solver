@@ -65,7 +65,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 |---|---|---|
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -96,9 +96,13 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 - **`optimizer.SourcingPlan`** — `draws`, `crafts` (`{item: count}`), `opens`
   (`{openable_name: count}`), `time`, the consumable tallies spent
   (`arnold_palmers/large_nets/cookie_sets/grape_juices/apple_ciders/orange_juice`),
-  `bought` (`{item: units}` purchased) and `gold` (`Σ bought*price`), `remainder`.
-  `.cost` is the pair `(time, gold)` — the whole tradeoff, so two plans equal on
-  both are equivalent however they mix making and buying.
+  `bought` (`{item: units}` purchased), `gold` (`Σ bought*price`), `surplus_gold`
+  (sale value of banked surplus, set by `frontier`) and `remainder`.
+  `.cost` is the pair `(time, net gold)` where **net gold = `gold − surplus_gold`**
+  — bought less what the plan banks — so a slow, passive-leaning plan that banks
+  more than it buys sits at *negative* gold and the frontier extends past the "buy
+  nothing" line. Two plans equal on both are equivalent however they mix making,
+  buying and banking.
 - **`sources.OpenFlow(name, consumes, yields)`** — opening a chest/bag: a free,
   instant multi-output LP flow.
 - **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
@@ -139,17 +143,21 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   `plan_gold(plan, prices)` is the market value of **all** consumables spent;
   **`plan_gold_breakdown`** splits it exactly into `(to_buy, self_sourced)` =
   `(plan.gold, plan_gold − plan.gold)` — to-buy is what the LP actually bought.
-  `main.cheapest_plan` ranks by `plan.gold` (least bought).
+  **`plan_surplus_gold`** = `Σ surplus_sale_value(plan_leftovers(...))`, the sale
+  value of what a plan banks; `frontier` stores it on each plan as `surplus_gold`,
+  so `cost`'s net gold nets it off (see the `SourcingPlan` bullet). `main.cheapest_plan`
+  ranks by **net** gold (`plan.gold − plan.surplus_gold`) — buys least, banks most.
 - **`frontier(...)`** = fast endpoint (`gold_weight=_FAST_PRICE`, buy freely) + cheap
   endpoint (`_FREE_PRICE`, self-source, `gold = 0`) + an epsilon sweep of makespan
-  caps (each minimising gold), then `_non_dominated` then `_thin` to `count`. Two
-  cap sources feed the sweep:
+  caps (each minimising gold), then it credits each plan's `surplus_gold`
+  (`plan_surplus_gold`) so `cost` is net, then `_non_dominated` then `_thin` to
+  `count`. Two cap sources feed the sweep:
   - `_time_caps` — geometric spacing between the endpoints.
   - `_passive_completion_caps` — the **passive-resource breakpoints** (see
     below), also passed to `_thin` as **anchors** so they survive thinning
     (smallest-first, since useful tradeoffs cluster at the fast end).
     `passive_pet_items` are excluded (pet trickle isn't a real plateau).
-- `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, gold)`; dedup key
+- `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, net gold)`; dedup key
   rounds both.
 
 ### Passive-resource breakpoints — the frontier's spine
@@ -221,7 +229,9 @@ buildings.
   crafting those leftovers into the sellable priced goods (AP, Large Net, Apple
   Cider, Orange Juice — Grape Juice and cookie sets excluded, no sale recipe),
   allocating shared materials to the richest good. Lists each good with its gold
-  and the nominal total. Rigorous for every plan: consumables are always grounded,
+  and the nominal total — the same figure `plan_surplus_gold` sums for the frontier
+  row's `(bank B, net N)` credit and the plan's net `cost`. Rigorous for every plan:
+  consumables are always grounded,
   so a plan self-sources exactly what it needs (net of buying) and the leftovers
   are genuine spare capacity (naturally zero when the binding materials are used
   up).
@@ -236,9 +246,12 @@ buildings.
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS
   (iron, nails) stripped.
-- The frontier's whole tradeoff is `(time, gold)`; that pair is `SourcingPlan.cost`
-  and the dedup key. A consumable's spend is not itself a Pareto axis — only the
-  gold spent buying it is.
+- The frontier's whole tradeoff is `(time, net gold)` where net gold =
+  `gold − surplus_gold`; that pair is `SourcingPlan.cost` and (rounded) the dedup
+  key. A consumable's spend is not itself a Pareto axis — only the gold spent buying
+  it, less the sale value of what the plan banks, is. `minimize` still optimises on
+  raw bought `gold`; `frontier` credits the surplus afterwards, so the two endpoints
+  and sweep are unchanged but their (and every plan's) `cost` is re-scored net.
 - **Buying can't earn mastery**: a demanded (goal) consumable must be crafted or
   gathered; `buy ≤ derived` confines purchases to non-goal (tool/material) uses.
 

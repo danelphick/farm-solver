@@ -48,6 +48,16 @@ def test_cheapest_plan_breaks_ties_on_time():
     assert cheapest_plan(plans) == 1
 
 
+def test_cheapest_plan_ranks_by_net_gold_crediting_banked_surplus():
+    # Plan 0 buys 5 and banks nothing (net 5); plan 1 buys 8 but banks 20 of surplus
+    # (net -12), so on net gold it is the cheapest despite buying more.
+    plans = [
+        SourcingPlan(time=timedelta(hours=1), gold=5, surplus_gold=0),
+        SourcingPlan(time=timedelta(hours=3), gold=8, surplus_gold=20),
+    ]
+    assert cheapest_plan(plans) == 1
+
+
 def test_limit_shortfall_reports_a_too_tight_time_limit():
     # Every plan is 3d+ here, so a 1d cap can never be met -- say so, naming both.
     plans = [
@@ -954,3 +964,14 @@ def test_print_frontier_splits_gold_into_buy_and_self_sourced(capsys):
     out = capsys.readouterr().out
     assert "gold, as buy + self-sourced" in out
     assert "-> 48 + 12 = 60 g" in out
+
+
+def test_print_frontier_shows_banked_surplus_and_net_gold(capsys):
+    # A plan that banks surplus adds "(bank B, net N)"; net is buy - bank, here below
+    # zero (buys 12, banks 50 -> net -38), so the row shows the frontier past 0 g.
+    plan = SourcingPlan(
+        time=timedelta(0), arnold_palmers=1000, gold=12.0, surplus_gold=50.0
+    )
+    print_frontier([plan], 0, 0, None, _GOLD, golds=[(12.0, 48.0)])
+    out = capsys.readouterr().out
+    assert "-> 12 + 48 = 60 g (bank 50, net -38)" in out
