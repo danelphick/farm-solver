@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tomllib
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -56,6 +57,44 @@ def parse_gold_budget(value: str) -> int | None:
     return budget
 
 
+def _parse_override_value(text: str) -> object:
+    """Interpret an override's ``value`` the way TOML would.
+
+    ``true``/``false`` become booleans, numbers become ints/floats, and quoted
+    strings drop their quotes; anything TOML cannot parse (e.g. a bare path) is
+    kept as the literal string, so ``solver.mastery_file=foo.txt`` works.
+    """
+    try:
+        return tomllib.loads(f"_ = {text}")["_"]
+    except tomllib.TOMLDecodeError:
+        return text
+
+
+def apply_overrides(cfg: dict, overrides: list[str] | None) -> None:
+    """Apply ``--override section.flag=value`` settings to ``cfg`` in place.
+
+    The dotted key walks (creating) nested tables; the value is parsed as TOML
+    (falling back to a literal string). Malformed overrides raise ``ValueError``.
+    """
+    for override in overrides or []:
+        key, sep, value = override.partition("=")
+        if not sep:
+            raise ValueError(f"--override needs section.flag=value, not {override!r}")
+        path = [part.strip() for part in key.split(".")]
+        if len(path) < 2 or not all(path):
+            raise ValueError(
+                f"--override key must be section.flag (dotted), not {key.strip()!r}"
+            )
+        table = cfg
+        for part in path[:-1]:
+            table = table.setdefault(part, {})
+            if not isinstance(table, dict):
+                raise ValueError(
+                    f"--override cannot descend into non-table {part!r} in {key.strip()!r}"
+                )
+        table[path[-1]] = _parse_override_value(value.strip())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="farm-solver",
@@ -80,6 +119,18 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "text file of your inventory copied from FarmRPG "
             "(overrides solver.inventory_file in the config)"
+        ),
+    )
+
+    parser.add_argument(
+        "--override",
+        action="append",
+        metavar="SECTION.FLAG=VALUE",
+        help=(
+            "override a config value for this run without editing config.toml "
+            "(e.g. --override sawmill.use_hickory_omelette=false). The value is "
+            "parsed as TOML (true/false, numbers, quoted strings), falling back "
+            "to a literal string. Repeatable"
         ),
     )
 
@@ -481,6 +532,7 @@ def load_config() -> dict:
 
 def run(args: argparse.Namespace) -> int:
     cfg = load_config()
+    apply_overrides(cfg, args.override)
     workshop = crafting.load_workshop()
     farm = crops.farm_from_config(cfg.get("farming", {}))
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
