@@ -54,29 +54,23 @@ Every item you still need can be obtained several ways, and the ways differ in w
 
 On top of the four channels, chests and bags can be **opened** at the Locksmith for their contents (see [Openables](#openables)). Opening costs no time or consumable of its own — the cost is having gathered the chest (and its key) in the first place, usually by fishing or exploring — so the solver acquires and opens a chest whenever that beats gathering its contents directly, and chains opens where the contents are themselves openable (a chest yielding a bag, a bag yielding keys).
 
-Spending a net or a palmer buys speed: it lifts an item out of the slow farming/passive queues for zero time, at the cost of one consumable. Cookie sets and Grape Juices (see [Cookies](#cookies)) are the same kind of scarce speed-for-time trade on the farming track. So there is a genuine tradeoff between time and all four. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another, spanning "all free but slow" to "fast but costly":
+Every consumable a plan spends is either **self-sourced** from your passive economy — costing *time* — or **bought** for *gold* (see [Spending gold: make vs buy](#spending-gold-make-vs-buy)). So the real tradeoff each plan strikes is **time against gold**: buy freely and finish fast, or spend nothing and wait. Cookie sets and Grape Juices (see [Cookies](#cookies)) are a related scarce speed-up on the farming track. Farm Solver models the whole choice as a linear program and reports the **Pareto frontier** — a handful of plans, none strictly worse than another on both axes, spanning "spend no gold and wait" to "buy freely and finish fast". Each row shows its makespan, the consumables it spends, and — with trading [prices](#trading-gold-prices) — its gold as `buy + self-sourced = total`:
 
 ```text
-Sourcing plans (time + Arnold Palmers + Large Nets):
- > 1. 87y 62d + 71,136 AP + 0 LN  [fastest]
-   2. 293y 319d + 3,931 AP + 0 LN  [cheapest]
-```
-
-Each of cookie sets and Grape Juices is priced and swept like the consumables, so the frontier offers plans that spend more of them to finish sooner or none of them to save them — a goal grown entirely by farming (say a heap of Beet) is no longer a single take-it-or-leave-it plan. When some plan spends them, each gets its own column:
-
-```text
-Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice):
- > 1. 11d 8h 47m + 0 AP + 0 LN + 11 sets + 159 GJ  [fastest]
-   2. 36d 8h 46m + 0 AP + 0 LN + 11 sets + 156 GJ
+Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
+ > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 6,519 + 6,078 = 12,597 g  [fastest]
+   2. 16d 2h 51m + 31,524 AP + 149,320 LN + 11 sets + 226 GJ + 80,622 cider -> 5,552 + 6,451 = 12,003 g
    ...
-   5. 3y 242d + 0 AP + 0 LN + 0 sets + 0 GJ  [cheapest]
+   5. 61d 2h 45m + 35,273 AP + 13,602 LN + 11 sets + 145 GJ + 57,130 cider -> 0 + 5,289 = 5,289 g  [cheapest] — all Lemon from passive
 ```
 
-The **cheapest** plan is the one spending the fewest of all four (leaning hardest on free farming and passive production), so it is not always the slowest overall.
+Cookie sets, Grape Juices and Apple Ciders each earn their own column only when some plan spends them (a goal grown entirely by farming, say a heap of Beet, might show none). They are priced and swept like the buyable consumables, so the frontier offers plans that lean on them to finish sooner or save them to finish cheaper.
+
+The **cheapest** plan is the one that buys the least gold — leaning hardest on free farming and passive production — so it need not be the slowest overall.
 
 One action often produces many different items at once (a net catches every fish in its zone, a harvest drops its crop plus rarer items), and the plan credits that whole bundle against everything you need — so a single fishing trip can cover several requirements together.
 
-By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one spending the fewest Arnold Palmers and Large Nets (`--fastest-plan` is the explicit form of the default):
+By default the **fastest** plan is expanded in full; the `>` marks which plan is shown. Pass `--plan N` to expand a different one by its number, or `--cheapest-plan` to expand the one that buys the least gold (`--fastest-plan` is the explicit form of the default):
 
 ```shell
 python main.py --cheapest-plan        # expand the cheapest plan instead
@@ -106,15 +100,15 @@ Anything no channel can supply is listed as a remainder to craft or provide your
 The frontier is built around the **long-gathering passive resources** — each building-made material is needed only up to its products' full demand, and the makespan at which that full amount finishes gathering is a natural plateau: cap the plan there and every slower material must be sped up with consumables, while that one, and all faster ones, still come for free. So the plans segment by resource, in order, and the frontier table labels each resource plan with why it is there — the material it gathers to completion:
 
 ```text
-Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice):
- > 1. 10d 11h 40m + 209,031 AP + 48,511 LN + 11 sets + 147 GJ  [fastest]
-   2. 20d 17h 22m + 189,637 AP + 35,050 LN + 11 sets + 290 GJ
-   3. 27d 7h 39m + 178,119 AP + 29,265 LN + 10 sets + 136 GJ  — all Steel Wire from passive
-   4. 143d 17m + 90,406 AP + 0 LN + 0 sets + 0 GJ  — all Oak from passive
-   5. 251y 10d + 421 AP + 0 LN + 0 sets + 0 GJ  [cheapest]
+Sourcing plans (time + Arnold Palmers + Large Nets + cookie sets + Grape Juice + Apple Cider -> gold, as buy + self-sourced):
+ > 1. 10d 11h 40m + 31,055 AP + 109,769 LN + 11 sets + 147 GJ + 86,406 cider -> 6,519 + 6,078 = 12,597 g  [fastest]
+   2. 16d 2h 51m + 31,524 AP + 149,320 LN + 11 sets + 226 GJ + 80,622 cider -> 5,552 + 6,451 = 12,003 g
+   3. 25d 20h 46m + 32,336 AP + 30,540 LN + 11 sets + 146 GJ + 72,158 cider -> 4,027 + 5,238 = 9,265 g
+   4. 27d 7h 39m + 32,457 AP + 29,265 LN + 11 sets + 146 GJ + 70,911 cider -> 3,801 + 5,223 = 9,024 g  — all Steel Wire from passive
+   5. 61d 2h 45m + 35,273 AP + 13,602 LN + 11 sets + 145 GJ + 57,130 cider -> 0 + 5,289 = 5,289 g  [cheapest] — all Lemon from passive
 ```
 
-Plan 3 is clamped to when Steel Wire finishes (its full requirement, ~27 days), plan 4 to Oak (~143 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plan 2 above) are shown in between with no resource label.
+Plan 4 is clamped to when Steel Wire finishes (its full requirement, ~27 days) and the cheapest to Lemon (~61 days); the chosen plan's critical path names the same gating resource ("its full requirement, after which no more is needed"). Pet-made materials are skipped here — their trickle is a slow last resort, not a real plateau. Grape Juice and cookie sets accelerate farming, so if more plans are asked for (`--plans N`) than there are resource plateaus, farming-accelerated intermediates (like plans 2 and 3 above) are shown in between with no resource label.
 
 By default a seasonal pet is scaled to its steady-state yearly share, so the plan's date does not matter. Set `model_calendar = true` under `[pets]` to instead model the calendar: how much a seasonal pet contributes then depends on how much of the plan runs while it is in season, given the plan's start (today, or `--start-date YYYY-MM-DD`). A short plan that misses a pet's window sees nothing from it; one that lands in the window sees its full haul; a plan spanning several years still settles to the yearly share whatever the start date. So the same goal can source differently in March than in July.
 

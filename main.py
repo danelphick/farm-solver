@@ -216,8 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # Which frontier plan to expand in full: the fastest (the default), the
-    # cheapest (fewest Arnold Palmers and Large Nets), or a specific one by its
-    # number in the table.
+    # cheapest (least gold spent), or a specific one by its number in the table.
     plan = parser.add_mutually_exclusive_group()
     plan.add_argument(
         "--fastest-plan",
@@ -227,9 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument(
         "--cheapest-plan",
         action="store_true",
-        help=(
-            "expand the plan spending the fewest Arnold Palmers and Large Nets"
-        ),
+        help="expand the plan that buys the least gold",
     )
     plan.add_argument(
         "--plan",
