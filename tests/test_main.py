@@ -634,6 +634,48 @@ def test_print_plan_reports_opening_chests(capsys):
     assert "Locked Chest" in out.split("Fishing:")[1]
 
 
+def test_print_plan_reports_opens_that_restock_a_consumable_tool(capsys):
+    # The plan spends Large Nets (a fishing *tool*, not a craft material) and opens
+    # a chest that yields them. Large Net is never crafting `need`, but the open
+    # still surfaces because it restocks a tool the plan burns.
+    demand = {"Gem": 10}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Cove", "fishing", {"gem": 1}, ln=1), 10)],
+        opens={"Net Chest": 4},
+        large_nets=30,
+    )
+    chest = OpenFlow(
+        name="Net Chest",
+        consumes={"net chest": 1},
+        yields={"large net": 3, "trinket": 9},
+    )
+    names = {"net chest": "Net Chest", "large net": "Large Net", "gem": "Gem"}
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, open_flows=[chest], openable_names=names)
+    out = capsys.readouterr().out
+    assert "4x Net Chest -> 12x Large Net" in out
+    assert "Trinket" not in out  # a byproduct nothing needs, still hidden
+
+
+def test_print_plan_lists_held_consumables_from_inventory(capsys):
+    # A plan can spend far more of a tool than it makes because it held a stack.
+    # The held portion (min of stock and spend) is surfaced so the spend reconciles.
+    demand = {"Gem": 10}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Cove", "fishing", {"gem": 1}, ln=1), 10)],
+        large_nets=1000,
+    )
+    inventory = {"large net": 712, "arnold palmer": 5}
+    print_plan(
+        plan, demand, Farm(), Workshop(), 1.0, inventory=inventory,
+        openable_names={"large net": "Large Net", "arnold palmer": "Arnold Palmer"},
+    )
+    out = capsys.readouterr().out
+    assert "From inventory (held consumables):" in out
+    assert "712x Large Net" in out
+    # Arnold Palmers are held but the plan spends none, so they are not listed.
+    assert "Arnold Palmer" not in out
+
+
 def test_print_plan_reduces_passive_residual_by_inventory(capsys):
     # 100 Widgets each consume a Gear that passive makes. With 40 Gears in stock,
     # passive need only build the 60 shortfall.

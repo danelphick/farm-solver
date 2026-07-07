@@ -659,6 +659,24 @@ def print_plan(
     # opens consume) are worth showing; an openable's other contents are byproducts.
     interesting = set(need) | set(crafted)
 
+    # Tools the plan spends (nets, palmers, cider, ...) are sourced then burned by
+    # fishing/exploring/farming, so they never appear as crafting `need`. Track how
+    # many of each the plan spends, so an open performed purely to restock one -- a
+    # Mystical Chest opened for its Large Nets -- surfaces, as does the held portion.
+    spent_consumables = {
+        item: spent
+        for item, spent in {
+            "large net": plan.large_nets,
+            "arnold palmer": plan.arnold_palmers,
+            "apple cider": plan.apple_ciders,
+            "orange juice": plan.orange_juice,
+            "grape juice": plan.grape_juices,
+        }.items()
+        if round(spent) >= 1
+    }
+    # An open is worth reporting if it yields a needed item or restocks a tool.
+    open_worthy = set(need) | set(spent_consumables)
+
     def wanted(offer: sources.Offer) -> str:
         return ", ".join(
             sorted(display.get(key, key) for key in offer.yields if key in interesting)
@@ -780,7 +798,7 @@ def print_plan(
         and any(
             round(flow.yields[item] * count) >= 1
             for item in flow.yields
-            if item in need
+            if item in open_worthy
         )
     ]
     if opens:
@@ -798,7 +816,7 @@ def print_plan(
             gained = ", ".join(
                 f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
                 for item in sorted(flow.yields)
-                if item in need and round(flow.yields[item] * count) >= 1
+                if item in open_worthy and round(flow.yields[item] * count) >= 1
             )
             detail = f" -> {gained}" if gained else ""
             print(
@@ -901,6 +919,21 @@ def print_plan(
                     f"  {quantity:>{width},}x {name}"
                     f" in {passive.format_duration(wait)}{source}"
                 )
+
+    # Consumable tools drawn from held stock (spent before any are crafted, opened
+    # or bought). Surfacing these makes the spend tallies reconcile: a plan can burn
+    # far more Large Nets than it makes or opens because it held a stack to begin
+    # with -- otherwise those nets look like they came from nowhere.
+    held = [
+        (item, min(inventory.get(item, 0.0), spent))
+        for item, spent in spent_consumables.items()
+        if round(min(inventory.get(item, 0.0), spent)) >= 1
+    ]
+    if held:
+        print("\nFrom inventory (held consumables):")
+        width = _num_width(round(units) for _, units in held)
+        for item, units in sorted(held, key=lambda kv: -kv[1]):
+            print(f"  {round(units):>{width},}x {display.get(item, item)}")
 
     purchases = [(item, units) for item, units in plan.bought.items() if round(units) >= 1]
     if purchases and prices is not None:

@@ -95,6 +95,8 @@ Passive production (concurrent):
   ...
 ```
 
+A plan often spends more of a consumable than any channel makes, because it drew on stock you already hold — 712 Large Nets in inventory, say, on top of the ones it crafts or opens chests for. So a **From inventory (held consumables)** section lists the held portion of each tool the plan burns (nets, Arnold Palmers, ciders, …), letting the spend reconcile — held plus opened plus crafted plus bought — instead of the held nets seeming to come from nowhere.
+
 Anything no channel can supply is listed as a remainder to craft or provide yourself. Pass `--plans N` to spread more (or fewer) plans across the frontier when you want finer resolution — useful where the fast end swings wildly in cost (default 5).
 
 The frontier is built around the **long-gathering passive resources** — each building-made material is needed only up to its products' full demand, and the makespan at which that full amount finishes gathering is a natural plateau: cap the plan there and every slower material must be sped up with consumables, while that one, and all faster ones, still come for free. So the plans segment by resource, in order, and the frontier table labels each resource plan with why it is there — the material it gathers to completion:
@@ -185,7 +187,7 @@ python main.py --unobtainable
 
 Chests and bags — dropped by fishing zones and exploring locations — can be opened at the Locksmith for their contents, defined in `openables.csv`. There are two kinds: a **fixed** openable always yields a set number of each of its items; a **random** one yields a single item drawn from a pool, so each entry averages its own count spread over the pool size. A chest also costs one **key** of its tier to open (Small Chest → Small Key, Medium → Square Key, Large → Treasure Key, Mystical → Skeleton Key); bags open freely.
 
-Opening is folded into the same linear program as crafting: it is a free, instant flow that consumes the chest (and key) and produces its average contents. So the solver treats "fish a chest and open it" as just another way to source the contents, taking it whenever that costs fewer consumables than gathering them directly — and it chains, since a chest's contents may themselves be openable (a Medium Chest yields a Grab Bag, whose pool yields the keys that open more chests). The opens that a plan performs are reported in their own section, each naming the key it spends and, of its contents, only the items the plan actually needs (the rest are byproducts):
+Opening is folded into the same linear program as crafting: it is a free, instant flow that consumes the chest (and key) and produces its average contents. So the solver treats "fish a chest and open it" as just another way to source the contents, taking it whenever that costs fewer consumables than gathering them directly — and it chains, since a chest's contents may themselves be openable (a Medium Chest yields a Grab Bag, whose pool yields the keys that open more chests). The opens that a plan performs are reported in their own section, each naming the key it spends and, of its contents, the items the plan actually needs — including any **consumable it restocks** (a Mystical Chest opened for its Large Nets), even though a net is a fishing tool rather than a craft material. The rest are byproducts and left out:
 
 ```text
 Opening (Locksmith):

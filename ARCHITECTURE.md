@@ -197,8 +197,16 @@ buildings.
 ## Printing conventions (report.print_plan)
 
 - Sections: Fishing, Exploring, Opening (Locksmith), Farming, Passive production,
-  remainder. Counts are **right-aligned per section** (`_num_width`; the `x`
-  lines up; not shared across sections).
+  From inventory (held consumables), Buy (with gold), Surplus, remainder. Counts
+  are **right-aligned per section** (`_num_width`; the `x` lines up; not shared
+  across sections).
+- **`open_worthy`** = `need ∪ spent_consumables` gates what an open shows: an
+  openable's yields are byproducts *unless* needed or a **tool** the plan spends
+  (Large Net / Arnold Palmer / Apple Cider / Orange Juice / Grape Juice). Tools
+  aren't crafting `need`, so without this an open done purely to restock one (a
+  Mystical Chest opened for its Large Nets) would vanish from the report. The
+  **From inventory** section then shows each tool's held portion (`min(stock,
+  spent)`), so the spend reconciles: held + opened + crafted + bought.
 - Cookie farming: `_print_cookie_farming`; a cookie set is a **whole real day**
   shared across crops, so the count is `ceil(total cookie-days)`
   (`_cookie_sets_used`), not per-crop rounding.
