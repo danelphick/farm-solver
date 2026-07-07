@@ -83,19 +83,18 @@ def print_frontier(
     prices: dict[str, float] | None = None,
     golds: list[tuple[float, float]] | None = None,
 ) -> None:
-    """The frontier table: each plan's time and consumables, fastest first.
+    """The frontier table: each plan's time, consumables and gold, fastest first.
 
-    Cookie sets and Grape Juices are shown as extra columns only when some plan
-    actually spends them, so a plan that uses neither keeps the plain time/AP/LN
-    table. With trading ``prices`` a trailing **gold** column shows each plan's
-    real gold cost (what "cheapest" ranks by). When ``golds`` is given (one
-    ``(to_buy, passive)`` pair per plan, see :func:`optimizer.plan_gold_breakdown`)
-    that total is split into the gold you must still **buy** and the gold value of
-    what the plan makes/holds **passively** -- so a plan that accumulates its Large
-    Nets from straw/wood/stone/antlers shows them in the total but not the to-buy
-    figure. ``reasons`` annotates why each plan is on the frontier -- a resource
-    plan says "all Steel Wire from passive" (its gathering plateau); endpoints and
-    farming intermediates carry only their fastest/cheapest tag.
+    The tradeoff is time against **gold**: the fast plans buy their consumables,
+    the slow ones self-source them. Each row lists its makespan and the consumables
+    it spends (cookie sets, Grape Juices and Apple Ciders appear as columns only
+    when some plan uses them), then, with trading ``prices``, its gold. ``golds``
+    (one ``(to_buy, passive)`` pair per plan, from
+    :func:`optimizer.plan_gold_breakdown`) splits that into what the plan **buys**
+    -- its real cost, what "cheapest" ranks by -- and the market value of what it
+    **self-sources** instead, summing to the total. ``reasons`` annotates why each
+    plan is on the frontier (a resource plan says "all Steel Wire from passive");
+    endpoints and farming intermediates carry only their fastest/cheapest tag.
     """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
@@ -110,11 +109,29 @@ def print_frontier(
         columns.append("Apple Cider")
     legend = ""
     if prices is not None:
-        legend = " = gold, as to-buy + passive" if golds is not None else " = gold"
+        legend = " -> gold, as buy + self-sourced" if golds is not None else " -> gold"
     print(f"\nSourcing plans ({' + '.join(columns)}{legend}):")
 
     for i, plan in enumerate(plans):
         marker = ">" if i == selected else " "
+        parts = [
+            passive.format_duration(plan.time),
+            f"{round(plan.arnold_palmers):,} AP",
+            f"{round(plan.large_nets):,} LN",
+        ]
+        if show_cookies:
+            parts.append(f"{_cookie_sets_used(plan):,} sets")
+        if show_juices:
+            parts.append(f"{round(plan.grape_juices):,} GJ")
+        if show_ciders:
+            parts.append(f"{round(plan.apple_ciders):,} cider")
+        gold = ""
+        if prices is not None:
+            if golds is not None:
+                buy, passv = (round(g) for g in golds[i])
+                gold = f" -> {buy:,} + {passv:,} = {buy + passv:,} g"
+            else:
+                gold = f" -> {round(optimizer.plan_gold(plan, prices)):,} g"
         tags = []
         if i == 0:
             tags.append("fastest")
@@ -127,24 +144,7 @@ def print_frontier(
         if reason:
             note_parts.append(f"— {reason}")
         note = "  " + " ".join(note_parts) if note_parts else ""
-        parts = [
-            passive.format_duration(plan.time),
-            f"{round(plan.arnold_palmers):,} AP",
-            f"{round(plan.large_nets):,} LN",
-        ]
-        if show_cookies:
-            parts.append(f"{_cookie_sets_used(plan):,} sets")
-        if show_juices:
-            parts.append(f"{round(plan.grape_juices):,} GJ")
-        if show_ciders:
-            parts.append(f"{round(plan.apple_ciders):,} cider")
-        if prices is not None:
-            if golds is not None:
-                buy, passv = (round(g) for g in golds[i])
-                note = f" = {buy:,} + {passv:,} = {buy + passv:,} g"
-            else:
-                note = f" = {round(optimizer.plan_gold(plan, prices)):,} g"
-        print(f" {marker} {i + 1}. {' + '.join(parts)}{note}")
+        print(f" {marker} {i + 1}. {' + '.join(parts)}{gold}{note}")
 
 
 def _frontier_reasons(
@@ -890,15 +890,25 @@ def print_plan(
                     f" in {passive.format_duration(wait)}{source}"
                 )
 
-    # The surplus is only coherent when the plan *grounds* its consumables --
-    # sources every net/palmer/cider from the passive economy (the inventory plan
-    # mode, where a grounded draw carries a `consumes`). Then leftovers are genuine
-    # spare capacity and valuing them as more of those goods adds up. In the
-    # unlimited mode consumables are bought instead, so the plan would be paying for
-    # nets while overproducing the materials to make them -- listing that surplus
-    # would contradict the to-buy gold, so it is suppressed.
-    grounded = any(draw.offer.consumes for draw in plan.draws)
-    if prices is not None and grounded:
+    purchases = [(item, units) for item, units in plan.bought.items() if round(units) >= 1]
+    if purchases and prices is not None:
+        print("\nBuy (with gold):")
+        ordered = sorted(
+            purchases, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
+        )
+        width = _num_width(round(units) for _, units in purchases)
+        for item, units in ordered:
+            cost = round(units * prices.get(item, 0.0))
+            print(
+                f"  {round(units):>{width},}x {display.get(item, item)}"
+                f" = {cost:,} g"
+            )
+        print(f"  total {round(plan.gold):,} g")
+
+    # Every consumable is grounded now, so the plan self-sources exactly what it
+    # needs (net of buying) and the leftovers are genuine spare capacity -- the
+    # surplus value is rigorous, shown whenever consumables are priced.
+    if prices is not None:
         _print_surplus_value(
             plan, demand, recipes, crafting_bonus, open_flows, inventory, prices,
             display,
