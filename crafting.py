@@ -168,15 +168,33 @@ def top_level_demand(
 ) -> dict[str, float]:
     """The directly needed items and how many of each, for the optimiser.
 
-    Each item's largest shortfall drives it (crafting is cumulative). A mastery
-    shortfall of ``n`` needs ``n / mastery_bonus`` items found, since each found
-    item grants the mastery bonus; a plain item-count shortfall needs ``n``. The
-    optimiser then works out all the crafting and gathering beneath these.
+    A mastery shortfall of ``n`` needs ``n / mastery_bonus`` items found, since
+    each found item grants the mastery bonus; a plain item-count shortfall
+    (``-i``) needs ``n``. Same-kind shortfalls for one item are cumulative --
+    crafting is cumulative, and a bigger ``-m`` mastery target simply subsumes a
+    smaller one (e.g. the tower's own requirement), so only the largest wins.
+    But a plain item-count floor is a *different* ask from a mastery shortfall
+    (holding N in inventory vs. finding N for mastery credit), so where a goal
+    combines both for the same item (see ``main.run``'s ``--target`` combining)
+    they add: the mastery shortfall's items plus the extra held on top. Matched
+    case-insensitively, keeping each item's first-seen display name so the two
+    kinds land on one entry rather than splitting by casing. The optimiser then
+    works out all the crafting and gathering beneath these.
     """
-    shortfalls = _shortfalls(needs)
-    return {
-        item: (count / mastery_bonus if is_mastery else float(count))
-        for item, (count, is_mastery) in shortfalls.items()
-        if count > 0
-    }
+    names: dict[str, str] = {}
+    extras: dict[tuple[str, bool], int] = {}
+    for need in needs:
+        key = need.item.lower()
+        names.setdefault(key, need.item)
+        kind = (key, need.is_mastery)
+        extras[kind] = max(extras.get(kind, 0), need.extra)
+
+    demand: dict[str, float] = {}
+    for (key, is_mastery), extra in extras.items():
+        if extra <= 0:
+            continue
+        amount = extra / mastery_bonus if is_mastery else float(extra)
+        display = names[key]
+        demand[display] = demand.get(display, 0.0) + amount
+    return demand
 

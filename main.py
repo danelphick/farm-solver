@@ -33,6 +33,29 @@ import report
 import sources
 
 
+def parse_target(value: str) -> str | int:
+    """Parse ``--target``: ``tower``, or a level number (``150`` or ``T150``).
+
+    ``tower`` (matched case-insensitively) climbs to the highest reachable
+    level, same as omitting ``--target``. Anything else is a level number, an
+    optional leading ``T``/``t`` stripped first (so ``T150`` and ``150`` are
+    the same), which must parse as a positive integer.
+    """
+    text = value.strip()
+    if text.lower() == "tower":
+        return "tower"
+    level_text = text[1:] if text[:1].lower() == "t" else text
+    try:
+        level = int(level_text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--target must be 'tower', a level number, or 'T<level>', not {value!r}"
+        ) from None
+    if level < 1:
+        raise argparse.ArgumentTypeError("--target level must be positive")
+    return level
+
+
 def parse_gold_budget(value: str) -> int | None:
     """Parse ``--max-gold``: ``inventory`` -> 0, ``unlimited`` -> no cap (None).
 
@@ -337,6 +360,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--level",
         type=int,
         help="target tower level (default: highest reachable level)",
+    )
+    parser.add_argument(
+        "--target",
+        type=parse_target,
+        default=None,
+        metavar="tower|N|TN",
+        help=(
+            "the goal to solve for: 'tower' (the default) climbs to the highest "
+            "reachable level (or -l's level); a level number ('150' or 'T150') "
+            "climbs to just that level, overriding -l. With -m/-i also given, "
+            "those become extra goals added to the tower's: a lower -m mastery "
+            "target than the tower already demands for that item is absorbed "
+            "(mastery is cumulative), and -i keeps at least that many of the "
+            "item in inventory at the end, on top of whatever mastery or "
+            "crafting already demands of it. Without --target, -m/-i solve for "
+            "that goal alone, ignoring the tower (the previous behaviour)"
+        ),
     )
     parser.add_argument(
         "--start-date",
@@ -811,14 +851,29 @@ def run(args: argparse.Namespace) -> int:
         have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
     )
 
-    if args.mastery is not None:
-        goals = parsing.parse_item_amounts(args.mastery)
-        solution = farm_solver.solve_mastery(state, goals)
-    elif args.items is not None:
-        goals = parsing.parse_item_amounts(args.items)
-        solution = farm_solver.solve_acquire(state, goals)
+    # Without --target, -m/-i solve for that goal alone, ignoring the tower (the
+    # previous behaviour). With --target given, they instead layer on top of the
+    # tower goal (see farm_solver.solve_target and the --target help text).
+    if args.target is None and (args.mastery is not None or args.items is not None):
+        if args.mastery is not None:
+            goals = parsing.parse_item_amounts(args.mastery)
+            solution = farm_solver.solve_mastery(state, goals)
+        else:
+            goals = parsing.parse_item_amounts(args.items)
+            solution = farm_solver.solve_acquire(state, goals)
     else:
-        solution = farm_solver.solve_tower(state, requirements, args.level)
+        target_level = args.target if isinstance(args.target, int) else args.level
+        mastery_goals = (
+            parsing.parse_item_amounts(args.mastery)
+            if args.mastery is not None
+            else None
+        )
+        item_goals = (
+            parsing.parse_item_amounts(args.items) if args.items is not None else None
+        )
+        solution = farm_solver.solve_target(
+            state, requirements, target_level, mastery_goals, item_goals
+        )
 
     report.print_solution(solution)
 

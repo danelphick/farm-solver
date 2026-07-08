@@ -25,14 +25,3 @@ TODO.md
 
   Collect user inventories/masteries and save results. Produce graphs showing progress along with
   projected progress both with solver models and based on current progress.
-
-- Add --target=X which sets the target. By default this will be --target=tower, which means target
-  climbing the tower to as high a level as is available. Additionally it should accept levels
-  which have the form 1-240 (currently the highest level so accept whatever that is). Also accept
-  the form T240. If a -i or -m option is given without --target being used, then it should have
-  the current behaviour of ignoring the tower. If --target is used in conjunction with -i and/or
-  -m then those goals should be added to the tower goals. So --target=tower -m "Grand Piano:MM",
-  means complete the tower AND also get 1,000,000 mastery for Grand Piano. If the additional goal
-  is lower mastery than the tower then ignore it. If -i "ITEM:N" is used for an item that would
-  normally be consumed crafting things needed for the tower, then this means that there should be
-  at least N items in the user's inventory at the end of plan, so craft extra.

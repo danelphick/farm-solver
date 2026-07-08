@@ -223,6 +223,32 @@ def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
     return Solution(needs=needs)
 
 
+def solve_target(
+    state: GameState,
+    requirements: TowerRequirements,
+    target_level: int | None = None,
+    mastery_goals: dict[str, int] | None = None,
+    item_goals: dict[str, int] | None = None,
+) -> Solution:
+    """Solve the tower goal, plus any extra ``-m``/``-i`` goals layered on top.
+
+    Used for ``--target`` (see ``main.run``): the tower's own mastery needs
+    (:func:`solve_tower`) are combined with an optional extra
+    :func:`solve_mastery` and/or :func:`solve_acquire` need list, simply by
+    concatenation -- ``crafting.top_level_demand`` is what reduces same-item
+    needs to one demand figure per kind, maxing a mastery goal against the
+    tower's own (so a lower ``-m`` target is absorbed, never subtracted) and
+    adding a plain ``-i`` floor on top of whatever mastery or crafting already
+    demands of that item.
+    """
+    needs = list(solve_tower(state, requirements, target_level).needs)
+    if mastery_goals:
+        needs += solve_mastery(state, mastery_goals).needs
+    if item_goals:
+        needs += solve_acquire(state, item_goals).needs
+    return Solution(needs=needs)
+
+
 def solve_acquire(state: GameState, goals: dict[str, int]) -> Solution:
     """Solve for holding the given number of each item (counting inventory).
 

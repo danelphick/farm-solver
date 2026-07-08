@@ -17,7 +17,8 @@ inventory_file = "./sample-inventory.txt"
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them. Pass `--empty-mastery` / `--empty-inventory` to ignore the mastery/inventory file (and config) entirely and start from nothing — neither flag nor config is required for the one it ignores.
 
 ```shell
-python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
+python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
+    [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--average-seasons] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
@@ -42,6 +43,18 @@ Rather than masterying an item, it can solve for acquiring a certain number of a
 
 ```shell
 python main.py -i "Flying Machine:2000,Gainite:20"
+```
+
+On their own, `-m`/`-i` replace the tower goal entirely, as above. Pass `--target` to solve the tower goal too, with `-m`/`-i` layered on top as *extra* goals instead of replacing it — `--target=tower` (the default level, or `-l`'s) plus a level number or `T<level>` (e.g. `--target=150` or `--target=T150`) to climb to just that level:
+
+```shell
+python main.py --target=tower -m "Grand Piano:1000000"
+```
+
+climbs the whole tower *and* masters Grand Piano to 1,000,000 — if the tower already demands more mastery of Grand Piano than that, the extra `-m` goal is simply absorbed (mastery is cumulative, so only the larger target matters). An extra `-i` goal instead means keeping at least that many of the item in inventory once the plan is done — on top of however many the tower's own crafting already consumes of it, so the solver crafts extra to leave that many spare:
+
+```shell
+python main.py --target=tower -i "Steel Wire:50"
 ```
 
 ## Sourcing plans

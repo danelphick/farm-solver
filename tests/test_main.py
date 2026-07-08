@@ -22,6 +22,7 @@ from main import (
     cookie_sets_available,
     limit_shortfall,
     parse_gold_budget,
+    parse_target,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
     resolve_dewstars_journal,
@@ -176,6 +177,39 @@ def test_parse_gold_budget_maps_the_named_aliases():
         parse_gold_budget("-1")
     with pytest.raises(argparse.ArgumentTypeError):
         parse_gold_budget("lots")
+
+
+def test_parse_target_accepts_tower_case_insensitively():
+    assert parse_target("tower") == "tower"
+    assert parse_target("Tower") == "tower"
+
+
+def test_parse_target_accepts_a_bare_level_number():
+    assert parse_target("150") == 150
+
+
+def test_parse_target_accepts_a_t_prefixed_level():
+    assert parse_target("T150") == 150
+    assert parse_target("t150") == 150
+
+
+def test_parse_target_rejects_garbage():
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_target("banana")
+
+
+def test_parse_target_rejects_non_positive_levels():
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_target("0")
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_target("-5")
+
+
+def test_target_defaults_to_none_so_bare_dash_m_ignores_the_tower():
+    parser = build_parser()
+    assert parser.parse_args([]).target is None
+    assert parser.parse_args(["--target", "T150"]).target == 150
+    assert parser.parse_args(["--target", "tower"]).target == "tower"
 
 
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
