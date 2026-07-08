@@ -57,6 +57,108 @@ def parse_gold_budget(value: str) -> int | None:
     return budget
 
 
+# Nominal player-to-player gold cost of one Pumpkin Juice, used when the config
+# does not set mastery.pumpkin_juice_price.
+DEFAULT_PUMPKIN_JUICE_PRICE = 230.0
+
+
+def _pumpkin_juice_limit(value: str) -> int:
+    """Parse ``--use-pumpkin-juice N``: a non-negative cap on juices spent."""
+    try:
+        limit = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--use-pumpkin-juice must be a non-negative integer, not {value!r}"
+        ) from None
+    if limit < 0:
+        raise argparse.ArgumentTypeError("--use-pumpkin-juice must be non-negative")
+    return limit
+
+
+def resolve_pumpkin_juice(
+    cli: int | None, cfg: dict
+) -> tuple[bool, int | None, float]:
+    """Whether Pumpkin Juice is allowed, its optional cap, and its gold price.
+
+    ``cli`` is ``args.use_pumpkin_juice``: ``None`` when the flag is absent (falling
+    back to ``mastery.use_pumpkin_juice``), ``-1`` for the bare flag (enabled, no
+    limit), or ``N >= 0`` for a cap. The config value is ``true`` (enabled, no limit),
+    an integer cap, or ``false``/absent (off). The command line wins. The price comes
+    from ``mastery.pumpkin_juice_price`` (default :data:`DEFAULT_PUMPKIN_JUICE_PRICE`).
+    """
+    mastery_cfg = cfg.get("mastery", {})
+    price = float(mastery_cfg.get("pumpkin_juice_price", DEFAULT_PUMPKIN_JUICE_PRICE))
+    if cli is not None:
+        return True, (None if cli < 0 else cli), price
+    setting = mastery_cfg.get("use_pumpkin_juice")
+    if not setting:  # None, False, or 0 -- off
+        return False, None, price
+    if setting is True:
+        return True, None, price
+    limit = int(setting)
+    return True, (None if limit < 0 else limit), price
+
+
+def pumpkin_juice_gains(
+    needs: list[farm_solver.ItemNeed],
+    state: farm_solver.GameState,
+    mastery_bonus: float,
+) -> dict[str, float]:
+    """Units of demand one Pumpkin Juice covers, per mastery-goal item.
+
+    A juice instantly grants 10% of an item's current mastery tier. In the
+    optimiser's items-to-find units (a found item is worth ``mastery_bonus``
+    mastery), that is ``0.1 * threshold / mastery_bonus`` -- the threshold being the
+    item's mastery denominator (its current tier), or the goal target for an item
+    not yet tracked. Only mastery goals (tower, ``-m``) with a shortfall qualify;
+    an ``-i`` acquire goal earns no mastery, so a juice does nothing for it.
+    """
+    gains: dict[str, float] = {}
+    for need in needs:
+        if not need.is_mastery or need.extra <= 0:
+            continue
+        mastery = state.mastery(need.item)
+        threshold = mastery.required if mastery and mastery.required else need.target
+        if threshold > 0:
+            gains[need.item.lower()] = 0.1 * threshold / mastery_bonus
+    return gains
+
+
+def pumpkin_juice_schedule(
+    plan: optimizer.SourcingPlan,
+    needs: list[farm_solver.ItemNeed],
+    pj_gain: dict[str, float],
+) -> dict[str, list[int]]:
+    """The mastery levels at which to drink each of ``plan``'s Pumpkin Juices.
+
+    A juice only lands its intended boost drunk late, in the goal's final tier. It
+    covers ``pj_gain`` of the item's shortfall -- the same demand units the LP credits
+    (``0.1 * threshold / mastery_bonus``, see :func:`pumpkin_juice_gains`) -- so the
+    drink points step down from the target by that: the last lands the item on target,
+    the one before a step below, and so on. They all sit above the current progress --
+    the LP caps juice at the shortfall, so ``count * gain`` never exceeds ``target -
+    have`` -- and are clamped there anyway. Using the LP's own ``pj_gain`` keeps the
+    schedule from drifting from the crediting. Returns ``{lower-cased item: [level,
+    ...]}`` ascending (the order you reach them), for the items the plan drinks on.
+    """
+    targets = {
+        need.item.lower(): (need.have, need.target)
+        for need in needs
+        if need.is_mastery
+    }
+    schedule: dict[str, list[int]] = {}
+    for item, count in plan.pumpkin_juices.items():
+        whole = round(count)
+        if whole < 1 or item not in targets or item not in pj_gain:
+            continue
+        have, target = targets[item]
+        gain = pj_gain[item]
+        schedule[item] = [
+            max(have, round(target - step * gain)) for step in range(whole, 0, -1)
+        ]
+    return schedule
+
+
 def _parse_override_value(text: str) -> object:
     """Interpret an override's ``value`` the way TOML would.
 
@@ -212,6 +314,21 @@ def build_parser() -> argparse.ArgumentParser:
             "to buy-freely (fastest); this drops plans over the cap. 'inventory' "
             "means 0 (self-source everything), 'unlimited' (the default) means no "
             "cap -- the whole frontier"
+        ),
+    )
+    parser.add_argument(
+        "--use-pumpkin-juice",
+        nargs="?",
+        const=-1,
+        default=None,
+        type=_pumpkin_juice_limit,
+        metavar="N",
+        help=(
+            "let the solver buy Pumpkin Juice -- a bought item that instantly boosts "
+            "one mastery goal by 10%% of its tier -- to finish sooner or cheaper "
+            "(overrides mastery.use_pumpkin_juice). Bare, any number may be used; "
+            "'=N' caps the total spent (the cap need not be reached). Priced at "
+            "mastery.pumpkin_juice_price gold each"
         ),
     )
     parser.add_argument(
@@ -597,6 +714,16 @@ def run(args: argparse.Namespace) -> int:
     # Absent, nothing is buyable and every plan is fully self-sourced.
     prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
 
+    # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
+    # mastery goal's shortfall directly, trading gold for a faster (or cheaper) plan;
+    # the optimiser decides how many (up to an optional cap) each frontier plan uses.
+    pj_enabled, pj_limit, pj_price = resolve_pumpkin_juice(args.use_pumpkin_juice, cfg)
+    pj_gain = (
+        pumpkin_juice_gains(solution.needs, state, args.mastery_bonus)
+        if pj_enabled
+        else {}
+    )
+
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
 
@@ -623,7 +750,7 @@ def run(args: argparse.Namespace) -> int:
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
-            prices=prices,
+            prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         )
         if not plans:
             return 0  # nothing left to source
@@ -695,10 +822,13 @@ def run(args: argparse.Namespace) -> int:
     }
     for flow in open_flows:
         sourceable_elsewhere |= set(flow.yields)
+    # When to drink each Pumpkin Juice: the mastery levels (near the goal, in the
+    # item's final tier) that land its intended boost -- shown in the plan's report.
+    pj_schedule = pumpkin_juice_schedule(chosen, solution.needs, pj_gain)
     report.print_plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
         open_flows, smith.names, inventory, sourceable_elsewhere,
-        max_passive_residuals, prices,
+        max_passive_residuals, prices, pj_schedule,
     )
 
     if args.breakdown:

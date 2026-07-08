@@ -65,7 +65,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 
 | File | Owns | Key names |
 |---|---|---|
-| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan` |
+| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
@@ -98,7 +98,10 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
 - **`optimizer.SourcingPlan`** — `draws`, `crafts` (`{item: count}`), `opens`
   (`{openable_name: count}`), `time`, the consumable tallies spent
   (`arnold_palmers/large_nets/cookie_sets/grape_juices/apple_ciders/orange_juice`),
-  `bought` (`{item: units}` purchased), `gold` (`Σ bought*price`), `surplus_gold`
+  `bought` (`{item: units}` purchased), `gold` (`Σ bought*price`, **incl. Pumpkin
+  Juice**), `pumpkin_juices` (`{goal item: count}` juices drunk), `pumpkin_gold`
+  (their slice of `gold`), `pumpkin_credit` (`{goal item: demand units}` a juice
+  covers, netted out of `need` in `plan_balance`), `surplus_gold`
   (sale value of banked surplus, set by `frontier`) and `remainder`.
   `.cost` is the pair `(time, net gold)` where **net gold = `gold − surplus_gold`**
   — bought less what the plan banks — so a slow, passive-leaning plan that banks
@@ -141,6 +144,13 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
     consumable is crafted/gathered. `_obtainable` seeds the `buyable` set (a buyable
     is always obtainable), so a channel grounded in one is usable even where nothing
     crafts it; `_reachable` walks from a wanted drop into the consumables it burns.
+  - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost. `pj_gain` (from
+    `main.pumpkin_juice_gains` = `0.1*threshold/mastery_bonus`) is the demand units one
+    juice covers for a goal item; a `pj` var per reachable goal adds that supply at
+    `pj_price` gold each, capped at fully covering the goal (`pj*gain ≤ need`) and by an
+    optional `pj_limit` total. Its gold folds into `gold`; **off in `favour_passive`**
+    (the buy-nothing regime). `plan_balance` nets `pumpkin_credit` out of `need` so the
+    residual/passive accounting reflects the boost, not passive, covered that slice.
   - `inventory` credits every item's balance **except directly-demanded ones**
     (their need is already net of stock; stamina is seeded by `--current-stamina`).
   - **Refinement** (determinism): pin makespan, minimise `gold`, then minimise
@@ -227,7 +237,15 @@ buildings.
 ## Printing conventions (report.print_plan)
 
 - Sections: Fishing, Exploring, Opening (Locksmith), Farming, Passive production,
-  From inventory (held consumables), Buy (with gold), Surplus, remainder. Counts
+  From inventory (held consumables), Buy (with gold), Pumpkin Juice (mastery boost),
+  Surplus, remainder. The Buy total is `plan.gold` **net of `pumpkin_gold`** (the
+  juice is listed apart); the frontier table gains a **Pumpkin Juice** column
+  (`_pumpkin_juices`) when a plan drinks any. The Pumpkin Juice section names the
+  **mastery levels to drink each juice at** (`main.pumpkin_juice_schedule`: `target −
+  k·pj_gain`, the LP's own `pj_gain = 0.1·threshold/mastery_bonus`, clamped ≥ progress)
+  so each lands its boost and the last hits the goal; no wall-clock time
+  is given (mastery accrues from instant crafts, so there is no reliable per-juice
+  time to attach). Counts
   are **right-aligned per section** (`_num_width`; the `x` lines up; not shared
   across sections).
 - **`open_worthy`** = `need ∪ spent_consumables` gates what an open shows: an

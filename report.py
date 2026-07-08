@@ -75,6 +75,11 @@ def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:
     return math.ceil(plan.cookie_sets)
 
 
+def _pumpkin_juices(plan: optimizer.SourcingPlan) -> float:
+    """Total Pumpkin Juices a plan spends, summed across the goals they boost."""
+    return sum(plan.pumpkin_juices.values())
+
+
 def print_frontier(
     plans: list[optimizer.SourcingPlan],
     selected: int,
@@ -104,6 +109,7 @@ def print_frontier(
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
     show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
+    show_pumpkin = any(round(_pumpkin_juices(p)) >= 1 for p in plans)
 
     columns = ["time", "Arnold Palmers", "Large Nets"]
     if show_cookies:
@@ -112,6 +118,8 @@ def print_frontier(
         columns.append("Grape Juice")
     if show_ciders:
         columns.append("Apple Cider")
+    if show_pumpkin:
+        columns.append("Pumpkin Juice")
     legend = ""
     if prices is not None:
         legend = " -> gold, as buy + self-sourced" if golds is not None else " -> gold"
@@ -130,6 +138,8 @@ def print_frontier(
             parts.append(f"{round(plan.grape_juices):,} GJ")
         if show_ciders:
             parts.append(f"{round(plan.apple_ciders):,} cider")
+        if show_pumpkin:
+            parts.append(f"{round(_pumpkin_juices(plan)):,} PJ")
         gold = ""
         if prices is not None:
             if golds is not None:
@@ -287,6 +297,9 @@ def _farming_drives(
     if makespan <= timedelta(0):
         return False
     farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
+    if farming_time <= timedelta(0):
+        return False  # no farming to drive the makespan (a sub-second tolerance on a
+        # near-instant plan could otherwise round zero farming up to co-maximal)
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
     if farming_time < makespan - tolerance:
         return False
@@ -649,8 +662,14 @@ def print_plan(
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
+    pumpkin_schedule: dict[str, list[int]] | None = None,
 ) -> None:
-    """Expand one plan into its per-channel actions and leftover materials."""
+    """Expand one plan into its per-channel actions and leftover materials.
+
+    ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
+    item, the mastery levels at which to drink its Pumpkin Juices so each lands its
+    intended tier boost; the Pumpkin Juice section names them.
+    """
     open_flows = open_flows or []
     inventory = inventory or {}
     flows_by_name = {flow.name.lower(): flow for flow in open_flows}
@@ -960,7 +979,32 @@ def print_plan(
                 f"  {round(units):>{width},}x {display.get(item, item)}"
                 f" = {cost:,} g"
             )
-        print(f"  total {round(plan.gold):,} g")
+        # Pumpkin Juice is bought too but has no per-unit price in ``prices`` (its
+        # gold is on the plan), so the consumable buys total is plan.gold net of it.
+        print(f"  total {round(plan.gold - plan.pumpkin_gold):,} g")
+
+    # Pumpkin Juice: a bought mastery boost, listed apart from the consumable buys
+    # since it covers a goal's mastery directly rather than feeding a channel. Each
+    # line names the goal it boosts, how many juices, and the gold and mastery gained.
+    juices = [
+        (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
+    ]
+    if juices and plan.pumpkin_gold > 0:
+        per_juice = plan.pumpkin_gold / _pumpkin_juices(plan)
+        print("\nPumpkin Juice (mastery boost):")
+        width = _num_width(round(units) for _, units in juices)
+        for item, units in sorted(juices, key=lambda kv: -kv[1]):
+            cost = round(units * per_juice)
+            name = display.get(item, item)
+            line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost:,} g"
+            # A juice grants 10% of the current tier, so it only lands its full boost
+            # drunk late, in the goal's final tier -- name those mastery levels.
+            levels = (pumpkin_schedule or {}).get(item)
+            if levels:
+                drink = " / ".join(f"{level:,}" for level in levels)
+                line += f"\n    drink at {name} mastery {drink}"
+            print(line)
+        print(f"  total {round(plan.pumpkin_gold):,} g")
 
     # Every consumable is grounded now, so the plan self-sources exactly what it
     # needs (net of buying) and the leftovers are genuine spare capacity -- the

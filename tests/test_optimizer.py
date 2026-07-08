@@ -13,6 +13,7 @@ from optimizer import (
     frontier,
     minimize,
     passive_residuals,
+    plan_balance,
     plan_gold,
     plan_gold_breakdown,
     plan_leftovers,
@@ -748,3 +749,64 @@ def test_frontier_without_prices_is_fully_self_sourced():
     plans = frontier([FARM_ITEM, FREE_FISH], {"It": 100})
     assert plans
     assert all(p.gold == 0 for p in plans)
+
+
+# --- Pumpkin Juice: a bought mastery boost that covers demand directly ---
+
+
+def test_minimize_drinks_pumpkin_juice_to_cover_mastery_when_gold_is_cheap():
+    # Each juice covers 10 units of "it" demand for 5 gold; with a tiny gold weight
+    # the solver buys 10 (covering all 100) rather than wait 100 minutes to grow it.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": 10}, pj_price=5)
+    assert plan.pumpkin_juices.get("it") == pytest.approx(10)
+    assert plan.pumpkin_gold == pytest.approx(50)
+    assert plan.gold == pytest.approx(50)  # PJ gold folds into the plan's gold
+    assert plan.pumpkin_credit.get("it") == pytest.approx(100)
+    assert plan.time == timedelta(0)
+    assert plan.draws == []
+
+
+def test_minimize_respects_the_pumpkin_juice_limit():
+    # Capped at 3 juices (covering 30), the other 70 must be grown (70 minutes).
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": 10}, pj_price=5, pj_limit=3)
+    assert plan.pumpkin_juices.get("it") == pytest.approx(3)
+    assert plan.time == timedelta(minutes=70)
+
+
+def test_minimize_caps_pumpkin_juice_at_the_goal():
+    # 15 demand, each juice covers 10, so at most 1.5 juices are useful -- a juice
+    # past full coverage earns no mastery, so the solver never buys more.
+    plan = minimize([FARM_ITEM], {"It": 15}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": 10}, pj_price=5)
+    assert plan.pumpkin_juices.get("it") == pytest.approx(1.5)
+    assert plan.time == timedelta(0)
+
+
+def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():
+    # A huge gold weight buys nothing, juice included: grow it instead.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=SELF_SOURCE,
+                    pj_gain={"it": 10}, pj_price=5)
+    assert plan.pumpkin_juices == {}
+    assert plan.time == timedelta(minutes=100)
+
+
+def test_minimize_skips_pumpkin_juice_when_favouring_passive():
+    # The buy-nothing slow regime never drinks juice (a gold purchase).
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, favour_passive=True,
+                    pj_gain={"it": 10}, pj_price=5)
+    assert plan.pumpkin_juices == {}
+
+
+def test_plan_balance_nets_out_pumpkin_credit():
+    # A juice covering 40 of a 100 demand leaves only 60 for the channels to make.
+    plan = SourcingPlan(pumpkin_credit={"it": 40})
+    balance = plan_balance(plan, {"It": 100}, {}, 1.0, [], {})
+    assert balance.need["it"] == pytest.approx(60)
+
+
+def test_plan_gold_includes_pumpkin_juice():
+    # Pumpkin Juice has no self-sourced form, so its whole gold adds to the total.
+    plan = SourcingPlan(large_nets=100, pumpkin_gold=50)
+    assert plan_gold(plan, GOLD) == pytest.approx(100 * 0.01 + 50)

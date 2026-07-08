@@ -6,6 +6,7 @@ import pytest
 
 import argparse
 
+from farm_solver import GameState, ItemNeed, Mastery
 from main import (
     _should_model_calendar,
     build_parser,
@@ -13,6 +14,9 @@ from main import (
     cookie_sets_available,
     limit_shortfall,
     parse_gold_budget,
+    pumpkin_juice_gains,
+    pumpkin_juice_schedule,
+    resolve_pumpkin_juice,
     selected_plan,
     within_limits,
 )
@@ -975,3 +979,141 @@ def test_print_frontier_shows_banked_surplus_and_net_gold(capsys):
     print_frontier([plan], 0, 0, None, _GOLD, golds=[(12.0, 48.0)])
     out = capsys.readouterr().out
     assert "-> 12 + 48 = 60 g (bank 50, net -38)" in out
+
+
+# --- Pumpkin Juice ---
+
+
+def test_use_pumpkin_juice_flag_parses_bare_and_capped_forms():
+    parser = build_parser()
+    assert parser.parse_args([]).use_pumpkin_juice is None
+    assert parser.parse_args(["--use-pumpkin-juice"]).use_pumpkin_juice == -1
+    assert parser.parse_args(["--use-pumpkin-juice=5"]).use_pumpkin_juice == 5
+
+
+def test_resolve_pumpkin_juice_cli_overrides_config():
+    # The bare flag (-1) enables with no limit even when the config turns it off.
+    assert resolve_pumpkin_juice(-1, {"mastery": {"use_pumpkin_juice": False}}) == (
+        True, None, 230.0
+    )
+    # An explicit cap wins too, with the default price when unset.
+    assert resolve_pumpkin_juice(5, {}) == (True, 5, 230.0)
+
+
+def test_resolve_pumpkin_juice_from_config():
+    assert resolve_pumpkin_juice(None, {}) == (False, None, 230.0)
+    assert resolve_pumpkin_juice(None, {"mastery": {"use_pumpkin_juice": True}}) == (
+        True, None, 230.0
+    )
+    assert resolve_pumpkin_juice(
+        None, {"mastery": {"use_pumpkin_juice": 7, "pumpkin_juice_price": 200}}
+    ) == (True, 7, 200.0)
+
+
+def test_pumpkin_juice_gains_uses_the_mastery_threshold():
+    # A juice grants 10% of the item's tier (its required denominator), in the
+    # optimiser's items-to-find units (a found item is worth mastery_bonus mastery).
+    state = GameState(
+        masteries={"butter": Mastery("Butter", progress=0, required=1_000_000)}
+    )
+    needs = [ItemNeed("Butter", have=0, target=1_000_000, is_mastery=True)]
+    gains = pumpkin_juice_gains(needs, state, 1.1)
+    assert gains == {"butter": pytest.approx(0.1 * 1_000_000 / 1.1)}
+
+
+def test_pumpkin_juice_gains_falls_back_to_the_target_when_untracked():
+    # An item absent from the mastery file uses the goal target as its tier.
+    needs = [ItemNeed("Gainite", have=0, target=100_000, is_mastery=True)]
+    gains = pumpkin_juice_gains(needs, GameState(), 1.0)
+    assert gains == {"gainite": pytest.approx(0.1 * 100_000)}
+
+
+def test_pumpkin_juice_gains_skips_acquire_goals_and_met_needs():
+    needs = [
+        ItemNeed("Butter", have=0, target=100, is_mastery=False),  # -i, no mastery
+        ItemNeed("Hops", have=50, target=50, is_mastery=True),  # already met
+    ]
+    assert pumpkin_juice_gains(needs, GameState(), 1.1) == {}
+
+
+def test_print_frontier_shows_the_pumpkin_juice_column(capsys):
+    plans = [SourcingPlan(time=timedelta(0), pumpkin_juices={"butter": 3})]
+    print_frontier(plans, 0, 0)
+    out = capsys.readouterr().out
+    assert "Pumpkin Juice" in out
+    assert "3 PJ" in out
+
+
+def test_print_frontier_omits_the_pumpkin_juice_column_when_unused(capsys):
+    print_frontier([SourcingPlan(time=timedelta(0))], 0, 0)
+    assert "Pumpkin Juice" not in capsys.readouterr().out
+
+
+def test_pumpkin_juice_schedule_names_the_drink_levels():
+    # Two juices step down from the goal by the LP's gain (1,000,000 / 1.1 per juice
+    # for an MM item), so the last lands the item on target and the one before a step
+    # below -- both above the current 750,000 progress.
+    gain = 0.1 * 1_000_000 / 1.1  # 90,909.09, matching pumpkin_juice_gains
+    needs = [ItemNeed("Butter", have=750_000, target=1_000_000, is_mastery=True)]
+    plan = SourcingPlan(pumpkin_juices={"butter": 2})
+    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {
+        "butter": [round(1_000_000 - 2 * gain), round(1_000_000 - gain)]
+    }
+
+
+def test_pumpkin_juice_schedule_clamps_to_current_progress():
+    # Only ~40,000 of shortfall left, so target - gain (~909,091) sits below the
+    # current 960,000 -- the drink point clamps up to where the item already is.
+    gain = 0.1 * 1_000_000 / 1.1
+    needs = [ItemNeed("Butter", have=960_000, target=1_000_000, is_mastery=True)]
+    plan = SourcingPlan(pumpkin_juices={"butter": 1})
+    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {"butter": [960_000]}
+
+
+def test_pumpkin_juice_schedule_skips_items_with_no_juice():
+    needs = [ItemNeed("Butter", have=0, target=1_000_000, is_mastery=True)]
+    assert pumpkin_juice_schedule(SourcingPlan(), needs, {}) == {}
+
+
+def test_print_plan_shows_the_pumpkin_juice_section(capsys):
+    demand = {"Butter": 500}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Pond", "fishing", {"butter": 100}, ln=1), 5)],
+        pumpkin_juices={"butter": 3},
+        pumpkin_gold=690.0,
+        pumpkin_credit={"butter": 300},
+    )
+    print_plan(
+        plan, demand, Farm(), Workshop(), 1.0,
+        pumpkin_schedule={"butter": [700_000, 800_000, 900_000]},
+    )
+    out = capsys.readouterr().out
+    assert "Pumpkin Juice (mastery boost):" in out
+    assert "3x Pumpkin Juice on Butter = 690 g" in out
+    assert "drink at Butter mastery 700,000 / 800,000 / 900,000" in out
+    assert "total 690 g" in out
+
+
+def test_print_plan_buy_total_excludes_pumpkin_gold(capsys):
+    # The Buy total is the consumable gold alone; the juice is listed apart, so the
+    # plan's gold (691) splits into 1 g of nets bought and 690 g of juice.
+    demand = {"Butter": 500}
+    plan = SourcingPlan(
+        draws=[
+            Draw(
+                Offer("fish Pond", "fishing", {"butter": 100},
+                      consumes={"large net": 1}, ln=1),
+                5,
+            )
+        ],
+        bought={"large net": 100},
+        gold=100 * 0.01 + 690,
+        pumpkin_juices={"butter": 3},
+        pumpkin_gold=690.0,
+        pumpkin_credit={"butter": 300},
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, prices={"large net": 0.01})
+    out = capsys.readouterr().out
+    buy_section = out.split("Buy (with gold):")[1].split("Pumpkin Juice")[0]
+    assert "total 1 g" in buy_section
+    assert "total 690 g" in out

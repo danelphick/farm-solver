@@ -155,6 +155,19 @@ class SourcingPlan:
     # gold); ``gold`` is the plan's real cost, what the frontier trades against time.
     bought: dict[str, float] = field(default_factory=dict)
     gold: float = 0.0
+    # Pumpkin Juices spent (lower-cased goal item -> count) and the gold they cost.
+    # A Pumpkin Juice is a bought mastery boost: each one applied to a mastery goal
+    # covers part of that item's shortfall directly (see :func:`minimize`). It has no
+    # self-sourced alternative, so its cost is folded into ``gold`` (a pure buy) and
+    # tracked apart here so the report can name which items it boosts. ``pumpkin_gold``
+    # is ``sum(pumpkin_juices) * price``, the slice of ``gold`` spent on juice.
+    pumpkin_juices: dict[str, float] = field(default_factory=dict)
+    pumpkin_gold: float = 0.0
+    # Demand each item's juices cover (lower-cased goal item -> units, ``count *
+    # pj_gain``). This is a credit against that item's requirement, so
+    # :func:`plan_balance` nets it out of ``need`` and the passive/residual accounting
+    # reflects that the boost -- not passive production -- covered that slice.
+    pumpkin_credit: dict[str, float] = field(default_factory=dict)
     # Sale value of everything the plan produces past all it consumes -- surplus it
     # banks (see :func:`plan_surplus_gold`), for other tasks or to sell. A credit
     # against ``gold``: the plan's net cost, what the frontier really trades against
@@ -296,6 +309,9 @@ def minimize(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     favour_passive: bool = False,
+    pj_gain: dict[str, float] | None = None,
+    pj_price: float = 0.0,
+    pj_limit: int | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -335,11 +351,20 @@ def minimize(
     bounds how far it runs (see :func:`frontier`, the slow regime). ``prices`` are the
     per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
     the plan is fully self-sourced.
+
+    **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
+    covers, ``0.1 * mastery_threshold / mastery_bonus``) turns on the mastery-boost
+    lever: a ``pj`` variable per goal item adds free, instant supply toward that item's
+    demand at ``pj_price`` gold each, capped at fully covering the demand (a juice past
+    the goal buys nothing). ``pj_limit`` caps the total juices spent. Like buying it is
+    a gold-for-time trade, so it is off in ``favour_passive`` mode (the buy-nothing
+    slow regime); its gold folds into ``gold``, tracked apart on the plan.
     """
     recipes = recipes or {}
     openables = openables or []
     inventory = inventory or {}
     prices = prices or {}
+    pj_gain = pj_gain or {}
     wanted = {item.lower(): (item, qty) for item, qty in demand.items() if qty > 0}
 
     # A buyable consumable can always be bought, so it is obtainable even where
@@ -424,6 +449,23 @@ def minimize(
     if buy_cookie is not None:
         gold = gold + price_cookie * buy_cookie
 
+    # Pumpkin Juice: a bought mastery boost, one variable per reachable goal item.
+    # Each juice on item i adds pj_gain[i] units toward its demand for pj_price gold;
+    # capped below at fully covering the goal (a juice past it buys nothing). It is a
+    # gold-for-time trade like buying, so it is off in the buy-nothing favour_passive
+    # regime. Its gold folds into the same ``gold`` the LP minimises.
+    pj = {}
+    if pj_gain and pj_price > 0 and not favour_passive:
+        pj = {
+            item: pulp.LpVariable(f"pj{i}", lowBound=0)
+            for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys()))
+            if pj_gain[item] > 0
+        }
+    if pj_limit is not None and pj:
+        problem += pulp.lpSum(pj.values()) <= pj_limit
+    if pj:
+        gold = gold + pj_price * pulp.lpSum(pj.values())
+
     # Market value of every consumable the plan spends -- Arnold Palmers, Large Nets,
     # Grape Juice, Apple Cider, Orange Juice (from the offers' per-unit tallies) and
     # cookie sets. The ``favour_passive`` mode minimises this to push sourcing off the
@@ -496,10 +538,17 @@ def minimize(
         held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
         bought = buy.get(item, 0)
+        # A Pumpkin Juice on this goal item covers pj_gain[item] units of its demand.
+        boosted = pj_gain[item] * pj[item] if item in pj else 0
         problem += (
-            gathered + made - consumed - used_up + unpacked - emptied + held + bought
+            gathered + made - consumed - used_up + unpacked - emptied + held
+            + bought + boosted
             >= need
         )
+        # Cap the mastery boost at the goal: juice past full coverage buys no
+        # progress (mastery cannot exceed the requirement), so it would only waste gold.
+        if item in pj:
+            problem += pj_gain[item] * pj[item] <= need
         # Buying can never earn an item's own mastery: a bought unit only covers a
         # non-goal use (a craft material, or a channel's tool), so cap purchases at
         # that derived demand. The goal ``need`` must then come from making or
@@ -540,7 +589,7 @@ def minimize(
     # *that* is pinned and the makespan is left free -- stage 3's activity term then
     # sheds any spare passive draw, settling the makespan at just what passive needs,
     # rather than the plan buying tools to finish early and undoing the passive lean.
-    if used or craft or opens or buy or buy_cookie is not None:
+    if used or craft or opens or buy or buy_cookie is not None or pj:
         if favour_passive:
             sv_star = pulp.value(spend_value) or 0.0
             problem += spend_value <= sv_star * (1 + 1e-9) + 1e-9
@@ -550,7 +599,7 @@ def minimize(
 
         # Stage 2 -- least gold at the pinned primary, then lock it. Skipped when
         # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
-        if buy or buy_cookie is not None:
+        if buy or buy_cookie is not None or pj:
             problem.setObjective(gold)
             problem.solve(pulp.PULP_CBC_CMD(msg=0))
             problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
@@ -558,7 +607,7 @@ def minimize(
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
             pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
-            + pulp.lpSum(buy.values())
+            + pulp.lpSum(buy.values()) + pulp.lpSum(pj.values())
             + (buy_cookie if buy_cookie is not None else 0)
         )
         problem.solve(pulp.PULP_CBC_CMD(msg=0))
@@ -585,6 +634,11 @@ def minimize(
     }
     if buy_cookie is not None and (bc := buy_cookie.value() or 0.0) > UNIT_EPSILON:
         bought["cookie set"] = bc
+    pumpkin_juices = {
+        item: units
+        for item, var in pj.items()
+        if (units := var.value() or 0.0) > UNIT_EPSILON
+    }
     time, ap, ln = aggregate(draws)
     return SourcingPlan(
         draws=sorted(draws, key=lambda d: d.offer.name),
@@ -603,6 +657,11 @@ def minimize(
         ),
         bought=bought,
         gold=pulp.value(gold) or 0.0,
+        pumpkin_juices=pumpkin_juices,
+        pumpkin_gold=sum(pumpkin_juices.values()) * pj_price,
+        pumpkin_credit={
+            item: pj_gain[item] * units for item, units in pumpkin_juices.items()
+        },
         remainder=remainder,
     )
 
@@ -630,11 +689,13 @@ def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
     result is the dot product of that map with the plan's consumable tally, so
     plans can be ranked by real gold cost. Grape Juice, priced from its grape
     content (or 0 if no grape price is configured), is included like the rest.
+    Pumpkin Juice has no self-sourced form, so its whole cost (``plan.pumpkin_gold``)
+    is added on -- it only ever counts as bought, never made.
     """
     return sum(
         spent * prices.get(item, 0.0)
         for item, spent in _consumable_spend(plan).items()
-    )
+    ) + plan.pumpkin_gold
 
 
 def plan_gold_breakdown(
@@ -901,6 +962,11 @@ def plan_balance(
     """
     demanded = {item.lower() for item in demand}
     need = {item.lower(): float(qty) for item, qty in demand.items() if qty > 0}
+    # A Pumpkin Juice covers part of a goal's mastery directly, so that slice is not a
+    # requirement for any channel to make -- net it out of the item's need.
+    for item, credit in plan.pumpkin_credit.items():
+        if item in need:
+            need[item] = max(0.0, need[item] - credit)
     for item, count in plan.crafts.items():
         for material, quantity in recipes.get(item, {}).items():
             need[material] = need.get(material, 0.0) + quantity * count
@@ -1020,6 +1086,9 @@ def frontier(
     cookie_sets: float = 0.0,
     passive_pet_items: set[str] = frozenset(),
     prices: dict[str, float] | None = None,
+    pj_gain: dict[str, float] | None = None,
+    pj_price: float = 0.0,
+    pj_limit: int | None = None,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -1052,12 +1121,12 @@ def frontier(
     fast = minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets,
+        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets,
+        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
     )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
@@ -1084,6 +1153,7 @@ def frontier(
             offers, demand, recipes, crafting_bonus, prices=prices,
             time_cap=timedelta(seconds=cap), openables=openables,
             inventory=inventory, cookie_sets=cookie_sets,
+            pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         )
         for cap in caps
     ]

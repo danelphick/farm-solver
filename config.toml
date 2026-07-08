@@ -124,6 +124,12 @@ large_net     = 10
 grapes        = 5    # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
 cookie_set    = 20   # priced individually, in gold each (not gk)
 
+[mastery]    # Pumpkin Juice: a bought item that instantly boosts one mastery goal
+# by 10% of its tier. Off by default; --use-pumpkin-juice[=N] overrides this.
+# `true` lets the solver use any number, an integer caps the total, `false` is off.
+use_pumpkin_juice = false
+pumpkin_juice_price = 230   # nominal gold cost of one Pumpkin Juice
+
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
 # Model the calendar so a seasonal pet only counts while in season (uses the

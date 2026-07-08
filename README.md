@@ -20,7 +20,7 @@ A command-line flag overrides the config; if a file is given in neither place, t
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--average-seasons] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
-    [--mastery-file <file>] [--inventory-file <file>]
+    [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -146,6 +146,30 @@ Stamina:
   Drink 83,867x Orange Juice -> 8,386,657 stamina
   Eat 96,230x Apple -> 1,443,450 stamina
 ```
+
+### Pumpkin Juice (mastery boost)
+
+**Pumpkin Juice** is a rare bought item that, drunk on an item, instantly grants **10% of that item's mastery tier** (100,000 mastery for an item mastering to `MM`). It is a pure gold-for-progress lever — bought, never made — so it trades exactly like the other purchases: a juice on a goal item covers a slice of its mastery shortfall directly, so much less of it needs crafting or gathering, which can finish a plan sooner (and sometimes cheaper, when the sourcing it saves is worth more than the juice). It only helps **mastery** goals (the tower and `-m`); an `-i` acquire goal earns no mastery, so a juice does nothing for it.
+
+It is off by default. Turn it on with `--use-pumpkin-juice` (or `mastery.use_pumpkin_juice = true`), and the solver decides how many each frontier plan drinks — the fast plans buy juice to finish quickly, the cheap ones self-source and drink none. `--use-pumpkin-juice=N` caps the total spent across a plan (the cap cannot be exceeded but need not be reached); each juice is priced at `mastery.pumpkin_juice_price` gold (default 230):
+
+```shell
+python main.py -m "Butter:1000000" --use-pumpkin-juice      # any number
+python main.py --use-pumpkin-juice=20                       # at most 20 for the tower
+```
+
+A plan that drinks juice shows a **Pumpkin Juice** column in the frontier table and a **Pumpkin Juice (mastery boost)** section in its breakdown, naming each goal boosted, how many juices, the gold, and — since a juice only grants 10% of the item's *current* tier — the **mastery levels to drink each at**, late in the goal's final tier so each lands its full boost and the last hits the goal:
+
+```text
+Pumpkin Juice (mastery boost):
+  1x Pumpkin Juice on Butter = 258 g
+    drink at Butter mastery 909,091
+  total 258 g
+```
+
+Each juice steps the drink point down from the goal by the mastery it is worth (`0.1 × tier ÷ mastery-bonus` — the same amount the solver credits it, `1,000,000 ÷ 1.1 ≈ 90,909` for an `MM` item), so the last juice lands the item on target, the one before a step below, and so on — all above your current progress.
+
+(No wall-clock time is given for each juice: mastery is earned by crafting, which the model treats as instant, so there is no reliable time-of-day to attach — the mastery level is the actionable cue.) A juice can only ever cover up to 100% of a goal's mastery (ten juices fill a fresh tier), so the count is naturally bounded per item even with no cap. Its gold folds into each plan's **buy** total (there is no self-sourced alternative), so it is part of the net cost the frontier trades against time. Juice held in inventory is not credited — every juice is costed at its nominal price.
 
 ## Materials and crafting
 
