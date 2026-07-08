@@ -220,10 +220,35 @@ def parse_tower_requirements(text: str) -> TowerRequirements:
 # --- Item specs ------------------------------------------------------------
 
 
+# FarmRPG mastery-tier shorthands (case-insensitive standalone tokens):
+# Mastery, Grand Mastery, Mega Mastery.
+_MASTERY_TOKENS = {"M": 10_000, "GM": 100_000, "MM": 1_000_000}
+
+
+def parse_amount(text: str) -> int:
+    """Parse an amount, accepting FarmRPG shorthands (case-insensitively).
+
+    Standalone tier tokens ``M``/``GM``/``MM`` mean 10K/100K/1M; a trailing
+    ``k`` multiplies the leading number by 1,000 and ``m`` by 1,000,000. A plain
+    number is taken as-is. Fractional prefixes are allowed (``1.5m`` -> 1,500,000).
+    """
+    text = text.strip()
+    upper = text.upper()
+    if upper in _MASTERY_TOKENS:
+        return _MASTERY_TOKENS[upper]
+    multiplier = 1
+    if upper.endswith("K"):
+        multiplier, text = 1_000, text[:-1]
+    elif upper.endswith("M"):
+        multiplier, text = 1_000_000, text[:-1]
+    return round(float(text) * multiplier)
+
+
 def parse_item_amounts(spec: str) -> dict[str, int]:
     """Parse a ``"item:amount,item:amount"`` spec into a mapping.
 
-    Used by both the ``-i`` (acquire) and ``-m`` (master) options.
+    Used by both the ``-i`` (acquire) and ``-m`` (master) options. Amounts accept
+    the shorthands documented on :func:`parse_amount`.
     """
     result: dict[str, int] = {}
     for chunk in spec.split(","):
@@ -234,7 +259,7 @@ def parse_item_amounts(spec: str) -> dict[str, int]:
         if not sep:
             raise ValueError(f"expected 'item:amount', got {chunk!r}")
         try:
-            result[item.strip()] = int(amount)
+            result[item.strip()] = parse_amount(amount)
         except ValueError as exc:
             raise ValueError(f"invalid amount in {chunk!r}") from exc
     return result

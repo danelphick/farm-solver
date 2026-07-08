@@ -411,13 +411,19 @@ def build_parser() -> argparse.ArgumentParser:
         "-m",
         "--mastery",
         metavar="ITEM:AMOUNT[,...]",
-        help="solve for mastering the given item(s) instead of the tower",
+        help=(
+            "solve for mastering the given item(s) instead of the tower; AMOUNT "
+            "accepts M/GM/MM (10K/100K/1M) and k/m suffixes, case-insensitively"
+        ),
     )
     goal.add_argument(
         "-i",
         "--items",
         metavar="ITEM:AMOUNT[,...]",
-        help="solve for acquiring the given item(s) instead of the tower",
+        help=(
+            "solve for acquiring the given item(s) instead of the tower; AMOUNT "
+            "accepts M/GM/MM (10K/100K/1M) and k/m suffixes, case-insensitively"
+        ),
     )
 
     return parser
