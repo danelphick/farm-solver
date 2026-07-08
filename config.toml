@@ -118,7 +118,7 @@ instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
 # The Scythe of Dewstar gives 4 bonus crops per row every harvest. It is an
 # account perk, not a held item, so by default it is auto-detected from having
 # met every mastery requirement for level 250; uncomment to force it on/off instead.
-have_scythe_of_dewstar = true
+# have_scythe_of_dewstar = true
 # Dewstar's Journal extends the Cookie bonus to those bonus crops. It IS a held
 # item, so by default it is auto-detected from the inventory file; uncomment to
 # force it on/off instead.
