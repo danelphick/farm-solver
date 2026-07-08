@@ -6,8 +6,16 @@ import pytest
 
 import argparse
 
-from farm_solver import GameState, Inventory, InventoryItem, ItemNeed, Mastery
+from farm_solver import (
+    GameState,
+    Inventory,
+    InventoryItem,
+    ItemNeed,
+    Mastery,
+    TowerRequirements,
+)
 from main import (
+    DEWSTAR_TOWER_LEVEL,
     _should_model_calendar,
     build_parser,
     cheapest_plan,
@@ -16,8 +24,10 @@ from main import (
     parse_gold_budget,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
+    resolve_dewstars_journal,
     resolve_fungus_processing,
     resolve_pumpkin_juice,
+    resolve_scythe_of_dewstar,
     selected_plan,
     within_limits,
 )
@@ -1042,6 +1052,79 @@ def test_resolve_fungus_processing_config_override_wins():
     assert (
         resolve_fungus_processing(
             {"exploring": {"have_fungus_processing": True}}, Inventory()
+        )
+        is True
+    )
+
+
+def test_resolve_scythe_of_dewstar_defaults_off_with_nothing_to_check():
+    # A perk, not a held item -- with no state/requirements (e.g. --unobtainable),
+    # only the config counts.
+    assert resolve_scythe_of_dewstar({}) is False
+    assert resolve_scythe_of_dewstar({"farming": {"have_scythe_of_dewstar": False}}) is False
+
+
+def test_resolve_scythe_of_dewstar_config_override_wins():
+    requirements = TowerRequirements(levels={DEWSTAR_TOWER_LEVEL: {"Butter": 1_000_000}})
+    complete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1_000_000, required=None)}
+    )
+    assert (
+        resolve_scythe_of_dewstar(
+            {"farming": {"have_scythe_of_dewstar": False}}, complete, requirements
+        )
+        is False
+    )
+    assert (
+        resolve_scythe_of_dewstar(
+            {"farming": {"have_scythe_of_dewstar": True}}, GameState(), requirements
+        )
+        is True
+    )
+
+
+def test_resolve_scythe_of_dewstar_auto_detects_from_dewstars_tower():
+    requirements = TowerRequirements(
+        levels={DEWSTAR_TOWER_LEVEL: {"Butter": 1_000_000}}
+    )
+    # Every requirement through the level met: the tower solve reports no
+    # shortfall, so the Scythe is assumed held.
+    complete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1_000_000, required=None)}
+    )
+    assert resolve_scythe_of_dewstar({}, complete, requirements) is True
+    # A shortfall anywhere through the level means the tower isn't cleared yet.
+    incomplete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1, required=1_000_000)}
+    )
+    assert resolve_scythe_of_dewstar({}, incomplete, requirements) is False
+    # Nothing to check (unobtainable report) defaults to off.
+    assert resolve_scythe_of_dewstar({}, complete, None) is False
+    assert resolve_scythe_of_dewstar({}, None, requirements) is False
+
+
+def test_resolve_dewstars_journal_checks_inventory_by_default():
+    held = Inventory(
+        items={"dewstar's journal": InventoryItem(name="Dewstar's Journal", quantity=1)}
+    )
+    assert resolve_dewstars_journal({}, held) is True
+    assert resolve_dewstars_journal({}, Inventory()) is False
+    assert resolve_dewstars_journal({}) is False
+
+
+def test_resolve_dewstars_journal_config_override_wins():
+    held = Inventory(
+        items={"dewstar's journal": InventoryItem(name="Dewstar's Journal", quantity=1)}
+    )
+    assert (
+        resolve_dewstars_journal(
+            {"farming": {"have_dewstars_journal": False}}, held
+        )
+        is False
+    )
+    assert (
+        resolve_dewstars_journal(
+            {"farming": {"have_dewstars_journal": True}}, Inventory()
         )
         is True
     )

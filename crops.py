@@ -81,6 +81,12 @@ COOKIE_SET_MULTIPLIER = 9
 # it, so it bounds how many boosted harvests one set buys.
 COOKIE_WINDOW = timedelta(minutes=5)
 
+# Excluded from the Scythe of Dewstar's bonus-crop pool (see Farm.dewstar_bonus).
+DEWSTAR_EXCLUDED = "mushroom"
+
+# One bonus crop is rolled per farm plot -- four per row.
+DEWSTAR_PLOTS_PER_ROW = 4
+
 # Config gives modifiers as whole-number percentages.
 PERCENT = 100
 
@@ -151,6 +157,11 @@ class Farm:
     crops (base growth at most :data:`INSTANT_GROW_MAX_BASE`), which with full
     perks grow quicker than you can click; when set it replaces the speed formula
     for those crops (see :meth:`grow_time`). ``None`` leaves them on the formula.
+
+    ``dewstar`` is whether the Scythe of Dewstar's bonus-crop yield is active (see
+    :meth:`dewstar_bonus`); ``dewstar_journal`` is whether Dewstar's Journal is
+    also held, extending the Cookie bonus to those bonus crops (see
+    :meth:`dewstar_cookie_bonus`).
     """
 
     crops: dict[str, Crop] = field(default_factory=dict)
@@ -161,6 +172,8 @@ class Farm:
     grape_juices_per_day: float = 0.0
     cookie_time_threshold: timedelta | None = None
     instant_grow_time: timedelta | None = None
+    dewstar: bool = False
+    dewstar_journal: bool = False
 
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
@@ -230,31 +243,108 @@ class Farm:
         grow_time = self.grow_time(name)
         return grow_time is not None and grow_time >= threshold
 
-    def cookie_day_yield(self, name: str, item: str | None = None) -> float | None:
-        """Expected ``item`` from one day of farming ``name`` under a cookie set.
+    def _cookie_boosted_harvests(self, name: str) -> float | None:
+        """A cookie day's harvest count for ``name``, boosted-equivalent.
 
         The boost applies to whatever is *harvested* during the set's
-        :data:`COOKIE_WINDOW`, at :data:`COOKIE_SET_MULTIPLIER` times the yield. In
+        :data:`COOKIE_WINDOW`, at :data:`COOKIE_SET_MULTIPLIER` times the count. In
         that window you harvest the crop you timed to finish plus any that regrow
         naturally inside it (many for a fast crop, just the one for a slow crop),
         and burn the day's Grape Juice instant grows -- all boosted. The day's
-        other natural harvests, outside the window, are not. So the day yields
-        ``(natural - in_window + multiplier * (in_window + grape_juices)) *
-        per_harvest``. Returns ``None`` when the crop does not qualify (see
-        :meth:`takes_cookies`) or does not drop the item.
+        other natural harvests, outside the window, are not. So the day's
+        boosted-equivalent harvest count is ``natural - in_window + multiplier *
+        (in_window + grape_juices)``. Returns ``None`` for an unknown crop; shared
+        by :meth:`cookie_day_yield` and :meth:`dewstar_cookie_bonus`.
         """
-        if not self.takes_cookies(name):
-            return None
-        per_harvest = self.per_harvest(name, item)
         grow_time = self.grow_time(name)
-        if not per_harvest or grow_time is None:
+        if grow_time is None:
             return None
         natural = timedelta(days=1) / grow_time
         # Harvests boosted inside the window: the one timed to it, plus any natural
         # regrowth that fits (fast crops), capped at the day's natural harvests.
         in_window = min(natural, 1 + math.floor(COOKIE_WINDOW / grow_time))
         boosted = in_window + self.grape_juices_per_day
-        return (natural - in_window + COOKIE_SET_MULTIPLIER * boosted) * per_harvest
+        return natural - in_window + COOKIE_SET_MULTIPLIER * boosted
+
+    def cookie_day_yield(self, name: str, item: str | None = None) -> float | None:
+        """Expected ``item`` from one day of farming ``name`` under a cookie set.
+
+        See :meth:`_cookie_boosted_harvests` for the boosted-equivalent harvest
+        count; the day yields that many harvests' worth of ``item``. Returns
+        ``None`` when the crop does not qualify (see :meth:`takes_cookies`) or does
+        not drop the item.
+        """
+        if not self.takes_cookies(name):
+            return None
+        per_harvest = self.per_harvest(name, item)
+        harvests = self._cookie_boosted_harvests(name)
+        if not per_harvest or harvests is None:
+            return None
+        return harvests * per_harvest
+
+    def _dewstar_pool(self, name: str) -> list[Crop]:
+        """Crops the Scythe of Dewstar may pick as a bonus for growing ``name``.
+
+        Every crop no slower than ``name`` (compared on raw seed :attr:`Crop.growth`,
+        unmodified by speed perks -- so, e.g., Carrot's pool is Carrot and Peppers
+        regardless of :attr:`speed`), :data:`DEWSTAR_EXCLUDED` (Mushroom) aside.
+        """
+        crop = self.crop(name)
+        if crop is None:
+            return []
+        return [
+            c for c in self.crops.values()
+            if c.name.lower() != DEWSTAR_EXCLUDED and c.growth <= crop.growth
+        ]
+
+    def dewstar_bonus(self, name: str) -> dict[str, float]:
+        """Extra crops one harvest of ``name`` yields via the Scythe of Dewstar.
+
+        One bonus crop is rolled per farm plot (:data:`DEWSTAR_PLOTS_PER_ROW` *
+        ``rows``), each choosing uniformly among :meth:`_dewstar_pool` and giving
+        exactly one of the chosen crop's *primary* item -- never a rarer drop, and
+        never scaled by a picked Mega seed's own tenfold yield. Empty when
+        ``dewstar`` is off or the crop is unknown.
+        """
+        if not self.dewstar:
+            return {}
+        pool = self._dewstar_pool(name)
+        if not pool:
+            return {}
+        share = (DEWSTAR_PLOTS_PER_ROW * self.rows) / len(pool)
+        bonus: dict[str, float] = {}
+        for crop in pool:
+            item = crop.primary.lower()
+            bonus[item] = bonus.get(item, 0.0) + share
+        return bonus
+
+    def dewstar_cookie_bonus(self, name: str) -> dict[str, float]:
+        """Dewstar bonus crops from one cookie-boosted day of farming ``name``.
+
+        Without Dewstar's Journal the Cookie bonus does not touch these bonus
+        crops -- every harvest in the day, in the window or out, gives the flat
+        per-harvest :meth:`dewstar_bonus` count. With the journal they follow the
+        crop's own boosted-equivalent harvest count (see
+        :meth:`_cookie_boosted_harvests`), so windowed harvests give
+        :data:`COOKIE_SET_MULTIPLIER` times as many too. Empty when ``dewstar`` is
+        off or the crop does not qualify for cookies (see :meth:`takes_cookies`).
+        """
+        if not self.dewstar or not self.takes_cookies(name):
+            return {}
+        bonus = self.dewstar_bonus(name)
+        if not bonus:
+            return {}
+        grow_time = self.grow_time(name)
+        if grow_time is None:
+            return {}
+        if self.dewstar_journal:
+            harvests = self._cookie_boosted_harvests(name)
+        else:
+            natural = timedelta(days=1) / grow_time
+            harvests = natural + self.grape_juices_per_day
+        if harvests is None:
+            return {}
+        return {item: rate * harvests for item, rate in bonus.items()}
 
     def time_to_grow(
         self, name: str, quantity: int, item: str | None = None
@@ -370,6 +460,8 @@ def load_farm(
     grape_juices_per_day: float = 0.0,
     cookie_time_threshold: timedelta | None = None,
     instant_grow_time: timedelta | None = None,
+    dewstar: bool = False,
+    dewstar_journal: bool = False,
 ) -> Farm:
     """Build a :class:`Farm` from the crop CSVs and the player's settings."""
     crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
@@ -385,6 +477,8 @@ def load_farm(
         grape_juices_per_day=grape_juices_per_day,
         cookie_time_threshold=cookie_time_threshold,
         instant_grow_time=instant_grow_time,
+        dewstar=dewstar,
+        dewstar_journal=dewstar_journal,
     )
 
 
@@ -392,6 +486,8 @@ def farm_from_config(
     config_section: dict,
     crops_path: Path | None = None,
     drops_path: Path | None = None,
+    have_scythe_of_dewstar: bool = False,
+    have_dewstars_journal: bool = False,
 ) -> Farm:
     """Build a :class:`Farm` from a ``[farming]`` config section.
 
@@ -405,7 +501,9 @@ def farm_from_config(
     crop is too fast to be worth a cookie set; omit it to disable cookies.
     ``instant_grow_time`` (e.g. ``"3s"``) is how long the very fast crops
     effectively take; omit it to leave them on the speed formula. Crop and drop
-    data come from the CSVs.
+    data come from the CSVs. ``have_scythe_of_dewstar`` and
+    ``have_dewstars_journal`` are resolved by the caller -- see
+    ``main.resolve_scythe_of_dewstar`` / ``main.resolve_dewstars_journal``.
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
@@ -418,5 +516,5 @@ def farm_from_config(
     instant = parse_duration(instant_text) if instant_text else None
     return load_farm(
         crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices,
-        threshold, instant,
+        threshold, instant, have_scythe_of_dewstar, have_dewstars_journal,
     )

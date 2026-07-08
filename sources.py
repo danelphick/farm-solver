@@ -336,6 +336,12 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
     day on the farming track and costs one cookie set and that day's Grape Juice.
     Modelling a whole day (natural harvests included) rather than only the boost
     keeps it a standalone action, needing no coupling back to the plain offers.
+
+    With the Scythe of Dewstar (``farm.dewstar``), every harvest also throws in
+    bonus crops of other, no-slower items (:meth:`Farm.dewstar_bonus`), folded into
+    the same bundles; the cookie-day bundle instead uses
+    :meth:`Farm.dewstar_cookie_bonus`, which only carries the Cookie multiplier
+    onto the bonus crops when Dewstar's Journal is held.
     """
     day = timedelta(days=1)
     offers: list[Offer] = []
@@ -346,6 +352,8 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
         juices = farm.grape_juices_for(crop.name)
         harvests_per_day = day / grow_time + juices
         bundle = {item: farm.per_harvest(crop.name, item) for item in crop.drops}
+        for item, rate in farm.dewstar_bonus(crop.name).items():
+            bundle[item] = bundle.get(item, 0.0) + rate
         gj_per_unit = juices / (day / grow_time + juices)
         offers.append(
             Offer(
@@ -371,6 +379,8 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
             cookie_bundle = {
                 item: farm.cookie_day_yield(crop.name, item) for item in crop.drops
             }
+            for item, rate in farm.dewstar_cookie_bonus(crop.name).items():
+                cookie_bundle[item] = cookie_bundle.get(item, 0.0) + rate
             offers.append(
                 Offer(
                     name=f"grow {crop.name} with cookies",

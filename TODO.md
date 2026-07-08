@@ -26,21 +26,9 @@ TODO.md
     Collect user inventories/masteries and save results. Produce graphs showing progress along with
     projected progress both with solver models and based on current progress.
 
-10. Scythe of Dewstar - Possession of the Scythe of Dewstar (overridden by a config like that for
-    Fungus Processing but in the farming section) causes farming to produce 1 bonus crop for each
-    farm plot (4 * rows).
-    * The crops are chosen randomly from the list of normal crops (i.e not rare drops like
-      runestones).
-    * The crops chosen all have growing time less than or equal to the original crop. So growing
-      Carrots gives Carrots and Peppers, whereas growing Radishes, gives Radishes, Eggplants,
-      Cucumbers, Peas, Carrots and Peppers.
-    * Mushrooms are also excluded.
-    * The bonus crops from megaseeds do not get the 10x bonus.
-    * If the user does not have "Dewstar's Journal", then Cookies will not apply their bonus to the
-      Dewstar bonus crops.
-    * If the user does have the journal then all crops grown during the cookie window will get the
-      Cookie bonus including the Dewstar bonus crops.
-    * Add config override for the journal as well.
+10. ~~Scythe of Dewstar~~ Done: see `crops.Farm.dewstar_bonus`/`dewstar_cookie_bonus`, the
+    `[farming]` `have_scythe_of_dewstar`/`have_dewstars_journal` config overrides, and the
+    README's "Scythe of Dewstar" section.
 
 11. Add --empty-inventory and --empty-mastery to ignore the inventory and mastery files.
 

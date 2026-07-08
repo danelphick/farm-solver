@@ -420,3 +420,17 @@ Farming (10d 11h 40m, 11 cookie sets):
   Cookie-boosted Mega Cotton in 7h 53m using 5 Grape Juice (yield 9x):
     29,138x Cotton
 ```
+
+### Scythe of Dewstar
+
+The **Scythe of Dewstar** adds 4 bonus crops per row to every harvest (so `4 * rows`, split evenly across your farm plots). Each bonus crop is chosen uniformly at random from the crops no slower than the one you're growing — Mushroom excluded — and gives exactly one of that crop's *primary* item, never a rarer drop. The Scythe is an account perk, not a held item, so it has no inventory presence to auto-detect the way an artifact can — instead, it is assumed held once every mastery requirement through Tower level 250 is met:
+
+```toml
+[farming]
+# have_scythe_of_dewstar = true  # force on/off; unset auto-detects from having T250
+# have_dewstars_journal = true   # held item; unset auto-detects from inventory
+```
+
+For example, growing Carrot (2m) rolls its bonus crops from Carrot and Peppers (1m) only, while growing Radish (10m) rolls from everything up to and including Radish itself (Peppers, Carrot, Peas, Cucumber, Eggplant, Radish). A picked Mega seed still gives just one of its base crop — its own tenfold yield doesn't apply to a Dewstar pick.
+
+Without **Dewstar's Journal**, Cookies don't touch these bonus crops — they accrue at the same flat per-harvest rate all day, cookie window or not. With the journal, bonus crops follow the same boosted-harvest count as the crop's own Cookie yield, so the windowed harvests give ninefold bonus crops too.

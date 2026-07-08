@@ -122,6 +122,55 @@ def resolve_fungus_processing(
     return inventory.amount(FUNGUS_PROCESSING_ARTIFACT) > 0
 
 
+# The artifact governing the Cookie interaction with Dewstar bonus crops -- see
+# crops.Farm.dewstar_cookie_bonus.
+DEWSTARS_JOURNAL_ARTIFACT = "Dewstar's Journal"
+
+# The tower level whose completion grants the Scythe of Dewstar -- see
+# resolve_scythe_of_dewstar.
+DEWSTAR_TOWER_LEVEL = 250
+
+
+def resolve_scythe_of_dewstar(
+    cfg: dict,
+    state: farm_solver.GameState | None = None,
+    requirements: farm_solver.TowerRequirements | None = None,
+) -> bool:
+    """Whether farming gets the Scythe of Dewstar's bonus-crop yield.
+
+    The Scythe is a reward for reaching tower level :data:`DEWSTAR_TOWER_LEVEL`,
+    not a held item, so it has no inventory presence to auto-detect the
+    way Fungus Processing and You or Dewstar's Journal do. Instead, with a
+    ``state`` and ``requirements`` to check, ``farm_solver.has_tower_level``
+    stands in for holding it. ``farming.have_scythe_of_dewstar`` in the config
+    overrides the check either way; with nothing to check (the ``--unobtainable``
+    report, which solves no tower goal) and no override, it defaults to off.
+    """
+    override = cfg.get("farming", {}).get("have_scythe_of_dewstar")
+    if override is not None:
+        return bool(override)
+    if state is None or requirements is None:
+        return False
+    return farm_solver.has_tower_level(state, requirements, DEWSTAR_TOWER_LEVEL)
+
+
+def resolve_dewstars_journal(
+    cfg: dict, inventory: farm_solver.Inventory | None = None
+) -> bool:
+    """Whether Dewstar's Journal extends the Cookie bonus to Dewstar bonus crops.
+
+    ``farming.have_dewstars_journal`` in the config overrides the check;
+    otherwise the journal's presence in inventory decides it. With no inventory to
+    check and no override, it defaults to off.
+    """
+    override = cfg.get("farming", {}).get("have_dewstars_journal")
+    if override is not None:
+        return bool(override)
+    if inventory is None:
+        return False
+    return inventory.amount(DEWSTARS_JOURNAL_ARTIFACT) > 0
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     state: farm_solver.GameState,
@@ -680,15 +729,20 @@ def run(args: argparse.Namespace) -> int:
     cfg = load_config()
     apply_overrides(cfg, args.override)
     workshop = crafting.load_workshop()
-    farm = crops.farm_from_config(cfg.get("farming", {}))
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
     start = args.start_date or date.today()
 
     # A standalone report over the whole workshop; no solving needed. Use the
     # steady-state producers (no plan span) so every pet's items are counted.
-    # No inventory file is read for this report, so the Fungus Processing
-    # artifact check falls back to the config override only.
+    # No inventory file is read for this report, so the Fungus Processing and
+    # Scythe of Dewstar / Dewstar's Journal checks fall back to config overrides
+    # only.
     if args.unobtainable:
+        farm = crops.farm_from_config(
+            cfg.get("farming", {}),
+            have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg),
+            have_dewstars_journal=resolve_dewstars_journal(cfg),
+        )
         explore = exploring.exploring_from_config(
             cfg.get("exploring", {}),
             have_fungus_processing=resolve_fungus_processing(cfg),
@@ -710,6 +764,15 @@ def run(args: argparse.Namespace) -> int:
     )
 
     state = load_state(mastery_file, inventory_file)
+    # Loaded unconditionally (not just for the tower goal below): reaching
+    # T250 auto-detects the Scythe of Dewstar (see resolve_scythe_of_dewstar),
+    # regardless of which goal this run solves.
+    requirements = farm_solver.load_tower_requirements(args.tower)
+    farm = crops.farm_from_config(
+        cfg.get("farming", {}),
+        have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg, state, requirements),
+        have_dewstars_journal=resolve_dewstars_journal(cfg, state.inventory),
+    )
     explore = exploring.exploring_from_config(
         cfg.get("exploring", {}),
         have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
@@ -722,7 +785,6 @@ def run(args: argparse.Namespace) -> int:
         goals = parsing.parse_item_amounts(args.items)
         solution = farm_solver.solve_acquire(state, goals)
     else:
-        requirements = farm_solver.load_tower_requirements(args.tower)
         solution = farm_solver.solve_tower(state, requirements, args.level)
 
     report.print_solution(solution)

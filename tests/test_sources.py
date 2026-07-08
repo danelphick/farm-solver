@@ -279,6 +279,95 @@ def test_farming_offer_time_matches_time_to_grow():
     )
 
 
+def test_farming_offers_fold_in_the_dewstar_bonus():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "carrot": Crop("Carrot", timedelta(minutes=2), {"carrot": 4}),
+        },
+        rows=1,
+        dewstar=True,
+    )
+    offers = {o.name: o for o in farming_offers(farm)}
+    # 4 plots split between the two eligible crops (Peppers, Carrot): +2 each.
+    assert offers["grow Carrot"].yields == {
+        "carrot": pytest.approx(4 + 2),
+        "peppers": pytest.approx(2),
+    }
+
+
+def test_farming_offers_dewstar_bonus_without_grape_juice_matches_the_gj_offer():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "slow": Crop("Slow", timedelta(days=1), {"slow": 1}),
+        },
+        rows=1,
+        grape_juices_per_day=11,
+        dewstar=True,
+    )
+    offers = {o.name: o for o in farming_offers(farm)}
+    # Slow (1d) only ever qualifies alongside Peppers (1m): 4 plots / 2 crops.
+    assert offers["grow Slow"].yields == {
+        "slow": pytest.approx(1 + 2), "peppers": pytest.approx(2),
+    }
+    assert offers["grow Slow without grape juice"].yields == offers["grow Slow"].yields
+
+
+def test_farming_offers_dewstar_cookie_bonus_uses_the_journal_rules():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "x": Crop("X", timedelta(hours=1), {"x": 1}),
+        },
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+        dewstar=True,
+    )
+    cookie = next(o for o in farming_offers(farm) if o.name == "grow X with cookies")
+    # Without the journal the bonus is flat: 26 harvests (24 natural + 2 GJ) a day,
+    # split 4/2 crops = 2 each, so 52 of each bonus item; X's own cookie yield (50)
+    # is unaffected.
+    assert cookie.yields == {
+        "x": pytest.approx(50 + 52),
+        "peppers": pytest.approx(52),
+    }
+
+
+def test_farming_offers_dewstar_cookie_bonus_boosted_with_the_journal():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "x": Crop("X", timedelta(hours=1), {"x": 1}),
+        },
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+        dewstar=True,
+        dewstar_journal=True,
+    )
+    cookie = next(o for o in farming_offers(farm) if o.name == "grow X with cookies")
+    # With the journal the bonus follows the same boosted count (50) as X's own
+    # cookie yield: 2 a harvest * 50 = 100 of each bonus item.
+    assert cookie.yields == {
+        "x": pytest.approx(50 + 100),
+        "peppers": pytest.approx(100),
+    }
+
+
+def test_farming_offers_no_dewstar_bonus_when_off():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1), {"peppers": 1}),
+            "carrot": Crop("Carrot", timedelta(minutes=2), {"carrot": 4}),
+        },
+        rows=1,
+    )
+    (offer,) = [o for o in farming_offers(farm) if o.name == "grow Carrot"]
+    assert offer.yields == {"carrot": pytest.approx(4)}
+
+
 # --- Inventory plan mode: grounded consumables + Apple Cider -------------------
 
 

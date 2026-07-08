@@ -3,6 +3,7 @@ from farm_solver import (
     ItemNeed,
     Mastery,
     TowerRequirements,
+    has_tower_level,
     solve_tower,
 )
 
@@ -71,6 +72,18 @@ def test_all_requirements_met_yields_no_needs():
     )
     solution = solve_tower(state, REQS)
     assert solution.needs == []
+
+
+def test_has_tower_level_true_when_every_requirement_through_it_is_met():
+    state = make_state(**{"Flying Machine": 100000, "Gainite": 10000})
+    assert has_tower_level(state, REQS, 205) is True
+
+
+def test_has_tower_level_false_on_any_shortfall_through_it():
+    # Flying Machine meets level 201's 50k but not level 205's 100k.
+    state = make_state(**{"Flying Machine": 50000, "Gainite": 10000})
+    assert has_tower_level(state, REQS, 201) is True
+    assert has_tower_level(state, REQS, 205) is False
 
 
 def test_item_needed_at_two_levels_is_listed_for_each():

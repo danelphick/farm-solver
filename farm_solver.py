@@ -191,6 +191,20 @@ def solve_tower(
     return Solution(needs=needs)
 
 
+def has_tower_level(
+    state: GameState, requirements: TowerRequirements, level: int
+) -> bool:
+    """Whether ``state`` already meets every mastery requirement through ``level``.
+
+    There is no direct record of which tower level a player has reached, so this
+    stands in for it: a shortfall anywhere through ``level`` (see
+    :func:`solve_tower`) means it hasn't been cleared. Used to auto-detect
+    perks/rewards a specific level grants, e.g. the Scythe of Dewstar at level
+    250 (see ``main.resolve_scythe_of_dewstar``).
+    """
+    return not solve_tower(state, requirements, level).needs
+
+
 def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
     """Solve for mastering each item in ``goals`` to the given amount.
 

@@ -403,6 +403,143 @@ def test_farm_from_config_reads_the_instant_grow_time():
     assert farm_from_config({}).instant_grow_time is None
 
 
+def _dewstar_farm(**kwargs):
+    crops = {
+        "peppers": Crop("Peppers", timedelta(minutes=1)),
+        "carrot": Crop("Carrot", timedelta(minutes=2)),
+        "peas": Crop("Peas", timedelta(minutes=3)),
+        "cucumber": Crop("Cucumber", timedelta(minutes=4)),
+        "eggplant": Crop("Eggplant", timedelta(minutes=5)),
+        "radish": Crop("Radish", timedelta(minutes=10)),
+        "onion": Crop("Onion", timedelta(minutes=15)),
+        "mushroom": Crop("Mushroom", timedelta(minutes=1)),  # excluded regardless
+    }
+    return Farm(crops=crops, dewstar=True, **kwargs)
+
+
+def test_dewstar_bonus_pool_matches_the_growing_time_examples():
+    farm = _dewstar_farm(rows=1)
+    # Carrot (2m): only Peppers (1m) and Carrot (2m) qualify -- 4 plots / 2 crops.
+    assert farm.dewstar_bonus("Carrot") == {"peppers": 2.0, "carrot": 2.0}
+    # Radish (10m): every crop up to Eggplant (5m) plus Radish itself, Onion (15m)
+    # and Mushroom excluded -- 4 plots split six ways.
+    bonus = farm.dewstar_bonus("Radish")
+    assert set(bonus) == {"peppers", "carrot", "peas", "cucumber", "eggplant", "radish"}
+    assert all(v == pytest.approx(4 / 6) for v in bonus.values())
+
+
+def test_dewstar_bonus_scales_with_rows():
+    farm = _dewstar_farm(rows=13)
+    bonus = farm.dewstar_bonus("Carrot")
+    assert bonus == {"peppers": pytest.approx(26), "carrot": pytest.approx(26)}
+
+
+def test_dewstar_bonus_is_empty_when_off():
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1)),
+            "carrot": Crop("Carrot", timedelta(minutes=2)),
+        },
+        rows=13,
+    )
+    assert farm.dewstar_bonus("Carrot") == {}
+
+
+def test_dewstar_bonus_unknown_crop_is_empty():
+    assert _dewstar_farm(rows=13).dewstar_bonus("Turnip") == {}
+
+
+def test_dewstar_bonus_mega_seed_is_not_scaled_tenfold():
+    # Mega Beet's own per_harvest is 10x Beet's, but as a Dewstar pick it still
+    # counts as one ordinary pool entry, sharing the flat per-plot rate.
+    farm = Farm(
+        crops={
+            "beet": Crop("Beet", timedelta(days=9)),
+            "mega beet": Crop("Mega Beet", timedelta(days=9), primary="Beet"),
+        },
+        rows=1,
+        dewstar=True,
+    )
+    bonus = farm.dewstar_bonus("Beet")
+    # Both pool entries share primary "Beet", so their shares combine.
+    assert bonus == {"beet": pytest.approx(4)}
+
+
+def test_dewstar_cookie_bonus_is_flat_without_the_journal():
+    # A 1h crop with 2 daily Grape Juices: 24 natural + 2 instant = 26 harvests,
+    # none boosted since there's no journal.
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1)),
+            "x": Crop("X", timedelta(hours=1)),
+        },
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+        dewstar=True,
+    )
+    bonus = farm.dewstar_bonus("X")
+    assert bonus == {"peppers": pytest.approx(2), "x": pytest.approx(2)}
+    day_bonus = farm.dewstar_cookie_bonus("X")
+    assert day_bonus == {
+        "peppers": pytest.approx(2 * 26),
+        "x": pytest.approx(2 * 26),
+    }
+
+
+def test_dewstar_cookie_bonus_gets_the_multiplier_with_the_journal():
+    # Same farm as above, but with the journal: the bonus follows the same
+    # boosted-harvest count as the crop's own cookie_day_yield (50, per the
+    # existing cookie_day_yield test).
+    farm = Farm(
+        crops={
+            "peppers": Crop("Peppers", timedelta(minutes=1)),
+            "x": Crop("X", timedelta(hours=1)),
+        },
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+        dewstar=True,
+        dewstar_journal=True,
+    )
+    day_bonus = farm.dewstar_cookie_bonus("X")
+    assert day_bonus == {"peppers": pytest.approx(2 * 50), "x": pytest.approx(2 * 50)}
+
+
+def test_dewstar_cookie_bonus_empty_when_crop_does_not_qualify():
+    farm = _dewstar_farm(rows=1, cookie_time_threshold=timedelta(minutes=18))
+    assert farm.dewstar_cookie_bonus("Carrot") == {}
+
+
+def test_dewstar_cookie_bonus_empty_when_off():
+    farm = Farm(
+        crops={"x": Crop("X", timedelta(hours=1))},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.dewstar_cookie_bonus("X") == {}
+
+
+def test_farm_from_config_defaults_dewstar_off(tmp_path):
+    crops_path = tmp_path / "crops.csv"
+    crops_path.write_text("Crop,Growth\nCorn,4h\n")
+    farm = farm_from_config({}, crops_path, tmp_path / "absent.csv")
+    assert farm.dewstar is False
+    assert farm.dewstar_journal is False
+
+
+def test_farm_from_config_passes_through_dewstar_flags(tmp_path):
+    crops_path = tmp_path / "crops.csv"
+    crops_path.write_text("Crop,Growth\nCorn,4h\n")
+    farm = farm_from_config(
+        {}, crops_path, tmp_path / "absent.csv",
+        have_scythe_of_dewstar=True, have_dewstars_journal=True,
+    )
+    assert farm.dewstar is True
+    assert farm.dewstar_journal is True
+
+
 def test_instant_crops_are_never_given_grape_juice():
     farm = Farm(
         crops={

@@ -65,14 +65,14 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 
 | File | Owns | Key names |
 |---|---|---|
-| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
+| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `resolve_files`, `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
-| `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*` |
+| `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_*`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
-| `crops.py` | farming model (grow time, GJ, cookies, instant-grow) | `Crop`, `Farm`, `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
+| `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size`, `trading_prices` |
@@ -282,6 +282,23 @@ buildings.
   `instant_grow_time` (~3s); GJ is never spent on them.
 - **Cookies**: full set = `COOKIE_SET_MULTIPLIER` (9×) yield in a 5-min window,
   used only with GJ, on crops ≥ `cookies_grow_time_threshold`.
+- **Scythe of Dewstar**: an account perk, not a held item, so unlike Fungus
+  Processing and You or Dewstar's Journal it has no inventory presence to
+  auto-detect — `resolve_scythe_of_dewstar` instead falls back to
+  `farm_solver.has_tower_level(state, requirements, DEWSTAR_TOWER_LEVEL)` (tower level
+  250): every mastery requirement through that level already met
+  stands in for holding it. `has_tower_level` is a generic "has this tower level"
+  query (no shortfall through it via `solve_tower`), meant for other
+  level-gated auto-detections too. `Farm.dewstar_bonus` adds `4 * rows` bonus
+  crops per harvest, split
+  uniformly across every crop no slower than the one grown (compared on raw,
+  unmodified `Crop.growth` — not the perked `grow_time`), Mushroom excluded; a
+  picked Mega seed still gives one plain item, not its own tenfold yield.
+  Without Dewstar's Journal (a held item, auto-detected as usual) the bonus
+  ignores the Cookie window entirely (flat per-harvest, all day); with it,
+  `dewstar_cookie_bonus` reuses
+  `_cookie_boosted_harvests` so the bonus gets the same 9× windowed boost as the
+  crop's own `cookie_day_yield`.
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS
