@@ -50,13 +50,19 @@ Net / Orange Juice must be crafted or gathered.
    the tower goal (as before), and `farm_solver.solve_goals` combines them when
    both are given (each just contributes its own need list). With `--target`
    given, `farm_solver.solve_target` instead concatenates the tower's needs
-   with `solve_goals`' extra `-m`/`-i` need list, and `crafting.top_level_demand`
-   is what reduces same-item needs to one demand figure per kind: same-kind
-   (mastery vs. mastery, e.g. a tower requirement and an extra `-m` goal)
-   shortfalls take the larger (mastery is cumulative), while a plain `-i` floor
-   *adds* to a mastery shortfall for the same item (a different ask: holding N
-   vs. finding N for mastery credit). Either way the result feeds
-   `crafting.top_level_demand` for `{item: qty}`;
+   with `solve_goals`' extra `-m`/`-i` need list. `crafting.top_level_demand` is
+   what reduces same-item needs (whatever the mix of tower/`-m`/`-i`) to one
+   demand figure: converted to a common "items produced" unit (a mastery
+   shortfall of `n` becomes `n / mastery_bonus`, a plain `-i` count stays `n`),
+   every need for one item takes the *largest*, never a sum — a found item
+   counts toward mastery and sits in inventory both, so producing enough for
+   the bigger of two goals clears the smaller as a side effect (a weaker `-m`
+   target than the tower's own is absorbed; an `-i` floor only takes over once
+   it exceeds what a mastery goal already produces). This is separate from a
+   plain (non-mastery) item's ordinary crafting consumption, which the LP
+   balance in `optimizer.minimize` adds on top regardless — an `-i` floor on a
+   pure material (never itself a mastery goal) still means "this many spare
+   after whatever crafting consumes";
    `crafting.recipe_flows` gives the craft graph (IGNORED_MATERIALS stripped,
    lower-cased).
 3. **Build channels** — `config.passive_production` (buildings + pets),

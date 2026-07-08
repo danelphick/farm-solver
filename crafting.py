@@ -170,31 +170,27 @@ def top_level_demand(
 
     A mastery shortfall of ``n`` needs ``n / mastery_bonus`` items found, since
     each found item grants the mastery bonus; a plain item-count shortfall
-    (``-i``) needs ``n``. Same-kind shortfalls for one item are cumulative --
-    crafting is cumulative, and a bigger ``-m`` mastery target simply subsumes a
-    smaller one (e.g. the tower's own requirement), so only the largest wins.
-    But a plain item-count floor is a *different* ask from a mastery shortfall
-    (holding N in inventory vs. finding N for mastery credit), so where a goal
-    combines both for the same item (see ``main.run``'s ``--target`` combining)
-    they add: the mastery shortfall's items plus the extra held on top. Matched
-    case-insensitively, keeping each item's first-seen display name so the two
-    kinds land on one entry rather than splitting by casing. The optimiser then
-    works out all the crafting and gathering beneath these.
+    (``-i``) needs ``n`` held. Both measure the same underlying action --
+    finding or crafting a copy of the item -- so once converted to that common
+    "items produced" unit, every need for one item (mastery or plain) takes the
+    *largest*, never a sum: a found item both counts toward mastery and sits in
+    inventory, so producing enough for the bigger of two combined goals (see
+    ``main.run``'s ``--target`` combining) automatically clears the smaller one
+    as a side effect -- a lower ``-m`` target than the tower's own is absorbed
+    (mastery is cumulative), and an ``-i`` floor below what a mastery goal
+    already produces needs nothing extra, but a floor *above* it takes over.
+    Matched case-insensitively, keeping each item's first-seen display name so
+    the two kinds land on one entry rather than splitting by casing. The
+    optimiser then works out all the crafting and gathering beneath these.
     """
     names: dict[str, str] = {}
-    extras: dict[tuple[str, bool], int] = {}
+    best: dict[str, float] = {}
     for need in needs:
+        if need.extra <= 0:
+            continue
         key = need.item.lower()
         names.setdefault(key, need.item)
-        kind = (key, need.is_mastery)
-        extras[kind] = max(extras.get(kind, 0), need.extra)
-
-    demand: dict[str, float] = {}
-    for (key, is_mastery), extra in extras.items():
-        if extra <= 0:
-            continue
-        amount = extra / mastery_bonus if is_mastery else float(extra)
-        display = names[key]
-        demand[display] = demand.get(display, 0.0) + amount
-    return demand
+        amount = need.extra / mastery_bonus if need.is_mastery else float(need.extra)
+        best[key] = max(best.get(key, 0.0), amount)
+    return {names[key]: amount for key, amount in best.items()}
 

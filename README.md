@@ -57,7 +57,7 @@ On their own (with no `--target`), `-m`/`-i` replace the tower goal entirely, as
 python main.py --target=tower -m "Grand Piano:1000000"
 ```
 
-climbs the whole tower *and* masters Grand Piano to 1,000,000 — if the tower already demands more mastery of Grand Piano than that, the extra `-m` goal is simply absorbed (mastery is cumulative, so only the larger target matters). An extra `-i` goal instead means keeping at least that many of the item in inventory once the plan is done — on top of however many the tower's own crafting already consumes of it, so the solver crafts extra to leave that many spare:
+climbs the whole tower *and* masters Grand Piano to 1,000,000. A found item counts toward mastery *and* sits in your inventory, so an extra `-m`/`-i` goal for an item the tower (or another `-m`/`-i` goal) already targets is compared on that same footing — whichever needs the most items *produced* wins, and the smaller goal is simply cleared as a side effect: a weaker `-m` target than the tower's own is absorbed (mastery is cumulative), and an `-i` floor only takes over once it calls for more items than a mastery goal for that item already produces. An `-i` goal for an item that is otherwise only a crafting material — not itself mastered — is different: it is a floor on top of however many the tower's crafting already consumes of it, so the solver crafts extra to leave that many spare:
 
 ```shell
 python main.py --target=tower -i "Steel Wire:50"

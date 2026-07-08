@@ -45,15 +45,48 @@ def test_extra_mastery_goal_higher_than_tower_wins():
     assert top_level_demand(needs, mastery_bonus=1.0) == {"Grand Piano": 1_000_000.0}
 
 
-def test_item_goal_adds_on_top_of_a_mastery_goal_for_the_same_item():
-    # An -i floor is a different ask (held count) from a mastery shortfall
-    # (items found), so the two add rather than max -- 100 mastery-driven items
-    # plus 50 held on top.
+def test_item_goal_below_a_mastery_goal_is_absorbed():
+    # A found item counts toward mastery *and* sits in inventory, so the 100
+    # items the mastery goal already produces (mastery_bonus=1.0) clear the
+    # smaller 50-item -i floor as a side effect -- no extra demand.
     needs = [
         ItemNeed(item="Steel Wire", have=0, target=100, is_mastery=True),
         ItemNeed(item="Steel Wire", have=0, target=50, is_mastery=False),
     ]
-    assert top_level_demand(needs, mastery_bonus=1.0) == {"Steel Wire": 150.0}
+    assert top_level_demand(needs, mastery_bonus=1.0) == {"Steel Wire": 100.0}
+
+
+def test_item_goal_above_a_mastery_goal_takes_over():
+    # The -i floor (200) now needs more items than the mastery goal (100) --
+    # it takes over, and the mastery goal is cleared as a side effect.
+    needs = [
+        ItemNeed(item="Steel Wire", have=0, target=100, is_mastery=True),
+        ItemNeed(item="Steel Wire", have=0, target=200, is_mastery=False),
+    ]
+    assert top_level_demand(needs, mastery_bonus=1.0) == {"Steel Wire": 200.0}
+
+
+def test_mastery_goal_converted_by_bonus_before_comparing_to_item_goal():
+    # mastery_bonus=1.1: the 11001 mastery shortfall needs 11001/1.1 = 10001
+    # items found, just over the 10000-item -i floor, so mastery takes over.
+    needs = [
+        ItemNeed(item="Board", have=0, target=11001, is_mastery=True),
+        ItemNeed(item="Board", have=0, target=10000, is_mastery=False),
+    ]
+    assert top_level_demand(needs, mastery_bonus=1.1)["Board"] == pytest.approx(
+        10000.909090909091
+    )
+
+
+def test_item_goal_above_the_converted_mastery_goal_takes_over():
+    # mastery_bonus=1.1: a 5000 mastery shortfall needs only 5000/1.1 = 4545.45
+    # items found, well under the 10000-item -i floor, so the floor takes over
+    # and the mastery goal is cleared as a by-product.
+    needs = [
+        ItemNeed(item="Board", have=0, target=5000, is_mastery=True),
+        ItemNeed(item="Board", have=0, target=10000, is_mastery=False),
+    ]
+    assert top_level_demand(needs, mastery_bonus=1.1) == {"Board": 10000.0}
 
 
 def test_item_goal_alone_needs_no_recipe_demand():
@@ -70,7 +103,7 @@ def test_combining_keeps_one_entry_despite_differing_casing():
         ItemNeed(item="Steel Wire", have=0, target=50, is_mastery=False),
     ]
     result = top_level_demand(needs, mastery_bonus=1.0)
-    assert result == {"steel wire": 150.0}
+    assert result == {"steel wire": 100.0}
 
 
 def test_needs_sorted_by_level_still_merge_the_same_item():

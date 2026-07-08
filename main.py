@@ -370,12 +370,18 @@ def build_parser() -> argparse.ArgumentParser:
             "the goal to solve for: 'tower' (the default) climbs to the highest "
             "reachable level (or -l's level); a level number ('150' or 'T150') "
             "climbs to just that level, overriding -l. With -m/-i also given, "
-            "those become extra goals added to the tower's: a lower -m mastery "
-            "target than the tower already demands for that item is absorbed "
-            "(mastery is cumulative), and -i keeps at least that many of the "
-            "item in inventory at the end, on top of whatever mastery or "
-            "crafting already demands of it. Without --target, -m/-i solve for "
-            "that goal alone, ignoring the tower (the previous behaviour)"
+            "those become extra goals added to the tower's: a found item counts "
+            "toward mastery and sits in inventory both, so a goal for an item "
+            "the tower (or another -m/-i goal) already targets is compared the "
+            "same way -- whichever needs the most items produced wins, clearing "
+            "the smaller as a side effect (a lower -m target than the tower's "
+            "own is absorbed; an -i floor only takes over once it calls for "
+            "more items than a mastery goal already produces). An -i goal on a "
+            "pure crafting material (not itself mastered) is instead a floor on "
+            "top of what the tower's crafting already consumes of it, so the "
+            "solver crafts extra to leave that many spare. Without --target, "
+            "-m/-i solve for that goal alone, ignoring the tower (the previous "
+            "behaviour)"
         ),
     )
     parser.add_argument(
@@ -553,10 +559,10 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "solve for acquiring the given item(s), combined with -m if that is "
             "also given; without --target this replaces the tower goal, with "
-            "--target it is added on top (at least this many held at the end, "
-            "on top of whatever mastery or crafting already needs of it). "
-            "AMOUNT accepts M/GM/MM (10K/100K/1M) and k/m suffixes, "
-            "case-insensitively"
+            "--target it is an extra goal (at least this many held at the end); "
+            "see --target's help for how it interacts with a mastery goal on "
+            "the same item. AMOUNT accepts M/GM/MM (10K/100K/1M) and k/m "
+            "suffixes, case-insensitively"
         ),
     )
 

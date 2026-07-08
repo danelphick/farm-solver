@@ -256,10 +256,11 @@ def solve_target(
     (:func:`solve_tower`) are combined with :func:`solve_goals`'s optional
     extra ``-m``/``-i`` need list, simply by concatenation --
     ``crafting.top_level_demand`` is what reduces same-item needs to one
-    demand figure per kind, maxing a mastery goal against the tower's own (so
-    a lower ``-m`` target is absorbed, never subtracted) and adding a plain
-    ``-i`` floor on top of whatever mastery or crafting already demands of
-    that item.
+    demand figure, taking the largest (never adding): a found item both counts
+    toward mastery and sits in inventory, so whichever goal for an item needs
+    the most items produced clears the others as a side effect (a lower ``-m``
+    target than the tower's own is absorbed; an ``-i`` floor only takes over
+    once it demands more items than the mastery goal already produces).
     """
     needs = list(solve_tower(state, requirements, target_level).needs)
     needs += solve_goals(state, mastery_goals, item_goals).needs
