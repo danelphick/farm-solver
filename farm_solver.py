@@ -223,6 +223,26 @@ def solve_mastery(state: GameState, goals: dict[str, int]) -> Solution:
     return Solution(needs=needs)
 
 
+def solve_goals(
+    state: GameState,
+    mastery_goals: dict[str, int] | None = None,
+    item_goals: dict[str, int] | None = None,
+) -> Solution:
+    """Solve ``-m``/``-i`` goals together, with no tower goal at all.
+
+    Used without ``--target`` (see ``main.run``): unlike before, ``-m`` and
+    ``-i`` may now both be given at once, each simply contributing its own
+    need list -- ``crafting.top_level_demand`` does the per-item combining
+    (see :func:`solve_target`).
+    """
+    needs: list[ItemNeed] = []
+    if mastery_goals:
+        needs += solve_mastery(state, mastery_goals).needs
+    if item_goals:
+        needs += solve_acquire(state, item_goals).needs
+    return Solution(needs=needs)
+
+
 def solve_target(
     state: GameState,
     requirements: TowerRequirements,
@@ -233,19 +253,16 @@ def solve_target(
     """Solve the tower goal, plus any extra ``-m``/``-i`` goals layered on top.
 
     Used for ``--target`` (see ``main.run``): the tower's own mastery needs
-    (:func:`solve_tower`) are combined with an optional extra
-    :func:`solve_mastery` and/or :func:`solve_acquire` need list, simply by
-    concatenation -- ``crafting.top_level_demand`` is what reduces same-item
-    needs to one demand figure per kind, maxing a mastery goal against the
-    tower's own (so a lower ``-m`` target is absorbed, never subtracted) and
-    adding a plain ``-i`` floor on top of whatever mastery or crafting already
-    demands of that item.
+    (:func:`solve_tower`) are combined with :func:`solve_goals`'s optional
+    extra ``-m``/``-i`` need list, simply by concatenation --
+    ``crafting.top_level_demand`` is what reduces same-item needs to one
+    demand figure per kind, maxing a mastery goal against the tower's own (so
+    a lower ``-m`` target is absorbed, never subtracted) and adding a plain
+    ``-i`` floor on top of whatever mastery or crafting already demands of
+    that item.
     """
     needs = list(solve_tower(state, requirements, target_level).needs)
-    if mastery_goals:
-        needs += solve_mastery(state, mastery_goals).needs
-    if item_goals:
-        needs += solve_acquire(state, item_goals).needs
+    needs += solve_goals(state, mastery_goals, item_goals).needs
     return Solution(needs=needs)
 
 

@@ -212,6 +212,15 @@ def test_target_defaults_to_none_so_bare_dash_m_ignores_the_tower():
     assert parser.parse_args(["--target", "tower"]).target == "tower"
 
 
+def test_mastery_and_items_flags_can_be_combined():
+    # Previously mutually exclusive; -m and -i must now both be settable at
+    # once (each contributes its own goals, see farm_solver.solve_goals).
+    parser = build_parser()
+    args = parser.parse_args(["-m", "Board:5000", "-i", "Board:10000"])
+    assert args.mastery == "Board:5000"
+    assert args.items == "Board:10000"
+
+
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
     print_frontier(PLANS, selected=2, cheapest=2)
     lines = [line.rstrip() for line in capsys.readouterr().out.splitlines()]

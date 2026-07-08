@@ -1,4 +1,4 @@
-from farm_solver import GameState, Mastery, TowerRequirements, solve_target
+from farm_solver import GameState, Mastery, TowerRequirements, solve_goals, solve_target
 
 
 def make_state(**progress: int) -> GameState:
@@ -60,3 +60,29 @@ def test_no_extra_goals_given_omits_them_entirely():
     state = make_state()
     solution = solve_target(state, REQS, mastery_goals=None, item_goals=None)
     assert all(need.level is not None for need in solution.needs)
+
+
+def test_solve_goals_combines_mastery_and_item_goals():
+    # -m and -i can now both be given at once (previously mutually exclusive);
+    # each just contributes its own need list, with no tower goal involved.
+    state = make_state()
+    solution = solve_goals(
+        state, mastery_goals={"Board": 5000}, item_goals={"Board": 10000}
+    )
+    needs = needs_by_item(solution)["Board"]
+    assert [(n.target, n.is_mastery) for n in needs] == [
+        (5000, True),
+        (10000, False),
+    ]
+    assert all(need.level is None for need in solution.needs)
+
+
+def test_solve_goals_with_only_mastery_matches_solve_mastery():
+    state = make_state()
+    solution = solve_goals(state, mastery_goals={"Board": 5000})
+    assert needs_by_item(solution)["Board"][0].is_mastery is True
+
+
+def test_solve_goals_with_neither_goal_is_empty():
+    state = make_state()
+    assert solve_goals(state).needs == []

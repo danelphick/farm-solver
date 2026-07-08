@@ -47,14 +47,16 @@ Net / Orange Juice must be crafted or gathered.
    (masteries + inventory) from the pasted-in text files.
 2. **Goal → demand** — `farm_solver.solve_tower/solve_mastery/solve_acquire`
    produce a `Solution` with `ItemNeed`s; without `--target`, `-m`/`-i` replace
-   the tower goal (as before). With `--target` given, `farm_solver.solve_target`
-   instead concatenates the tower's needs with an extra `-m`/`-i` need list, and
-   `crafting.top_level_demand` is what reduces same-item needs to one demand
-   figure per kind: same-kind (mastery vs. mastery, e.g. a tower requirement and
-   an extra `-m` goal) shortfalls take the larger (mastery is cumulative), while
-   a plain `-i` floor *adds* to a mastery shortfall for the same item (a
-   different ask: holding N vs. finding N for mastery credit). Either way the
-   result feeds `crafting.top_level_demand` for `{item: qty}`;
+   the tower goal (as before), and `farm_solver.solve_goals` combines them when
+   both are given (each just contributes its own need list). With `--target`
+   given, `farm_solver.solve_target` instead concatenates the tower's needs
+   with `solve_goals`' extra `-m`/`-i` need list, and `crafting.top_level_demand`
+   is what reduces same-item needs to one demand figure per kind: same-kind
+   (mastery vs. mastery, e.g. a tower requirement and an extra `-m` goal)
+   shortfalls take the larger (mastery is cumulative), while a plain `-i` floor
+   *adds* to a mastery shortfall for the same item (a different ask: holding N
+   vs. finding N for mastery credit). Either way the result feeds
+   `crafting.top_level_demand` for `{item: qty}`;
    `crafting.recipe_flows` gives the craft graph (IGNORED_MATERIALS stripped,
    lower-cased).
 3. **Build channels** — `config.passive_production` (buildings + pets),
@@ -77,7 +79,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
-| `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_target`, `has_tower_level` |
+| `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |

@@ -45,7 +45,13 @@ Rather than masterying an item, it can solve for acquiring a certain number of a
 python main.py -i "Flying Machine:2000,Gainite:20"
 ```
 
-On their own, `-m`/`-i` replace the tower goal entirely, as above. Pass `--target` to solve the tower goal too, with `-m`/`-i` layered on top as *extra* goals instead of replacing it — `--target=tower` (the default level, or `-l`'s) plus a level number or `T<level>` (e.g. `--target=150` or `--target=T150`) to climb to just that level:
+`-m` and `-i` can be combined, each contributing its own goals:
+
+```shell
+python main.py -m "Flying Machine:100000" -i "Gainite:20"
+```
+
+On their own (with no `--target`), `-m`/`-i` replace the tower goal entirely, as above. Pass `--target` to solve the tower goal too, with `-m`/`-i` layered on top as *extra* goals instead of replacing it — `--target=tower` (the default level, or `-l`'s) plus a level number or `T<level>` (e.g. `--target=150` or `--target=T150`) to climb to just that level:
 
 ```shell
 python main.py --target=tower -m "Grand Piano:1000000"

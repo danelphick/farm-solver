@@ -532,25 +532,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="expand plan number N from the frontier table instead",
     )
 
-    # The goal is mutually exclusive: climb the tower (default), master items,
-    # or acquire items.
-    goal = parser.add_mutually_exclusive_group()
-    goal.add_argument(
+    # -m and -i can be combined (each just contributes its own need list, see
+    # farm_solver.solve_goals/solve_target); without --target they replace the
+    # tower goal, with --target they are added on top of it instead.
+    parser.add_argument(
         "-m",
         "--mastery",
         metavar="ITEM:AMOUNT[,...]",
         help=(
-            "solve for mastering the given item(s) instead of the tower; AMOUNT "
-            "accepts M/GM/MM (10K/100K/1M) and k/m suffixes, case-insensitively"
+            "solve for mastering the given item(s), combined with -i if that is "
+            "also given; without --target this replaces the tower goal, with "
+            "--target it is added on top. AMOUNT accepts M/GM/MM (10K/100K/1M) "
+            "and k/m suffixes, case-insensitively"
         ),
     )
-    goal.add_argument(
+    parser.add_argument(
         "-i",
         "--items",
         metavar="ITEM:AMOUNT[,...]",
         help=(
-            "solve for acquiring the given item(s) instead of the tower; AMOUNT "
-            "accepts M/GM/MM (10K/100K/1M) and k/m suffixes, case-insensitively"
+            "solve for acquiring the given item(s), combined with -m if that is "
+            "also given; without --target this replaces the tower goal, with "
+            "--target it is added on top (at least this many held at the end, "
+            "on top of whatever mastery or crafting already needs of it). "
+            "AMOUNT accepts M/GM/MM (10K/100K/1M) and k/m suffixes, "
+            "case-insensitively"
         ),
     )
 
@@ -853,24 +859,18 @@ def run(args: argparse.Namespace) -> int:
 
     # Without --target, -m/-i solve for that goal alone, ignoring the tower (the
     # previous behaviour). With --target given, they instead layer on top of the
-    # tower goal (see farm_solver.solve_target and the --target help text).
-    if args.target is None and (args.mastery is not None or args.items is not None):
-        if args.mastery is not None:
-            goals = parsing.parse_item_amounts(args.mastery)
-            solution = farm_solver.solve_mastery(state, goals)
-        else:
-            goals = parsing.parse_item_amounts(args.items)
-            solution = farm_solver.solve_acquire(state, goals)
+    # tower goal (see farm_solver.solve_target and the --target help text). -m
+    # and -i can be combined either way.
+    mastery_goals = (
+        parsing.parse_item_amounts(args.mastery) if args.mastery is not None else None
+    )
+    item_goals = (
+        parsing.parse_item_amounts(args.items) if args.items is not None else None
+    )
+    if args.target is None and (mastery_goals is not None or item_goals is not None):
+        solution = farm_solver.solve_goals(state, mastery_goals, item_goals)
     else:
         target_level = args.target if isinstance(args.target, int) else args.level
-        mastery_goals = (
-            parsing.parse_item_amounts(args.mastery)
-            if args.mastery is not None
-            else None
-        )
-        item_goals = (
-            parsing.parse_item_amounts(args.items) if args.items is not None else None
-        )
         solution = farm_solver.solve_target(
             state, requirements, target_level, mastery_goals, item_goals
         )
