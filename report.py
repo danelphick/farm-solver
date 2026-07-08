@@ -137,7 +137,7 @@ def print_frontier(
         if show_juices:
             parts.append(f"{round(plan.grape_juices):,} GJ")
         if show_ciders:
-            parts.append(f"{round(plan.apple_ciders):,} cider")
+            parts.append(f"{round(plan.apple_ciders):,} AC")
         if show_pumpkin:
             parts.append(f"{round(_pumpkin_juices(plan)):,} PJ")
         gold = ""

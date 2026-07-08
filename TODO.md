@@ -27,5 +27,3 @@ TODO.md
 
     Collect user inventories/masteries and save results. Produce graphs showing progress along with
     projected progress both with solver models and based on current progress.
-
-11. Abbreviate Cider to AC in sourcing plan lists
