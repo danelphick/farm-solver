@@ -13,7 +13,7 @@ structures only; populating them from data is done elsewhere (parsing).
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 # The bundled location data, used unless another path is given.
@@ -32,6 +32,13 @@ WANDERER_STAMINA_REDUCTION = {0: 0.0, 1: 0.04, 2: 0.11, 3: 0.20, 4: 0.33}
 # Both the Neigh Neigh perk and the Neigh meal cut cider stamina 20% each,
 # multiplicatively with Wanderer and each other.
 NEIGH_STAMINA_REDUCTION = 0.20
+
+# A CSV row tagged with a flag in the "Flags" column is an alternate for its
+# location, used only when that flag is active instead of the location's
+# unflagged rows (see ExploringLocation.with_flags). Holding the "Fungus
+# Processing and You" artifact activates this one, swapping Gary's Crushroom's
+# drop table (the Mushroom crushes into Mushroom Paste, plus rarer byproducts).
+FUNGUS_PROCESSING_FLAG = "fungus_processing"
 
 
 @dataclass
@@ -104,15 +111,32 @@ class ExploringLocation:
 
     ``drop_rates`` maps the item's display name to the probability that any one
     item found at the location is that item. The rates need not sum to one --
-    some of what a palmer yields may be nothing of interest.
+    some of what a palmer yields may be nothing of interest. ``flagged_drop_rates``
+    holds alternate tables read from CSV rows tagged in the ``Flags`` column,
+    keyed by flag name -- each replaces ``drop_rates`` outright when that flag is
+    active (see :meth:`with_flags`), rather than adding to it.
     """
 
     name: str
     drop_rates: dict[str, float] = field(default_factory=dict)
+    flagged_drop_rates: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def explore(self, palmer_yield: int) -> dict[str, float]:
         """Expected count of each item from a palmer yielding ``palmer_yield``."""
         return {item: rate * palmer_yield for item, rate in self.drop_rates.items()}
+
+    def with_flags(self, active: set[str]) -> "ExploringLocation":
+        """A copy with ``drop_rates`` swapped for an active flag's table, if any.
+
+        Later flags in ``active`` win if more than one applies to this location
+        (an arbitrary but deterministic tie-break; no location currently has more
+        than one flagged table).
+        """
+        drop_rates = self.drop_rates
+        for flag in active:
+            if flag in self.flagged_drop_rates:
+                drop_rates = self.flagged_drop_rates[flag]
+        return replace(self, drop_rates=dict(drop_rates))
 
 
 @dataclass
@@ -134,11 +158,15 @@ class Exploring:
 
 
 def read_locations(path: Path) -> dict[str, ExploringLocation]:
-    """Read locations from a ``Location,Item,Drop Rate`` CSV, keyed lower-cased.
+    """Read locations from a ``Location,Item,Drop Rate,Flags`` CSV, keyed lower-cased.
 
     A location's rows are gathered into one :class:`ExploringLocation`; each item
     is keyed lower-cased (like the rest of the model) for case-insensitive
-    matching. A missing file yields no locations.
+    matching. A row's ``Flags`` cell, if non-empty, files its rate under
+    ``flagged_drop_rates[flag]`` instead of the location's base ``drop_rates`` --
+    an alternate used only when that flag is active (see
+    :meth:`ExploringLocation.with_flags`). A missing ``Flags`` column (or a blank
+    cell) is the unflagged, always-on case. A missing file yields no locations.
     """
     locations: dict[str, ExploringLocation] = {}
     if not path.exists():
@@ -149,7 +177,13 @@ def read_locations(path: Path) -> dict[str, ExploringLocation]:
             location = locations.setdefault(
                 name.lower(), ExploringLocation(name=name)
             )
-            location.drop_rates[row["Item"].strip().lower()] = float(row["Drop Rate"])
+            item = row["Item"].strip().lower()
+            rate = float(row["Drop Rate"])
+            flag = (row.get("Flags") or "").strip().lower()
+            if flag:
+                location.flagged_drop_rates.setdefault(flag, {})[item] = rate
+            else:
+                location.drop_rates[item] = rate
     return locations
 
 
@@ -169,7 +203,9 @@ def load_exploring(
 
 
 def exploring_from_config(
-    config_section: dict, path: Path | None = None
+    config_section: dict,
+    path: Path | None = None,
+    have_fungus_processing: bool = False,
 ) -> Exploring:
     """Build an :class:`Exploring` from an ``[exploring]`` config section.
 
@@ -177,6 +213,9 @@ def exploring_from_config(
     :class:`ExploringModifiers`) and the Apple Cider perks/meals (see
     :class:`CiderModifiers`); its ``[exploring.effectiveness]`` subtable maps each
     zone to its Exploring Effectiveness. Location drop rates come from the CSV.
+    ``have_fungus_processing`` (resolved by the caller -- see
+    ``main.resolve_fungus_processing``) activates the CSV's
+    :data:`FUNGUS_PROCESSING_FLAG` rows, swapping Gary's Crushroom's drop table.
     """
     section = config_section or {}
     modifiers = ExploringModifiers(
@@ -193,4 +232,11 @@ def exploring_from_config(
         zone.lower(): int(value)
         for zone, value in (section.get("effectiveness") or {}).items()
     }
-    return load_exploring(path, modifiers, cider, effectiveness)
+    exploring = load_exploring(path, modifiers, cider, effectiveness)
+    active_flags = {FUNGUS_PROCESSING_FLAG} if have_fungus_processing else set()
+    if active_flags:
+        exploring.locations = {
+            key: location.with_flags(active_flags)
+            for key, location in exploring.locations.items()
+        }
+    return exploring

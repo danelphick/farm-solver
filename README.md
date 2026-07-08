@@ -359,6 +359,9 @@ wanderer_level = 4               # cider stamina −4/11/20/33% at level 1/2/3/4
 have_neigh_neigh = true          # then ×0.8 stamina (perk)
 use_neigh = true                 # then ×0.8 stamina again (meal)
 
+# have_fungus_processing = true  # force Gary's Crushroom's drop table on/off;
+                                  # unset auto-detects the artifact from inventory
+
 [exploring.effectiveness]        # per-zone Exploring Effectiveness for cider
 Forest = 136
 "Small Cave" = 104

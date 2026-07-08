@@ -87,6 +87,10 @@ have_cinnamon_sticks = true
 wanderer_level = 4
 have_neigh_neigh = true
 use_neigh = true
+# Gary's Crushroom's drop table changes if the "Fungus Processing and You"
+# artifact is held. By default this is auto-detected from the inventory file;
+# uncomment to force it on/off instead.
+# have_fungus_processing = true
 
 [exploring.effectiveness]  # per-zone Exploring Effectiveness for Apple Cider
 Forest = 136

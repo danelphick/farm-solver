@@ -1,151 +1,154 @@
-Location,Item,Drop Rate
-Small Cave,Wood,0.3872
-Small Cave,Stone,0.38708
-Small Cave,Mushroom,0.15686
-Small Cave,Bone,0.05782
-Small Cave,Grab Bag 02,0.00462
-Small Cave,Wooden Mask,0.00462
-Small Cave,Runestone 04,0.0014388489
-Small Cave,Skeleton Key,0.0003134796
-Small Cave,Model Ship,0.0000693241
-Small Spring,Wood,0.25404
-Small Spring,Feathers,0.25388
-Small Spring,Stone,0.25388
-Small Spring,Mushroom,0.11074
-Small Spring,Aquamarine,0.07128
-Small Spring,Apple,0.04168
-Small Spring,Snail,0.00722
-Small Spring,Dice,0.00336
-Small Spring,Spectacles,0.00336
-Small Spring,Small Chest 01,0.0005037783
-Small Spring,Skull Coin,0.0000511771
-Highland Hills,Fern Leaf,0.18726
-Highland Hills,Purple Flower,0.18726
-Highland Hills,Stone,0.18722
-Highland Hills,Feathers,0.18722
-Highland Hills,Wood,0.18722
-Highland Hills,Amethyst,0.05516
-Highland Hills,Caterpillar,0.00566
-Highland Hills,Strange Letter,0.00264
-Highland Hills,Runestone 14,0.0002339181
-Highland Hills,Medium Chest 01,0.0001325381
-Cane Pole Ridge,Stone,0.25496
-Cane Pole Ridge,Wood,0.25494
-Cane Pole Ridge,Unpolished Shimmer Stone,0.2549
-Cane Pole Ridge,Mushroom,0.11112
-Cane Pole Ridge,Lemon Quartz,0.07154
-Cane Pole Ridge,Tea Leaves,0.04186
-Cane Pole Ridge,Horned Beetle,0.00724
-Cane Pole Ridge,Pocket Watch,0.00338
-Cane Pole Ridge,Lima Bean,0.0000505051
-Misty Forest,Blue Feathers,0.15468
-Misty Forest,Fern Leaf,0.15466
-Misty Forest,Wood,0.15466
-Misty Forest,Acorn,0.15464
-Misty Forest,Straw,0.07126
-Misty Forest,3-leaf Clover,0.07118
-Misty Forest,Mushroom,0.07116
-Misty Forest,Sweet Root,0.07114
-Misty Forest,Unpolished Ruby,0.0464
-Misty Forest,Pine Cone,0.02268
-Misty Forest,4-leaf Clover,0.01692
-Misty Forest,Spider,0.00478
-Misty Forest,Shiny Beetle,0.00478
-Misty Forest,Runestone 05,0.0005540166
-Misty Forest,Gold Feather,0.000241838
-Misty Forest,Frog,0.0002087683
-Misty Forest,Amber,0.0000335177
-Black Rock Canyon,Sandstone,0.35604
-Black Rock Canyon,Coal,0.35598
-Black Rock Canyon,Salt Rock,0.14624
-Black Rock Canyon,Horn,0.06844
-Black Rock Canyon,Shimmer Quartz,0.04474
-Black Rock Canyon,Ancient Coin,0.0131
-Black Rock Canyon,Giant Centipede,0.00932
-Black Rock Canyon,Ruby Scorpion,0.00434
-Black Rock Canyon,Runestone 09,0.0006024096
-Black Rock Canyon,Runestone 13,0.0004158004
-Black Rock Canyon,Orange Gecko,0.000408998
-Black Rock Canyon,Large Chest 02,0.0002159827
-Black Rock Canyon,Medium Chest 02,0.0001640689
-Forest,Wood,0.40006
-Forest,Straw,0.15618
-Forest,Mushroom,0.1561
-Forest,Hide,0.0991
-Forest,Antler,0.0726
-Forest,Arrowhead,0.05734
-Forest,Bird Egg,0.04738
-Forest,Fire Ant,0.00984
-Forest,Gold Feather,0.0004889976
-Forest,Gold Leaf,0.0004842615
-Forest,Frog,0.0004237288
-Mount Banon,Coal,0.25782
-Mount Banon,Unpolished Shimmer Stone,0.25778
-Mount Banon,Stone,0.25772
-Mount Banon,Unpolished Emerald,0.11228
-Mount Banon,Carbon Sphere,0.11224
-Mount Banon,Magna Quartz,0.001025641
-Mount Banon,Gold Feather,0.0003590664
-Mount Banon,Small Chest 02,0.0002567394
-Mount Banon,Bacon,0.000255102
-Mount Banon,Runestone 19,0.0002247191
-Mount Banon,Dragon Skull,0.0000505945
-Ember Lagoon,Stone,0.57688
-Ember Lagoon,Glass Orb,0.20578
-Ember Lagoon,Emberstone,0.129
-Ember Lagoon,Prism Shard,0.06116
-Ember Lagoon,Ancient Coin,0.01772
-Ember Lagoon,Moonstone,0.0044
-Ember Lagoon,Heart Necklace Left Piece,0.00252
-Ember Lagoon,Magicite,0.001754386
-Ember Lagoon,Runestone 17,0.0004282655
-Ember Lagoon,Large Chest 01,0.0002936858
-Ember Lagoon,Diamond,0.0000885347
-Whispering Creek,Oak,0.35506
-Whispering Creek,Slimestone,0.1421
-Whispering Creek,Salt Rock,0.1421
-Whispering Creek,Unpolished Garnet,0.0905
-Whispering Creek,Blue Gel,0.06642
-Whispering Creek,Apple,0.05244
-Whispering Creek,Sour Root,0.03226
-Whispering Creek,Thorns,0.03226
-Whispering Creek,Striped Feather,0.03222
-Whispering Creek,Red Berries,0.03222
-Whispering Creek,Lemon,0.01056
-Whispering Creek,Orange,0.01056
-Whispering Creek,Herbs,0.0012578616
-Whispering Creek,Raptor Egg,0.000030248
-Whispering Creek,Raptor Claw,0.0000208008
-Jundland Desert,Sand,0.42678
-Jundland Desert,Scrap Metal,0.16406
-Jundland Desert,Scrap Wire,0.16398
-Jundland Desert,Machine Part,0.07602
-Jundland Desert,Transistor,0.04958
-Jundland Desert,Prickly Pear,0.0368
-Jundland Desert,Broken Pipe,0.02426
-Jundland Desert,Small Bolt,0.01932
-Jundland Desert,Pulley,0.01446
-Jundland Desert,Copper Wire,0.0144
-Jundland Desert,Monster Skull,0.0055
-Jundland Desert,Onyx Scorpion,0.00478
-Jundland Desert,Langstaff Crest,0.0000174703
-Gary's Crushroom,Mushroom,0.9998
-Gary's Crushroom,Piece 30,0.0002
-Gary's Crushroom,Gary's Diary Page 77,0.00000012
-Gary's Crushroom,Gary's Diary Page 36,0.0000001
-Sinking Swamp,Bamboo,0.1923636364
-Sinking Swamp,Swamp Thistle,0.1169090909
-Sinking Swamp,Scrap Cloth,0.1150909091
-Sinking Swamp,Sinkrot,0.0852727273
-Sinking Swamp,Mudcap,0.0807272727
-Sinking Swamp,Bogslug,0.1403636364
-Sinking Swamp,Amber Mire Bloom,0.0492727273
-Sinking Swamp,Glowshroom,0.0445454545
-Sinking Swamp,Swamp Algae,0.0436363636
-Sinking Swamp,Swamp Gourd,0.0383636364
-Sinking Swamp,Mist Lily,0.0274545455
-Sinking Swamp,Shadow Bloom,0.0270909091
-Sinking Swamp,Sporefly,0.0334545455
-Sinking Swamp,Water Lily,0.0058181818
-Sinking Swamp,Re'taw,0.0000909091
-Sinking Swamp,U'ral Talisman,0.0000181818
+Location,Item,Drop Rate,Flags
+Small Cave,Wood,0.3872,
+Small Cave,Stone,0.38708,
+Small Cave,Mushroom,0.15686,
+Small Cave,Bone,0.05782,
+Small Cave,Grab Bag 02,0.00462,
+Small Cave,Wooden Mask,0.00462,
+Small Cave,Runestone 04,0.0014388489,
+Small Cave,Skeleton Key,0.0003134796,
+Small Cave,Model Ship,0.0000693241,
+Small Spring,Wood,0.25404,
+Small Spring,Feathers,0.25388,
+Small Spring,Stone,0.25388,
+Small Spring,Mushroom,0.11074,
+Small Spring,Aquamarine,0.07128,
+Small Spring,Apple,0.04168,
+Small Spring,Snail,0.00722,
+Small Spring,Dice,0.00336,
+Small Spring,Spectacles,0.00336,
+Small Spring,Small Chest 01,0.0005037783,
+Small Spring,Skull Coin,0.0000511771,
+Highland Hills,Fern Leaf,0.18726,
+Highland Hills,Purple Flower,0.18726,
+Highland Hills,Stone,0.18722,
+Highland Hills,Feathers,0.18722,
+Highland Hills,Wood,0.18722,
+Highland Hills,Amethyst,0.05516,
+Highland Hills,Caterpillar,0.00566,
+Highland Hills,Strange Letter,0.00264,
+Highland Hills,Runestone 14,0.0002339181,
+Highland Hills,Medium Chest 01,0.0001325381,
+Cane Pole Ridge,Stone,0.25496,
+Cane Pole Ridge,Wood,0.25494,
+Cane Pole Ridge,Unpolished Shimmer Stone,0.2549,
+Cane Pole Ridge,Mushroom,0.11112,
+Cane Pole Ridge,Lemon Quartz,0.07154,
+Cane Pole Ridge,Tea Leaves,0.04186,
+Cane Pole Ridge,Horned Beetle,0.00724,
+Cane Pole Ridge,Pocket Watch,0.00338,
+Cane Pole Ridge,Lima Bean,0.0000505051,
+Misty Forest,Blue Feathers,0.15468,
+Misty Forest,Fern Leaf,0.15466,
+Misty Forest,Wood,0.15466,
+Misty Forest,Acorn,0.15464,
+Misty Forest,Straw,0.07126,
+Misty Forest,3-leaf Clover,0.07118,
+Misty Forest,Mushroom,0.07116,
+Misty Forest,Sweet Root,0.07114,
+Misty Forest,Unpolished Ruby,0.0464,
+Misty Forest,Pine Cone,0.02268,
+Misty Forest,4-leaf Clover,0.01692,
+Misty Forest,Spider,0.00478,
+Misty Forest,Shiny Beetle,0.00478,
+Misty Forest,Runestone 05,0.0005540166,
+Misty Forest,Gold Feather,0.000241838,
+Misty Forest,Frog,0.0002087683,
+Misty Forest,Amber,0.0000335177,
+Black Rock Canyon,Sandstone,0.35604,
+Black Rock Canyon,Coal,0.35598,
+Black Rock Canyon,Salt Rock,0.14624,
+Black Rock Canyon,Horn,0.06844,
+Black Rock Canyon,Shimmer Quartz,0.04474,
+Black Rock Canyon,Ancient Coin,0.0131,
+Black Rock Canyon,Giant Centipede,0.00932,
+Black Rock Canyon,Ruby Scorpion,0.00434,
+Black Rock Canyon,Runestone 09,0.0006024096,
+Black Rock Canyon,Runestone 13,0.0004158004,
+Black Rock Canyon,Orange Gecko,0.000408998,
+Black Rock Canyon,Large Chest 02,0.0002159827,
+Black Rock Canyon,Medium Chest 02,0.0001640689,
+Forest,Wood,0.40006,
+Forest,Straw,0.15618,
+Forest,Mushroom,0.1561,
+Forest,Hide,0.0991,
+Forest,Antler,0.0726,
+Forest,Arrowhead,0.05734,
+Forest,Bird Egg,0.04738,
+Forest,Fire Ant,0.00984,
+Forest,Gold Feather,0.0004889976,
+Forest,Gold Leaf,0.0004842615,
+Forest,Frog,0.0004237288,
+Mount Banon,Coal,0.25782,
+Mount Banon,Unpolished Shimmer Stone,0.25778,
+Mount Banon,Stone,0.25772,
+Mount Banon,Unpolished Emerald,0.11228,
+Mount Banon,Carbon Sphere,0.11224,
+Mount Banon,Magna Quartz,0.001025641,
+Mount Banon,Gold Feather,0.0003590664,
+Mount Banon,Small Chest 02,0.0002567394,
+Mount Banon,Bacon,0.000255102,
+Mount Banon,Runestone 19,0.0002247191,
+Mount Banon,Dragon Skull,0.0000505945,
+Ember Lagoon,Stone,0.57688,
+Ember Lagoon,Glass Orb,0.20578,
+Ember Lagoon,Emberstone,0.129,
+Ember Lagoon,Prism Shard,0.06116,
+Ember Lagoon,Ancient Coin,0.01772,
+Ember Lagoon,Moonstone,0.0044,
+Ember Lagoon,Heart Necklace Left Piece,0.00252,
+Ember Lagoon,Magicite,0.001754386,
+Ember Lagoon,Runestone 17,0.0004282655,
+Ember Lagoon,Large Chest 01,0.0002936858,
+Ember Lagoon,Diamond,0.0000885347,
+Whispering Creek,Oak,0.35506,
+Whispering Creek,Slimestone,0.1421,
+Whispering Creek,Salt Rock,0.1421,
+Whispering Creek,Unpolished Garnet,0.0905,
+Whispering Creek,Blue Gel,0.06642,
+Whispering Creek,Apple,0.05244,
+Whispering Creek,Sour Root,0.03226,
+Whispering Creek,Thorns,0.03226,
+Whispering Creek,Striped Feather,0.03222,
+Whispering Creek,Red Berries,0.03222,
+Whispering Creek,Lemon,0.01056,
+Whispering Creek,Orange,0.01056,
+Whispering Creek,Herbs,0.0012578616,
+Whispering Creek,Raptor Egg,0.000030248,
+Whispering Creek,Raptor Claw,0.0000208008,
+Jundland Desert,Sand,0.42678,
+Jundland Desert,Scrap Metal,0.16406,
+Jundland Desert,Scrap Wire,0.16398,
+Jundland Desert,Machine Part,0.07602,
+Jundland Desert,Transistor,0.04958,
+Jundland Desert,Prickly Pear,0.0368,
+Jundland Desert,Broken Pipe,0.02426,
+Jundland Desert,Small Bolt,0.01932,
+Jundland Desert,Pulley,0.01446,
+Jundland Desert,Copper Wire,0.0144,
+Jundland Desert,Monster Skull,0.0055,
+Jundland Desert,Onyx Scorpion,0.00478,
+Jundland Desert,Langstaff Crest,0.0000174703,
+Gary's Crushroom,Mushroom,0.9998,
+Gary's Crushroom,Piece 30,0.0002,
+Gary's Crushroom,Gary's Diary Page 77,0.00000012,
+Gary's Crushroom,Gary's Diary Page 36,0.0000001,
+Gary's Crushroom,Mushroom Paste,0.999818,fungus_processing
+Gary's Crushroom,Piece 30,0.00009,fungus_processing
+Gary's Crushroom,Painite,0.00009,fungus_processing
+Sinking Swamp,Bamboo,0.1923636364,
+Sinking Swamp,Swamp Thistle,0.1169090909,
+Sinking Swamp,Scrap Cloth,0.1150909091,
+Sinking Swamp,Sinkrot,0.0852727273,
+Sinking Swamp,Mudcap,0.0807272727,
+Sinking Swamp,Bogslug,0.1403636364,
+Sinking Swamp,Amber Mire Bloom,0.0492727273,
+Sinking Swamp,Glowshroom,0.0445454545,
+Sinking Swamp,Swamp Algae,0.0436363636,
+Sinking Swamp,Swamp Gourd,0.0383636364,
+Sinking Swamp,Mist Lily,0.0274545455,
+Sinking Swamp,Shadow Bloom,0.0270909091,
+Sinking Swamp,Sporefly,0.0334545455,
+Sinking Swamp,Water Lily,0.0058181818,
+Sinking Swamp,Re'taw,0.0000909091,
+Sinking Swamp,U'ral Talisman,0.0000181818,

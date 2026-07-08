@@ -6,7 +6,7 @@ import pytest
 
 import argparse
 
-from farm_solver import GameState, ItemNeed, Mastery
+from farm_solver import GameState, Inventory, InventoryItem, ItemNeed, Mastery
 from main import (
     _should_model_calendar,
     build_parser,
@@ -16,6 +16,7 @@ from main import (
     parse_gold_budget,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
+    resolve_fungus_processing,
     resolve_pumpkin_juice,
     selected_plan,
     within_limits,
@@ -1008,6 +1009,42 @@ def test_resolve_pumpkin_juice_from_config():
     assert resolve_pumpkin_juice(
         None, {"mastery": {"use_pumpkin_juice": 7, "pumpkin_juice_price": 200}}
     ) == (True, 7, 200.0)
+
+
+def test_resolve_fungus_processing_checks_inventory_by_default():
+    held = Inventory(
+        items={
+            "fungus processing and you": InventoryItem(
+                name="Fungus Processing and You", quantity=1
+            )
+        }
+    )
+    assert resolve_fungus_processing({}, held) is True
+    assert resolve_fungus_processing({}, Inventory()) is False
+    # No inventory to check (e.g. the --unobtainable report) defaults to off.
+    assert resolve_fungus_processing({}) is False
+
+
+def test_resolve_fungus_processing_config_override_wins():
+    held = Inventory(
+        items={
+            "fungus processing and you": InventoryItem(
+                name="Fungus Processing and You", quantity=1
+            )
+        }
+    )
+    assert (
+        resolve_fungus_processing(
+            {"exploring": {"have_fungus_processing": False}}, held
+        )
+        is False
+    )
+    assert (
+        resolve_fungus_processing(
+            {"exploring": {"have_fungus_processing": True}}, Inventory()
+        )
+        is True
+    )
 
 
 def test_pumpkin_juice_gains_uses_the_mastery_threshold():

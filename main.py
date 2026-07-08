@@ -99,6 +99,29 @@ def resolve_pumpkin_juice(
     return True, (None if limit < 0 else limit), price
 
 
+# The artifact whose presence changes Gary's Crushroom's drop table -- see
+# exploring.FUNGUS_PROCESSING_FLAG.
+FUNGUS_PROCESSING_ARTIFACT = "Fungus Processing and You"
+
+
+def resolve_fungus_processing(
+    cfg: dict, inventory: farm_solver.Inventory | None = None
+) -> bool:
+    """Whether Gary's Crushroom's drop table is boosted by Fungus Processing and You.
+
+    ``exploring.have_fungus_processing`` in the config overrides the check;
+    otherwise the artifact's presence in inventory decides it. With no
+    inventory to check (the ``--unobtainable`` report, which reads no
+    inventory file) and no override, it defaults to off.
+    """
+    override = cfg.get("exploring", {}).get("have_fungus_processing")
+    if override is not None:
+        return bool(override)
+    if inventory is None:
+        return False
+    return inventory.amount(FUNGUS_PROCESSING_ARTIFACT) > 0
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     state: farm_solver.GameState,
@@ -659,12 +682,17 @@ def run(args: argparse.Namespace) -> int:
     workshop = crafting.load_workshop()
     farm = crops.farm_from_config(cfg.get("farming", {}))
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
-    explore = exploring.exploring_from_config(cfg.get("exploring", {}))
     start = args.start_date or date.today()
 
     # A standalone report over the whole workshop; no solving needed. Use the
     # steady-state producers (no plan span) so every pet's items are counted.
+    # No inventory file is read for this report, so the Fungus Processing
+    # artifact check falls back to the config override only.
     if args.unobtainable:
+        explore = exploring.exploring_from_config(
+            cfg.get("exploring", {}),
+            have_fungus_processing=resolve_fungus_processing(cfg),
+        )
         production = config.passive_production(cfg, today=start)
         obtainable = obtainable_items(production, farm, fish, explore)
         report.print_unobtainable(unobtainable_materials(workshop, obtainable))
@@ -682,6 +710,10 @@ def run(args: argparse.Namespace) -> int:
     )
 
     state = load_state(mastery_file, inventory_file)
+    explore = exploring.exploring_from_config(
+        cfg.get("exploring", {}),
+        have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
+    )
 
     if args.mastery is not None:
         goals = parsing.parse_item_amounts(args.mastery)

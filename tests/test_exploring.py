@@ -2,6 +2,7 @@ import pytest
 
 from exploring import (
     DEFAULT_EXPLORING_CSV,
+    FUNGUS_PROCESSING_FLAG,
     CiderModifiers,
     Exploring,
     ExploringLocation,
@@ -60,6 +61,39 @@ def test_read_locations_missing_file_is_empty(tmp_path):
     assert read_locations(tmp_path / "absent.csv") == {}
 
 
+def test_read_locations_files_flagged_rows_separately(tmp_path):
+    path = tmp_path / "exploring.csv"
+    path.write_text(
+        "Location,Item,Drop Rate,Flags\n"
+        "Cave,Wood,0.4,\n"
+        "Cave,Mushroom Paste,0.6,fungus_processing\n"
+    )
+    location = read_locations(path)["cave"]
+    assert location.drop_rates == {"wood": 0.4}
+    assert location.flagged_drop_rates == {"fungus_processing": {"mushroom paste": 0.6}}
+
+
+def test_with_flags_swaps_in_the_flagged_table():
+    location = ExploringLocation(
+        name="Cave",
+        drop_rates={"wood": 0.4},
+        flagged_drop_rates={"fungus_processing": {"mushroom paste": 0.6}},
+    )
+    swapped = location.with_flags({"fungus_processing"})
+    assert swapped.drop_rates == {"mushroom paste": 0.6}
+    # The original is untouched.
+    assert location.drop_rates == {"wood": 0.4}
+
+
+def test_with_flags_no_active_match_keeps_the_base_table():
+    location = ExploringLocation(
+        name="Cave",
+        drop_rates={"wood": 0.4},
+        flagged_drop_rates={"fungus_processing": {"mushroom paste": 0.6}},
+    )
+    assert location.with_flags({"some_other_flag"}).drop_rates == {"wood": 0.4}
+
+
 def test_exploring_from_config_sets_modifiers_and_loads_locations():
     exploring = exploring_from_config(
         {"have_lemon_squeezer": True, "use_quandary_chowder": True}
@@ -72,6 +106,21 @@ def test_exploring_from_config_sets_modifiers_and_loads_locations():
 
 def test_the_bundled_exploring_csv_parses():
     assert read_locations(DEFAULT_EXPLORING_CSV)
+
+
+def test_fungus_processing_swaps_garys_crushroom_drop_table():
+    exploring = exploring_from_config({}, have_fungus_processing=True)
+    drop_rates = exploring.locations["gary's crushroom"].drop_rates
+    assert "mushroom paste" in drop_rates
+    assert "mushroom" not in drop_rates
+    assert FUNGUS_PROCESSING_FLAG == "fungus_processing"
+
+
+def test_without_fungus_processing_garys_crushroom_is_unchanged():
+    exploring = exploring_from_config({})
+    drop_rates = exploring.locations["gary's crushroom"].drop_rates
+    assert "mushroom" in drop_rates
+    assert "mushroom paste" not in drop_rates
 
 
 def test_explores_per_cider_without_cinnamon_is_ten_per_effectiveness():
