@@ -461,6 +461,15 @@ def test_thin_keeps_anchor_plans():
     assert len(kept) == 3
 
 
+def test_thin_count_one_keeps_the_fastest_plan():
+    # count=1 with more than one candidate used to divide by zero computing the
+    # even-spread step; it should instead just keep the fastest (first) plan.
+    plans = [SourcingPlan(time=timedelta(days=d)) for d in range(1, 11)]  # 1..10 days
+    kept = _thin(plans, 1)
+    assert len(kept) == 1
+    assert kept[0].time.days == 1
+
+
 def test_frontier_clamps_to_a_passive_completion_breakpoint():
     # Oak and Horn can be fished (fast, bought nets) or made passively (free, slow).
     # Horn finishes passively at 100/10 = 10 min; Oak only at 100/1 = 100 min (the

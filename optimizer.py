@@ -906,6 +906,8 @@ def _thin(
     """
     if len(plans) <= count:
         return plans
+    if count <= 1:
+        return [plans[0]]  # fastest
     keep = {0, len(plans) - 1}  # always both ends
     for target in sorted(anchors):
         if len(keep) >= count:
