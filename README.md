@@ -14,13 +14,14 @@ mastery_file = "./sample-mastery.txt"
 inventory_file = "./sample-inventory.txt"
 ```
 
-A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them.
+A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them. Pass `--empty-mastery` / `--empty-inventory` to ignore the mastery/inventory file (and config) entirely and start from nothing — neither flag nor config is required for the one it ignores.
 
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--average-seasons] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
-    [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>]
+    [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
+    [--empty-mastery] [--empty-inventory]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.

@@ -295,6 +295,22 @@ def build_parser() -> argparse.ArgumentParser:
             "(overrides solver.inventory_file in the config)"
         ),
     )
+    parser.add_argument(
+        "--empty-mastery",
+        action="store_true",
+        help=(
+            "ignore the mastery file (and solver.mastery_file config) and start "
+            "from no mastery progress"
+        ),
+    )
+    parser.add_argument(
+        "--empty-inventory",
+        action="store_true",
+        help=(
+            "ignore the inventory file (and solver.inventory_file config) and "
+            "start from an empty inventory"
+        ),
+    )
 
     parser.add_argument(
         "--override",
@@ -572,16 +588,20 @@ def unobtainable_materials(
 
 def resolve_files(
     args: argparse.Namespace, cfg: dict
-) -> tuple[Path, Path]:
+) -> tuple[Path | None, Path | None]:
     """The mastery and inventory files, from the CLI or the [solver] config.
 
     A command-line ``--mastery-file`` / ``--inventory-file`` overrides the
     config; otherwise the value comes from the ``[solver]`` section. A file
-    missing from both raises a :class:`ValueError`.
+    missing from both raises a :class:`ValueError`. ``--empty-mastery`` /
+    ``--empty-inventory`` skip resolution entirely (``None``), so neither the
+    flag nor the config need be set.
     """
     solver = cfg.get("solver", {})
 
-    def pick(cli: Path | None, key: str, flag: str) -> Path:
+    def pick(cli: Path | None, key: str, flag: str, empty: bool) -> Path | None:
+        if empty:
+            return None
         if cli is not None:
             return cli
         value = solver.get(key)
@@ -593,14 +613,27 @@ def resolve_files(
         )
 
     return (
-        pick(args.mastery_file, "mastery_file", "--mastery-file"),
-        pick(args.inventory_file, "inventory_file", "--inventory-file"),
+        pick(args.mastery_file, "mastery_file", "--mastery-file", args.empty_mastery),
+        pick(
+            args.inventory_file,
+            "inventory_file",
+            "--inventory-file",
+            args.empty_inventory,
+        ),
     )
 
 
-def load_state(masteries_path: Path, inventory_path: Path) -> farm_solver.GameState:
-    masteries = parsing.parse_masteries(masteries_path.read_text())
-    inventory = parsing.parse_inventory(inventory_path.read_text())
+def load_state(
+    masteries_path: Path | None, inventory_path: Path | None
+) -> farm_solver.GameState:
+    masteries = (
+        parsing.parse_masteries(masteries_path.read_text()) if masteries_path else {}
+    )
+    inventory = (
+        parsing.parse_inventory(inventory_path.read_text())
+        if inventory_path
+        else farm_solver.Inventory()
+    )
     return farm_solver.GameState(masteries=masteries, inventory=inventory)
 
 
