@@ -7,8 +7,6 @@
 
 - Cap opening chests - config flag to list chests that should not be consumed.
 
-- Corn Prize Bag - Add it.
-
 - Rework results into tables.
 
 - Recycling - Drinking OJ, AP, AC gives back glass bottles.
