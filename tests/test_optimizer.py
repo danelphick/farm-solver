@@ -15,6 +15,7 @@ from optimizer import (
     passive_residuals,
     plan_balance,
     plan_gold,
+    leftover_inventory_share,
     plan_gold_breakdown,
     plan_leftovers,
     plan_surplus_gold,
@@ -629,6 +630,42 @@ def test_plan_leftovers_are_supply_past_consumption():
     plan = SourcingPlan(draws=[Draw(passive, 100)], crafts={"twine": 300})
     leftovers = plan_leftovers(plan, {}, {"twine": {"straw": 2}}, 1.0, [], {})
     assert leftovers == pytest.approx({"straw": 400.0, "twine": 300.0})
+
+
+def test_leftover_inventory_share_is_held_stock_past_consumption():
+    # 1,000 Arnold Palmer held plus 300 more made by passive; the craft's own
+    # consumption (none here) would come out of the held stock first, so all
+    # 1,000 held count as leftover, on top of the 300 the plan itself made.
+    passive = Offer(
+        "passive", "passive", {"arnold palmer": 3.0}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive, 100)])
+    inventory = {"arnold palmer": 1000.0}
+    leftovers = plan_leftovers(plan, {}, {}, 1.0, [], inventory)
+    assert leftovers == pytest.approx({"arnold palmer": 1300.0})
+    share = leftover_inventory_share(plan, {}, {}, 1.0, [], inventory)
+    assert share == pytest.approx({"arnold palmer": 1000.0})
+
+
+def test_leftover_inventory_share_nets_out_what_the_plan_consumed():
+    # 100 held Straw, but a craft consumes 60 of it -- only the 40 that survive
+    # count as an inventory-sourced leftover; passive makes none of it itself.
+    plan = SourcingPlan(crafts={"twine": 30})
+    inventory = {"straw": 100.0}
+    share = leftover_inventory_share(
+        plan, {}, {"twine": {"straw": 2}}, 1.0, [], inventory
+    )
+    assert share == pytest.approx({"straw": 40.0})
+
+
+def test_leftover_inventory_share_skips_directly_demanded_items():
+    # Demand is already net of held stock (plan_balance's convention), so an
+    # item's own inventory never reaches its leftover when it is the goal itself.
+    plan = SourcingPlan(draws=[Draw(Offer("buy", "buy", {"twine": 1.0}), 500)])
+    share = leftover_inventory_share(
+        plan, {"twine": 100}, {}, 1.0, [], {"twine": 1000.0}
+    )
+    assert "twine" not in share
 
 
 def test_surplus_sale_value_crafts_leftovers_into_the_richest_good():

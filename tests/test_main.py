@@ -1007,11 +1007,34 @@ def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
     print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
     out = capsys.readouterr().out
     assert "Surplus (accumulates past the goal)" in out
-    assert "500x Large Net = 5 g" in out
-    assert "nominal value = 5 g" in out
+    assert "500x Large Net (0 inventory + 500 accumulated) = 5 g" in out
+    assert "nominal value = 5 g (0 g inventory + 5 g accumulated)" in out
 
     print_plan(plan, {}, Farm(), workshop, 1.0)  # no prices -> no surplus section
     assert "Surplus" not in capsys.readouterr().out
+
+
+def test_print_plan_splits_surplus_into_inventory_and_accumulated(capsys):
+    # 300 Large Net already held (none of it consumed) plus 1,000 surplus Straw
+    # the plan crafts into 500 more -- the 800 total should read as 300 held +
+    # 500 made, and the nominal value the same way in gold.
+    workshop = Workshop({"large net": WorkshopRecipe("Large Net", {"Straw": 2})})
+    passive_offer = Offer(
+        "passive", "passive", {"straw": 10}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(passive_offer, 100)])
+    print_plan(
+        plan,
+        {},
+        Farm(),
+        workshop,
+        1.0,
+        prices=_GOLD,
+        inventory={"large net": 300.0},
+    )
+    out = capsys.readouterr().out
+    assert "800x Large Net (300 inventory + 500 accumulated) = 8 g" in out
+    assert "nominal value = 8 g (3 g inventory + 5 g accumulated)" in out
 
 
 def test_print_frontier_splits_gold_into_buy_and_self_sourced(capsys):

@@ -631,6 +631,11 @@ def _print_surplus_value(
     Assuming they are crafted into the sellable priced goods -- Arnold Palmers,
     Large Nets, Apple Cider, Orange Juice -- :func:`optimizer.surplus_sale_value`
     finds the most gold they are worth; this lists each good and the nominal total.
+    Each count and the total always split into inventory (already held) versus
+    accumulated (what the plan itself produced), via
+    :func:`optimizer.leftover_inventory_share`, so the nominal value shows how
+    much value executing the plan actually adds -- zero on either side when a
+    good was entirely held or entirely made.
     """
     leftovers = optimizer.plan_leftovers(
         plan, demand, recipes, crafting_bonus, open_flows, inventory
@@ -638,15 +643,30 @@ def _print_surplus_value(
     rows = optimizer.surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
     if not rows:
         return
+    # Split each good's count (and so its gold) into what was already held versus
+    # what the plan itself accumulated, so the nominal value shows how much value
+    # executing the plan actually added on top of stock the player already owned.
+    inventory_share = optimizer.leftover_inventory_share(
+        plan, demand, recipes, crafting_bonus, open_flows, inventory
+    )
     total = sum(gold for _, _, gold in rows)
+    inventory_gold = sum(
+        min(inventory_share.get(item, 0.0), count) * prices[item] for item, count, _ in rows
+    )
     print("\nSurplus (accumulates past the goal), craftable into sellable goods:")
     width = _num_width(round(count) for _, count, _ in rows)
     for item, count, gold in rows:
+        held = min(inventory_share.get(item, 0.0), count)
         print(
             f"  {round(count):>{width},}x {display.get(item, item)}"
+            f" ({round(held):,} inventory + {round(count - held):,} accumulated)"
             f" = {round(gold):,} g"
         )
-    print(f"  nominal value = {round(total):,} g")
+    print(
+        f"  nominal value = {round(total):,} g"
+        f" ({round(inventory_gold):,} g inventory"
+        f" + {round(total - inventory_gold):,} g accumulated)"
+    )
 
 
 def print_plan(

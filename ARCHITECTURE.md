@@ -83,7 +83,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 |---|---|---|
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `surplus_sale_value`, `plan_surplus_gold` |
+| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -290,7 +290,12 @@ buildings.
   consumables are always grounded,
   so a plan self-sources exactly what it needs (net of buying) and the leftovers
   are genuine spare capacity (naturally zero when the binding materials are used
-  up).
+  up). Each good's count and the total gold also split into *inventory* (already
+  held) vs *accumulated* (what the plan itself produced), via
+  `optimizer.leftover_inventory_share` — held stock is assumed spent before
+  anything the plan makes (same convention as the "From inventory" consumables
+  note), so a directly-demanded item contributes nothing (its stock already nets
+  out of `demand` in `plan_balance`).
 
 ## Invariants & gotchas
 

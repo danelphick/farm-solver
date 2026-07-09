@@ -740,10 +740,7 @@ def plan_leftovers(
     )
     passive = plan.passive_draw
     produced = passive.produced if passive is not None else {}
-    consumed: dict[str, float] = {}
-    for draw in plan.draws:
-        for item, quantity in draw.offer.consumes.items():
-            consumed[item] = consumed.get(item, 0.0) + quantity * draw.units
+    consumed = _draw_consumed(plan)
     leftovers: dict[str, float] = {}
     keys = set(balance.need) | set(balance.elsewhere) | set(produced)
     for key in keys:
@@ -752,6 +749,49 @@ def plan_leftovers(
         if (left := supply - used) > UNIT_EPSILON:
             leftovers[key] = left
     return leftovers
+
+
+def _draw_consumed(plan: SourcingPlan) -> dict[str, float]:
+    """Each item a plan's draws consume (chest keys, Large Nets, stamina, ...)."""
+    consumed: dict[str, float] = {}
+    for draw in plan.draws:
+        for item, quantity in draw.offer.consumes.items():
+            consumed[item] = consumed.get(item, 0.0) + quantity * draw.units
+    return consumed
+
+
+def leftover_inventory_share(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> dict[str, float]:
+    """How much of each :func:`plan_leftovers` leftover was already held, not made.
+
+    Held stock is spent before anything the plan itself produces (the "From
+    inventory" note in :func:`report.print_plan` makes the same assumption for
+    consumables), so an item's leftover only counts as inventory-sourced past
+    what its own consumption used: ``max(0, held - (need + draw-consumes))``.
+    Directly-demanded items are skipped -- their held stock already nets out of
+    ``demand`` (see :func:`plan_balance`), so none of it reaches ``elsewhere`` or
+    a leftover here. The rest of a leftover (see :func:`plan_leftovers`) is
+    whatever the plan accumulated: crafted, opened, drawn or passively produced.
+    """
+    balance = plan_balance(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    demanded = {item.lower() for item in demand}
+    consumed = _draw_consumed(plan)
+    shares: dict[str, float] = {}
+    for item, held in inventory.items():
+        if item in demanded:
+            continue
+        used = balance.need.get(item, 0.0) + consumed.get(item, 0.0)
+        if (share := held - used) > UNIT_EPSILON:
+            shares[item] = share
+    return shares
 
 
 def surplus_sale_value(
