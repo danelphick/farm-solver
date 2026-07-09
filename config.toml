@@ -8,8 +8,8 @@ data_directory = "./mydata"
 # inventory_file = "./sample-inventory.txt"
 
 [storehouse]
-inventory = 49440
-updated_on = "2026-06-30"
+inventory = 49620
+updated_on = "2026-07-09"
 growth = 20
 
 [sawmill]
@@ -21,7 +21,7 @@ have_sturdy_saw = true
 use_hickory_omelette = true
 
 [chicken_coop]
-produces = 18271
+produces = 18304
 completed_starmap = true
 
 [cow_pasture]
@@ -55,7 +55,7 @@ grubs = 7000
 minnows = 6000
 
 [vineyard]
-grapes = 43000
+grapes = 44000
 
 [steelworks]
 steel = 10296
