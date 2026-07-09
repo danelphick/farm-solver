@@ -25,6 +25,9 @@
 
 - Rework results into tables.
 
+- Performance. Need to profile it to find where time is taken and see if it can be optimised.
+  Possibly faster solver or maybe equation optimisation.
+
 - Build a web page.
   Options: a) Django page with light front-end that just calls into the python solver server-side.
            b) Translate the python in javascript and run client-side.
