@@ -1,6 +1,11 @@
 [solver]
-mastery_file = "./sample-mastery.txt"
-inventory_file = "./sample-inventory.txt"
+# If data_directory is supplied and either of mastery_file or inventory_file are not then it will
+# look in the directory for data-files that start mastery and inventory. It will then treat the
+# suffix as a data and then sort to find the most recent files. E.g. mydata/inventory-2026-07-08.txt
+# and mydata/mastery-2026-07-08.txt
+data_directory = "./mydata"
+# mastery_file = "./sample-mastery.txt"
+# inventory_file = "./sample-inventory.txt"
 
 [storehouse]
 inventory = 49440

@@ -79,3 +79,40 @@ def test_empty_both_ignores_config():
     mastery, inventory = resolve_files(args, CONFIG)
     assert mastery is None
     assert inventory is None
+
+
+def test_data_directory_picks_latest_dated_file(tmp_path):
+    for name in [
+        "mastery-2026-06-29.txt",
+        "mastery-2026-07-08.txt",
+        "mastery-2026-07-04.txt",
+        "inventory-2026-06-29.txt",
+        "inventory-2026-07-08.txt",
+        "inventory-2026-07-04.txt",
+    ]:
+        (tmp_path / name).write_text("")
+    cfg = {"solver": {"data_directory": str(tmp_path)}}
+    mastery, inventory = resolve_files(make_args(), cfg)
+    assert mastery == tmp_path / "mastery-2026-07-08.txt"
+    assert inventory == tmp_path / "inventory-2026-07-08.txt"
+
+
+def test_data_directory_only_fills_in_unset_file(tmp_path):
+    (tmp_path / "mastery-2026-07-08.txt").write_text("")
+    (tmp_path / "inventory-2026-07-08.txt").write_text("")
+    cfg = {
+        "solver": {
+            "data_directory": str(tmp_path),
+            "inventory_file": "./cfg-inventory.txt",
+        }
+    }
+    args = make_args(mastery_file=Path("cli-mastery.txt"))
+    mastery, inventory = resolve_files(args, cfg)
+    assert mastery == Path("cli-mastery.txt")
+    assert inventory == Path("./cfg-inventory.txt")
+
+
+def test_data_directory_without_matching_file_is_an_error(tmp_path):
+    cfg = {"solver": {"data_directory": str(tmp_path)}}
+    with pytest.raises(ValueError, match="mastery_file"):
+        resolve_files(make_args(), cfg)

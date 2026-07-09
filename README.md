@@ -16,6 +16,13 @@ inventory_file = "./sample-inventory.txt"
 
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them. Pass `--empty-mastery` / `--empty-inventory` to ignore the mastery/inventory file (and config) entirely and start from nothing — neither flag nor config is required for the one it ignores.
 
+Instead of naming a fixed file, you can point `data_directory` at a folder of dated exports (e.g. `mastery-2026-07-08.txt`, `inventory-2026-07-08.txt`) and let the solver pick the newest one for whichever of `mastery_file` / `inventory_file` is left unset:
+
+```toml
+[solver]
+data_directory = "./mydata"
+```
+
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [-i item:amount] [-m item:amount] \

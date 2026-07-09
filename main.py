@@ -638,18 +638,33 @@ def unobtainable_materials(
     return sorted(found.values())
 
 
+def _latest_dated_file(directory: Path, prefix: str) -> Path | None:
+    """The most recent ``{prefix}*`` file in ``directory``, or ``None``.
+
+    Filenames are expected to look like ``mastery-2026-07-08.txt``: the
+    ISO-formatted date suffix sorts correctly as a plain string, so the last
+    name in sorted order is the most recent file.
+    """
+    candidates = sorted(p for p in directory.glob(f"{prefix}*") if p.is_file())
+    return candidates[-1] if candidates else None
+
+
 def resolve_files(
     args: argparse.Namespace, cfg: dict
 ) -> tuple[Path | None, Path | None]:
     """The mastery and inventory files, from the CLI or the [solver] config.
 
     A command-line ``--mastery-file`` / ``--inventory-file`` overrides the
-    config; otherwise the value comes from the ``[solver]`` section. A file
-    missing from both raises a :class:`ValueError`. ``--empty-mastery`` /
-    ``--empty-inventory`` skip resolution entirely (``None``), so neither the
-    flag nor the config need be set.
+    config; otherwise the value comes from the ``[solver]`` section. If
+    neither gives a file and ``solver.data_directory`` is set, the most
+    recent ``mastery-*``/``inventory-*`` file in that directory is used
+    (sorted by filename, so a ``YYYY-MM-DD`` suffix picks the latest date). A
+    file missing from all three raises a :class:`ValueError`.
+    ``--empty-mastery`` / ``--empty-inventory`` skip resolution entirely
+    (``None``), so neither the flag nor the config need be set.
     """
     solver = cfg.get("solver", {})
+    data_directory = solver.get("data_directory")
 
     def pick(cli: Path | None, key: str, flag: str, empty: bool) -> Path | None:
         if empty:
@@ -659,9 +674,15 @@ def resolve_files(
         value = solver.get(key)
         if value is not None:
             return Path(value)
+        prefix = key.removesuffix("_file")
+        if data_directory is not None:
+            found = _latest_dated_file(Path(data_directory), prefix)
+            if found is not None:
+                return found
         raise ValueError(
-            f"no {key.replace('_', ' ')}: pass {flag} or set solver.{key} "
-            "in the config"
+            f"no {key.replace('_', ' ')}: pass {flag}, set solver.{key}, or "
+            f"set solver.data_directory to a directory containing a {prefix}* "
+            "file, in the config"
         )
 
     return (
