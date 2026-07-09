@@ -733,6 +733,13 @@ def print_plan(
             sorted(display.get(key, key) for key in offer.yields if key in interesting)
         )
 
+    def wanted_counts(draw: sources.Draw) -> str:
+        return ", ".join(
+            f"{round(draw.produced[key]):,}x {display.get(key, key)}"
+            for key in sorted(draw.offer.yields)
+            if key in interesting
+        )
+
     def sourced(draws: list[sources.Draw]) -> list[sources.Draw]:
         # Drop residue draws: CBC can leave a sliver of a net, palmer or planting
         # on a channel nothing needs, which rounds to zero produced in ~zero time
@@ -778,7 +785,7 @@ def print_plan(
             location = draw.offer.name.removeprefix("explore ")
             print(
                 f"  {math.ceil(draw.units):>{width},}x Arnold Palmer at {location}"
-                f" ({wanted(draw.offer)})"
+                f" ({wanted_counts(draw)})"
             )
     if cider_draws:
         print("\nExploring (Apple Cider):")
@@ -794,7 +801,7 @@ def print_plan(
             stamina = draw.units * draw.offer.consumes.get("stamina", 0.0)
             print(
                 f"  {math.ceil(ciders(draw)):>{width},}x Apple Cider at {zone}"
-                f" ({round(stamina):,} stamina, {wanted(draw.offer)})"
+                f" ({-round(stamina):,} stamina, {wanted_counts(draw)})"
             )
 
     # Stamina for Apple Cider: what the ciders spend, and where it comes from --

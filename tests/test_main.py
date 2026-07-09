@@ -313,7 +313,7 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "Fishing:" in out
     assert "5x Large Net at Small Pond (Drum)" in out
     assert "Exploring:" in out
-    assert "2x Arnold Palmer at Cave (Bone)" in out
+    assert "2x Arnold Palmer at Cave (100x Bone)" in out
     assert "Farming (1d 1h):" in out  # 25 Harvest Alls * 1h, grown one at a time
     assert "Harvest Alls of Corn" in out
     # Board at 10/min needs 200 min = 3h 20m, shown per item under passive.
@@ -912,8 +912,25 @@ def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):
     )
     print_plan(plan, demand, Farm(), Workshop(), 1.45)
     out = capsys.readouterr().out
-    assert "10x Arnold Palmer at Canyon (Horn)" in out  # Horn comes from exploring
+    assert "10x Arnold Palmer at Canyon (1,000x Horn)" in out  # Horn from exploring
     assert "Passive production" not in out  # nothing left for passive to cover
+
+
+def test_print_plan_exploring_reports_stamina_negative_and_resource_counts(capsys):
+    # A cider explore should show what it gathered (with counts, not just names)
+    # and its stamina cost as a negative, since stamina goes down, not up.
+    demand = {"Oak": 1000}
+    cider = Offer(
+        "cider Whispering Creek",
+        "exploring",
+        {"oak": 400},
+        consumes={"apple cider": 1, "stamina": 1216},
+    )
+    plan = SourcingPlan(draws=[Draw(cider, 3)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Exploring (Apple Cider):" in out
+    assert "3x Apple Cider at Whispering Creek (-3,648 stamina, 1,200x Oak)" in out
 
 
 def test_print_plan_passive_shows_only_the_residual(capsys):
