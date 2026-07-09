@@ -23,3 +23,7 @@
 
   Collect user inventories/masteries and save results. Produce graphs showing progress along with
   projected progress both with solver models and based on current progress.
+
+- T300 Artifact: On the 7th day of every month, the player gets 3000 Apple Cider, while on the 14th
+  day of every month they get 2000 Arnold Palmer. This should be auto-detected like the Scythe of
+  Dewstar by looking at the Tower level achieved.
