@@ -709,6 +709,11 @@ def print_plan(
     # Only genuinely-needed items (demand, craft materials, and the chests/keys
     # opens consume) are worth showing; an openable's other contents are byproducts.
     interesting = set(need) | set(crafted)
+    # Items a draw consumes directly -- Apples eaten, Orange Juice drunk, Large
+    # Nets/Arnold Palmers/Apple Cider burned -- never reach crafting `need` (only
+    # `plan.crafts` materials do), but exploring for one is still the reason a zone
+    # is worth visiting, so the zone listing below counts them alongside `interesting`.
+    consumed = optimizer.draw_consumed(plan)
 
     # Tools the plan spends (nets, palmers, cider, ...) are sourced then burned by
     # fishing/exploring/farming, so they never appear as crafting `need`. Track how
@@ -725,8 +730,11 @@ def print_plan(
         }.items()
         if round(spent) >= 1
     }
-    # An open is worth reporting if it yields a needed item or restocks a tool.
-    open_worthy = set(need) | set(spent_consumables)
+    # An open is worth reporting if it yields a needed item, restocks a tool, or
+    # gathers something a draw goes on to consume (an Apple-yielding chest opened
+    # to feed the eat-Apple stamina flow, say) -- the same `consumed` union the
+    # zone listings use, so an open done purely for a byproduct doesn't vanish.
+    open_worthy = set(need) | set(spent_consumables) | set(consumed)
 
     def wanted(offer: sources.Offer) -> str:
         return ", ".join(
@@ -737,7 +745,7 @@ def print_plan(
         return ", ".join(
             f"{round(draw.produced[key]):,}x {display.get(key, key)}"
             for key in sorted(draw.offer.yields)
-            if key in interesting
+            if key in interesting or key in consumed
         )
 
     def sourced(draws: list[sources.Draw]) -> list[sources.Draw]:
@@ -747,7 +755,11 @@ def print_plan(
         return [
             d
             for d in draws
-            if any(round(d.produced[k]) >= 1 for k in d.offer.yields if k in interesting)
+            if any(
+                round(d.produced[k]) >= 1
+                for k in d.offer.yields
+                if k in interesting or k in consumed
+            )
         ]
 
     def draws_on(track: str) -> list[sources.Draw]:

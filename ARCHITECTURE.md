@@ -264,11 +264,22 @@ buildings.
   time to attach). Counts
   are **right-aligned per section** (`_num_width`; the `x` lines up; not shared
   across sections).
-- **`open_worthy`** = `need ∪ spent_consumables` gates what an open shows: an
-  openable's yields are byproducts *unless* needed or a **tool** the plan spends
-  (Large Net / Arnold Palmer / Apple Cider / Orange Juice / Grape Juice). Tools
-  aren't crafting `need`, so without this an open done purely to restock one (a
-  Mystical Chest opened for its Large Nets) would vanish from the report. The
+- **Exploring/Fishing/Farming zone lines** show each item a draw yields with its
+  count when the item is in `interesting` (`need ∪ crafted`) **or**
+  `optimizer.draw_consumed(plan)` — what any draw's `consumes` uses (Apples eaten,
+  Orange Juice drunk, Large Nets/Arnold Palmers/Apple Cider burned, ...). Those
+  items never reach crafting `need` (only `plan.crafts` materials do), but
+  exploring/fishing/farming for one is still the reason the zone/crop is worth
+  it, so `sourced` (the residue-draw filter) checks the same union — a draw
+  whose only real output is an eaten/drunk byproduct no longer looks like
+  residue and vanishes from the report.
+- **`open_worthy`** = `need ∪ spent_consumables ∪ draw_consumed(plan)` gates what
+  an open shows: an openable's yields are byproducts *unless* needed, a **tool**
+  the plan spends (Large Net / Arnold Palmer / Apple Cider / Orange Juice / Grape
+  Juice), or something a draw goes on to consume (a chest opened for the Apples
+  it eats for stamina). None of these are crafting `need`, so without this an
+  open done purely for one — a Mystical Chest opened for its Large Nets, a Fruit
+  Chest opened for its Apples — would vanish from the report entirely. The
   **From inventory** section then shows each tool's held portion (`min(stock,
   spent)`), so the spend reconciles: held + opened + crafted + bought.
 - Cookie farming: `_print_cookie_farming`; a cookie set is a **whole real day**

@@ -724,6 +724,29 @@ def test_print_plan_reports_opens_that_restock_a_consumable_tool(capsys):
     assert "Trinket" not in out  # a byproduct nothing needs, still hidden
 
 
+def test_print_plan_reports_opens_that_gather_a_consumed_byproduct(capsys):
+    # The plan eats Apple for stamina and opens a chest that yields it as one of
+    # several drops. Apple is neither demand nor a craft material, so without
+    # counting `draw_consumed` this open would look worthless and vanish entirely.
+    demand = {"Gem": 10}
+    eat_apple = Offer("eat apple", "drinking", {"stamina": 15}, consumes={"apple": 1})
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Cove", "fishing", {"gem": 1}, ln=1), 10), Draw(eat_apple, 100)],
+        opens={"Fruit Chest": 1},
+    )
+    chest = OpenFlow(
+        name="Fruit Chest",
+        consumes={"fruit chest": 1},
+        yields={"apple": 100, "trinket": 9},
+    )
+    names = {"fruit chest": "Fruit Chest", "gem": "Gem"}
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, open_flows=[chest], openable_names=names)
+    out = capsys.readouterr().out
+    assert "Opening (Locksmith):" in out
+    assert "1x Fruit Chest -> 100x apple" in out
+    assert "Trinket" not in out  # still hidden -- nothing consumes it
+
+
 def test_print_plan_lists_held_consumables_from_inventory(capsys):
     # A plan can spend far more of a tool than it makes because it held a stack.
     # The held portion (min of stock and spend) is surfaced so the spend reconciles.
@@ -931,6 +954,31 @@ def test_print_plan_exploring_reports_stamina_negative_and_resource_counts(capsy
     out = capsys.readouterr().out
     assert "Exploring (Apple Cider):" in out
     assert "3x Apple Cider at Whispering Creek (-3,648 stamina, 1,200x Oak)" in out
+
+
+def test_print_plan_exploring_lists_byproducts_the_plan_goes_on_to_use(capsys):
+    # The cider explore throws off Apple as a byproduct alongside the needed Oak;
+    # Apple is not itself demanded or a craft material, but the plan eats it for
+    # stamina, so it should still show up at the zone that produced it.
+    demand = {"Oak": 1000}
+    cider = Offer(
+        "cider Whispering Creek",
+        "exploring",
+        {"oak": 400, "apple": 50},
+        consumes={"apple cider": 1, "stamina": 1216},
+    )
+    eat_apple = Offer(
+        "eat apple", "drinking", {"stamina": 15}, consumes={"apple": 1}
+    )
+    plan = SourcingPlan(draws=[Draw(cider, 3), Draw(eat_apple, 150)])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    # No display-name mapping for a bare "apple" in this minimal setup (it isn't
+    # demanded, crafted, or an openable), so it falls back to its raw lower-case key.
+    assert (
+        "3x Apple Cider at Whispering Creek"
+        " (-3,648 stamina, 150x apple, 1,200x Oak)" in out
+    )
 
 
 def test_print_plan_passive_shows_only_the_residual(capsys):

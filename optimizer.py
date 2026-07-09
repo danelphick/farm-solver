@@ -740,7 +740,7 @@ def plan_leftovers(
     )
     passive = plan.passive_draw
     produced = passive.produced if passive is not None else {}
-    consumed = _draw_consumed(plan)
+    consumed = draw_consumed(plan)
     leftovers: dict[str, float] = {}
     keys = set(balance.need) | set(balance.elsewhere) | set(produced)
     for key in keys:
@@ -751,7 +751,7 @@ def plan_leftovers(
     return leftovers
 
 
-def _draw_consumed(plan: SourcingPlan) -> dict[str, float]:
+def draw_consumed(plan: SourcingPlan) -> dict[str, float]:
     """Each item a plan's draws consume (chest keys, Large Nets, stamina, ...)."""
     consumed: dict[str, float] = {}
     for draw in plan.draws:
@@ -783,7 +783,7 @@ def leftover_inventory_share(
         plan, demand, recipes, crafting_bonus, openables, inventory
     )
     demanded = {item.lower() for item in demand}
-    consumed = _draw_consumed(plan)
+    consumed = draw_consumed(plan)
     shares: dict[str, float] = {}
     for item, held in inventory.items():
         if item in demanded:
