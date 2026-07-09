@@ -44,7 +44,9 @@ Net / Orange Juice must be crafted or gathered.
 `main.run(args)` orchestrates, roughly:
 
 1. **Load state** — `main.load_state` → `parsing` builds `farm_solver.GameState`
-   (masteries + inventory) from the pasted-in text files.
+   (masteries + inventory) from the pasted-in text files, then
+   `main.apply_inventory_overrides` forces any `--override-inventory` items to
+   their given held amount, replacing whatever the file said.
 2. **Goal → demand** — `farm_solver.solve_tower/solve_mastery/solve_acquire`
    produce a `Solution` with `ItemNeed`s; without `--target`, `-m`/`-i` replace
    the tower goal (as before), and `farm_solver.solve_goals` combines them when
@@ -81,7 +83,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 
 | File | Owns | Key names |
 |---|---|---|
-| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
+| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |

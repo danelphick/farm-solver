@@ -17,6 +17,7 @@ from farm_solver import (
 from main import (
     DEWSTAR_TOWER_LEVEL,
     _should_model_calendar,
+    apply_inventory_overrides,
     build_parser,
     cheapest_plan,
     cookie_sets_available,
@@ -219,6 +220,32 @@ def test_mastery_and_items_flags_can_be_combined():
     args = parser.parse_args(["-m", "Board:5000", "-i", "Board:10000"])
     assert args.mastery == "Board:5000"
     assert args.items == "Board:10000"
+
+
+def test_override_inventory_flag_defaults_to_none():
+    parser = build_parser()
+    assert parser.parse_args([]).override_inventory is None
+    args = parser.parse_args(
+        ["--override-inventory", "Medium Chest:0,Arnold Palmer:100"]
+    )
+    assert args.override_inventory == "Medium Chest:0,Arnold Palmer:100"
+
+
+def test_apply_inventory_overrides_replaces_held_amounts():
+    inventory = Inventory(
+        items={
+            "medium chest": InventoryItem(name="Medium Chest", quantity=5, category="Chests"),
+        }
+    )
+    apply_inventory_overrides(
+        inventory, {"Medium Chest": 0, "Arnold Palmer": 100}
+    )
+    assert inventory.amount("Medium Chest") == 0
+    assert inventory.amount("Arnold Palmer") == 100
+    # An overridden item that already had a category keeps it.
+    assert inventory.get("Medium Chest").category == "Chests"
+    # A brand-new item (not in the file at all) has no category to keep.
+    assert inventory.get("Arnold Palmer").category is None
 
 
 def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):

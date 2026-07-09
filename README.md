@@ -16,6 +16,8 @@ inventory_file = "./sample-inventory.txt"
 
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them. Pass `--empty-mastery` / `--empty-inventory` to ignore the mastery/inventory file (and config) entirely and start from nothing — neither flag nor config is required for the one it ignores.
 
+To force specific items to a given held amount regardless of what the inventory file says, use `--override-inventory`, e.g. `--override-inventory "Medium Chest:0,Arnold Palmer:100"`. It's applied after the inventory file is loaded, so it replaces whatever amount the file gave those items (and adds the item if the file didn't have it at all); everything else from the file is left alone.
+
 Instead of naming a fixed file, you can point `data_directory` at a folder of dated exports (e.g. `mastery-2026-07-08.txt`, `inventory-2026-07-08.txt`) and let the solver pick the newest one for whichever of `mastery_file` / `inventory_file` is left unset:
 
 ```toml
@@ -29,7 +31,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--average-seasons] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
-    [--empty-mastery] [--empty-inventory]
+    [--empty-mastery] [--empty-inventory] [--override-inventory item:amount]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.

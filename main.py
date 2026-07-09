@@ -4,7 +4,8 @@ See README.md for usage. In short::
 
     python main.py [-t <tower-requirements>] [-l level] \
         [-i item:amount] [-m item:amount] \
-        [--mastery-file <masteries>] [--inventory-file <inventory>]
+        [--mastery-file <masteries>] [--inventory-file <inventory>] \
+        [--override-inventory item:amount]
 
 The mastery and inventory files default to the ``[solver]`` config section.
 """
@@ -332,6 +333,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "ignore the inventory file (and solver.inventory_file config) and "
             "start from an empty inventory"
+        ),
+    )
+    parser.add_argument(
+        "--override-inventory",
+        metavar="ITEM:AMOUNT[,...]",
+        help=(
+            "force the held amount of the given item(s) to AMOUNT, applied "
+            "after the inventory file (or --empty-inventory) is loaded, so it "
+            "overrides whatever that gave those items (e.g. "
+            "'Medium Chest:0,Arnold Palmer:100'). AMOUNT accepts M/GM/MM "
+            "(10K/100K/1M) and k/m suffixes, case-insensitively"
         ),
     )
 
@@ -710,6 +722,23 @@ def load_state(
     return farm_solver.GameState(masteries=masteries, inventory=inventory)
 
 
+def apply_inventory_overrides(
+    inventory: farm_solver.Inventory, overrides: dict[str, int]
+) -> None:
+    """Force each item in ``overrides`` to the given held amount, in place.
+
+    Meant to run right after the inventory file (or ``--empty-inventory``) is
+    loaded, so these values replace whatever amount the file gave those items
+    -- the file's amount for an overridden item is ignored entirely.
+    """
+    for item, amount in overrides.items():
+        existing = inventory.get(item)
+        category = existing.category if existing is not None else None
+        inventory.items[item.lower()] = farm_solver.InventoryItem(
+            name=item, quantity=amount, category=category
+        )
+
+
 def within_limits(
     plan: optimizer.SourcingPlan,
     time_limit: timedelta | None = None,
@@ -870,6 +899,10 @@ def run(args: argparse.Namespace) -> int:
     )
 
     state = load_state(mastery_file, inventory_file)
+    if args.override_inventory is not None:
+        apply_inventory_overrides(
+            state.inventory, parsing.parse_item_amounts(args.override_inventory)
+        )
     # Loaded unconditionally (not just for the tower goal below): reaching
     # T250 auto-detects the Scythe of Dewstar (see resolve_scythe_of_dewstar),
     # regardless of which goal this run solves.
