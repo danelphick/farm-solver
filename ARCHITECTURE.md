@@ -288,7 +288,11 @@ buildings.
   shared across crops, so the count is `ceil(total cookie-days)`
   (`_cookie_sets_used`), not per-crop rounding.
 - Passive lines name producers via `_passive_sources`; seasonal window flagged by
-  `_season_note`. Only items the plan actually needs are shown.
+  `_season_note`. Items the plan needs are shown by their `need − elsewhere`
+  residual; a **consumed tool** (Arnold Palmer / Apple Cider) is never a crafting
+  `need`, so it has no such residual — but when the passive track makes it (the
+  Mechanical Heart's grants, a pet's haul) the line still appears, quantity =
+  `min(passive_draw.produced, draw_consumed)`, so the free supply is visible.
 - **Buy section** (`print_plan`, with trading `prices`): lists `plan.bought` and
   the gold each purchase costs, totalling `plan.gold`.
 - **Surplus section** (`_print_surplus_value`, with trading `prices`): passive

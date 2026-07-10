@@ -957,9 +957,21 @@ def print_plan(
             if rate <= 0:
                 continue
             residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
-            if residual > 1e-6:
-                wait = timedelta(minutes=residual / rate)
-                rows.append((wait, display.get(key, key), round(residual), key))
+            if residual <= 1e-6:
+                # A consumed tool (Arnold Palmer / Apple Cider / ...) is never a
+                # crafting `need`, so its `need - elsewhere` residual is not what
+                # passive contributes -- but the passive track can still make it
+                # (the Mechanical Heart's monthly grants, a pet's haul), free
+                # supply that offsets what the channels must gather. Show the
+                # amount passive actually produced, capped at what the plan burns.
+                produced = passive_draw.produced.get(key, 0.0)
+                if key not in consumed or produced <= 1e-6:
+                    continue
+                residual = min(produced, consumed[key])
+                if residual <= 1e-6:
+                    continue
+            wait = timedelta(minutes=residual / rate)
+            rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
             # List the item on the critical path first (only when passive is the

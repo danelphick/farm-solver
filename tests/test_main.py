@@ -898,6 +898,53 @@ def test_print_plan_passive_names_a_single_source(capsys):
     assert "10x Flower in 2m (from Windmill)" in out
 
 
+def test_print_plan_passive_shows_a_consumed_tool_the_passive_track_makes(capsys):
+    # Arnold Palmer is a consumed tool, never a crafting `need`, so it has no
+    # need-minus-elsewhere residual -- but the passive track (e.g. the Mechanical
+    # Heart's monthly grants) can still make it, free supply worth surfacing. Show
+    # what passive produced, capped at what the plan burns, named by its producer.
+    demand = {"Horn": 2000}
+    explore = Offer(
+        "explore Cave", "exploring", {"horn": 10},
+        consumes={"arnold palmer": 1}, ap=1,
+    )
+    passive_offer = Offer(
+        "passive", "passive", {"arnold palmer": 1}, time_per_unit=MINUTE
+    )
+    plan = SourcingPlan(draws=[Draw(explore, 200), Draw(passive_offer, 60)])
+    production = PassiveProduction(
+        producers=[PassiveProducer("Mechanical Heart", MINUTE, {"arnold palmer": 1})]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production,
+               openable_names={"arnold palmer": "Arnold Palmer"})
+    out = capsys.readouterr().out
+    # Passive made 60 palmers (rate 1/min * 60 units), all of them burned by the
+    # 200-palmer explore, so 60 show under the Mechanical Heart.
+    assert "60x Arnold Palmer in 1h (from Mechanical Heart)" in out
+
+
+def test_print_plan_passive_caps_a_consumed_tool_at_what_the_plan_burns(capsys):
+    # If passive overproduces the tool past what the plan spends, only the used
+    # portion shows (the rest is surplus, accounted separately).
+    demand = {"Horn": 2000}
+    explore = Offer(
+        "explore Cave", "exploring", {"horn": 10},
+        consumes={"arnold palmer": 1}, ap=1,
+    )
+    passive_offer = Offer(
+        "passive", "passive", {"arnold palmer": 1}, time_per_unit=MINUTE
+    )
+    # Passive makes 500 palmers but the explore only burns 40.
+    plan = SourcingPlan(draws=[Draw(explore, 40), Draw(passive_offer, 500)])
+    production = PassiveProduction(
+        producers=[PassiveProducer("Mechanical Heart", MINUTE, {"arnold palmer": 1})]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
+    out = capsys.readouterr().out
+    assert "40x Arnold Palmer" in out
+    assert "500x Arnold Palmer" not in out
+
+
 def test_print_plan_passive_breaks_down_multiple_sources(capsys):
     # Two producers make the item; the quantity is split by their rate share, on
     # the same line, largest contributor first.
