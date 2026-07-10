@@ -635,10 +635,17 @@ def minimize(
 
         # Stage 2 -- least gold at the pinned primary, then lock it. Skipped when
         # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
+        # Also skipped in epsilon-constraint mode: stage 1 already minimised gold
+        # under `makespan <= time_cap`, and stage 1's `t_star` pin above only
+        # tightens that same bound, so a re-solve here is a provable no-op -- pin
+        # gold from the stage-1 solution directly instead.
         if buy or buy_cookie is not None or pj:
-            problem.setObjective(gold)
-            problem.solve(_solver())
-            problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
+            if time_cap is not None and not favour_passive:
+                problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
+            else:
+                problem.setObjective(gold)
+                problem.solve(_solver())
+                problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(

@@ -89,7 +89,9 @@ module-level factory and default it to in-process HiGHS.
 
 Measured effect: base 4.3 s → 0.62 s, calendar 8.2 s → 1.22 s.
 
-## Item 2 — Skip the provably redundant stage-2 solve in epsilon mode
+## Item 2 — Skip the provably redundant stage-2 solve in epsilon mode — DONE
+
+Implemented 2026-07-10. Details below kept for reference.
 
 **File:** `optimizer.py`, `minimize`, the refinement block (~lines 592–613).
 
