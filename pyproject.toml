@@ -7,6 +7,7 @@ requires-python = ">=3.14"
 dependencies = [
     "highspy>=1.15.1",
     "pulp>=3.3.2",
+    "rich>=15.0.0",
 ]
 
 [tool.pytest.ini_options]

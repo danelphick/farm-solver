@@ -34,7 +34,8 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [--solver highs|cbc|NAME] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
-    [--empty-mastery] [--empty-inventory] [--override-inventory item:amount]
+    [--empty-mastery] [--empty-inventory] [--override-inventory item:amount] \
+    [--format text|markdown]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -153,6 +154,10 @@ Three ceilings drop plans that exceed them: `--passive-limit <duration>` on tota
 ```shell
 python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a century
 ```
+
+## Report format
+
+Pass `--format markdown` (`md` also accepted) to get the same report as Markdown, with a table for the frontier and for each tabular section of the expanded plan (Fishing, Exploring, Farming, Passive production, Buy, Surplus, ...); narrative bits like the critical path stay plain text. `--format text` (`txt`) is the default. When stdout is a terminal, Markdown is rendered through it via [rich](https://github.com/Textualize/rich) rather than printed as raw source; redirected to a file (`python main.py --format markdown > report.md`) it prints the Markdown source itself, so the file is a real `.md` document.
 
 ## Spending gold: make vs buy
 

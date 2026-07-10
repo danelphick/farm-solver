@@ -72,9 +72,14 @@ Net / Orange Juice must be crafted or gathered.
    one `list[Offer]`; `sources.open_flows` builds the Locksmith `OpenFlow`s.
 4. **Solve frontier** — `optimizer.frontier(...)` → list of `SourcingPlan`,
    fastest first.
-5. **Print** — `report.print_frontier` (the table), then `report.print_plan` for
-   the selected plan (critical path + per-channel actions), optional
-   `report.print_crafts`. All printing lives in `report.py`; `main.run` calls it.
+5. **Print** — `main.run` picks a `report.Reporter` from `--format`
+   (`report.build_reporter`; `TextReporter` prints immediately as before,
+   `MarkdownReporter` buffers into a `MarkdownDoc`) and calls its `.frontier`
+   (the table), `.plan` for the selected plan (critical path + per-channel
+   actions), optional `.crafts`, then `.finish()` (a no-op for text; for
+   Markdown, renders through `rich` to a terminal or prints the raw Markdown
+   source otherwise). All printing lives in `report.py`; `main.run` calls it
+   only through the `Reporter`.
 
 The whole thing loops up to `_MAX_SEASON_ITERS` when `model_calendar` is on, since
 a seasonal pet's yield depends on the plan span (a fixed point). In the default
@@ -91,7 +96,7 @@ frontier as before.
 | File | Owns | Key names |
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
-| `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -259,6 +264,37 @@ production** section's ordering (lead item = the critical one) so they agree.
 `_pet_passive_rate` distinguishes pets (name-prefixed `PET_PRODUCER_PREFIX`) from
 buildings.
 
+## Two renderers, one set of decisions (report.py)
+
+`--format markdown` gets its own `markdown_*` function per `print_*` function
+(`markdown_frontier`/`print_frontier`, `markdown_plan`/`print_plan`, ...), but
+they never duplicate a *decision* -- only how a row is laid out differs. The
+shared pieces:
+
+- **`_build_plan_context`/`_PlanContext`** — the `need`/`elsewhere`/`crafted`
+  balance (`optimizer.plan_balance`), `interesting`/`consumed` sets, spent
+  consumables and `open_worthy`, computed once and read by both renderers via
+  `_wanted`/`_wanted_counts`/`_sourced`/`_draws_on`.
+- **`_critical_path_summary`** — the `(makespan, line)` decision `print_critical_path`
+  and `markdown_plan` both print verbatim; see "Critical-path naming" below for
+  the logic itself.
+- **`_craft_order`** — the parents-before-materials ordering `print_crafts` and
+  `markdown_crafts` both walk.
+- Every other named helper below (`_defining_passive_resource`, `_farming_drives`,
+  `_slowest_passive_item`, `_passive_sources`, ...) is called directly by both
+  `print_plan` and `markdown_plan` -- there is no markdown-specific copy of any
+  of this reasoning, only of the loop that turns its output into a printed line
+  vs. a table row.
+
+`report.Reporter` (`TextReporter`/`MarkdownReporter`, picked by
+`report.build_reporter(args.format)`) is the facade `main.run` calls through, so
+it never branches on `--format` itself. `MarkdownReporter` buffers into a
+`MarkdownDoc` (one block per heading/paragraph/bullet-list/table) and only
+renders in `.finish()`: via `rich.markdown.Markdown` through `rich.console.Console`
+when stdout is a terminal, or by printing the Markdown source as-is otherwise --
+so redirecting to a file (`> report.md`) gets real Markdown, not rich's
+word-wrapped rendering of it.
+
 ## Printing conventions (report.print_plan)
 
 - Sections: Fishing, Exploring, Opening (Locksmith), Farming, Passive production,
@@ -386,6 +422,11 @@ startup per solve (once ~75% of the runtime). Alternate optima differ between
 backends just as they do between CBC runs; the refinement tower in `minimize`
 pins the reported metrics either way. NSGA-II/pymoo was rejected: the LP frontier
 is piecewise-linear/convex, so scalarise-and-sweep recovers every vertex exactly.
+
+**rich** renders `--format markdown`'s output to a terminal (`report.MarkdownReporter.finish`,
+via `rich.markdown.Markdown`/`rich.console.Console`) -- only used when stdout is
+a tty; redirected output prints the Markdown source directly, no dependency
+needed to consume it.
 
 ## Dev workflow
 

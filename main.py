@@ -81,6 +81,18 @@ def parse_gold_budget(value: str) -> int | None:
     return budget
 
 
+def parse_format(value: str) -> str:
+    """Parse ``--format``: ``text``/``txt`` or ``markdown``/``md``."""
+    aliases = {"text": "text", "txt": "text", "markdown": "markdown", "md": "markdown"}
+    text = value.strip().lower()
+    try:
+        return aliases[text]
+    except KeyError:
+        raise argparse.ArgumentTypeError(
+            f"--format must be 'text'/'txt' or 'markdown'/'md', not {value!r}"
+        ) from None
+
+
 # Nominal player-to-player gold cost of one Pumpkin Juice, used when the config
 # does not set mastery.pumpkin_juice_price.
 DEFAULT_PUMPKIN_JUICE_PRICE = 230.0
@@ -626,6 +638,19 @@ def build_parser() -> argparse.ArgumentParser:
             "suffixes, case-insensitively"
         ),
     )
+    parser.add_argument(
+        "--format",
+        type=parse_format,
+        default="text",
+        metavar="text|markdown",
+        help=(
+            "report layout: 'text' (default) or 'markdown' ('txt'/'md' also "
+            "accepted), with tables for the frontier and each plan section. "
+            "Markdown renders through the terminal (via rich) when stdout is a "
+            "terminal, or prints the raw Markdown source when redirected (e.g. "
+            "to a .md file)"
+        ),
+    )
 
     return parser
 
@@ -922,6 +947,9 @@ def load_config() -> dict:
 
 
 def run(args: argparse.Namespace) -> int:
+    # All output goes through this: text prints immediately (today's behaviour),
+    # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
+    reporter = report.build_reporter(args.format)
     cfg = load_config()
     apply_overrides(cfg, args.override)
     # Select the LP backend before anything solves; the flag beats the config.
@@ -951,7 +979,8 @@ def run(args: argparse.Namespace) -> int:
             cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)
         )
         obtainable = obtainable_items(production, farm, fish, explore)
-        report.print_unobtainable(unobtainable_materials(workshop, obtainable))
+        reporter.unobtainable(unobtainable_materials(workshop, obtainable))
+        reporter.finish()
         return 0
 
     # The mastery and inventory files come from the command line, falling back
@@ -1006,7 +1035,7 @@ def run(args: argparse.Namespace) -> int:
             state, requirements, target_level, mastery_goals, item_goals
         )
 
-    report.print_solution(solution)
+    reporter.solution(solution)
 
     # Every recipe is a craft flow; the optimiser sources the top-level demand,
     # choosing craft-vs-gather for itself. Openables are free multi-output flows
@@ -1113,6 +1142,7 @@ def run(args: argparse.Namespace) -> int:
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         )
         if not plans:
+            reporter.finish()
             return 0  # nothing left to source
         # The limits drop plans over a time or consumable ceiling, unless that
         # would leave none (then the whole frontier is shown, with a warning below).
@@ -1139,13 +1169,13 @@ def run(args: argparse.Namespace) -> int:
             dated.append("seasonal pets")
         if monthly_grants:
             dated.append("the Mechanical Heart's grants")
-        print(
-            f"\nStarting {start:%d %b %Y}; {' and '.join(dated)} count only for "
+        reporter.note(
+            f"Starting {start:%d %b %Y}; {' and '.join(dated)} count only for "
             "the part of the plan they fall in."
         )
     if not within:
-        print(
-            f"\n{limit_shortfall(plans, time_limit, args.max_ap, args.max_ln, args.max_gold)}"
+        reporter.note(
+            limit_shortfall(plans, time_limit, args.max_ap, args.max_ln, args.max_gold)
         )
     # Display names for the items a reason or the plan report may mention.
     display = report.build_display(demand, workshop)
@@ -1174,7 +1204,7 @@ def run(args: argparse.Namespace) -> int:
     golds = None
     if prices is not None:
         golds = [optimizer.plan_gold_breakdown(p, prices) for p in shown]
-    report.print_frontier(shown, selected, cheapest, reasons, prices, golds)
+    reporter.frontier(shown, selected, cheapest, reasons, prices, golds)
     chosen = shown[selected]
     solution.arnold_palmers = round(chosen.arnold_palmers)
     solution.large_nets = round(chosen.large_nets)
@@ -1190,14 +1220,15 @@ def run(args: argparse.Namespace) -> int:
     # When to drink each Pumpkin Juice: the mastery levels (near the goal, in the
     # item's final tier) that land its intended boost -- shown in the plan's report.
     pj_schedule = pumpkin_juice_schedule(chosen, solution.needs, pj_gain)
-    report.print_plan(
+    reporter.plan(
         chosen, demand, farm, workshop, args.crafting_bonus, production,
         open_flows, smith.names, inventory, sourceable_elsewhere,
         max_passive_residuals, prices, pj_schedule,
     )
 
     if args.breakdown:
-        report.print_crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)
+        reporter.crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)
+    reporter.finish()
     return 0
 
 

@@ -12,9 +12,14 @@ its precedence is deliberate -- read ARCHITECTURE.md before touching it.
 from __future__ import annotations
 
 import calendar
+import dataclasses
 import math
+import sys
 from collections.abc import Iterable
 from datetime import timedelta
+
+from rich.console import Console
+from rich.markdown import Markdown as RichMarkdown
 
 import config
 import crafting
@@ -36,6 +41,45 @@ _FARMING_COMAX_MARGIN = 0.01
 _FULL_REQUIREMENT_MARGIN = 0.02
 
 
+def _escape_cell(text: str) -> str:
+    """Escape a Markdown table cell so an embedded ``|`` doesn't split columns."""
+    return text.replace("|", "\\|")
+
+
+class MarkdownDoc:
+    """Accumulates a report as Markdown source, rendered once at the end.
+
+    Each call appends one self-contained block (a heading, a paragraph, a bullet
+    list or a table); :meth:`render` joins them blank-line-separated, which is
+    what makes each a distinct element to a Markdown parser/renderer.
+    """
+
+    def __init__(self) -> None:
+        self._blocks: list[str] = []
+
+    def heading(self, text: str, level: int = 2) -> None:
+        self._blocks.append(f"{'#' * level} {text}")
+
+    def para(self, text: str) -> None:
+        self._blocks.append(text)
+
+    def bullets(self, lines: Iterable[str]) -> None:
+        self._blocks.append("\n".join(f"- {line}" for line in lines))
+
+    def table(self, headers: list[str], rows: list[list[str]]) -> None:
+        if not rows:
+            return
+        head = "| " + " | ".join(_escape_cell(h) for h in headers) + " |"
+        sep = "| " + " | ".join(["---"] * len(headers)) + " |"
+        body = [
+            "| " + " | ".join(_escape_cell(str(c)) for c in row) + " |" for row in rows
+        ]
+        self._blocks.append("\n".join([head, sep, *body]))
+
+    def render(self) -> str:
+        return "\n\n".join(self._blocks) + "\n"
+
+
 def print_solution(solution: farm_solver.Solution) -> None:
     for need in solution.needs:
         prefix = f"T{need.level}: " if need.level is not None else ""
@@ -54,6 +98,31 @@ def print_solution(solution: farm_solver.Solution) -> None:
         print(note)
 
 
+def markdown_solution(doc: MarkdownDoc, solution: farm_solver.Solution) -> None:
+    """Markdown counterpart to :func:`print_solution`: the goal needs as a table."""
+    show_level = any(need.level is not None for need in solution.needs)
+    if solution.needs:
+        doc.heading("Goal")
+        headers = (["Level"] if show_level else []) + [
+            "Item", "Have", "Target", "Still needed",
+        ]
+        rows = []
+        for need in solution.needs:
+            row = [f"T{need.level}"] if show_level and need.level is not None else (
+                [""] if show_level else []
+            )
+            row += [
+                need.item,
+                f"{need.have:,}",
+                f"{need.target:,}",
+                f"{need.extra:,}" if need.extra > 0 else "done",
+            ]
+            rows.append(row)
+        doc.table(headers, rows)
+    for note in solution.notes:
+        doc.para(note)
+
+
 def print_unobtainable(materials: list[str]) -> None:
     print("The following materials are required for some crafts but are unobtainable:")
     if not materials:
@@ -61,6 +130,15 @@ def print_unobtainable(materials: list[str]) -> None:
         return
     for material in materials:
         print(f"  {material}")
+
+
+def markdown_unobtainable(doc: MarkdownDoc, materials: list[str]) -> None:
+    """Markdown counterpart to :func:`print_unobtainable`."""
+    doc.heading("Unobtainable materials")
+    if not materials:
+        doc.para("(none)")
+        return
+    doc.bullets(materials)
 
 
 def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:
@@ -167,6 +245,81 @@ def print_frontier(
             note_parts.append(f"— {reason}")
         note = "  " + " ".join(note_parts) if note_parts else ""
         print(f" {marker} {i + 1}. {' + '.join(parts)}{gold}{note}")
+
+
+def markdown_frontier(
+    doc: MarkdownDoc,
+    plans: list[optimizer.SourcingPlan],
+    selected: int,
+    cheapest: int,
+    reasons: list[str | None] | None = None,
+    prices: dict[str, float] | None = None,
+    golds: list[tuple[float, float]] | None = None,
+) -> None:
+    """Markdown counterpart to :func:`print_frontier`: the same rows, as a table."""
+    show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
+    show_juices = any(round(p.grape_juices) >= 1 for p in plans)
+    show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
+    show_pumpkin = any(round(_pumpkin_juices(p)) >= 1 for p in plans)
+
+    headers = ["#", "Time", "AP", "LN"]
+    if show_cookies:
+        headers.append("Cookie sets")
+    if show_juices:
+        headers.append("Grape Juice")
+    if show_ciders:
+        headers.append("Apple Cider")
+    if show_pumpkin:
+        headers.append("Pumpkin Juice")
+    if prices is not None:
+        headers.append("Gold")
+    headers.append("Notes")
+
+    rows = []
+    for i, plan in enumerate(plans):
+        row = [
+            str(i + 1),
+            passive.format_duration(plan.time),
+            f"{round(plan.arnold_palmers):,}",
+            f"{round(plan.large_nets):,}",
+        ]
+        if show_cookies:
+            row.append(f"{_cookie_sets_used(plan):,}")
+        if show_juices:
+            row.append(f"{round(plan.grape_juices):,}")
+        if show_ciders:
+            row.append(f"{round(plan.apple_ciders):,}")
+        if show_pumpkin:
+            row.append(f"{round(_pumpkin_juices(plan)):,}")
+        if prices is not None:
+            if golds is not None:
+                buy, passv = (round(g) for g in golds[i])
+                gold = f"{buy:,} + {passv:,} = {buy + passv:,} g"
+            else:
+                gold = f"{round(optimizer.plan_gold(plan, prices)):,} g"
+            banked = round(plan.surplus_gold)
+            if banked:
+                net = round(plan.gold - plan.surplus_gold)
+                gold += f" (bank {banked:,}, net {net:,})"
+            row.append(gold)
+        tags = []
+        if i == 0:
+            tags.append("fastest")
+        if i == cheapest:
+            tags.append("cheapest")
+        if i == selected:
+            tags.append("selected")
+        notes = []
+        if tags:
+            notes.append(f"[{', '.join(tags)}]")
+        reason = reasons[i] if reasons is not None else None
+        if reason:
+            notes.append(reason)
+        row.append(" ".join(notes))
+        rows.append(row)
+
+    doc.heading("Sourcing plans")
+    doc.table(headers, rows)
 
 
 def _frontier_reasons(
@@ -433,7 +586,7 @@ def _passive_residuals_of(
     }
 
 
-def print_critical_path(
+def _critical_path_summary(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
     elsewhere: dict[str, float],
@@ -441,8 +594,8 @@ def print_critical_path(
     production: passive.PassiveProduction | None = None,
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
-) -> None:
-    """Highlight the track that truly caps how fast the plan can run.
+) -> tuple[timedelta, str] | None:
+    """The track that truly caps how fast the plan can run: ``(makespan, line)``.
 
     Tracks run concurrently, so the total time is the slowest of them. Fishing and
     exploring are instant, so that leaves farming and passive production. They are
@@ -458,13 +611,15 @@ def print_critical_path(
     longest-grown crop could itself be sourced with consumables (it is fill, see
     :func:`_binding_crop_is_fill`) and a passive item is co-maximal, that passive
     item is the driver instead. Naming the driver shows what to attack (source it
-    with consumables, or pick a faster plan) to finish sooner.
+    with consumables, or pick a faster plan) to finish sooner. Shared by
+    :func:`print_critical_path` and :func:`markdown_plan` so both name the same
+    driver from the same logic.
     """
     # Concurrent tracks; the makespan is the longest one (derived from the draws,
     # not plan.time, so directly-built plans without a cached time still work).
     makespan = max(plan.track_times().values(), default=timedelta(0))
     if makespan <= timedelta(0):
-        return  # everything is instant; there is no wait to explain
+        return None  # everything is instant; there is no wait to explain
 
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
     defining = _defining_passive_resource(
@@ -495,7 +650,30 @@ def print_critical_path(
             f"({passive.format_duration(wait)}) — the slowest item to build up"
         )
     else:
+        return None
+    return makespan, line
+
+
+def print_critical_path(
+    plan: optimizer.SourcingPlan,
+    need: dict[str, float],
+    elsewhere: dict[str, float],
+    display: dict[str, str],
+    production: passive.PassiveProduction | None = None,
+    sourceable_elsewhere: set[str] | None = None,
+    max_passive_residuals: dict[str, float] | None = None,
+) -> None:
+    """Highlight the track that truly caps how fast the plan can run.
+
+    See :func:`_critical_path_summary` for the decision logic.
+    """
+    summary = _critical_path_summary(
+        plan, need, elsewhere, display, production, sourceable_elsewhere,
+        max_passive_residuals,
+    )
+    if summary is None:
         return
+    makespan, line = summary
     print(f"\nCritical path (sets the {passive.format_duration(makespan)} total):")
     print(f"  {line}")
 
@@ -683,27 +861,81 @@ def _print_surplus_value(
     )
 
 
-def print_plan(
+def markdown_surplus_value(
+    doc: MarkdownDoc,
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
-    farm: crops.Farm,
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    open_flows: list[sources.OpenFlow],
+    inventory: dict[str, float],
+    prices: dict[str, float],
+    display: dict[str, str],
+) -> None:
+    """Markdown counterpart to :func:`_print_surplus_value`."""
+    leftovers = optimizer.plan_leftovers(
+        plan, demand, recipes, crafting_bonus, open_flows, inventory
+    )
+    rows = optimizer.surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
+    if not rows:
+        return
+    inventory_share = optimizer.leftover_inventory_share(
+        plan, demand, recipes, crafting_bonus, open_flows, inventory
+    )
+    total = sum(gold for _, _, gold in rows)
+    inventory_gold = sum(
+        min(inventory_share.get(item, 0.0), count) * prices[item] for item, count, _ in rows
+    )
+    doc.heading("Surplus (accumulates past the goal), craftable into sellable goods")
+    table_rows = []
+    for item, count, gold in rows:
+        held = min(inventory_share.get(item, 0.0), count)
+        table_rows.append([
+            display.get(item, item),
+            f"{round(count):,}",
+            f"{round(held):,}",
+            f"{round(count - held):,}",
+            f"{round(gold):,} g",
+        ])
+    doc.table(["Item", "Qty", "Inventory", "Accumulated", "Gold"], table_rows)
+    doc.para(
+        f"Nominal value: {round(total):,} g "
+        f"({round(inventory_gold):,} g inventory + "
+        f"{round(total - inventory_gold):,} g accumulated)"
+    )
+
+
+@dataclasses.dataclass
+class _PlanContext:
+    """Shared accounting for one plan's report, computed once for both renderers.
+
+    See :func:`optimizer.plan_balance` for ``need``/``elsewhere``/``crafted``; the
+    rest is derived from them the same way for :func:`print_plan` and
+    :func:`markdown_plan`, so both sections and both renderers agree.
+    """
+
+    display: dict[str, str]
+    recipes: dict[str, dict[str, float]]
+    open_flows: list[sources.OpenFlow]
+    flows_by_name: dict[str, sources.OpenFlow]
+    need: dict[str, float]
+    elsewhere: dict[str, float]
+    crafted: dict[str, float]
+    interesting: set[str]
+    consumed: dict[str, float]
+    spent_consumables: dict[str, float]
+    open_worthy: set[str]
+
+
+def _build_plan_context(
+    plan: optimizer.SourcingPlan,
+    demand: dict[str, float],
     workshop: crafting.Workshop,
     crafting_bonus: float,
-    production: passive.PassiveProduction | None = None,
-    open_flows: list[sources.OpenFlow] | None = None,
-    openable_names: dict[str, str] | None = None,
-    inventory: dict[str, float] | None = None,
-    sourceable_elsewhere: set[str] | None = None,
-    max_passive_residuals: dict[str, float] | None = None,
-    prices: dict[str, float] | None = None,
-    pumpkin_schedule: dict[str, list[int]] | None = None,
-) -> None:
-    """Expand one plan into its per-channel actions and leftover materials.
-
-    ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
-    item, the mastery levels at which to drink its Pumpkin Juices so each lands its
-    intended tier boost; the Pumpkin Juice section names them.
-    """
+    open_flows: list[sources.OpenFlow] | None,
+    openable_names: dict[str, str] | None,
+    inventory: dict[str, float] | None,
+) -> _PlanContext:
     open_flows = open_flows or []
     inventory = inventory or {}
     flows_by_name = {flow.name.lower(): flow for flow in open_flows}
@@ -750,41 +982,83 @@ def print_plan(
     # zone listings use, so an open done purely for a byproduct doesn't vanish.
     open_worthy = set(need) | set(spent_consumables) | set(consumed)
 
-    def wanted(offer: sources.Offer) -> str:
-        return ", ".join(
-            sorted(display.get(key, key) for key in offer.yields if key in interesting)
+    return _PlanContext(
+        display=display, recipes=recipes, open_flows=open_flows,
+        flows_by_name=flows_by_name, need=need, elsewhere=elsewhere, crafted=crafted,
+        interesting=interesting, consumed=consumed,
+        spent_consumables=spent_consumables, open_worthy=open_worthy,
+    )
+
+
+def _wanted(ctx: _PlanContext, offer: sources.Offer) -> str:
+    return ", ".join(
+        sorted(ctx.display.get(key, key) for key in offer.yields if key in ctx.interesting)
+    )
+
+
+def _wanted_counts(ctx: _PlanContext, draw: sources.Draw) -> str:
+    return ", ".join(
+        f"{round(draw.produced[key]):,}x {ctx.display.get(key, key)}"
+        for key in sorted(draw.offer.yields)
+        if key in ctx.interesting or key in ctx.consumed
+    )
+
+
+def _sourced(ctx: _PlanContext, draws: list[sources.Draw]) -> list[sources.Draw]:
+    # Drop residue draws: CBC can leave a sliver of a net, palmer or planting on a
+    # channel nothing needs, which rounds to zero produced in ~zero time or
+    # consumable -- not a real action, so keep it out of the report.
+    return [
+        d
+        for d in draws
+        if any(
+            round(d.produced[k]) >= 1
+            for k in d.offer.yields
+            if k in ctx.interesting or k in ctx.consumed
         )
+    ]
 
-    def wanted_counts(draw: sources.Draw) -> str:
-        return ", ".join(
-            f"{round(draw.produced[key]):,}x {display.get(key, key)}"
-            for key in sorted(draw.offer.yields)
-            if key in interesting or key in consumed
-        )
 
-    def sourced(draws: list[sources.Draw]) -> list[sources.Draw]:
-        # Drop residue draws: CBC can leave a sliver of a net, palmer or planting
-        # on a channel nothing needs, which rounds to zero produced in ~zero time
-        # or consumable -- not a real action, so keep it out of the report.
-        return [
-            d
-            for d in draws
-            if any(
-                round(d.produced[k]) >= 1
-                for k in d.offer.yields
-                if k in interesting or k in consumed
-            )
-        ]
+def _draws_on(plan: optimizer.SourcingPlan, track: str) -> list[sources.Draw]:
+    return [d for d in plan.draws if d.offer.track == track]
 
-    def draws_on(track: str) -> list[sources.Draw]:
-        return [d for d in plan.draws if d.offer.track == track]
+
+def print_plan(
+    plan: optimizer.SourcingPlan,
+    demand: dict[str, float],
+    farm: crops.Farm,
+    workshop: crafting.Workshop,
+    crafting_bonus: float,
+    production: passive.PassiveProduction | None = None,
+    open_flows: list[sources.OpenFlow] | None = None,
+    openable_names: dict[str, str] | None = None,
+    inventory: dict[str, float] | None = None,
+    sourceable_elsewhere: set[str] | None = None,
+    max_passive_residuals: dict[str, float] | None = None,
+    prices: dict[str, float] | None = None,
+    pumpkin_schedule: dict[str, list[int]] | None = None,
+) -> None:
+    """Expand one plan into its per-channel actions and leftover materials.
+
+    ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
+    item, the mastery levels at which to drink its Pumpkin Juices so each lands its
+    intended tier boost; the Pumpkin Juice section names them.
+    """
+    inventory = inventory or {}
+    ctx = _build_plan_context(
+        plan, demand, workshop, crafting_bonus, open_flows, openable_names, inventory
+    )
+    display, recipes = ctx.display, ctx.recipes
+    open_flows = ctx.open_flows
+    need, elsewhere = ctx.need, ctx.elsewhere
+    spent_consumables = ctx.spent_consumables
 
     print_critical_path(
         plan, need, elsewhere, display, production, sourceable_elsewhere,
         max_passive_residuals,
     )
 
-    fishing_draws = sourced(draws_on(sources.FISHING_TRACK))
+    fishing_draws = _sourced(ctx, _draws_on(plan, sources.FISHING_TRACK))
     if fishing_draws:
         print("\nFishing:")
         ordered = sorted(fishing_draws, key=lambda d: d.ln, reverse=True)
@@ -793,10 +1067,10 @@ def print_plan(
             zone = draw.offer.name.removeprefix("fish ")
             print(
                 f"  {math.ceil(draw.units):>{width},}x Large Net at {zone}"
-                f" ({wanted(draw.offer)})"
+                f" ({_wanted(ctx, draw.offer)})"
             )
 
-    exploring_draws = sourced(draws_on(sources.EXPLORING_TRACK))
+    exploring_draws = _sourced(ctx, _draws_on(plan, sources.EXPLORING_TRACK))
     # Two ways to explore: Arnold Palmers (ap cost / consumes a palmer) and, in
     # the inventory plan mode, Apple Cider (consumes stamina and part of a cider).
     palmer_draws = [
@@ -811,7 +1085,7 @@ def print_plan(
             location = draw.offer.name.removeprefix("explore ")
             print(
                 f"  {math.ceil(draw.units):>{width},}x Arnold Palmer at {location}"
-                f" ({wanted_counts(draw)})"
+                f" ({_wanted_counts(ctx, draw)})"
             )
     if cider_draws:
         print("\nExploring (Apple Cider):")
@@ -827,13 +1101,13 @@ def print_plan(
             stamina = draw.units * draw.offer.consumes.get("stamina", 0.0)
             print(
                 f"  {math.ceil(ciders(draw)):>{width},}x Apple Cider at {zone}"
-                f" ({-round(stamina):,} stamina, {wanted_counts(draw)})"
+                f" ({-round(stamina):,} stamina, {_wanted_counts(ctx, draw)})"
             )
 
     # Stamina for Apple Cider: what the ciders spend, and where it comes from --
     # the banked start (--current-stamina), the Farmhouse's daily passive deposit,
     # and any items consumed to top it up (Orange Juice drunk, Apples eaten).
-    drinking_draws = draws_on(sources.DRINKING_TRACK)
+    drinking_draws = _draws_on(plan, sources.DRINKING_TRACK)
     cider_stamina = sum(
         d.units * d.offer.consumes.get("stamina", 0.0) for d in cider_draws
     )
@@ -878,11 +1152,11 @@ def print_plan(
     opens = [
         (name, count)
         for name, count in plan.opens.items()
-        if (flow := flows_by_name.get(name.lower())) is not None
+        if (flow := ctx.flows_by_name.get(name.lower())) is not None
         and any(
             round(flow.yields[item] * count) >= 1
             for item in flow.yields
-            if item in open_worthy
+            if item in ctx.open_worthy
         )
     ]
     if opens:
@@ -890,7 +1164,7 @@ def print_plan(
         ordered = sorted(opens, key=lambda nc: nc[1], reverse=True)
         width = _num_width(math.ceil(count) for _, count in ordered)
         for name, count in ordered:
-            flow = flows_by_name[name.lower()]
+            flow = ctx.flows_by_name[name.lower()]
             keys = [
                 f"{round(quantity * count):,} {display.get(item, item)}"
                 for item, quantity in flow.consumes.items()
@@ -900,7 +1174,7 @@ def print_plan(
             gained = ", ".join(
                 f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
                 for item in sorted(flow.yields)
-                if item in open_worthy and round(flow.yields[item] * count) >= 1
+                if item in ctx.open_worthy and round(flow.yields[item] * count) >= 1
             )
             detail = f" -> {gained}" if gained else ""
             print(
@@ -908,7 +1182,7 @@ def print_plan(
                 f" {display.get(name.lower(), name)}{cost}{detail}"
             )
 
-    farming_draws = sourced(draws_on(sources.FARMING_TRACK))
+    farming_draws = _sourced(ctx, _draws_on(plan, sources.FARMING_TRACK))
     if farming_draws:
         # Crops grow one at a time, so the whole track's time is their sum.
         total_farming = sum((d.time for d in farming_draws), timedelta(0))
@@ -926,12 +1200,12 @@ def print_plan(
             round(d.produced[key])
             for d in farming_draws
             for key in d.offer.yields
-            if key in interesting
+            if key in ctx.interesting
         )
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             juices = draw.gj  # LP-tracked; zero for the without-grape-juice offer
             if draw.offer.cookies:
-                _print_cookie_farming(draw, juices, interesting, display, width)
+                _print_cookie_farming(draw, juices, ctx.interesting, display, width)
                 continue
             crop = _crop_of(draw.offer)
             line = (
@@ -945,7 +1219,7 @@ def print_plan(
             # grape-juice share of the plantings splits every produced item the
             # same way.
             gj_share = juices / draw.units if draw.units else 0.0
-            for key in sorted(k for k in draw.offer.yields if k in interesting):
+            for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
                 total = draw.produced[key]
                 name = display.get(key, key)
                 if round(juices) >= 1:
@@ -979,9 +1253,9 @@ def print_plan(
                 # supply that offsets what the channels must gather. Show the
                 # amount passive actually produced, capped at what the plan burns.
                 produced = passive_draw.produced.get(key, 0.0)
-                if key not in consumed or produced <= 1e-6:
+                if key not in ctx.consumed or produced <= 1e-6:
                     continue
-                residual = min(produced, consumed[key])
+                residual = min(produced, ctx.consumed[key])
                 if residual <= 1e-6:
                     continue
             wait = timedelta(minutes=residual / rate)
@@ -1086,15 +1360,319 @@ def print_plan(
             print(f"  {plan.remainder[material]:,}x {material}")
 
 
-def print_crafts(
+def markdown_plan(
+    doc: MarkdownDoc,
     plan: optimizer.SourcingPlan,
+    demand: dict[str, float],
+    farm: crops.Farm,
     workshop: crafting.Workshop,
     crafting_bonus: float,
-    mastery_bonus: float,
+    production: passive.PassiveProduction | None = None,
+    open_flows: list[sources.OpenFlow] | None = None,
+    openable_names: dict[str, str] | None = None,
+    inventory: dict[str, float] | None = None,
+    sourceable_elsewhere: set[str] | None = None,
+    max_passive_residuals: dict[str, float] | None = None,
+    prices: dict[str, float] | None = None,
+    pumpkin_schedule: dict[str, list[int]] | None = None,
 ) -> None:
-    """List the crafts the plan performs, parents before the items they consume."""
-    if not plan.crafts:
-        return
+    """Markdown counterpart to :func:`print_plan`: the same sections, as tables.
+
+    Shares :func:`_build_plan_context` and every decision helper (critical path,
+    farming-drives, passive sourcing) with :func:`print_plan`, so the two renderers
+    always agree on content -- only the layout (table vs. aligned text) differs.
+    """
+    inventory = inventory or {}
+    ctx = _build_plan_context(
+        plan, demand, workshop, crafting_bonus, open_flows, openable_names, inventory
+    )
+    display = ctx.display
+    need, elsewhere = ctx.need, ctx.elsewhere
+
+    summary = _critical_path_summary(
+        plan, need, elsewhere, display, production, sourceable_elsewhere,
+        max_passive_residuals,
+    )
+    if summary is not None:
+        makespan, line = summary
+        doc.heading(f"Critical path (sets the {passive.format_duration(makespan)} total)")
+        doc.para(line)
+
+    fishing_draws = _sourced(ctx, _draws_on(plan, sources.FISHING_TRACK))
+    if fishing_draws:
+        ordered = sorted(fishing_draws, key=lambda d: d.ln, reverse=True)
+        rows = [
+            [
+                f"{math.ceil(d.units):,}",
+                d.offer.name.removeprefix("fish "),
+                _wanted(ctx, d.offer),
+            ]
+            for d in ordered
+        ]
+        doc.heading("Fishing")
+        doc.table(["Large Nets", "Zone", "Yields"], rows)
+
+    exploring_draws = _sourced(ctx, _draws_on(plan, sources.EXPLORING_TRACK))
+    palmer_draws = [
+        d for d in exploring_draws if not d.offer.consumes.get("apple cider")
+    ]
+    cider_draws = [d for d in exploring_draws if d.offer.consumes.get("apple cider")]
+    if palmer_draws:
+        ordered = sorted(palmer_draws, key=lambda d: d.ap, reverse=True)
+        rows = [
+            [
+                f"{math.ceil(d.units):,}",
+                d.offer.name.removeprefix("explore "),
+                _wanted_counts(ctx, d),
+            ]
+            for d in ordered
+        ]
+        doc.heading("Exploring")
+        doc.table(["Arnold Palmers", "Location", "Yields"], rows)
+    if cider_draws:
+        def ciders(d: sources.Draw) -> float:
+            return d.units * d.offer.consumes.get("apple cider", 0.0)
+
+        ordered = sorted(cider_draws, key=ciders, reverse=True)
+        rows = []
+        for d in ordered:
+            stamina = d.units * d.offer.consumes.get("stamina", 0.0)
+            rows.append([
+                f"{math.ceil(ciders(d)):,}",
+                d.offer.name.removeprefix("cider "),
+                f"{-round(stamina):,}",
+                _wanted_counts(ctx, d),
+            ])
+        doc.heading("Exploring (Apple Cider)")
+        doc.table(["Apple Cider", "Zone", "Stamina", "Yields"], rows)
+
+    drinking_draws = _draws_on(plan, sources.DRINKING_TRACK)
+    cider_stamina = sum(
+        d.units * d.offer.consumes.get("stamina", 0.0) for d in cider_draws
+    )
+    if round(cider_stamina) >= 1:
+        lines = [f"{round(cider_stamina):,} spent on Apple Cider"]
+        banked = inventory.get("stamina", 0.0)
+        if round(banked) >= 1:
+            lines.append(f"{round(banked):,} banked at the start")
+        passive_draw = plan.passive_draw
+        rate = (
+            passive_draw.offer.yields.get("stamina", 0.0)
+            if passive_draw is not None
+            else 0.0
+        )
+        if rate > 0:
+            lines.append(f"{round(rate * 1440):,}/day from the Farmhouse (passive)")
+        topups: dict[str, list[float]] = {}
+        for draw in drinking_draws:
+            for item, per in draw.offer.consumes.items():
+                units, gained = topups.setdefault(item, [0.0, 0.0])
+                topups[item] = [
+                    units + per * draw.units,
+                    gained + draw.produced.get("stamina", 0.0),
+                ]
+        verbs = {"orange juice": "Drink", "apple": "Eat"}
+        for item, (units, gained) in sorted(topups.items(), key=lambda kv: -kv[1][1]):
+            if round(units) < 1:
+                continue
+            verb = verbs.get(item, "Use")
+            lines.append(
+                f"{verb} {round(units):,}x {display.get(item, item)}"
+                f" -> {round(gained):,} stamina"
+            )
+        doc.heading("Stamina")
+        doc.bullets(lines)
+
+    opens = [
+        (name, count)
+        for name, count in plan.opens.items()
+        if (flow := ctx.flows_by_name.get(name.lower())) is not None
+        and any(
+            round(flow.yields[item] * count) >= 1
+            for item in flow.yields
+            if item in ctx.open_worthy
+        )
+    ]
+    if opens:
+        ordered = sorted(opens, key=lambda nc: nc[1], reverse=True)
+        rows = []
+        for name, count in ordered:
+            flow = ctx.flows_by_name[name.lower()]
+            keys = [
+                f"{round(quantity * count):,} {display.get(item, item)}"
+                for item, quantity in flow.consumes.items()
+                if item != name.lower() and round(quantity * count) >= 1
+            ]
+            gained = ", ".join(
+                f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
+                for item in sorted(flow.yields)
+                if item in ctx.open_worthy and round(flow.yields[item] * count) >= 1
+            )
+            rows.append([
+                f"{math.ceil(count):,}",
+                display.get(name.lower(), name),
+                ", ".join(keys),
+                gained,
+            ])
+        doc.heading("Opening (Locksmith)")
+        doc.table(["Count", "Item", "Materials used", "Yields"], rows)
+
+    farming_draws = _sourced(ctx, _draws_on(plan, sources.FARMING_TRACK))
+    if farming_draws:
+        total_farming = sum((d.time for d in farming_draws), timedelta(0))
+        heading = f"Farming ({passive.format_duration(total_farming)}"
+        total_sets = math.ceil(sum(d.cookies for d in farming_draws if d.cookies))
+        if total_sets >= 1:
+            heading += f", {total_sets:,} cookie sets"
+        rows = []
+        for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
+            juices = draw.gj
+            crop = _crop_of(draw.offer)
+            duration = passive.format_duration(draw.time)
+            if draw.offer.cookies:
+                action = f"Cookie-boosted {crop}"
+                if round(juices) >= 1:
+                    action += (
+                        f" using {round(juices):,} Grape Juice"
+                        f" (yield {crops.COOKIE_SET_MULTIPLIER}x)"
+                    )
+                for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
+                    rows.append([
+                        action, duration, display.get(key, key),
+                        f"{round(draw.produced[key]):,}", "",
+                    ])
+                continue
+            action = f"{_harvest_alls(math.ceil(draw.units))} of {crop}"
+            if round(juices) >= 1:
+                action += f" using {round(juices):,} Grape Juice"
+            gj_share = juices / draw.units if draw.units else 0.0
+            for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
+                total = draw.produced[key]
+                name = display.get(key, key)
+                detail = ""
+                if round(juices) >= 1:
+                    from_gj = total * gj_share
+                    detail = (
+                        f"{round(from_gj):,} from Grape Juice, "
+                        f"{round(total - from_gj):,} from normal farming"
+                    )
+                rows.append([action, duration, name, f"{round(total):,}", detail])
+        doc.heading(heading + ")")
+        doc.table(["Action", "Duration", "Item", "Qty", "Detail"], rows)
+
+    passive_draw = plan.passive_draw
+    if passive_draw is not None:
+        offer = passive_draw.offer
+        prod_rows = []
+        for key, rate in offer.yields.items():
+            if rate <= 0:
+                continue
+            residual = need.get(key, 0.0) - elsewhere.get(key, 0.0)
+            if residual <= 1e-6:
+                produced = passive_draw.produced.get(key, 0.0)
+                if key not in ctx.consumed or produced <= 1e-6:
+                    continue
+                residual = min(produced, ctx.consumed[key])
+                if residual <= 1e-6:
+                    continue
+            wait = timedelta(minutes=residual / rate)
+            prod_rows.append((wait, display.get(key, key), round(residual), key))
+        if prod_rows:
+            critical_key = None
+            if not _farming_drives(
+                plan, need, elsewhere, display, production, sourceable_elsewhere
+            ):
+                critical = _slowest_passive_item(
+                    plan, need, elsewhere, display, production
+                )
+                if critical is not None:
+                    critical_key = critical[3]
+            ordered = sorted(
+                prod_rows, key=lambda r: (r[3] != critical_key, -r[2], -r[0])
+            )
+            rows = []
+            for wait, name, quantity, key in ordered:
+                raw_source = (
+                    _passive_sources(production, key, quantity)
+                    if production is not None
+                    else ""
+                )
+                source = raw_source.strip()
+                if source.startswith("(") and source.endswith(")"):
+                    source = source[1:-1]
+                rows.append([
+                    name, f"{quantity:,}", passive.format_duration(wait), source,
+                ])
+            doc.heading("Passive production (concurrent)")
+            doc.table(["Item", "Qty", "Time", "Source"], rows)
+
+    held = [
+        (item, min(inventory.get(item, 0.0), spent))
+        for item, spent in ctx.spent_consumables.items()
+        if round(min(inventory.get(item, 0.0), spent)) >= 1
+    ]
+    if held:
+        rows = [
+            [display.get(item, item), f"{round(units):,}"]
+            for item, units in sorted(held, key=lambda kv: -kv[1])
+        ]
+        doc.heading("From inventory (held consumables)")
+        doc.table(["Item", "Qty"], rows)
+
+    purchases = [(item, units) for item, units in plan.bought.items() if round(units) >= 1]
+    if purchases and prices is not None:
+        ordered = sorted(
+            purchases, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
+        )
+        rows = [
+            [
+                display.get(item, item),
+                f"{round(units):,}",
+                f"{round(units * prices.get(item, 0.0)):,} g",
+            ]
+            for item, units in ordered
+        ]
+        doc.heading("Buy (with gold)")
+        doc.table(["Item", "Qty", "Gold"], rows)
+        doc.para(f"Total: {round(plan.gold - plan.pumpkin_gold):,} g")
+
+    juices = [
+        (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
+    ]
+    if juices and plan.pumpkin_gold > 0:
+        per_juice = plan.pumpkin_gold / _pumpkin_juices(plan)
+        rows = []
+        for item, units in sorted(juices, key=lambda kv: -kv[1]):
+            cost = round(units * per_juice)
+            name = display.get(item, item)
+            levels = (pumpkin_schedule or {}).get(item)
+            drink = " / ".join(f"{level:,}" for level in levels) if levels else ""
+            rows.append([name, f"{round(units):,}", f"{cost:,} g", drink])
+        doc.heading("Pumpkin Juice (mastery boost)")
+        doc.table(["Goal", "Juices", "Gold", "Drink at mastery"], rows)
+        doc.para(f"Total: {round(plan.pumpkin_gold):,} g")
+
+    if prices is not None:
+        markdown_surplus_value(
+            doc, plan, demand, ctx.recipes, crafting_bonus, ctx.open_flows,
+            inventory, prices, display,
+        )
+
+    if plan.remainder:
+        rows = [
+            [material, f"{plan.remainder[material]:,}"]
+            for material in sorted(plan.remainder)
+        ]
+        doc.heading("Materials with no known source (supply yourself)")
+        doc.table(["Material", "Qty"], rows)
+
+
+def _craft_order(plan: optimizer.SourcingPlan, workshop: crafting.Workshop) -> list[str]:
+    """Craft keys in ``plan.crafts``, parents before the items they consume.
+
+    Shared by :func:`print_crafts` and :func:`markdown_crafts` so both list the
+    same build order.
+    """
     consumed = {
         material.lower()
         for item in plan.crafts
@@ -1118,9 +1696,20 @@ def print_crafts(
         visit(item)
     for item in sorted(plan.crafts):  # any left in a cycle
         visit(item)
+    return order
 
+
+def print_crafts(
+    plan: optimizer.SourcingPlan,
+    workshop: crafting.Workshop,
+    crafting_bonus: float,
+    mastery_bonus: float,
+) -> None:
+    """List the crafts the plan performs, parents before the items they consume."""
+    if not plan.crafts:
+        return
     print("\nRequired Crafts:")
-    for key in order:
+    for key in _craft_order(plan, workshop):
         count = plan.crafts[key]
         recipe = workshop.get(key)
         assert recipe is not None  # only craftable items are in plan.crafts
@@ -1132,3 +1721,157 @@ def print_crafts(
         for material, quantity in recipe.materials.items():
             if material.lower() not in crafting.IGNORED_MATERIALS:
                 print(f"  {round(count * quantity):,}x {material}")
+
+
+def markdown_crafts(
+    doc: MarkdownDoc,
+    plan: optimizer.SourcingPlan,
+    workshop: crafting.Workshop,
+    crafting_bonus: float,
+    mastery_bonus: float,
+) -> None:
+    """Markdown counterpart to :func:`print_crafts`."""
+    if not plan.crafts:
+        return
+    doc.heading("Required Crafts")
+    for key in _craft_order(plan, workshop):
+        count = plan.crafts[key]
+        recipe = workshop.get(key)
+        assert recipe is not None
+        produced = count * crafting_bonus
+        doc.heading(
+            f"{round(count):,}x {recipe.name} "
+            f"(Produces {round(produced):,}, Adds {round(produced * mastery_bonus):,} Mastery)",
+            3,
+        )
+        rows = [
+            [material, f"{round(count * quantity):,}"]
+            for material, quantity in recipe.materials.items()
+            if material.lower() not in crafting.IGNORED_MATERIALS
+        ]
+        if rows:
+            doc.table(["Material", "Qty"], rows)
+
+
+class Reporter:
+    """Uniform interface over the two output formats ``main.run`` drives.
+
+    Text prints immediately, matching every behaviour before this class existed;
+    Markdown buffers into a :class:`MarkdownDoc` and renders once in
+    :meth:`finish` -- via `rich` to the terminal, or as raw Markdown source when
+    stdout isn't one (so redirecting to a ``.md`` file gets real Markdown).
+    """
+
+    def solution(self, solution: farm_solver.Solution) -> None:
+        raise NotImplementedError
+
+    def unobtainable(self, materials: list[str]) -> None:
+        raise NotImplementedError
+
+    def note(self, text: str) -> None:
+        raise NotImplementedError
+
+    def frontier(
+        self,
+        plans: list[optimizer.SourcingPlan],
+        selected: int,
+        cheapest: int,
+        reasons: list[str | None] | None = None,
+        prices: dict[str, float] | None = None,
+        golds: list[tuple[float, float]] | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def plan(
+        self,
+        plan: optimizer.SourcingPlan,
+        demand: dict[str, float],
+        farm: crops.Farm,
+        workshop: crafting.Workshop,
+        crafting_bonus: float,
+        production: passive.PassiveProduction | None = None,
+        open_flows: list[sources.OpenFlow] | None = None,
+        openable_names: dict[str, str] | None = None,
+        inventory: dict[str, float] | None = None,
+        sourceable_elsewhere: set[str] | None = None,
+        max_passive_residuals: dict[str, float] | None = None,
+        prices: dict[str, float] | None = None,
+        pumpkin_schedule: dict[str, list[int]] | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def crafts(
+        self,
+        plan: optimizer.SourcingPlan,
+        workshop: crafting.Workshop,
+        crafting_bonus: float,
+        mastery_bonus: float,
+    ) -> None:
+        raise NotImplementedError
+
+    def finish(self) -> None:
+        """Flush any buffered output. A no-op for the text reporter."""
+
+
+class TextReporter(Reporter):
+    """Prints straight to stdout, exactly as every report function always has."""
+
+    def solution(self, solution: farm_solver.Solution) -> None:
+        print_solution(solution)
+
+    def unobtainable(self, materials: list[str]) -> None:
+        print_unobtainable(materials)
+
+    def note(self, text: str) -> None:
+        print(f"\n{text}")
+
+    def frontier(self, *args, **kwargs) -> None:
+        print_frontier(*args, **kwargs)
+
+    def plan(self, *args, **kwargs) -> None:
+        print_plan(*args, **kwargs)
+
+    def crafts(self, *args, **kwargs) -> None:
+        print_crafts(*args, **kwargs)
+
+
+class MarkdownReporter(Reporter):
+    """Buffers the whole report as Markdown, rendered once in :meth:`finish`."""
+
+    def __init__(self) -> None:
+        self.doc = MarkdownDoc()
+
+    def solution(self, solution: farm_solver.Solution) -> None:
+        markdown_solution(self.doc, solution)
+
+    def unobtainable(self, materials: list[str]) -> None:
+        markdown_unobtainable(self.doc, materials)
+
+    def note(self, text: str) -> None:
+        self.doc.para(text)
+
+    def frontier(self, *args, **kwargs) -> None:
+        markdown_frontier(self.doc, *args, **kwargs)
+
+    def plan(self, *args, **kwargs) -> None:
+        markdown_plan(self.doc, *args, **kwargs)
+
+    def crafts(self, *args, **kwargs) -> None:
+        markdown_crafts(self.doc, *args, **kwargs)
+
+    def finish(self) -> None:
+        text = self.doc.render()
+        if sys.stdout.isatty():
+            Console().print(RichMarkdown(text))
+        else:
+            # Not a terminal (e.g. redirected to a file): print the Markdown
+            # source itself, so the redirected output is a real .md file rather
+            # than rich's word-wrapped rendering of it.
+            print(text)
+
+
+def build_reporter(format_: str) -> Reporter:
+    """The :class:`Reporter` for ``--format`` (``"text"`` or ``"markdown"``)."""
+    if format_ == "markdown":
+        return MarkdownReporter()
+    return TextReporter()
