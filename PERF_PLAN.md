@@ -118,7 +118,9 @@ different stage-1 objective). Add a short comment with the argument above.
 Removes 1 of 3 solves for the ~44 epsilon minimizes per frontier (~13% of
 solves, and the same share of their model-translation overhead).
 
-## Item 3 — Index offers per item in `minimize`
+## Item 3 — Index offers per item in `minimize` — DONE
+
+Implemented 2026-07-10. Details below kept for reference.
 
 **File:** `optimizer.py`, `minimize`, the per-item balance loop (~line 512).
 

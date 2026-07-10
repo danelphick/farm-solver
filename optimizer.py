@@ -442,7 +442,10 @@ def minimize(
     if not items:
         return SourcingPlan(remainder=remainder)
 
-    used = [o for o in usable if any(o.yield_of(i) > 0 for i in items)]
+    used = [
+        o for o in usable
+        if any(rate > 0 and i in items for i, rate in o.yields.items())
+    ]
     crafted = sorted(items & craftable)
     # Openables worth modelling: those touching a reachable item, either yielding
     # one or consuming one (a chest reached only as the thing a key gates still
@@ -536,6 +539,18 @@ def minimize(
         # nothing (gold 0) for the slowest, fully self-sourced plan.
         problem += makespan + gold_weight * gold
 
+    # Index each offer's yields/consumes by item once, so the per-item loop below
+    # doesn't rescan every offer twice (via ``yield_of``) for every item.
+    yield_terms: dict[str, list] = {}
+    consume_terms: dict[str, list] = {}
+    for o, x in zip(used, usage):
+        for item, rate in o.yields.items():
+            if rate > 0:
+                yield_terms.setdefault(item, []).append(rate * x)
+        for item, qty in o.consumes.items():
+            if qty > 0:
+                consume_terms.setdefault(item, []).append(qty * x)
+
     # Net production of each item covers its demand:
     # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
     # Iterate in a fixed (sorted) order: ``items`` is a set, whose iteration
@@ -546,17 +561,11 @@ def minimize(
     # constraint order is what CBC breaks those ties by, so a fixed order keeps
     # the printed plan reproducible run to run.
     for item in sorted(items):
-        gathered = pulp.lpSum(
-            o.yield_of(item) * x for o, x in zip(used, usage) if o.yield_of(item) > 0
-        )
+        gathered = pulp.lpSum(yield_terms.get(item, []))
         # What offers use up as inputs (Arnold Palmers an explore burns, the
         # stamina and Apple Cider a cider explore spends) -- these must be
         # sourced like any other need.
-        used_up = pulp.lpSum(
-            o.consumes[item] * x
-            for o, x in zip(used, usage)
-            if o.consumes.get(item, 0.0) > 0
-        )
+        used_up = pulp.lpSum(consume_terms.get(item, []))
         made = crafting_bonus * craft[item] if item in craft else 0
         consumed = pulp.lpSum(qty * craft[j] for j, qty in consumers.get(item, []))
         unpacked = pulp.lpSum(
