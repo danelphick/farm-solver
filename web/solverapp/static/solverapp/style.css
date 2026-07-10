@@ -1,5 +1,244 @@
-/* Placeholder; the real stylesheet lands with the interactive UI. */
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5f6368;
+  --border: #d7dae0;
+  --panel: #f7f8fa;
+  --accent: #2f6f4f;
+  --accent-fg: #ffffff;
+  --warning: #8a5a00;
+  --warning-bg: #fff4e0;
+  --error: #b3261e;
+  --error-bg: #fdecea;
+  --row-selected: #e4f2ea;
+  --row-cheapest-border: #2f6f4f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181c;
+    --fg: #e8e8e8;
+    --muted: #9aa0a6;
+    --border: #33363b;
+    --panel: #1f2226;
+    --accent: #4caf7d;
+    --accent-fg: #0c130f;
+    --warning: #e0b03a;
+    --warning-bg: #3a2f10;
+    --error: #ef6a62;
+    --error-bg: #3a1917;
+    --row-selected: #1d2b23;
+    --row-cheapest-border: #4caf7d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  font-family: system-ui, sans-serif;
-  margin: 2rem;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  margin: 0;
+  padding: 1.5rem;
+  line-height: 1.45;
+}
+
+header {
+  max-width: 60rem;
+  margin: 0 auto 1.5rem;
+}
+
+h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.6rem;
+}
+
+.tagline {
+  color: var(--muted);
+  font-size: 0.9rem;
+  max-width: 42rem;
+}
+
+.status {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.status-pending {
+  color: var(--muted);
+}
+
+.status-ok {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.status-error {
+  color: var(--error);
+  background: var(--error-bg);
+  border-color: var(--error);
+}
+
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 55rem) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
+
+.paste-panel,
+.controls-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.controls-panel h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin: 1.1rem 0 0.5rem;
+}
+
+.controls-panel h2:first-child {
+  margin-top: 0;
+}
+
+.field {
+  margin-bottom: 0.75rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.field textarea {
+  width: 100%;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  resize: vertical;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.field-row label {
+  flex: 0 0 11rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.field-row label.inline {
+  flex: none;
+  color: var(--fg);
+}
+
+.field-row input[type="text"],
+.field-row input[type="number"],
+.field-row input[type="date"],
+.field-row select {
+  flex: 1 1 8rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 0;
+}
+
+.field-row input.narrow {
+  flex: 0 0 6rem;
+}
+
+#results {
+  max-width: 60rem;
+  margin: 2rem auto 0;
+}
+
+#results h2 {
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.report-section table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.report-section th,
+.report-section td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.report-section th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+#frontier-section table tbody tr.clickable {
+  cursor: pointer;
+}
+
+#frontier-section table tbody tr.clickable:hover {
+  background: var(--panel);
+}
+
+#frontier-section table tbody tr.selected {
+  background: var(--row-selected);
+  font-weight: 600;
+}
+
+#frontier-section table tbody tr.cheapest td:first-child {
+  border-left: 3px solid var(--row-cheapest-border);
+}
+
+.note {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.warning {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
 }
