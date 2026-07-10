@@ -97,7 +97,7 @@ frontier as before.
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -185,6 +185,27 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
     (their need is already net of stock; stamina is seeded by `--current-stamina`).
   - **Refinement** (determinism): pin makespan, minimise `gold`, then minimise
     activity (crafts + gathering + buys) — pins `(time, gold)` then sheds slack.
+  - **`_build_base`/`_solve_configured` split**: `minimize` itself is `_build_base`
+    (once) + one `_solve_configured` call. `_build_base` builds everything a sweep
+    holds fixed call to call — variables, the balance/track constraints,
+    `gold`/`spend_value` — and returns a `_Base`. `_solve_configured` adds the
+    per-call bit (the objective, an optional `makespan ≤ time_cap`, `favour_passive`'s
+    `pj ≤ 0` neutralisation) then runs the refinement above and reads out the
+    `SourcingPlan`. `frontier` (below) reuses one `_Base` across its ~80-call sweep
+    instead of rebuilding the LP from scratch per call (`plans/MODEL_REUSE_PLAN.md`).
+    Every constraint a `_solve_configured` call adds is named and recorded in
+    `base.ephemeral`; the *next* call on that base pops exactly those names first —
+    **pop happens at the top of the call, not the end**, so a call that raises
+    partway through never corrupts the base for a call that never happens. Since
+    `pj` variable existence used to be gated on `favour_passive`, but one base must
+    serve calls in both modes, `_build_base` now builds `pj` unconditionally and
+    `_solve_configured` neutralises it per call instead (`pj[item] ≤ 0`, ephemeral,
+    when `favour_passive`). Gotcha: `LpConstraint.name`'s setter sanitises the name
+    (spaces/punctuation → `_`), so an ephemeral name built from an item string (e.g.
+    `f"pj_off_{item}"` for `"fancy violin"`) must be read back off the constraint
+    object (`constraint.name` after assignment) before it goes in `ephemeral`, or
+    the recorded name won't match what `problem.constraints` actually stores and the
+    next call's pop silently misses it.
 - **Gold prices** (`config.trading_prices`, the `[trading]` section): per-unit gold
   for each buyable consumable (AP/LN/cider/OJ per-1000 → ÷1000; cookie sets per
   unit; Grape Juice at its production cost, kept for `plan_gold`'s market value but
@@ -198,7 +219,12 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   ranks by **net** gold (`plan.gold − plan.surplus_gold`) — buys least, banks most.
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
-  `_non_dominated` then `_thin` to `count`:
+  `_non_dominated` then `_thin` to `count`. It builds two `_build_base` bases up
+  front — `base_active` (`favour_passive=False`) shared by the fast endpoint, cheap
+  endpoint and every epsilon-cap solve; `base_passive` (`favour_passive=True`)
+  shared by the probe and every extension-cap solve — and drives every solve
+  through `_solve_configured` against one of them, instead of a fresh `minimize`
+  (full LP rebuild) per call:
   - **Fast regime** `[t_fast, t_cheap]` — fast endpoint (`gold_weight=_FAST_PRICE`,
     buy freely) + cheap endpoint (`_FREE_PRICE`, self-source, `gold = 0`) + an epsilon
     sweep of makespan caps (each minimising gold). Two cap sources:

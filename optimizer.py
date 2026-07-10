@@ -625,8 +625,15 @@ def _solve_configured(
     # neutralises it here instead, exactly like the old variable-absence did.
     if favour_passive and base.pj:
         for item, var in base.pj.items():
-            problem += (var <= 0, f"pj_off_{item}")
-            base.ephemeral.append(f"pj_off_{item}")
+            # LpConstraint's name setter sanitises the name (spaces/punctuation ->
+            # "_"), so an item name like "fancy violin" is stored under a different
+            # key than the raw f-string -- read the constraint's own ``.name`` back
+            # so ``ephemeral`` records exactly what ``problem.constraints`` uses,
+            # or the next call's pop misses it and re-adding collides.
+            constraint = var <= 0
+            constraint.name = f"pj_off_{item}"
+            problem.addConstraint(constraint)
+            base.ephemeral.append(constraint.name)
 
     if time_cap is not None:
         problem += (base.makespan <= _minutes(time_cap), "cap")
@@ -1364,17 +1371,20 @@ def frontier(
     ``prices`` (per-unit gold, from :func:`config.trading_prices`) is what makes a
     consumable buyable and banked surplus sellable; without it nothing can be bought,
     the slow regime is skipped, and the frontier is the single self-sourced plan.
+
+    Builds two shared :func:`_build_base` bases -- ``base_active`` for every
+    ``favour_passive=False`` call (fast/cheap endpoints, the epsilon-cap sweep) and
+    ``base_passive`` for every ``favour_passive=True`` call (the probe, the
+    extension-cap sweep) -- and drives every solve in the sweep through
+    :func:`_solve_configured` against one of them, instead of a fresh :func:`minimize`
+    (which rebuilds the whole LP) per call. See ``plans/MODEL_REUSE_PLAN.md``.
     """
-    fast = fastest_endpoint(
-        offers, demand, recipes, crafting_bonus, openables=openables,
-        inventory=inventory, cookie_sets=cookie_sets, prices=prices,
-        pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+    base_active = _build_base(
+        offers, demand, recipes, crafting_bonus, openables, inventory,
+        cookie_sets, prices, pj_gain, pj_price, pj_limit,
     )
-    cheap = minimize(
-        offers, demand, recipes, crafting_bonus, prices=prices,
-        gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-    )
+    fast = _solve_configured(base_active, gold_weight=_FAST_PRICE)
+    cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE)
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
@@ -1396,12 +1406,7 @@ def frontier(
     ]
     caps += breakpoints
     plans += [
-        minimize(
-            offers, demand, recipes, crafting_bonus, prices=prices,
-            time_cap=timedelta(seconds=cap), openables=openables,
-            inventory=inventory, cookie_sets=cookie_sets,
-            pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-        )
+        _solve_configured(base_active, time_cap=timedelta(seconds=cap))
         for cap in caps
     ]
 
@@ -1413,11 +1418,11 @@ def frontier(
     # worth nothing and these slower plans are dominated).
     anchors = list(breakpoints)
     if prices:
-        probe = minimize(
-            offers, demand, recipes, crafting_bonus, prices=prices,
-            favour_passive=True, openables=openables, inventory=inventory,
-            cookie_sets=cookie_sets,
+        base_passive = _build_base(
+            offers, demand, recipes, crafting_bonus, openables, inventory,
+            cookie_sets, prices, pj_gain, pj_price, pj_limit,
         )
+        probe = _solve_configured(base_passive, favour_passive=True)
         nonpet = _passive_completion_caps(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, passive_pet_items,
@@ -1429,10 +1434,8 @@ def frontier(
             anchors += ext_breaks
             ext_caps = _time_caps(t_cheap, t_bound, samples) + ext_breaks + [t_bound]
             plans += [
-                minimize(
-                    offers, demand, recipes, crafting_bonus, prices=prices,
-                    favour_passive=True, time_cap=timedelta(seconds=cap),
-                    openables=openables, inventory=inventory, cookie_sets=cookie_sets,
+                _solve_configured(
+                    base_passive, favour_passive=True, time_cap=timedelta(seconds=cap),
                 )
                 for cap in ext_caps
             ]
