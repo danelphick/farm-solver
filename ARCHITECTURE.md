@@ -495,9 +495,60 @@ via `rich.markdown.Markdown`/`rich.console.Console`) -- only used when stdout is
 a tty; redirected output prints the Markdown source directly, no dependency
 needed to consume it.
 
+## Web app (web/)
+
+A Django server-side wrapper over the same solver (`webapi.py` bridges the
+two -- see its module-map entry above), for a browser UI: no accounts, no
+server DB, browser `localStorage` holds each user's pasted state and
+parameter choices. `web/manage.py` inserts the repo root onto `sys.path` (the
+solver package is not installed, just imported directly) before delegating
+to Django; `web/farmweb/wsgi.py` does the same for a production WSGI server
+that imports it without going through `manage.py`.
+
+- **`web/farmweb/`** — the Django project: `settings.py` (deliberately no
+  `django.contrib.auth`/`admin`/`sessions`; `DATABASES = {}`, since there is
+  nothing server-side to persist; `DEBUG`/`SECRET_KEY`/`ALLOWED_HOSTS` are
+  env-driven), `urls.py` (`/` → `index`, `/api/solve` → `api_solve`),
+  `wsgi.py`.
+- **`web/solverapp/`** — the one app: `apps.py` (`AppConfig.ready()` pins
+  `optimizer.set_solver_backend("highs")` once at process startup -- never
+  per-request, since `optimizer._backend` is a module global unsafe under
+  concurrent solves in the same process -- and refuses to start without it),
+  `views.py` (`index`; `api_solve`, a `csrf_exempt` JSON POST -- no
+  session/cookie auth exists to forge), `cache.py` (`SessionCache`: an
+  in-process LRU(64)/TTL(30 min) `OrderedDict` of `webapi.SolveSession` keyed
+  by `webapi.fingerprint`; `SOLVE_SEMAPHORE`, one LP solve at a time per
+  process; `key_lock`, a per-fingerprint lock guarding against a dogpile of
+  identical concurrent requests all missing the cache at once), `tests.py`
+  (Django `SimpleTestCase` -- no DB to wrap in a transaction), `templates/`,
+  `static/`.
+- **`api_solve`'s flow**: decode JSON → `webapi.params_to_args` (`ValueError`
+  → 400) → `webapi.fingerprint` → `cache.key_lock` (serialises same-fingerprint
+  requests) → cache lookup → `SOLVE_SEMAPHORE.acquire(timeout=20)` (else 503)
+  → `webapi.solve` on a miss (`ValueError` from an unparseable paste → 422) →
+  `webapi.render` → `cache.CACHE.put` → each `SolveResult.sections[...]`
+  markdown rendered to HTML via `markdown.markdown(text,
+  extensions=["tables"])` → JSON response (`cached`, `solved_ms`,
+  `solution_html`, `notes`, `warnings`, `frontier.{html,plans}`,
+  `plan.{index,html}`).
+- **Per-worker caches are a deliberate simplicity trade-off**: no state is
+  shared across gunicorn workers/processes, so a request landing on a
+  different worker (or after a restart/eviction) is just a cache miss --
+  `webapi.solve`/`render` re-run in ~0.5-3s. No sticky sessions, no shared
+  cache to keep consistent; see `cache.py`'s module docstring.
+- Install with `uv sync --group web`; run with `uv run --group web python
+  web/manage.py runserver`. Django's own tests run via `uv run --group web
+  python web/manage.py test solverapp` -- deliberately outside `tests/` and
+  not named `test_*.py`, so plain `uv run pytest -q` neither collects nor
+  needs Django (`webapi.py` itself has no Django dependency and is covered by
+  `tests/test_webapi.py` under the plain suite).
+
 ## Dev workflow
 
 - Run: `uv run pytest -q` (tests in `tests/`). Lint: `uvx ruff check .`.
 - Try it: `python main.py` (default), `-i Item:N`, `-m Item:N`, `--plan K`,
   `--plans N`, `--cookie-sets N`.
+- Web app: `uv sync --group web`, then `uv run --group web python
+  web/manage.py runserver`; its own tests via `uv run --group web python
+  web/manage.py test solverapp` (see "Web app (web/)" above).
 - Commit directly to `main`; end commit messages with the Co-Authored-By trailer.

@@ -11,3 +11,7 @@ wheels/
 
 # Claude Code personal settings (permissions, etc.)
 .claude/settings.local.json
+
+# Django staticfiles collectstatic output (web/manage.py collectstatic)
+web/staticfiles/*
+!web/staticfiles/.gitkeep

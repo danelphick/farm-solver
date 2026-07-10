@@ -1,0 +1,106 @@
+"""HTTP views: the index page and the JSON solve API.
+
+All solving logic lives in :mod:`webapi` (framework-free, plain-pytest
+tested); this module is purely the HTTP <-> webapi bridge -- decoding the
+request, mapping :mod:`webapi`'s exceptions to status codes, rendering each
+markdown section to HTML, and shaping the JSON response.
+"""
+
+from __future__ import annotations
+
+import json
+import time
+
+import markdown
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+import webapi
+
+from .cache import CACHE, SOLVE_SEMAPHORE, key_lock
+
+# Solve-semaphore acquire timeout: long enough to queue behind one in-flight
+# solve (budget ~1-3s per ARCHITECTURE.md's server-hardware note) without
+# hanging a request indefinitely if something is stuck.
+_SEMAPHORE_TIMEOUT_SECONDS = 20
+
+
+def index(request: HttpRequest) -> HttpResponse:
+    return render(request, "solverapp/index.html")
+
+
+def _section_html(text: str) -> str:
+    """Render one SectionedReporter markdown section to HTML."""
+    return markdown.markdown(text, extensions=["tables"])
+
+
+@csrf_exempt  # a JSON POST API with no session/cookie auth -- nothing to forge
+@require_POST
+def api_solve(request: HttpRequest) -> JsonResponse:
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "malformed JSON body"}, status=400)
+
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "request body must be a JSON object"}, status=400)
+
+    mastery_text = payload.get("mastery_text", "")
+    inventory_text = payload.get("inventory_text", "")
+    params = payload.get("params", {})
+    if not isinstance(params, dict):
+        return JsonResponse({"error": "params must be a JSON object"}, status=400)
+
+    try:
+        args = webapi.params_to_args(params)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    key = webapi.fingerprint(mastery_text, inventory_text, args)
+    started = time.monotonic()
+
+    with key_lock(key):
+        session = CACHE.get(key)
+        cached = session is not None
+        if not SOLVE_SEMAPHORE.acquire(timeout=_SEMAPHORE_TIMEOUT_SECONDS):
+            return JsonResponse({"error": "solver busy, try again"}, status=503)
+        try:
+            if session is None:
+                session = webapi.solve(mastery_text, inventory_text, args)
+            result, session = webapi.render(session, args)
+        except ValueError as exc:
+            # Only reachable from webapi.solve's parsing of mastery_text/
+            # inventory_text (params were already validated above), so this
+            # is always an unparseable paste.
+            return JsonResponse({"error": str(exc)}, status=422)
+        finally:
+            SOLVE_SEMAPHORE.release()
+        CACHE.put(key, session)
+
+    solved_ms = round((time.monotonic() - started) * 1000)
+
+    return JsonResponse({
+        "session": key,
+        "cached": cached and not result.resolved,
+        "solved_ms": solved_ms,
+        "solution_html": _section_html(result.sections["solution"]),
+        "notes": result.notes,
+        "warnings": result.warnings,
+        "frontier": {
+            "html": _section_html(result.sections["frontier"]),
+            "plans": result.frontier_rows,
+        },
+        "plan": {
+            "index": result.selected,
+            "html": _section_html(
+                result.sections["plan"]
+                + (
+                    "\n\n" + result.sections["crafts"]
+                    if result.sections.get("crafts", "").strip()
+                    else ""
+                )
+            ),
+        },
+    })
