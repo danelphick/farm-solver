@@ -157,7 +157,10 @@ Term order inside each `lpSum` changes from items-major to offer order — the
 constraints are mathematically identical and offer order is preserved, so the
 determinism comment at `for item in sorted(items)` still holds.
 
-## Item 4 — Cheap fixed-point iterations for `--model-calendar`
+## Item 4 — Cheap fixed-point iterations for `--model-calendar` — DONE
+
+Implemented 2026-07-10 (measured: `--model-calendar` minimize() calls 97 → 51,
+avg wall 402 ms → 212 ms in-process). Details below kept for reference.
 
 **File:** `main.py`, the `_MAX_SEASON_ITERS` loop in `run` (~line 1057).
 

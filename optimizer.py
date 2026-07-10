@@ -941,6 +941,34 @@ def self_sourced_endpoint(
     )
 
 
+def fastest_endpoint(
+    offers: list[Offer],
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None = None,
+    crafting_bonus: float = 1.0,
+    openables: list[OpenFlow] | None = None,
+    inventory: dict[str, float] | None = None,
+    cookie_sets: float = 0.0,
+    prices: dict[str, float] | None = None,
+    pj_gain: dict[str, float] | None = None,
+    pj_price: float = 0.0,
+    pj_limit: int | None = None,
+) -> SourcingPlan:
+    """The fast endpoint: buys as freely as needed to finish soonest.
+
+    Solved with the buy-freely weight (``_FAST_PRICE``) -- the exact call
+    :func:`frontier` makes for its first (fastest, ``shown[0]``) plan, factored
+    out so a caller that only needs that one plan (see :func:`main.run`'s
+    calendar fixed point) can seed a solve without building the rest of the
+    frontier. ``frontier`` calls this too, so the two can never drift apart.
+    """
+    return minimize(
+        offers, demand, recipes, crafting_bonus, prices=prices,
+        gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
+        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+    )
+
+
 def plan_surplus_gold(
     plan: SourcingPlan,
     demand: dict[str, float],
@@ -1212,10 +1240,10 @@ def frontier(
     consumable buyable and banked surplus sellable; without it nothing can be bought,
     the slow regime is skipped, and the frontier is the single self-sourced plan.
     """
-    fast = minimize(
-        offers, demand, recipes, crafting_bonus, prices=prices,
-        gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+    fast = fastest_endpoint(
+        offers, demand, recipes, crafting_bonus, openables=openables,
+        inventory=inventory, cookie_sets=cookie_sets, prices=prices,
+        pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
     )
     cheap = minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,

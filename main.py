@@ -1068,6 +1068,38 @@ def run(args: argparse.Namespace) -> int:
     offers: list[sources.Offer] = []
     plans: list[optimizer.SourcingPlan] = []
     within: list[optimizer.SourcingPlan] = []
+    # With no --plan/--cheapest-plan and no limit, the plan the fixed point below
+    # settles on is always shown[0] -- the frontier's fastest plan, one minimize
+    # call (see optimizer.fastest_endpoint) rather than the whole frontier
+    # (~250 solves). Seed the horizon on that cheap iteration instead, so the
+    # loop below need only run the real frontier once, at the already-converged
+    # horizon (its own convergence check then passes on the first pass). With a
+    # limit or an explicit plan selection, the selected plan can differ from the
+    # fastest, so the seed would converge on the wrong horizon -- skip it and
+    # fall through to the full frontier loop as before.
+    fast_path = (
+        model_calendar and args.plan is None and not args.cheapest_plan
+        and time_limit is None and args.max_ap is None and args.max_ln is None
+        and args.max_gold is None
+    )
+    if fast_path:
+        for _ in range(_MAX_SEASON_ITERS):
+            production = config.passive_production(
+                cfg, today=start, start=start, horizon=horizon,
+                monthly_grants=monthly_grants,
+            )
+            offers = optimizer.all_offers(production, fish, explore, farm)
+            fast = optimizer.fastest_endpoint(
+                offers, demand, recipes, args.crafting_bonus, prices=prices,
+                openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
+                pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+            )
+            if not fast.draws and not fast.crafts:  # nothing to source
+                break
+            if horizon is not None and _makespans_close(fast.time, horizon):
+                break
+            horizon = fast.time
+
     for _ in range(_MAX_SEASON_ITERS):
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon,

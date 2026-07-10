@@ -77,7 +77,14 @@ Net / Orange Juice must be crafted or gathered.
    `report.print_crafts`. All printing lives in `report.py`; `main.run` calls it.
 
 The whole thing loops up to `_MAX_SEASON_ITERS` when `model_calendar` is on, since
-a seasonal pet's yield depends on the plan span (a fixed point).
+a seasonal pet's yield depends on the plan span (a fixed point). In the default
+selection case (no `--plan`/`--cheapest-plan`/limit — the selected plan is always
+`shown[0]`, the fastest), `main.run` seeds that fixed point on repeated
+`optimizer.fastest_endpoint` calls (one `minimize`, not a full frontier) and hands
+the converged horizon to the loop above, which then runs the real frontier once
+and breaks on its own convergence check. Any limit or explicit `--plan` can select
+a different plan than the fastest, so that case falls back to iterating the full
+frontier as before.
 
 ## Module map
 
@@ -85,7 +92,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
