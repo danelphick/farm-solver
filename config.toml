@@ -8,9 +8,9 @@ data_directory = "./mydata"
 # inventory_file = "./sample-inventory.txt"
 # Model the calendar so date-dependent sources -- a seasonal pet, the Mechanical
 # Heart's monthly grants -- only count for the part of the plan they fall in (uses
-# the plan's --start-date; costs an extra solve). Off by default (yearly average);
-# --model-calendar / --average-seasons override it on / off for one run.
-model_calendar = false
+# the plan's --start-date; costs an extra solve). On by default; --model-calendar /
+# --average-calendar override it on / off for one run.
+# model_calendar = true
 
 [storehouse]
 inventory = 49620
