@@ -347,7 +347,11 @@ buildings.
   the 14th of each month) as daily producers named `MONTHLY_GRANT_PRODUCER`. Each
   grant is spread to an average daily rate over the plan span (steady-state monthly
   average with no span; exact in-window grant-days otherwise, like a seasonal pet),
-  so it rides the same `model_calendar` fixed-point iteration.
+  so it rides the same `model_calendar` fixed-point iteration. An active grant is a
+  date-dependent source in its own right: `_should_model_calendar` treats it like a
+  seasonal pet, so the calendar model (and its extra solve) engages for the grants
+  even when every pet is year-round. `--model-calendar` / `--average-seasons` force
+  the calendar on / off from the CLI (mutually exclusive; off wins).
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS

@@ -164,10 +164,26 @@ def test_average_seasons_still_wins_over_the_model_calendar_flag():
     )
 
 
-def test_model_calendar_flag_still_needs_a_seasonal_pet():
-    # Forcing it on with only year-round pets still has nothing to model.
+def test_model_calendar_flag_still_needs_a_dated_source():
+    # Forcing it on with only year-round pets and no grants has nothing to model.
     assert not _should_model_calendar(
         {"Dog": 8}, average_seasons=False, model_calendar=True
+    )
+
+
+def test_monthly_grants_are_a_dated_source_even_without_a_seasonal_pet():
+    # The Mechanical Heart's grants are date-dependent, so they alone justify the
+    # calendar model even when every pet is year-round.
+    assert _should_model_calendar(
+        {"Dog": 8, "model_calendar": True}, average_seasons=False, monthly_grants=True
+    )
+    # ...but not when the calendar is not opted into at all.
+    assert not _should_model_calendar(
+        {"Dog": 8}, average_seasons=False, monthly_grants=True
+    )
+    # ...and --average-seasons still forces it off.
+    assert not _should_model_calendar(
+        {"Dog": 8, "model_calendar": True}, average_seasons=True, monthly_grants=True
     )
 
 

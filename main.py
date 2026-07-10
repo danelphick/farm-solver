@@ -631,7 +631,10 @@ def _makespans_close(a: timedelta, b: timedelta) -> bool:
 
 
 def _should_model_calendar(
-    pets_config: dict, average_seasons: bool, model_calendar: bool = False
+    pets_config: dict,
+    average_seasons: bool,
+    model_calendar: bool = False,
+    monthly_grants: bool = False,
 ) -> bool:
     """Whether to model the seasonal calendar rather than a yearly average.
 
@@ -639,13 +642,16 @@ def _should_model_calendar(
     makespan), so it is off by default and opted into with ``pets.model_calendar``
     in the config or the ``--model-calendar`` flag (``model_calendar``, which
     overrides the config on). ``--average-seasons`` forces it off and wins over
-    both; there is nothing to model unless the config actually has a seasonal pet.
+    both. It is worth the cost only when something in the plan is date-dependent:
+    a seasonal pet, or the Mechanical Heart's monthly grants (``monthly_grants``);
+    with neither, the yearly average is exact and the extra solve is skipped.
     """
     if average_seasons:
         return False
     if not (model_calendar or pets_config.get("model_calendar")):
         return False
-    return any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
+    has_seasonal_pet = any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
+    return has_seasonal_pet or monthly_grants
 
 
 def obtainable_items(
@@ -1025,14 +1031,15 @@ def run(args: argparse.Namespace) -> int:
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
 
-    # A seasonal pet is only in season for part of the year, so how much it
-    # contributes depends on how long the plan runs -- which is itself an output
-    # of the solve. When modelling the calendar (opt-in, see _should_model_calendar)
-    # iterate to a fixed point: solve, take the expanded plan's makespan as the plan
-    # span, rebuild the seasonal pet rates for it, and solve again until the makespan
-    # settles. Otherwise a single steady-state pass (horizon None) is enough.
+    # A date-dependent source -- a seasonal pet in season for part of the year, or
+    # the Mechanical Heart's monthly grants -- contributes an amount that depends on
+    # how long the plan runs, which is itself an output of the solve. When modelling
+    # the calendar (opt-in, see _should_model_calendar) iterate to a fixed point:
+    # solve, take the expanded plan's makespan as the plan span, rebuild those rates
+    # for it, and solve again until the makespan settles. Otherwise a single
+    # steady-state pass (horizon None) is enough.
     model_calendar = _should_model_calendar(
-        cfg.get("pets", {}), args.average_seasons, args.model_calendar
+        cfg.get("pets", {}), args.average_seasons, args.model_calendar, monthly_grants
     )
     horizon: timedelta | None = None
     production = config.passive_production(
@@ -1077,9 +1084,14 @@ def run(args: argparse.Namespace) -> int:
     selected = selected_plan(shown, args.plan, args.cheapest_plan)
 
     if model_calendar:
+        dated = []
+        if any(name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})):
+            dated.append("seasonal pets")
+        if monthly_grants:
+            dated.append("the Mechanical Heart's grants")
         print(
-            f"\nStarting {start:%d %b %Y}; a seasonal pet counts only for the "
-            "part of the plan it is in season."
+            f"\nStarting {start:%d %b %Y}; {' and '.join(dated)} count only for "
+            "the part of the plan they fall in."
         )
     if not within:
         print(
