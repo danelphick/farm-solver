@@ -205,7 +205,16 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
     `f"pj_off_{item}"` for `"fancy violin"`) must be read back off the constraint
     object (`constraint.name` after assignment) before it goes in `ephemeral`, or
     the recorded name won't match what `problem.constraints` actually stores and the
-    next call's pop silently misses it.
+    next call's pop silently misses it. Gotcha 2: the pop itself
+    (`problem.constraints.pop(name, None)`) uses PuLP's dict-style `.constraints`
+    access, which is **deprecated** (PuLP 4.0 returns a list from
+    `prob.constraints()` instead, with no replacement removal API yet as of PuLP
+    3.3.2). Works correctly today on both `highs` and `cbc`, but is a forward-
+    compatibility risk sitting at the core of this reuse mechanism — watch for it
+    on the next PuLP upgrade. The `DeprecationWarning` only shows under `uv run
+    pytest -q`, not a plain script run (Python suppresses `DeprecationWarning`
+    outside `__main__` by default), which is why it wasn't caught until after
+    the fact.
 - **Gold prices** (`config.trading_prices`, the `[trading]` section): per-unit gold
   for each buyable consumable (AP/LN/cider/OJ per-1000 → ÷1000; cookie sets per
   unit; Grape Juice at its production cost, kept for `plan_gold`'s market value but

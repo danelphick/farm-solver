@@ -273,6 +273,19 @@ Same discipline as PERF_PLAN.md, not repeated once at the end:
   preceding each one. The spike measured ~2-2.8x on the sweep groups under
   HiGHS (the default) and ~1.1-1.2x under CBC — expect the win to matter for
   the common case and be marginal for CBC users.
+- **PuLP deprecation risk (found in post-merge review, not by the spike).**
+  `_solve_configured`'s `problem.constraints.pop(name, None)` uses PuLP's
+  dict-style `.constraints` access, which is deprecated — PuLP 4.0 returns a
+  list from `prob.constraints()` instead, and there is no replacement removal
+  API yet as of PuLP 3.3.2. Confirmed working correctly today on both `highs`
+  and `cbc` (this is the entire reuse mechanism, so it's well-exercised), but
+  it is a forward-compatibility risk sitting at the core of this plan's
+  design — watch for it on the next PuLP upgrade. Missed during
+  implementation because the `DeprecationWarning` only surfaces under `uv run
+  pytest -q` (pytest overrides the default warning filter); a plain `python
+  main.py` run stays silent, since Python suppresses `DeprecationWarning`
+  outside `__main__` by default. Now noted in `optimizer.py` and
+  ARCHITECTURE.md's gotchas.
 
 ## Rejected / deferred (carried over, still applicable)
 
@@ -320,3 +333,24 @@ building is no longer the dominant cost: solving now accounts for ~66% of
 Lands below PERF_PLAN's own "~0.4s" estimate for the default HiGHS backend, as
 expected; not re-measured under `--solver cbc` (the plan's own risk note
 already flagged this item as HiGHS-tier, marginal-to-CBC).
+
+## Post-merge review (2026-07-10)
+
+Independently re-verified: golden diff against `13884b8` (time/net-gold match
+exactly on every plan; the one label difference seen — the frontier table's
+"defining passive resource" name on one plan — reproduced identically on
+*unmodified* `13884b8` across repeated runs, confirming it's the pre-existing
+alternate-optima flap, not a regression), `pytest -q` (599 passed), `ruff
+check` (clean), cross-backend diff (`highs` vs `cbc`, matching).
+
+Two gaps found and fixed:
+
+- `fastest_endpoint`'s docstring claimed "`frontier` calls this too, so the
+  two can never drift apart" — no longer true since step 3 (`frontier` now
+  calls `_solve_configured(base_active, gold_weight=_FAST_PRICE)` directly).
+  Still behaviorally equivalent, but no longer enforced by shared code.
+  Docstring corrected to say so explicitly.
+- The PuLP `.constraints` deprecation risk (see the Risks section's new
+  bullet above) — not caught during implementation since the warning is
+  silent outside `pytest`. Documented in `optimizer.py` (inline comment) and
+  ARCHITECTURE.md (gotchas).

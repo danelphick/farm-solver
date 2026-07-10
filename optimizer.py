@@ -617,6 +617,14 @@ def _solve_configured(
         return SourcingPlan(remainder=base.remainder)
 
     problem = base.problem
+    # NOTE: PuLP deprecates dict-style access to `.constraints` (removal by name
+    # will need `prob.constraints()` -- a list -- plus `get_constraint_by_name`
+    # once PuLP 4.0 lands; there is no replacement removal API yet). This still
+    # works correctly today (verified against both `highs` and `cbc`), but pins
+    # this whole reuse mechanism to that mapping staying functional. Watch for
+    # it on the next PuLP upgrade -- `uv run pytest -q` surfaces the
+    # DeprecationWarning (a plain script run does not, since Python suppresses
+    # DeprecationWarning outside `__main__` by default).
     for name in base.ephemeral:
         problem.constraints.pop(name, None)
     base.ephemeral = []
@@ -1088,11 +1096,18 @@ def fastest_endpoint(
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
 
-    Solved with the buy-freely weight (``_FAST_PRICE``) -- the exact call
-    :func:`frontier` makes for its first (fastest, ``shown[0]``) plan, factored
-    out so a caller that only needs that one plan (see :func:`main.run`'s
-    calendar fixed point) can seed a solve without building the rest of the
-    frontier. ``frontier`` calls this too, so the two can never drift apart.
+    Solved with the buy-freely weight (``_FAST_PRICE``), factored out so a
+    caller that only needs that one plan (see :func:`main.run`'s calendar
+    fixed point) can seed a solve without building the rest of the frontier.
+
+    ``frontier`` no longer calls this directly -- it builds its own shared
+    base and drives the fast endpoint through ``_solve_configured(base_active,
+    gold_weight=_FAST_PRICE)`` so that solve can share the base with the rest
+    of its sweep (see ``plans/MODEL_REUSE_PLAN.md``). The two are equivalent
+    (same ``_FAST_PRICE``, same underlying inputs, both bottoming out in
+    ``_solve_configured``), but that equivalence is no longer enforced by
+    shared code -- if the fast-endpoint call in either place ever changes,
+    update the other to match.
     """
     return minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
