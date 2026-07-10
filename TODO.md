@@ -19,8 +19,10 @@
 
 - Rework results into tables.
 
-- Performance. Need to profile it to find where time is taken and see if it can be optimised.
-  Possibly faster solver or maybe equation optimisation.
+- ~~Performance. Need to profile it to find where time is taken and see if it can be optimised.
+  Possibly faster solver or maybe equation optimisation.~~ Done 2026-07-10: in-process HiGHS
+  backend plus fewer/cheaper solves; 4.3s -> 0.66s (12x with --model-calendar). Record in
+  [plans/PERF_PLAN.md](plans/PERF_PLAN.md).
 
 - Build a web page.
   Options: a) Django page with light front-end that just calls into the python solver server-side.
