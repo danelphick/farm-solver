@@ -293,6 +293,9 @@ buildings.
   `need`, so it has no such residual — but when the passive track makes it (the
   Mechanical Heart's grants, a pet's haul) the line still appears, quantity =
   `min(passive_draw.produced, draw_consumed)`, so the free supply is visible.
+  `_passive_sources` flags the Mechanical Heart producer `(smeared)` (via
+  `_smeared_note`) since its monthly lump is modelled as an averaged daily rate,
+  just as `_season_note` flags a seasonal pet's window.
 - **Buy section** (`print_plan`, with trading `prices`): lists `plan.bought` and
   the gold each purchase costs, totalling `plan.gold`.
 - **Surplus section** (`_print_surplus_value`, with trading `prices`): passive

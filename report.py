@@ -540,6 +540,17 @@ def _season_note(producer_name: str) -> str:
     return f" [seasonal: {span}]"
 
 
+def _smeared_note(producer_name: str) -> str:
+    """A ``(smeared)`` flag for the Mechanical Heart producer, else empty.
+
+    The monthly tower-artifact grants arrive as a lump on a fixed day, but are
+    modelled as an average daily rate spread across the plan (see
+    :func:`config._monthly_grant_producers`), so the reported quantity is that
+    smear, not the day's real bundle.
+    """
+    return " (smeared)" if producer_name == config.MONTHLY_GRANT_PRODUCER else ""
+
+
 def _passive_sources(
     production: passive.PassiveProduction, item: str, quantity: int
 ) -> str:
@@ -557,13 +568,16 @@ def _passive_sources(
         return ""
     if len(contributors) == 1:
         name = contributors[0][1]
-        return f" (from {name}{_season_note(name)})"
+        return f" (from {name}{_season_note(name)}{_smeared_note(name)})"
     counts = _apportion(quantity, [rate for rate, _ in contributors])
     labelled = sorted(
         ((count, rate, name) for count, (rate, name) in zip(counts, contributors)),
         key=lambda t: (-t[0], -t[1], t[2]),  # biggest share, then rate, then name
     )
-    parts = [f"{count:,} from {name}{_season_note(name)}" for count, _, name in labelled]
+    parts = [
+        f"{count:,} from {name}{_season_note(name)}{_smeared_note(name)}"
+        for count, _, name in labelled
+    ]
     return " (" + ", ".join(parts) + ")"
 
 

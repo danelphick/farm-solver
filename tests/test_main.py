@@ -919,8 +919,9 @@ def test_print_plan_passive_shows_a_consumed_tool_the_passive_track_makes(capsys
                openable_names={"arnold palmer": "Arnold Palmer"})
     out = capsys.readouterr().out
     # Passive made 60 palmers (rate 1/min * 60 units), all of them burned by the
-    # 200-palmer explore, so 60 show under the Mechanical Heart.
-    assert "60x Arnold Palmer in 1h (from Mechanical Heart)" in out
+    # 200-palmer explore, so 60 show under the Mechanical Heart -- flagged
+    # (smeared) since the monthly grant is spread to a daily rate, not a lump.
+    assert "60x Arnold Palmer in 1h (from Mechanical Heart (smeared))" in out
 
 
 def test_print_plan_passive_caps_a_consumed_tool_at_what_the_plan_burns(capsys):
