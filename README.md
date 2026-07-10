@@ -486,3 +486,111 @@ The **Mechanical Heart** (the **Tower level 300** artifact) hands you a bulk of 
 ```
 
 These grants join passive production as free supply of those consumables, spread to an average daily rate over the plan (like a pet's averaged haul). By default that rate counts exactly how many grant days — 7ths and 14ths — fall inside the plan's window given its start date, so a short plan that lands on the 7th sees the cider while one that misses it does not; with `model_calendar = false` (under `[solver]`, or `--average-calendar` on the command line) it instead uses the steady-state monthly average. A plan then leans on the granted ciders and palmers before crafting, gathering or buying more, and the passive breakdown lists them under the `Mechanical Heart` producer, flagged `(smeared)` as a reminder that the figure is the monthly lump spread to a daily rate, not what actually lands on the day.
+
+## Web app
+
+The same solver is also available as a small Django web app (`web/`) — paste
+your masteries and inventory into two boxes in a browser instead of files on
+disk, adjust the same goal/limit/pumpkin-juice/calendar controls the CLI
+flags expose, and get back the frontier table and a plan breakdown. There are
+no accounts and nothing is stored server-side: your pasted text and parameter
+choices live in the browser's `localStorage` only, resent with every request.
+A solve takes roughly the same ~0.5s a CLI run does on capable hardware (see
+"Server hardware reality" below); a *refilter* — changing a limit or which
+plan is expanded, without changing what needs solving — is answered from an
+in-process cache in a few milliseconds.
+
+### Running it locally
+
+```shell
+uv sync --group web
+uv run --group web python web/manage.py runserver
+```
+
+Then open `http://127.0.0.1:8000/`. `web/manage.py` puts the repo root on
+`sys.path` itself, so no packaging or install step is needed for `main.py`/
+`webapi.py`/`optimizer.py`/etc. to be importable from `web/solverapp/`.
+
+Its own test suite runs separately from the main one, since it needs Django
+installed and a running Django test harness:
+
+```shell
+uv run --group web python web/manage.py test solverapp
+```
+
+(`uv run pytest -q` never collects these — they live outside `tests/` and
+are named `tests.py`, not `test_*.py` — so the plain test suite needs no
+Django dependency at all.)
+
+### Per-player config caveat
+
+`config.toml` (pets, buildings, crafting/exploring/fishing effectiveness,
+trading prices — everything under [Configuration](#configuration) above) is
+normally *per player*: the CLI reads whatever `config.toml` sits next to
+`main.py`. The web app is a single running server shared by everyone who
+uses it, and this first iteration serves **one** `config.toml` — the
+server's own — to every visitor; it does not (yet) let each player supply
+their own. If your setup differs from the server's checked-in config (a pet
+you don't have, an effectiveness perk you haven't unlocked, different
+trading prices), the escape hatch is the same `--override
+section.flag=value` mechanism the CLI has, exposed in the web UI's Advanced
+panel as one `section.flag=value` override per line — anything you could
+pass as a repeated `--override` flag on the command line works there too.
+
+### Deploying it
+
+For anything beyond local use, run it behind gunicorn with a reverse proxy
+handling TLS (gunicorn itself only speaks plain HTTP):
+
+```shell
+uv run --group web gunicorn \
+    --chdir web \
+    --workers 2 --worker-class gthread --threads 4 \
+    --bind 127.0.0.1:8000 \
+    farmweb.wsgi:application
+```
+
+Two gthread workers × 4 threads keeps cache-hit (refilter) requests
+responsive even while a worker's solve semaphore is held by an in-flight
+solve elsewhere in that same process — `solverapp/cache.py`'s
+`SOLVE_SEMAPHORE` limits each *process* (not thread) to one LP solve at a
+time, since PuLP/HiGHS hold solver state that is not safe to touch from two
+threads at once. The session cache (`solverapp/cache.py`'s `SessionCache`,
+an in-process LRU(64)/TTL(30 min) `OrderedDict`) is per-worker-process, not
+shared, so a request that lands on a different worker than the one that
+solved it is simply a cache miss — it just re-solves, never returns a wrong
+answer, at the cost of ~0.5–3s instead of a few milliseconds. This is a
+deliberate simplicity trade-off for a small deployment; there is no sticky
+routing or shared cache to keep consistent.
+
+Before deploying, run `web/manage.py collectstatic` so whitenoise
+(`WhiteNoiseMiddleware`, already wired into `MIDDLEWARE`) can serve
+`app.js`/`style.css` straight out of `web/staticfiles/` without Django's
+per-request static-file machinery:
+
+```shell
+uv run --group web python web/manage.py collectstatic --noinput
+```
+
+Set these environment variables in production (see
+`web/farmweb/settings.py`; the checked-in defaults are dev-only and unsafe
+to deploy as-is):
+
+```shell
+DJANGO_SECRET_KEY=<a long random string>
+DJANGO_DEBUG=false
+DJANGO_ALLOWED_HOSTS=your-domain.example
+```
+
+### Server hardware reality
+
+The solver's own README/ARCHITECTURE performance figures (a solve in
+~0.4–0.7s) come from a fast desktop-class CPU. The frontier sweep is ~80
+*sequential* single-threaded LP solves, so a typical cloud VPS core — often
+1.5–4× slower single-thread than a top-tier desktop chip — should budget
+**~1–3s per re-solve** instead. Benchmark the actual target host before
+tuning anything (`time python main.py` with a representative mastery/
+inventory pair is a reasonable proxy): the web UI shows an explicit pending
+state on a re-solve, and the solve-semaphore acquire timeout
+(`_SEMAPHORE_TIMEOUT_SECONDS` in `solverapp/views.py`) is sized for that
+budget rather than the desktop figure.

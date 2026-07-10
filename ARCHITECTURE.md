@@ -125,6 +125,7 @@ frontier as before.
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
+| `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.api_solve`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
 
 Data lives in `*.csv` (crops, fishing, exploring, pets, openables, tower,
 seed_drops) and `config.toml`; game state comes from pasted text files.
@@ -531,6 +532,17 @@ that imports it without going through `manage.py`.
   extensions=["tables"])` → JSON response (`cached`, `solved_ms`,
   `solution_html`, `notes`, `warnings`, `frontier.{html,plans}`,
   `plan.{index,html}`).
+- **`static/solverapp/app.js`** (vanilla JS, no build step): state
+  (`{mastery_text, inventory_text, params}`, mirroring `POST /api/solve`'s
+  body) round-trips through `localStorage["farm-solver.v1"]`, restored and
+  auto-solved on load. Any control/paste edit debounces 400ms then re-solves;
+  a monotonic sequence number drops a response superseded by a newer
+  request. The frontier table's rows are zipped with the response's
+  `frontier.plans` JSON array by index for selected/cheapest styling and
+  click-to-select (sets `plan_select` and re-POSTs immediately, no debounce
+  -- a refilter, so it is cache-hit fast); any other change resets the
+  selection first, so it can never point past the end of a differently
+  filtered frontier.
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --
