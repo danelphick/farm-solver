@@ -333,68 +333,59 @@ def _reachable(
     return seen
 
 
-def minimize(
+@dataclass
+class _Base:
+    """The part of :func:`minimize`'s LP shared by every call in a sweep that
+    holds ``offers``/``demand``/``recipes``/... fixed (see :func:`_build_base`).
+
+    ``pj`` is always built (unlike the old per-call gating on ``favour_passive``)
+    since one base must serve calls with either setting; :func:`_solve_configured`
+    neutralises it per call instead. ``ephemeral`` names the constraints the most
+    recent :func:`_solve_configured` call added, so the next call knows what to
+    pop before adding its own.
+    """
+
+    problem: pulp.LpProblem
+    usage: list[pulp.LpVariable]
+    craft: dict[str, pulp.LpVariable]
+    opens: list[pulp.LpVariable]
+    makespan: pulp.LpVariable
+    buy: dict[str, pulp.LpVariable]
+    buy_cookie: pulp.LpVariable | None
+    pj: dict[str, pulp.LpVariable]
+    gold: pulp.LpAffineExpression
+    spend_value: pulp.LpAffineExpression
+    used: list[Offer]
+    crafted: list[str]
+    opened: list[OpenFlow]
+    remainder: dict[str, float]
+    pj_gain: dict[str, float]
+    pj_price: float
+    # True when no demanded item is obtainable at all -- the LP is never built
+    # (mirrors ``minimize``'s old early return), so ``_solve_configured`` must
+    # skip straight to the trivial remainder-only plan without touching ``problem``.
+    remainder_only: bool = False
+    ephemeral: list[str] = field(default_factory=list)
+
+
+def _build_base(
     offers: list[Offer],
     demand: dict[str, float],
     recipes: dict[str, dict[str, float]] | None = None,
     crafting_bonus: float = 1.0,
-    prices: dict[str, float] | None = None,
-    gold_weight: float = 0.0,
-    time_cap: timedelta | None = None,
     openables: list[OpenFlow] | None = None,
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
-    favour_passive: bool = False,
+    prices: dict[str, float] | None = None,
     pj_gain: dict[str, float] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
-) -> SourcingPlan:
-    """Solve one LP: cover ``demand``, trading makespan against gold spent.
-
-    ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
-    (auto-supplied materials already stripped); one craft consumes those and
-    yields ``crafting_bonus`` of the item. ``openables`` are Locksmith flows:
-    opening one consumes its token (and key) and yields its average bundle, at no
-    time cost -- a free multi-output flow the LP drives like crafts. Net production
-    (gathered + crafted + opened + **bought** - consumed) must cover ``demand`` for
-    every obtainable item, and each track's time sums to at most the makespan
-    ``T``. A demanded item that is neither gatherable, craftable nor openable lands
-    in the ``remainder``.
-
-    ``inventory`` (lower-cased item -> quantity held) is free supply the plan need
-    not produce: it is credited to every item's balance *except* those directly
-    demanded, since the demand is already net of what is held (mastery progress or
-    the acquired count). The credit is a constant, so surplus stock simply leaves
-    the balance slack; it never makes an otherwise-unproducible item obtainable.
-
-    **Buying.** Each buyable consumable (see :data:`BUYABLE`; cookie sets too, via
-    ``cookie_sets`` + a purchase) gets a ``buy`` variable that adds free, instant
-    supply at its ``prices`` gold cost -- the alternative to self-sourcing it, which
-    costs makespan. Buying cannot earn an item's own **mastery**, so where an item
-    is itself demanded (a tower/`-m`/`-i` goal) a ``buy <= derived`` floor keeps
-    purchases to its non-goal uses (as a craft material or a channel's tool), and
-    the goal must be crafted or gathered. ``gold`` is ``sum(buy * price)``.
-
-    Three modes trace the frontier from different sides. By default the LP minimises
-    ``T + gold_weight * gold`` (a weighted sum): a tiny ``gold_weight`` buys freely
-    for the fastest plan, a huge one buys nothing for the slowest self-sourced one.
-    With ``time_cap`` set it instead minimises ``gold`` subject to ``T <= time_cap``
-    -- an epsilon-constraint solve, which unlike the weighted sum can land on the
-    *interior* of a flat frontier segment. With ``favour_passive`` it minimises
-    ``spend_value`` (the market value of every consumable spent) instead of gold, so
-    the plan leans as hard as possible on free passive production and basic farming,
-    spending the fewest tools and banking the over-production; ``time_cap`` then
-    bounds how far it runs (see :func:`frontier`, the slow regime). ``prices`` are the
-    per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
-    the plan is fully self-sourced.
-
-    **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
-    covers, ``0.1 * mastery_threshold / mastery_bonus``) turns on the mastery-boost
-    lever: a ``pj`` variable per goal item adds free, instant supply toward that item's
-    demand at ``pj_price`` gold each, capped at fully covering the demand (a juice past
-    the goal buys nothing). ``pj_limit`` caps the total juices spent. Like buying it is
-    a gold-for-time trade, so it is off in ``favour_passive`` mode (the buy-nothing
-    slow regime); its gold folds into ``gold``, tracked apart on the plan.
+) -> _Base:
+    """Build the part of :func:`minimize`'s LP that is identical across every
+    call in a sweep sharing these inputs -- variables, the balance/track
+    constraints, ``gold``/``spend_value`` -- everything except the per-call
+    objective and time cap, which :func:`_solve_configured` adds. See
+    ``plans/MODEL_REUSE_PLAN.md`` for why this split exists.
     """
     recipes = recipes or {}
     openables = openables or []
@@ -440,7 +431,13 @@ def minimize(
         if key not in obtainable
     }
     if not items:
-        return SourcingPlan(remainder=remainder)
+        return _Base(
+            problem=pulp.LpProblem("sourcing", pulp.LpMinimize),
+            usage=[], craft={}, opens=[], makespan=pulp.LpVariable("T", lowBound=0),
+            buy={}, buy_cookie=None, pj={}, gold=0, spend_value=0,
+            used=[], crafted=[], opened=[], remainder=remainder,
+            pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
+        )
 
     used = [
         o for o in usable
@@ -492,9 +489,11 @@ def minimize(
     # Each juice on item i adds pj_gain[i] units toward its demand for pj_price gold;
     # capped below at fully covering the goal (a juice past it buys nothing). It is a
     # gold-for-time trade like buying, so it is off in the buy-nothing favour_passive
-    # regime. Its gold folds into the same ``gold`` the LP minimises.
+    # regime -- built unconditionally here since one base serves both regimes;
+    # ``_solve_configured`` neutralises it per call with an ephemeral ``pj <= 0``
+    # when ``favour_passive``. Its gold folds into the same ``gold`` the LP minimises.
     pj = {}
-    if pj_gain and pj_price > 0 and not favour_passive:
+    if pj_gain and pj_price > 0:
         pj = {
             item: pulp.LpVariable(f"pj{i}", lowBound=0)
             for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys()))
@@ -523,21 +522,6 @@ def minimize(
         * x
         for o, x in zip(used, usage)
     ) + cookies * prices.get("cookie set", 0.0)
-
-    if favour_passive:
-        # Slowest, most passive-leaning end: fewest tools spent (so passive and
-        # farming carry the demand), makespan bounded by ``time_cap`` so it cannot
-        # run away onto a centuries-long pet trickle.
-        if time_cap is not None:
-            problem += makespan <= _minutes(time_cap)
-        problem += spend_value
-    elif time_cap is not None:
-        problem += makespan <= _minutes(time_cap)
-        problem += gold  # least gold under the time cap (epsilon-constraint)
-    else:
-        # A tiny gold_weight buys freely for the fastest plan; a huge one buys
-        # nothing (gold 0) for the slowest, fully self-sourced plan.
-        problem += makespan + gold_weight * gold
 
     # Index each offer's yields/consumes by item once, so the per-item loop below
     # doesn't rescan every offer twice (via ``yield_of``) for every item.
@@ -608,6 +592,57 @@ def minimize(
     for terms in tracks.values():
         problem += pulp.lpSum(terms) <= makespan
 
+    return _Base(
+        problem=problem, usage=usage, craft=craft, opens=opens, makespan=makespan,
+        buy=buy, buy_cookie=buy_cookie, pj=pj, gold=gold, spend_value=spend_value,
+        used=used, crafted=crafted, opened=opened, remainder=remainder,
+        pj_gain=pj_gain, pj_price=pj_price,
+    )
+
+
+def _solve_configured(
+    base: _Base,
+    *,
+    gold_weight: float = 0.0,
+    time_cap: timedelta | None = None,
+    favour_passive: bool = False,
+) -> SourcingPlan:
+    """Solve ``base`` under one call's mode -- the per-call counterpart of
+    :func:`_build_base`. Reusable across many calls sharing a base: every
+    constraint this call adds is named and recorded in ``base.ephemeral`` so
+    the *next* call's first step can remove exactly them, leaving the shared
+    balance/track constraints untouched. See ``plans/MODEL_REUSE_PLAN.md``.
+    """
+    if base.remainder_only:
+        return SourcingPlan(remainder=base.remainder)
+
+    problem = base.problem
+    for name in base.ephemeral:
+        problem.constraints.pop(name, None)
+    base.ephemeral = []
+
+    # ``pj`` is built unconditionally in the base (see _build_base); favour_passive
+    # neutralises it here instead, exactly like the old variable-absence did.
+    if favour_passive and base.pj:
+        for item, var in base.pj.items():
+            problem += (var <= 0, f"pj_off_{item}")
+            base.ephemeral.append(f"pj_off_{item}")
+
+    if time_cap is not None:
+        problem += (base.makespan <= _minutes(time_cap), "cap")
+        base.ephemeral.append("cap")
+
+    if favour_passive:
+        # Slowest, most passive-leaning end: fewest tools spent (so passive and
+        # farming carry the demand), makespan bounded by ``time_cap`` so it cannot
+        # run away onto a centuries-long pet trickle.
+        problem.setObjective(base.spend_value)
+    elif time_cap is not None:
+        problem.setObjective(base.gold)  # least gold under the time cap (epsilon-constraint)
+    else:
+        # A tiny gold_weight buys freely for the fastest plan; a huge one buys
+        # nothing (gold 0) for the slowest, fully self-sourced plan.
+        problem.setObjective(base.makespan + gold_weight * base.gold)
     problem.solve(_solver())
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
@@ -634,13 +669,17 @@ def minimize(
     # *that* is pinned and the makespan is left free -- stage 3's activity term then
     # sheds any spare passive draw, settling the makespan at just what passive needs,
     # rather than the plan buying tools to finish early and undoing the passive lean.
-    if used or craft or opens or buy or buy_cookie is not None or pj:
+    if (
+        base.used or base.craft or base.opens or base.buy
+        or base.buy_cookie is not None or base.pj
+    ):
         if favour_passive:
-            sv_star = pulp.value(spend_value) or 0.0
-            problem += spend_value <= sv_star * (1 + 1e-9) + 1e-9
+            sv_star = pulp.value(base.spend_value) or 0.0
+            problem += (base.spend_value <= sv_star * (1 + 1e-9) + 1e-9, "stage1_pin")
         else:
-            t_star = makespan.value() or 0.0
-            problem += makespan <= t_star * (1 + 1e-9) + 1e-9
+            t_star = base.makespan.value() or 0.0
+            problem += (base.makespan <= t_star * (1 + 1e-9) + 1e-9, "stage1_pin")
+        base.ephemeral.append("stage1_pin")
 
         # Stage 2 -- least gold at the pinned primary, then lock it. Skipped when
         # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
@@ -648,47 +687,55 @@ def minimize(
         # under `makespan <= time_cap`, and stage 1's `t_star` pin above only
         # tightens that same bound, so a re-solve here is a provable no-op -- pin
         # gold from the stage-1 solution directly instead.
-        if buy or buy_cookie is not None or pj:
+        if base.buy or base.buy_cookie is not None or base.pj:
             if time_cap is not None and not favour_passive:
-                problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
+                problem += (
+                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
+                    "stage2_pin",
+                )
             else:
-                problem.setObjective(gold)
+                problem.setObjective(base.gold)
                 problem.solve(_solver())
-                problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
+                problem += (
+                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
+                    "stage2_pin",
+                )
+            base.ephemeral.append("stage2_pin")
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
-            pulp.lpSum(craft.values()) + pulp.lpSum(usage) + pulp.lpSum(opens)
-            + pulp.lpSum(buy.values()) + pulp.lpSum(pj.values())
-            + (buy_cookie if buy_cookie is not None else 0)
+            pulp.lpSum(base.craft.values()) + pulp.lpSum(base.usage)
+            + pulp.lpSum(base.opens) + pulp.lpSum(base.buy.values())
+            + pulp.lpSum(base.pj.values())
+            + (base.buy_cookie if base.buy_cookie is not None else 0)
         )
         problem.solve(_solver())
 
     draws = [
         Draw(offer, units)
-        for offer, x in zip(used, usage)
+        for offer, x in zip(base.used, base.usage)
         if (units := x.value() or 0.0) > UNIT_EPSILON
     ]
     crafts = {
         item: count
-        for item in crafted
-        if (count := craft[item].value() or 0.0) > UNIT_EPSILON
+        for item in base.crafted
+        if (count := base.craft[item].value() or 0.0) > UNIT_EPSILON
     }
     opens_done = {
         flow.name: count
-        for flow, o in zip(opened, opens)
+        for flow, o in zip(base.opened, base.opens)
         if (count := o.value() or 0.0) > UNIT_EPSILON
     }
     bought = {
         item: units
-        for item, var in buy.items()
+        for item, var in base.buy.items()
         if (units := var.value() or 0.0) > UNIT_EPSILON
     }
-    if buy_cookie is not None and (bc := buy_cookie.value() or 0.0) > UNIT_EPSILON:
+    if base.buy_cookie is not None and (bc := base.buy_cookie.value() or 0.0) > UNIT_EPSILON:
         bought["cookie set"] = bc
     pumpkin_juices = {
         item: units
-        for item, var in pj.items()
+        for item, var in base.pj.items()
         if (units := var.value() or 0.0) > UNIT_EPSILON
     }
     time, ap, ln = aggregate(draws)
@@ -708,13 +755,91 @@ def minimize(
             d.offer.consumes.get("orange juice", 0.0) * d.units for d in draws
         ),
         bought=bought,
-        gold=pulp.value(gold) or 0.0,
+        gold=pulp.value(base.gold) or 0.0,
         pumpkin_juices=pumpkin_juices,
-        pumpkin_gold=sum(pumpkin_juices.values()) * pj_price,
+        pumpkin_gold=sum(pumpkin_juices.values()) * base.pj_price,
         pumpkin_credit={
-            item: pj_gain[item] * units for item, units in pumpkin_juices.items()
+            item: base.pj_gain[item] * units for item, units in pumpkin_juices.items()
         },
-        remainder=remainder,
+        remainder=base.remainder,
+    )
+
+
+def minimize(
+    offers: list[Offer],
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None = None,
+    crafting_bonus: float = 1.0,
+    prices: dict[str, float] | None = None,
+    gold_weight: float = 0.0,
+    time_cap: timedelta | None = None,
+    openables: list[OpenFlow] | None = None,
+    inventory: dict[str, float] | None = None,
+    cookie_sets: float = 0.0,
+    favour_passive: bool = False,
+    pj_gain: dict[str, float] | None = None,
+    pj_price: float = 0.0,
+    pj_limit: int | None = None,
+) -> SourcingPlan:
+    """Solve one LP: cover ``demand``, trading makespan against gold spent.
+
+    ``recipes`` maps a lower-cased craftable item to its ``{material: quantity}``
+    (auto-supplied materials already stripped); one craft consumes those and
+    yields ``crafting_bonus`` of the item. ``openables`` are Locksmith flows:
+    opening one consumes its token (and key) and yields its average bundle, at no
+    time cost -- a free multi-output flow the LP drives like crafts. Net production
+    (gathered + crafted + opened + **bought** - consumed) must cover ``demand`` for
+    every obtainable item, and each track's time sums to at most the makespan
+    ``T``. A demanded item that is neither gatherable, craftable nor openable lands
+    in the ``remainder``.
+
+    ``inventory`` (lower-cased item -> quantity held) is free supply the plan need
+    not produce: it is credited to every item's balance *except* those directly
+    demanded, since the demand is already net of what is held (mastery progress or
+    the acquired count). The credit is a constant, so surplus stock simply leaves
+    the balance slack; it never makes an otherwise-unproducible item obtainable.
+
+    **Buying.** Each buyable consumable (see :data:`BUYABLE`; cookie sets too, via
+    ``cookie_sets`` + a purchase) gets a ``buy`` variable that adds free, instant
+    supply at its ``prices`` gold cost -- the alternative to self-sourcing it, which
+    costs makespan. Buying cannot earn an item's own **mastery**, so where an item
+    is itself demanded (a tower/`-m`/`-i` goal) a ``buy <= derived`` floor keeps
+    purchases to its non-goal uses (as a craft material or a channel's tool), and
+    the goal must be crafted or gathered. ``gold`` is ``sum(buy * price)``.
+
+    Three modes trace the frontier from different sides. By default the LP minimises
+    ``T + gold_weight * gold`` (a weighted sum): a tiny ``gold_weight`` buys freely
+    for the fastest plan, a huge one buys nothing for the slowest self-sourced one.
+    With ``time_cap`` set it instead minimises ``gold`` subject to ``T <= time_cap``
+    -- an epsilon-constraint solve, which unlike the weighted sum can land on the
+    *interior* of a flat frontier segment. With ``favour_passive`` it minimises
+    ``spend_value`` (the market value of every consumable spent) instead of gold, so
+    the plan leans as hard as possible on free passive production and basic farming,
+    spending the fewest tools and banking the over-production; ``time_cap`` then
+    bounds how far it runs (see :func:`frontier`, the slow regime). ``prices`` are the
+    per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
+    the plan is fully self-sourced.
+
+    **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
+    covers, ``0.1 * mastery_threshold / mastery_bonus``) turns on the mastery-boost
+    lever: a ``pj`` variable per goal item adds free, instant supply toward that item's
+    demand at ``pj_price`` gold each, capped at fully covering the demand (a juice past
+    the goal buys nothing). ``pj_limit`` caps the total juices spent. Like buying it is
+    a gold-for-time trade, so it is off in ``favour_passive`` mode (the buy-nothing
+    slow regime); its gold folds into ``gold``, tracked apart on the plan.
+
+    A single-shot call: builds one :func:`_build_base` and solves it once via
+    :func:`_solve_configured`. :func:`frontier` instead builds a base per
+    ``favour_passive`` regime and drives every sweep call through
+    ``_solve_configured`` directly, since almost everything below is identical
+    call to call within one sweep.
+    """
+    base = _build_base(
+        offers, demand, recipes, crafting_bonus, openables, inventory,
+        cookie_sets, prices, pj_gain, pj_price, pj_limit,
+    )
+    return _solve_configured(
+        base, gold_weight=gold_weight, time_cap=time_cap, favour_passive=favour_passive,
     )
 
 
