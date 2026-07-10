@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 import tomllib
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -956,48 +957,45 @@ def load_config() -> dict:
         return {}
 
 
-def run(args: argparse.Namespace) -> int:
-    if args.pager and args.format != "markdown":
-        raise ValueError("--pager requires --format markdown")
-    # All output goes through this: text prints immediately (today's behaviour),
-    # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
-    reporter = report.build_reporter(args.format, pager=args.pager)
-    cfg = load_config()
-    apply_overrides(cfg, args.override)
-    # Select the LP backend before anything solves; the flag beats the config.
-    backend = args.solver or cfg.get("solver", {}).get("backend")
-    if backend:
-        optimizer.set_solver_backend(backend)
+@dataclass
+class SolveInputs:
+    """Everything one (re-)solve needs, built once from args/config/state."""
+
+    time_limit: timedelta | None
+    state: farm_solver.GameState
+    requirements: farm_solver.TowerRequirements
+    farm: crops.Farm
+    explore: exploring.Exploring
+    fish: fishing.Fishing
+    workshop: crafting.Workshop
+    monthly_grants: bool
+    solution: farm_solver.Solution
+    recipes: dict
+    smith: locksmith.Locksmith
+    open_flows: list[sources.OpenFlow]
+    demand: dict[str, float]
+    inventory: dict[str, float]
+    cookie_sets: float | None
+    prices: dict[str, float] | None
+    pj_gain: dict[str, float]
+    pj_price: float
+    pj_limit: int | None
+    model_calendar: bool
+    start: date
+
+
+def build_inputs(
+    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+) -> SolveInputs:
+    """Build a :class:`SolveInputs` from parsed args/config and a loaded state.
+
+    ``state`` is expected already loaded, with ``--override-inventory``
+    applied (the CLI does file loading + the override in :func:`run`; a web
+    caller instead builds a state directly from pasted request text).
+    """
+    start = args.start_date or date.today()
     workshop = crafting.load_workshop()
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
-    start = args.start_date or date.today()
-
-    # A standalone report over the whole workshop; no solving needed. Use the
-    # steady-state producers (no plan span) so every pet's items are counted.
-    # No inventory file is read for this report, so the Fungus Processing and
-    # Scythe of Dewstar / Dewstar's Journal checks fall back to config overrides
-    # only.
-    if args.unobtainable:
-        farm = crops.farm_from_config(
-            cfg.get("farming", {}),
-            have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg),
-            have_dewstars_journal=resolve_dewstars_journal(cfg),
-        )
-        explore = exploring.exploring_from_config(
-            cfg.get("exploring", {}),
-            have_fungus_processing=resolve_fungus_processing(cfg),
-        )
-        production = config.passive_production(
-            cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)
-        )
-        obtainable = obtainable_items(production, farm, fish, explore)
-        reporter.unobtainable(unobtainable_materials(workshop, obtainable))
-        reporter.finish()
-        return 0
-
-    # The mastery and inventory files come from the command line, falling back
-    # to the [solver] config section.
-    mastery_file, inventory_file = resolve_files(args, cfg)
 
     # Parse the time limit first so a bad duration fails before any output.
     time_limit = (
@@ -1006,11 +1004,6 @@ def run(args: argparse.Namespace) -> int:
         else None
     )
 
-    state = load_state(mastery_file, inventory_file)
-    if args.override_inventory is not None:
-        apply_inventory_overrides(
-            state.inventory, parsing.parse_item_amounts(args.override_inventory)
-        )
     # Loaded unconditionally (not just for the tower goal below): reaching
     # T250 auto-detects the Scythe of Dewstar (see resolve_scythe_of_dewstar),
     # regardless of which goal this run solves.
@@ -1046,8 +1039,6 @@ def run(args: argparse.Namespace) -> int:
         solution = farm_solver.solve_target(
             state, requirements, target_level, mastery_goals, item_goals
         )
-
-    reporter.solution(solution)
 
     # Every recipe is a craft flow; the optimiser sources the top-level demand,
     # choosing craft-vs-gather for itself. Openables are free multi-output flows
@@ -1100,7 +1091,77 @@ def run(args: argparse.Namespace) -> int:
         args.model_calendar or cfg.get("solver", {}).get("model_calendar", True),
         monthly_grants,
     )
-    horizon: timedelta | None = None
+
+    return SolveInputs(
+        time_limit=time_limit,
+        state=state,
+        requirements=requirements,
+        farm=farm,
+        explore=explore,
+        fish=fish,
+        workshop=workshop,
+        monthly_grants=monthly_grants,
+        solution=solution,
+        recipes=recipes,
+        smith=smith,
+        open_flows=open_flows,
+        demand=demand,
+        inventory=inventory,
+        cookie_sets=cookie_sets,
+        prices=prices,
+        pj_gain=pj_gain,
+        pj_price=pj_price,
+        pj_limit=pj_limit,
+        model_calendar=model_calendar,
+        start=start,
+    )
+
+
+@dataclass
+class FrontierResult:
+    """The frontier sweep's output, before any refilter (limits/selection)."""
+
+    plans: list[optimizer.SourcingPlan]
+    within: list[optimizer.SourcingPlan]
+    shown: list[optimizer.SourcingPlan]
+    offers: list[sources.Offer]
+    production: passive.PassiveProduction
+    horizon: timedelta | None
+
+
+def solve_frontier(
+    inputs: SolveInputs,
+    args: argparse.Namespace,
+    cfg: dict,
+    horizon_seed: timedelta | None = None,
+) -> FrontierResult:
+    """Run the seasonal fixed-point loop and the frontier sweep.
+
+    ``cfg`` is needed (not part of :class:`SolveInputs`) purely to rebuild
+    ``config.passive_production`` each iteration -- the config itself never
+    changes mid-solve, unlike everything else in ``inputs``. ``horizon_seed``
+    initialises the fixed point's ``horizon`` instead of ``None`` -- used by
+    the web API's horizon-guard re-solve, seeded from the already-selected
+    plan's makespan; the CLI never passes it.
+    """
+    time_limit = inputs.time_limit
+    fish = inputs.fish
+    explore = inputs.explore
+    farm = inputs.farm
+    monthly_grants = inputs.monthly_grants
+    recipes = inputs.recipes
+    open_flows = inputs.open_flows
+    demand = inputs.demand
+    inventory = inputs.inventory
+    cookie_sets = inputs.cookie_sets
+    prices = inputs.prices
+    pj_gain = inputs.pj_gain
+    pj_price = inputs.pj_price
+    pj_limit = inputs.pj_limit
+    model_calendar = inputs.model_calendar
+    start = inputs.start
+
+    horizon: timedelta | None = horizon_seed
     production = config.passive_production(
         cfg, today=start, monthly_grants=monthly_grants
     )
@@ -1154,8 +1215,10 @@ def run(args: argparse.Namespace) -> int:
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         )
         if not plans:
-            reporter.finish()
-            return 0  # nothing left to source
+            return FrontierResult(
+                plans=[], within=[], shown=[], offers=offers,
+                production=production, horizon=horizon,
+            )
         # The limits drop plans over a time or consumable ceiling, unless that
         # would leave none (then the whole frontier is shown, with a warning below).
         within = [
@@ -1172,25 +1235,30 @@ def run(args: argparse.Namespace) -> int:
             break
         horizon = new_horizon
 
-    cheapest = cheapest_plan(shown)
-    selected = selected_plan(shown, args.plan, args.cheapest_plan)
+    return FrontierResult(
+        plans=plans, within=within, shown=shown, offers=offers,
+        production=production, horizon=horizon,
+    )
 
-    if model_calendar:
-        dated = []
-        if any(name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})):
-            dated.append("seasonal pets")
-        if monthly_grants:
-            dated.append("the Mechanical Heart's grants")
-        reporter.note(
-            f"Starting {start:%d %b %Y}; {' and '.join(dated)} count only for "
-            "the part of the plan they fall in."
-        )
-    if not within:
-        reporter.note(
-            limit_shortfall(plans, time_limit, args.max_ap, args.max_ln, args.max_gold)
-        )
+
+@dataclass
+class PlanContextData:
+    """Report-only context derived from a solved frontier."""
+
+    cheapest: int
+    display: dict[str, str]
+    max_passive_residuals: dict[str, float]
+    reasons: list[str | None]
+    golds: list[tuple[float, float]] | None
+    sourceable_elsewhere: set[str]
+
+
+def derive_report_inputs(
+    inputs: SolveInputs, fr: FrontierResult, args: argparse.Namespace
+) -> PlanContextData:
+    cheapest = cheapest_plan(fr.shown)
     # Display names for the items a reason or the plan report may mention.
-    display = report.build_display(demand, workshop)
+    display = report.build_display(inputs.demand, inputs.workshop)
     # Full requirement yardstick: the passive residuals of the cheap endpoint (the
     # fastest fully self-sourced plan), for judging whether a resource is at its
     # complete gathering point (see print_critical_path, and the frontier reasons).
@@ -1199,47 +1267,141 @@ def run(args: argparse.Namespace) -> int:
     # understates some items (cider stamina from Apples cuts the Orange requirement)
     # and the fast plans overstate net materials (Antler) -- and thinning may drop it.
     reference = optimizer.self_sourced_endpoint(
-        offers, demand, recipes, args.crafting_bonus, openables=open_flows,
-        inventory=inventory, cookie_sets=cookie_sets, prices=prices,
+        fr.offers, inputs.demand, inputs.recipes, args.crafting_bonus,
+        openables=inputs.open_flows, inventory=inputs.inventory,
+        cookie_sets=inputs.cookie_sets, prices=inputs.prices,
     )
     max_passive_residuals = optimizer.passive_residuals(
-        reference, demand, recipes, args.crafting_bonus, open_flows, inventory
+        reference, inputs.demand, inputs.recipes, args.crafting_bonus,
+        inputs.open_flows, inputs.inventory,
     )
     reasons = report._frontier_reasons(
-        shown, demand, recipes, args.crafting_bonus, open_flows, inventory,
-        max_passive_residuals, production, display,
+        fr.shown, inputs.demand, inputs.recipes, args.crafting_bonus,
+        inputs.open_flows, inputs.inventory, max_passive_residuals,
+        fr.production, display,
     )
     # Split each plan's gold into what must still be bought vs. what the plan makes
     # or holds passively (Large Nets from straw/wood/stone/antlers, cookie sets from
     # held cookies, etc.). Cookie sets come from held cookies, so credit the plan's
     # allowance as a holding (there is no "cookie set" inventory line).
     golds = None
-    if prices is not None:
-        golds = [optimizer.plan_gold_breakdown(p, prices) for p in shown]
-    reporter.frontier(shown, selected, cheapest, reasons, prices, golds)
-    chosen = shown[selected]
-    solution.arnold_palmers = round(chosen.arnold_palmers)
-    solution.large_nets = round(chosen.large_nets)
+    if inputs.prices is not None:
+        golds = [optimizer.plan_gold_breakdown(p, inputs.prices) for p in fr.shown]
     # Items a consumable channel can supply: growing one of these is optional fill,
     # not a farming bottleneck (see print_critical_path).
     sourceable_elsewhere = {
-        key for offer in offers
+        key for offer in fr.offers
         if offer.track in (sources.FISHING_TRACK, sources.EXPLORING_TRACK)
         for key in offer.yields
     }
-    for flow in open_flows:
+    for flow in inputs.open_flows:
         sourceable_elsewhere |= set(flow.yields)
+    return PlanContextData(
+        cheapest=cheapest,
+        display=display,
+        max_passive_residuals=max_passive_residuals,
+        reasons=reasons,
+        golds=golds,
+        sourceable_elsewhere=sourceable_elsewhere,
+    )
+
+
+def run(args: argparse.Namespace) -> int:
+    if args.pager and args.format != "markdown":
+        raise ValueError("--pager requires --format markdown")
+    # All output goes through this: text prints immediately (today's behaviour),
+    # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
+    reporter = report.build_reporter(args.format, pager=args.pager)
+    cfg = load_config()
+    apply_overrides(cfg, args.override)
+    # Select the LP backend before anything solves; the flag beats the config.
+    backend = args.solver or cfg.get("solver", {}).get("backend")
+    if backend:
+        optimizer.set_solver_backend(backend)
+    workshop = crafting.load_workshop()
+    fish = fishing.fishing_from_config(cfg.get("fishing", {}))
+    start = args.start_date or date.today()
+
+    # A standalone report over the whole workshop; no solving needed. Use the
+    # steady-state producers (no plan span) so every pet's items are counted.
+    # No inventory file is read for this report, so the Fungus Processing and
+    # Scythe of Dewstar / Dewstar's Journal checks fall back to config overrides
+    # only.
+    if args.unobtainable:
+        farm = crops.farm_from_config(
+            cfg.get("farming", {}),
+            have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg),
+            have_dewstars_journal=resolve_dewstars_journal(cfg),
+        )
+        explore = exploring.exploring_from_config(
+            cfg.get("exploring", {}),
+            have_fungus_processing=resolve_fungus_processing(cfg),
+        )
+        production = config.passive_production(
+            cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)
+        )
+        obtainable = obtainable_items(production, farm, fish, explore)
+        reporter.unobtainable(unobtainable_materials(workshop, obtainable))
+        reporter.finish()
+        return 0
+
+    # The mastery and inventory files come from the command line, falling back
+    # to the [solver] config section.
+    mastery_file, inventory_file = resolve_files(args, cfg)
+
+    state = load_state(mastery_file, inventory_file)
+    if args.override_inventory is not None:
+        apply_inventory_overrides(
+            state.inventory, parsing.parse_item_amounts(args.override_inventory)
+        )
+
+    inputs = build_inputs(args, cfg, state)
+    reporter.solution(inputs.solution)
+
+    fr = solve_frontier(inputs, args, cfg)
+    if not fr.plans:
+        reporter.finish()
+        return 0  # nothing left to source
+
+    selected = selected_plan(fr.shown, args.plan, args.cheapest_plan)
+    ctx = derive_report_inputs(inputs, fr, args)
+
+    if inputs.model_calendar:
+        dated = []
+        if any(name.lower() in pets.SEASONAL_MONTHS for name in cfg.get("pets", {})):
+            dated.append("seasonal pets")
+        if inputs.monthly_grants:
+            dated.append("the Mechanical Heart's grants")
+        reporter.note(
+            f"Starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only for "
+            "the part of the plan they fall in."
+        )
+    if not fr.within:
+        reporter.note(
+            limit_shortfall(
+                fr.plans, inputs.time_limit, args.max_ap, args.max_ln, args.max_gold
+            )
+        )
+    reporter.frontier(
+        fr.shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds
+    )
+    chosen = fr.shown[selected]
+    inputs.solution.arnold_palmers = round(chosen.arnold_palmers)
+    inputs.solution.large_nets = round(chosen.large_nets)
     # When to drink each Pumpkin Juice: the mastery levels (near the goal, in the
     # item's final tier) that land its intended boost -- shown in the plan's report.
-    pj_schedule = pumpkin_juice_schedule(chosen, solution.needs, pj_gain)
+    pj_schedule = pumpkin_juice_schedule(
+        chosen, inputs.solution.needs, inputs.pj_gain
+    )
     reporter.plan(
-        chosen, demand, farm, workshop, args.crafting_bonus, production,
-        open_flows, smith.names, inventory, sourceable_elsewhere,
-        max_passive_residuals, prices, pj_schedule,
+        chosen, inputs.demand, inputs.farm, inputs.workshop, args.crafting_bonus,
+        fr.production, inputs.open_flows, inputs.smith.names, inputs.inventory,
+        ctx.sourceable_elsewhere, ctx.max_passive_residuals, inputs.prices,
+        pj_schedule,
     )
 
     if args.breakdown:
-        reporter.crafts(chosen, workshop, args.crafting_bonus, args.mastery_bonus)
+        reporter.crafts(chosen, inputs.workshop, args.crafting_bonus, args.mastery_bonus)
     reporter.finish()
     return 0
 

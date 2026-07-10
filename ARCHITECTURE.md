@@ -41,7 +41,22 @@ Net / Orange Juice must be crafted or gathered.
 
 ## Pipeline (one run)
 
-`main.run(args)` orchestrates, roughly:
+`main.run(args)` orchestrates, roughly, by delegating most of the work to three
+stage functions (split out so a non-CLI caller — the web app, see below — can
+drive the same pipeline from an already-built `GameState` instead of files):
+`main.build_inputs(args, cfg, state)` does goal-solving and channel/demand setup,
+returning a `SolveInputs` (state, farm/explore/fish/workshop, the solved
+`Solution`, recipes/smith/open_flows, demand, inventory, cookie_sets, prices,
+pumpkin-juice terms, `model_calendar`, `start`); `main.solve_frontier(inputs,
+args, cfg, horizon_seed=None)` runs the seasonal fixed-point loop and the
+frontier sweep, returning a `FrontierResult` (`plans`/`within`/`shown`, `offers`,
+`production`, the converged `horizon` — `horizon_seed` lets a caller resume the
+fixed point instead of restarting it, used by the web API's horizon-guard
+re-solve); `main.derive_report_inputs(inputs, fr, args)` computes the report-only
+context (`cheapest`, `display`, `max_passive_residuals`, `reasons`, `golds`,
+`sourceable_elsewhere`) into a `PlanContextData`. `run()` itself keeps setup,
+file loading and the `--unobtainable` early exit, then calls the three in order
+and drives the `Reporter` off their results:
 
 1. **Load state** — `main.load_state` → `parsing` builds `farm_solver.GameState`
    (masteries + inventory) from the pasted-in text files, then
@@ -95,7 +110,7 @@ frontier as before.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
+| `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
