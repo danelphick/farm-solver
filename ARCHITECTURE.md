@@ -82,10 +82,10 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 ## Module map
 
 | File | Owns | Key names |
-|---|---|---|
+| --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -367,13 +367,17 @@ buildings.
 
 ## Dependency
 
-One runtime dep: **PuLP** (with its bundled CBC solver). Chosen over SciPy/HiGHS
-because it installs from a pure-Python wheel on 3.14 with no numpy/BLAS/ABI risk,
-its declarative model reads like the codebase, and flipping units to integer
-(MILP — whole nets/palmers, instead of rounding the LP solution at reporting) is a
-one-keyword change. We solve only a handful of tiny LPs per run, so CBC's
-subprocess overhead is immaterial. NSGA-II/pymoo was rejected: the LP frontier is
-piecewise-linear/convex, so scalarise-and-sweep recovers every vertex exactly.
+**PuLP** is the modelling layer (declarative, reads like the codebase, and
+flipping units to integer MILP is a one-keyword change); the backend that solves
+each LP is pluggable (`optimizer.set_solver_backend`, `[solver] backend` /
+`--solver`, any PuLP solver by name). The default is **HiGHS** via `highspy`
+(binary wheels on 3.14; pulls in numpy): a run makes hundreds of sub-millisecond
+LPs, and HiGHS solves in-process where the bundled **CBC** — the fallback when
+highspy is missing, since PuLP ships its binary — pays ~8 ms of subprocess
+startup per solve (once ~75% of the runtime). Alternate optima differ between
+backends just as they do between CBC runs; the refinement tower in `minimize`
+pins the reported metrics either way. NSGA-II/pymoo was rejected: the LP frontier
+is piecewise-linear/convex, so scalarise-and-sweep recovers every vertex exactly.
 
 ## Dev workflow
 

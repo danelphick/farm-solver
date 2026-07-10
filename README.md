@@ -25,10 +25,13 @@ Instead of naming a fixed file, you can point `data_directory` at a folder of da
 data_directory = "./mydata"
 ```
 
+The LP backend is selectable with `backend` under `[solver]`, or `--solver NAME` for a one-off run (the flag wins). The default is `highs`, which solves in-process and is much faster; `cbc` (PuLP's bundled solver, and the fallback whenever the `highspy` package is missing) needs no extra dependency but launches a subprocess per solve. Any other installed [PuLP solver](https://coin-or.github.io/pulp/technical/solvers.html) can be named too (e.g. `GLPK_CMD`). Plans differing only in which equally-good alternative fills the same time and gold can differ between backends, just as they can between runs.
+
 ```shell
 python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--model-calendar | --average-seasons] \
+    [--solver highs|cbc|NAME] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
     [--empty-mastery] [--empty-inventory] [--override-inventory item:amount]

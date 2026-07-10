@@ -454,6 +454,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--solver",
+        metavar="NAME",
+        default=None,
+        help=(
+            "LP solver backend: 'highs' (in-process, the default when highspy "
+            "is installed), 'cbc' (PuLP's bundled fallback), or any installed "
+            "PuLP solver name; overrides solver.backend in the config"
+        ),
+    )
+    parser.add_argument(
         "--crafting-bonus",
         type=float,
         default=crafting.DEFAULT_CRAFTING_BONUS,
@@ -913,6 +923,10 @@ def load_config() -> dict:
 def run(args: argparse.Namespace) -> int:
     cfg = load_config()
     apply_overrides(cfg, args.override)
+    # Select the LP backend before anything solves; the flag beats the config.
+    backend = args.solver or cfg.get("solver", {}).get("backend")
+    if backend:
+        optimizer.set_solver_backend(backend)
     workshop = crafting.load_workshop()
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
     start = args.start_date or date.today()

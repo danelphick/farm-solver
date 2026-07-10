@@ -100,6 +100,42 @@ _MIN_CAP_SAMPLES = 40
 # own makespan, and one hugging an endpoint would just duplicate it.
 _CAP_MARGIN = 0.005
 
+# The LP backend. PuLP is the modelling layer, so any of its solvers can run
+# these problems; the run makes hundreds of sub-millisecond solves, so what
+# matters is per-solve overhead. HiGHS (via highspy) solves in-process and is
+# the default whenever it is installed; CBC -- PuLP's bundled, zero-extra-
+# dependency fallback -- launches a subprocess per solve (~8 ms of process
+# startup each), which once dominated the whole run. Other PuLP solvers
+# (``pulp.listSolvers()``) bolt on by name through :func:`set_solver_backend`.
+_SOLVER_BACKENDS = {
+    "highs": lambda: pulp.HiGHS(msg=False),
+    "cbc": lambda: pulp.PULP_CBC_CMD(msg=0),
+}
+_backend = "highs" if pulp.HiGHS(msg=False).available() else "cbc"
+
+
+def set_solver_backend(name: str) -> None:
+    """Select the LP backend: a key of ``_SOLVER_BACKENDS`` (case-insensitive),
+    or any installed PuLP solver name for bolt-on solvers. Raises ValueError
+    for an unknown or unavailable one, naming the choices."""
+    global _backend
+    if name.lower() in _SOLVER_BACKENDS:
+        _backend = name.lower()
+        return
+    if name in pulp.listSolvers(onlyAvailable=True):
+        _backend = name
+        return
+    choices = sorted(_SOLVER_BACKENDS) + sorted(
+        set(pulp.listSolvers(onlyAvailable=True)) - {"HiGHS", "PULP_CBC_CMD"}
+    )
+    raise ValueError(f"unknown solver backend {name!r} (choices: {', '.join(choices)})")
+
+
+def _solver() -> pulp.LpSolver:
+    """A fresh configured solver for one solve, per the selected backend."""
+    factory = _SOLVER_BACKENDS.get(_backend)
+    return factory() if factory else pulp.getSolver(_backend, msg=0)
+
 
 def all_offers(
     production: PassiveProduction,
@@ -563,7 +599,7 @@ def minimize(
     for terms in tracks.values():
         problem += pulp.lpSum(terms) <= makespan
 
-    problem.solve(pulp.PULP_CBC_CMD(msg=0))
+    problem.solve(_solver())
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
     # optima CBC picks between at random across processes. Refine it in a
@@ -601,7 +637,7 @@ def minimize(
         # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
         if buy or buy_cookie is not None or pj:
             problem.setObjective(gold)
-            problem.solve(pulp.PULP_CBC_CMD(msg=0))
+            problem.solve(_solver())
             problem += gold <= (pulp.value(gold) or 0.0) * (1 + 1e-9) + 1e-9
 
         # Stage 3 -- least activity, so no reported metric moves.
@@ -610,7 +646,7 @@ def minimize(
             + pulp.lpSum(buy.values()) + pulp.lpSum(pj.values())
             + (buy_cookie if buy_cookie is not None else 0)
         )
-        problem.solve(pulp.PULP_CBC_CMD(msg=0))
+        problem.solve(_solver())
 
     draws = [
         Draw(offer, units)
@@ -849,7 +885,7 @@ def surplus_sale_value(
     for expr in net.values():
         problem += expr >= 0  # cannot consume more of a material than is available
     problem += pulp.lpSum(prices[item] * net[item] for item in sellable)
-    problem.solve(pulp.PULP_CBC_CMD(msg=0))
+    problem.solve(_solver())
     if pulp.LpStatus[problem.status] != "Optimal":
         return []
     rows = [
