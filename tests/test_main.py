@@ -117,23 +117,23 @@ def test_should_model_calendar_is_off_by_default():
     assert not _should_model_calendar({"Wolf": 8}, average_seasons=False)
 
 
-def test_should_model_calendar_when_config_opts_in_with_a_seasonal_pet():
+def test_should_model_calendar_when_opted_in_with_a_seasonal_pet():
     assert _should_model_calendar(
-        {"Wolf": 8, "model_calendar": True}, average_seasons=False
+        {"Wolf": 8}, average_seasons=False, model_calendar=True
     )
 
 
 def test_average_seasons_forces_the_calendar_off():
-    # The CLI flag overrides the config opt-in.
+    # --average-seasons overrides the opt-in.
     assert not _should_model_calendar(
-        {"Wolf": 8, "model_calendar": True}, average_seasons=True
+        {"Wolf": 8}, average_seasons=True, model_calendar=True
     )
 
 
 def test_should_model_calendar_needs_an_actual_seasonal_pet():
-    # Opting in with only year-round pets has nothing to model.
+    # Opting in with only year-round pets (and no grants) has nothing to model.
     assert not _should_model_calendar(
-        {"Dog": 8, "model_calendar": True}, average_seasons=False
+        {"Dog": 8}, average_seasons=False, model_calendar=True
     )
 
 
@@ -150,7 +150,7 @@ def test_model_calendar_flag_and_average_seasons_are_mutually_exclusive():
 
 
 def test_model_calendar_flag_overrides_the_config_off():
-    # The CLI flag opts in even when pets.model_calendar is unset.
+    # The CLI flag opts in even when solver.model_calendar is unset.
     assert _should_model_calendar(
         {"Wolf": 8}, average_seasons=False, model_calendar=True
     )
@@ -175,7 +175,7 @@ def test_monthly_grants_are_a_dated_source_even_without_a_seasonal_pet():
     # The Mechanical Heart's grants are date-dependent, so they alone justify the
     # calendar model even when every pet is year-round.
     assert _should_model_calendar(
-        {"Dog": 8, "model_calendar": True}, average_seasons=False, monthly_grants=True
+        {"Dog": 8}, average_seasons=False, model_calendar=True, monthly_grants=True
     )
     # ...but not when the calendar is not opted into at all.
     assert not _should_model_calendar(
@@ -183,7 +183,7 @@ def test_monthly_grants_are_a_dated_source_even_without_a_seasonal_pet():
     )
     # ...and --average-seasons still forces it off.
     assert not _should_model_calendar(
-        {"Dog": 8, "model_calendar": True}, average_seasons=True, monthly_grants=True
+        {"Dog": 8}, average_seasons=True, model_calendar=True, monthly_grants=True
     )
 
 

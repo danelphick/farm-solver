@@ -6,6 +6,11 @@
 data_directory = "./mydata"
 # mastery_file = "./sample-mastery.txt"
 # inventory_file = "./sample-inventory.txt"
+# Model the calendar so date-dependent sources -- a seasonal pet, the Mechanical
+# Heart's monthly grants -- only count for the part of the plan they fall in (uses
+# the plan's --start-date; costs an extra solve). Off by default (yearly average);
+# --model-calendar / --average-seasons override it on / off for one run.
+model_calendar = false
 
 [storehouse]
 inventory = 49620
@@ -155,9 +160,6 @@ pumpkin_juice_price = 230   # nominal gold cost of one Pumpkin Juice
 
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
-# Model the calendar so a seasonal pet only counts while in season (uses the
-# plan's --start-date; costs an extra solve). Off by default (yearly average).
-model_calendar = false
 "Cat" = 8
 "Wolf" = 8
 "Owl" = 8
