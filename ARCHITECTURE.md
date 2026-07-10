@@ -287,13 +287,20 @@ shared pieces:
   vs. a table row.
 
 `report.Reporter` (`TextReporter`/`MarkdownReporter`, picked by
-`report.build_reporter(args.format)`) is the facade `main.run` calls through, so
-it never branches on `--format` itself. `MarkdownReporter` buffers into a
-`MarkdownDoc` (one block per heading/paragraph/bullet-list/table) and only
-renders in `.finish()`: via `rich.markdown.Markdown` through `rich.console.Console`
-when stdout is a terminal, or by printing the Markdown source as-is otherwise --
-so redirecting to a file (`> report.md`) gets real Markdown, not rich's
-word-wrapped rendering of it.
+`report.build_reporter(args.format, pager=...)`) is the facade `main.run` calls
+through, so it never branches on `--format` itself. `MarkdownReporter` buffers
+into a `MarkdownDoc` (one block per heading/paragraph/bullet-list/table) and
+only renders in `.finish()`: via `rich.markdown.Markdown` through
+`rich.console.Console` when stdout is a terminal, or by printing the Markdown
+source as-is otherwise -- so redirecting to a file (`> report.md`) gets real
+Markdown, not rich's word-wrapped rendering of it. `--pager` (Markdown +
+terminal only; `main.run` rejects it otherwise) wraps that same `console.print`
+in `console.pager(styles=True)`, which captures the rendered segments and hands
+them to `rich`'s `SystemPager` (`pydoc.pager` under the hood: `$PAGER`/`$MANPAGER`,
+else `less`, already invoked with `LESS=-R...` for ANSI passthrough). This only
+works because *we* launch the pager as a subprocess after rendering -- piping
+this process's own stdout to a pager externally makes stdout a non-tty before
+`.finish()` ever runs, so it takes the raw-source branch instead of the styled one.
 
 ## Printing conventions (report.print_plan)
 

@@ -651,6 +651,16 @@ def build_parser() -> argparse.ArgumentParser:
             "to a .md file)"
         ),
     )
+    parser.add_argument(
+        "--pager",
+        action="store_true",
+        help=(
+            "page the rendered report through the system pager ($PAGER, else "
+            "less), preserving the rendered tables and styling -- unlike piping "
+            "this process's own output to a pager, which would just show the "
+            "raw Markdown source. Requires --format markdown and a terminal"
+        ),
+    )
 
     return parser
 
@@ -947,9 +957,11 @@ def load_config() -> dict:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.pager and args.format != "markdown":
+        raise ValueError("--pager requires --format markdown")
     # All output goes through this: text prints immediately (today's behaviour),
     # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
-    reporter = report.build_reporter(args.format)
+    reporter = report.build_reporter(args.format, pager=args.pager)
     cfg = load_config()
     apply_overrides(cfg, args.override)
     # Select the LP backend before anything solves; the flag beats the config.

@@ -1836,10 +1836,21 @@ class TextReporter(Reporter):
 
 
 class MarkdownReporter(Reporter):
-    """Buffers the whole report as Markdown, rendered once in :meth:`finish`."""
+    """Buffers the whole report as Markdown, rendered once in :meth:`finish`.
 
-    def __init__(self) -> None:
+    ``pager`` runs the rendered output through the system pager (`rich`'s
+    ``Console.pager``, which shells out via :mod:`pydoc` -- respecting
+    ``$PAGER``/``$MANPAGER``, else ``less``, with ANSI passthrough already set
+    via its ``LESS`` env var). This is different from piping the process's own
+    stdout to a pager externally: that makes stdout a non-tty *before* we ever
+    see it, so :meth:`finish` would take the raw-source branch below and the
+    pager would show unrendered Markdown, not the styled tables. Here the pager
+    is a subprocess *we* launch, so our own stdout stays the terminal throughout.
+    """
+
+    def __init__(self, pager: bool = False) -> None:
         self.doc = MarkdownDoc()
+        self.pager = pager
 
     def solution(self, solution: farm_solver.Solution) -> None:
         markdown_solution(self.doc, solution)
@@ -1861,17 +1872,27 @@ class MarkdownReporter(Reporter):
 
     def finish(self) -> None:
         text = self.doc.render()
-        if sys.stdout.isatty():
-            Console().print(RichMarkdown(text))
-        else:
+        if not sys.stdout.isatty():
             # Not a terminal (e.g. redirected to a file): print the Markdown
             # source itself, so the redirected output is a real .md file rather
-            # than rich's word-wrapped rendering of it.
+            # than rich's word-wrapped rendering of it. A pager would have
+            # nothing to attach to here either, so it's ignored in this case.
             print(text)
+            return
+        console = Console()
+        if self.pager:
+            with console.pager(styles=True):
+                console.print(RichMarkdown(text))
+        else:
+            console.print(RichMarkdown(text))
 
 
-def build_reporter(format_: str) -> Reporter:
-    """The :class:`Reporter` for ``--format`` (``"text"`` or ``"markdown"``)."""
+def build_reporter(format_: str, pager: bool = False) -> Reporter:
+    """The :class:`Reporter` for ``--format`` (``"text"`` or ``"markdown"``).
+
+    ``pager`` (Markdown only) pages the rendered output through the system
+    pager instead of dumping it straight to the terminal.
+    """
     if format_ == "markdown":
-        return MarkdownReporter()
+        return MarkdownReporter(pager=pager)
     return TextReporter()
