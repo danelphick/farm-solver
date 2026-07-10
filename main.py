@@ -195,6 +195,34 @@ def resolve_dewstars_journal(
     return inventory.amount(DEWSTARS_JOURNAL_ARTIFACT) > 0
 
 
+# The tower level whose completion grants the Mechanical Heart -- the artifact
+# handing over a monthly bulk of Apple Cider and Arnold Palmer (config.MONTHLY_GRANTS).
+MONTHLY_GRANT_TOWER_LEVEL = 300
+
+
+def resolve_monthly_grants(
+    cfg: dict,
+    state: farm_solver.GameState | None = None,
+    requirements: farm_solver.TowerRequirements | None = None,
+) -> bool:
+    """Whether the Mechanical Heart's monthly grants (see config.MONTHLY_GRANTS) apply.
+
+    Like the Scythe of Dewstar, the Mechanical Heart is a tower reward, not a
+    held item, so it has no inventory presence to auto-detect: with a ``state``
+    and ``requirements`` to check, ``farm_solver.has_tower_level`` at
+    :data:`MONTHLY_GRANT_TOWER_LEVEL` (tower level 300) stands in for holding it.
+    ``exploring.have_mechanical_heart`` in the config overrides the check either
+    way; with nothing to check (the ``--unobtainable`` report) and no override,
+    it defaults to off.
+    """
+    override = cfg.get("exploring", {}).get("have_mechanical_heart")
+    if override is not None:
+        return bool(override)
+    if state is None or requirements is None:
+        return False
+    return farm_solver.has_tower_level(state, requirements, MONTHLY_GRANT_TOWER_LEVEL)
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     state: farm_solver.GameState,
@@ -882,7 +910,9 @@ def run(args: argparse.Namespace) -> int:
             cfg.get("exploring", {}),
             have_fungus_processing=resolve_fungus_processing(cfg),
         )
-        production = config.passive_production(cfg, today=start)
+        production = config.passive_production(
+            cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)
+        )
         obtainable = obtainable_items(production, farm, fish, explore)
         report.print_unobtainable(unobtainable_materials(workshop, obtainable))
         return 0
@@ -916,6 +946,10 @@ def run(args: argparse.Namespace) -> int:
         cfg.get("exploring", {}),
         have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
     )
+    # The T300 tower artifact grants a monthly bulk of Apple Cider / Arnold Palmer
+    # (config.MONTHLY_GRANTS), auto-detected from the tower level like the Scythe;
+    # added to passive production below (scaled to the plan span, like a pet).
+    monthly_grants = resolve_monthly_grants(cfg, state, requirements)
 
     # Without --target, -m/-i solve for that goal alone, ignoring the tower (the
     # previous behaviour). With --target given, they instead layer on top of the
@@ -983,7 +1017,9 @@ def run(args: argparse.Namespace) -> int:
     # settles. Otherwise a single steady-state pass (horizon None) is enough.
     model_calendar = _should_model_calendar(cfg.get("pets", {}), args.average_seasons)
     horizon: timedelta | None = None
-    production = config.passive_production(cfg, today=start)
+    production = config.passive_production(
+        cfg, today=start, monthly_grants=monthly_grants
+    )
     # Assigned in the loop below (which always runs at least once); declared here
     # so the data flow past the loop is explicit rather than leaking out of it.
     shown: list[optimizer.SourcingPlan] = []
@@ -992,7 +1028,8 @@ def run(args: argparse.Namespace) -> int:
     within: list[optimizer.SourcingPlan] = []
     for _ in range(_MAX_SEASON_ITERS):
         production = config.passive_production(
-            cfg, today=start, start=start, horizon=horizon
+            cfg, today=start, start=start, horizon=horizon,
+            monthly_grants=monthly_grants,
         )
         offers = optimizer.all_offers(production, fish, explore, farm)
         plans = optimizer.frontier(

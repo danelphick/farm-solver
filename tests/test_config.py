@@ -3,7 +3,13 @@ from datetime import date, timedelta
 
 import pytest
 
-from config import load_config, passive_production, storehouse_size, trading_prices
+from config import (
+    MONTHLY_GRANT_PRODUCER,
+    load_config,
+    passive_production,
+    storehouse_size,
+    trading_prices,
+)
 from passive import DAILY, HOURLY, MINUTE
 
 
@@ -400,6 +406,46 @@ def test_pets_with_no_level_are_not_producers():
     # The boost flag alone leaves every pet at level 0, so none produce.
     production = passive_production({"pets": {"use_crunchy_omelette": True}})
     assert not any(p.name.startswith("pet ") for p in production.producers)
+
+
+def test_monthly_grants_off_by_default():
+    # Without the flag the tower-artifact producer is absent.
+    production = passive_production({})
+    assert not any(p.name == MONTHLY_GRANT_PRODUCER for p in production.producers)
+
+
+def test_monthly_grants_add_steady_state_daily_producers():
+    # With no plan span the grants are their steady-state monthly average spread
+    # over a ~30.4-day month: 3000 cider and 2000 Arnold Palmer a month.
+    production = passive_production({}, monthly_grants=True)
+    grants = [p for p in production.producers if p.name == MONTHLY_GRANT_PRODUCER]
+    assert all(p.period == DAILY for p in grants)
+    per_month = 365 / 12
+    assert production.rate_per_minute("apple cider") == pytest.approx(
+        3000 / per_month / 1440
+    )
+    assert production.rate_per_minute("arnold palmer") == pytest.approx(
+        2000 / per_month / 1440
+    )
+
+
+def test_monthly_grants_count_the_days_that_land_in_the_plan_window():
+    # A 31-day plan from the 1st catches one 7th (cider) and one 14th (AP), each
+    # spread evenly across the 31 days.
+    production = passive_production(
+        {}, start=date(2026, 7, 1), horizon=timedelta(days=31), monthly_grants=True
+    )
+    assert production.rate_per_minute("apple cider") == pytest.approx(3000 / 31 / 1440)
+    assert production.rate_per_minute("arnold palmer") == pytest.approx(2000 / 31 / 1440)
+
+
+def test_monthly_grant_that_never_lands_in_the_window_is_dropped():
+    # A 5-day plan from the 8th misses both the 7th and the 14th, so neither grant
+    # produces anything and no tower-artifact producer is listed.
+    production = passive_production(
+        {}, start=date(2026, 7, 8), horizon=timedelta(days=5), monthly_grants=True
+    )
+    assert not any(p.name == MONTHLY_GRANT_PRODUCER for p in production.producers)
 
 
 def test_passive_production_without_sawmill_is_empty():

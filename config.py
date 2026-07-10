@@ -16,6 +16,7 @@ import crafting
 import pets
 from passive import (
     DAILY,
+    DAYS_PER_YEAR,
     HOURLY,
     MINUTE,
     TEN_MINUTES,
@@ -54,6 +55,7 @@ def passive_production(
     today: date | None = None,
     start: date | None = None,
     horizon: timedelta | None = None,
+    monthly_grants: bool = False,
 ) -> PassiveProduction:
     """Build the passive producers described by ``config``.
 
@@ -92,6 +94,11 @@ def passive_production(
       (inventory plan mode); see :func:`_farmhouse_producer`.
     * ``[pets]`` -- each listed pet fetches its average daily haul of items (see
       :func:`_pet_producers` and :mod:`pets`), as a daily producer.
+
+    With ``monthly_grants`` on (the auto-detected tower artifact, see
+    :func:`main.resolve_monthly_grants`), the monthly consumable grants
+    (:data:`MONTHLY_GRANTS`) are added as daily producers of their averaged
+    per-day supply over the plan span (see :func:`_monthly_grant_producers`).
 
     The storehouse size (see :func:`storehouse_size`) is attached so production
     rates respect how much can be held at once.
@@ -352,6 +359,9 @@ def passive_production(
     if pets_config:
         producers.extend(_pet_producers(pets_config, start, horizon))
 
+    if monthly_grants:
+        producers.extend(_monthly_grant_producers(start, horizon))
+
     return PassiveProduction(
         producers=producers, inventory_size=storehouse_size(config, today)
     )
@@ -418,6 +428,70 @@ def _pet_producers(
                 name=f"{PET_PRODUCER_PREFIX}{pet.name}", period=DAILY, outputs=outputs
             )
         )
+    return producers
+
+
+# The Mechanical Heart's grants (the tower-level-300 artifact, auto-detected, see
+# main.resolve_monthly_grants): a bulk of a consumable landing on a fixed
+# day-of-month every month, as ``(lower-cased item, day-of-month, amount)``.
+MONTHLY_GRANTS: tuple[tuple[str, int, int], ...] = (
+    ("apple cider", 7, 3000),
+    ("arnold palmer", 14, 2000),
+)
+
+# Name of the passive producer standing in for those grants.
+MONTHLY_GRANT_PRODUCER = "Mechanical Heart"
+
+# Average days in a month (365/12), for a grant's steady-state daily rate.
+_DAYS_PER_MONTH = DAYS_PER_YEAR / 12
+
+# Beyond this span the start-date phase washes out and each grant settles to its
+# steady-state monthly share (mirrors pets._STEADY_STATE_DAYS).
+_GRANT_STEADY_STATE_DAYS = 3 * DAYS_PER_YEAR
+
+
+def _monthly_grant_daily_rate(
+    day: int, amount: int, start: date | None, horizon: timedelta | None
+) -> float:
+    """Average per-day supply from a monthly grant of ``amount`` on ``day``.
+
+    The grant lands once a month, on the ``day``-of-month. Over a plan running
+    ``horizon`` from ``start`` this counts how many land in the window and
+    spreads the total evenly across the span -- the same shape as a seasonal
+    pet's haul scaled by its in-window days (see :func:`pets.seasonal_fraction`).
+    With no ``start``/``horizon`` -- or a span of several years, where the start
+    phase washes out -- it is the steady-state monthly average.
+    """
+    if start is None or horizon is None:
+        return amount / _DAYS_PER_MONTH
+    total_days = horizon.total_seconds() / 86400
+    if total_days <= 0 or total_days >= _GRANT_STEADY_STATE_DAYS:
+        return amount / _DAYS_PER_MONTH
+    span = max(1, round(total_days))
+    grants = sum(1 for i in range(span) if (start + timedelta(days=i)).day == day)
+    return grants * amount / span
+
+
+def _monthly_grant_producers(
+    start: date | None, horizon: timedelta | None
+) -> list[PassiveProducer]:
+    """Daily producers for the monthly tower-artifact grants (see MONTHLY_GRANTS).
+
+    Each grant is spread to an average daily rate over the plan span (see
+    :func:`_monthly_grant_daily_rate`) and modelled as a daily producer, the same
+    shape as a pet's averaged haul. A grant that never lands in the span produces
+    nothing and is skipped. The amounts (thousands) stay well under any storehouse
+    cap, so like a pet these are not meaningfully clamped by it.
+    """
+    producers: list[PassiveProducer] = []
+    for item, day, amount in MONTHLY_GRANTS:
+        rate = _monthly_grant_daily_rate(day, amount, start, horizon)
+        if rate > 0:
+            producers.append(
+                PassiveProducer(
+                    name=MONTHLY_GRANT_PRODUCER, period=DAILY, outputs={item: rate}
+                )
+            )
     return producers
 
 

@@ -16,6 +16,7 @@ from farm_solver import (
 )
 from main import (
     DEWSTAR_TOWER_LEVEL,
+    MONTHLY_GRANT_TOWER_LEVEL,
     _should_model_calendar,
     apply_inventory_overrides,
     build_parser,
@@ -28,6 +29,7 @@ from main import (
     pumpkin_juice_schedule,
     resolve_dewstars_journal,
     resolve_fungus_processing,
+    resolve_monthly_grants,
     resolve_pumpkin_juice,
     resolve_scythe_of_dewstar,
     selected_plan,
@@ -1283,6 +1285,55 @@ def test_resolve_dewstars_journal_config_override_wins():
     assert (
         resolve_dewstars_journal(
             {"farming": {"have_dewstars_journal": True}}, Inventory()
+        )
+        is True
+    )
+
+
+def test_resolve_monthly_grants_defaults_off_with_nothing_to_check():
+    # A tower perk, not a held item -- with no state/requirements (e.g.
+    # --unobtainable), only the config counts.
+    assert resolve_monthly_grants({}) is False
+    assert resolve_monthly_grants({"exploring": {"have_mechanical_heart": False}}) is False
+
+
+def test_resolve_monthly_grants_auto_detects_from_the_tower_level():
+    requirements = TowerRequirements(
+        levels={MONTHLY_GRANT_TOWER_LEVEL: {"Butter": 1_000_000}}
+    )
+    # Every requirement through level 300 met: the tower solve reports no
+    # shortfall, so the grants are assumed active.
+    complete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1_000_000, required=None)}
+    )
+    assert resolve_monthly_grants({}, complete, requirements) is True
+    # A shortfall anywhere through the level means it isn't reached yet.
+    incomplete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1, required=1_000_000)}
+    )
+    assert resolve_monthly_grants({}, incomplete, requirements) is False
+    # Nothing to check (unobtainable report) defaults to off.
+    assert resolve_monthly_grants({}, complete, None) is False
+    assert resolve_monthly_grants({}, None, requirements) is False
+
+
+def test_resolve_monthly_grants_config_override_wins():
+    requirements = TowerRequirements(
+        levels={MONTHLY_GRANT_TOWER_LEVEL: {"Butter": 1_000_000}}
+    )
+    complete = GameState(
+        masteries={"butter": Mastery("Butter", progress=1_000_000, required=None)}
+    )
+    # Override off beats a met tower; override on beats an unmet one.
+    assert (
+        resolve_monthly_grants(
+            {"exploring": {"have_mechanical_heart": False}}, complete, requirements
+        )
+        is False
+    )
+    assert (
+        resolve_monthly_grants(
+            {"exploring": {"have_mechanical_heart": True}}, GameState(), requirements
         )
         is True
     )

@@ -2,10 +2,6 @@
 
 - Cap opening chests - config flag to list chests that should not be consumed.
 
-- T300 Artifact: On the 7th day of every month, the player gets 3000 Apple Cider, while on the 14th
-  day of every month they get 2000 Arnold Palmer. This should be auto-detected like the Scythe of
-  Dewstar by looking at the Tower level achieved.
-
 - Prune Juice - resets Grape Juice allocation for the day and so allows speedier farming at a cost.
 
 - Veggie Juice - reduces crop length by 10%. Multiple can be drunk to reduce to a minimum of 1

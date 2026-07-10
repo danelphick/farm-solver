@@ -390,6 +390,8 @@ use_neigh = true                 # then ×0.8 stamina again (meal)
 
 # have_fungus_processing = true  # force Gary's Crushroom's drop table on/off;
                                   # unset auto-detects the artifact from inventory
+# have_mechanical_heart = true     # force the T300 monthly cider/palmer grants
+                                  # on/off; unset auto-detects from having T300
 
 [exploring.effectiveness]        # per-zone Exploring Effectiveness for cider
 Forest = 136
@@ -463,3 +465,14 @@ The **Scythe of Dewstar** adds 4 bonus crops per row to every harvest (so `4 * r
 For example, growing Carrot (2m) rolls its bonus crops from Carrot and Peppers (1m) only, while growing Radish (10m) rolls from everything up to and including Radish itself (Peppers, Carrot, Peas, Cucumber, Eggplant, Radish). A picked Mega seed still gives just one of its base crop — its own tenfold yield doesn't apply to a Dewstar pick.
 
 Without **Dewstar's Journal**, Cookies don't touch these bonus crops — they accrue at the same flat per-harvest rate all day, cookie window or not. With the journal, bonus crops follow the same boosted-harvest count as the crop's own Cookie yield, so the windowed harvests give ninefold bonus crops too.
+
+### Mechanical Heart
+
+The **Mechanical Heart** (the **Tower level 300** artifact) hands you a bulk of consumables on a fixed day of every month: **3000 Apple Cider** on the 7th and **2000 Arnold Palmer** on the 14th. Like the Scythe of Dewstar it is an account perk, not a held item, so it is assumed active once every mastery requirement through Tower level 300 is met:
+
+```toml
+[exploring]
+# have_mechanical_heart = true  # force on/off; unset auto-detects from having T300
+```
+
+These grants join passive production as free supply of those consumables, spread to an average daily rate over the plan (like a pet's averaged haul). By default that rate is the steady-state monthly average; with `model_calendar = true` (under `[pets]`) it instead counts exactly how many grant days — 7ths and 14ths — fall inside the plan's window given its start date, so a short plan that lands on the 7th sees the cider while one that misses it does not. A plan then leans on the granted ciders and palmers before crafting, gathering or buying more, and the passive breakdown lists them under the `Mechanical Heart` producer.

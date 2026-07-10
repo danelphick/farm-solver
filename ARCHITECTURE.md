@@ -83,7 +83,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 
 | File | Owns | Key names |
 |---|---|---|
-| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
+| `main.py` | CLI, orchestration (no printing) | `run`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `report.py` | **all printing** + critical-path naming | `print_frontier`, `print_plan`, `print_critical_path`, `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `minimize`, `frontier`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
@@ -93,7 +93,7 @@ a seasonal pet's yield depends on the plan span (a fixed point).
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
-| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production`, `PET_PRODUCER_PREFIX`, `storehouse_size`, `trading_prices` |
+| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `storehouse_size`, `trading_prices` |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
@@ -333,6 +333,14 @@ buildings.
   `dewstar_cookie_bonus` reuses
   `_cookie_boosted_harvests` so the bonus gets the same 9× windowed boost as the
   crop's own `cookie_day_yield`.
+- **Monthly grants** (tower level 300 artifact): `main.resolve_monthly_grants`
+  auto-detects it like the Scythe (via `has_tower_level`, config override
+  `exploring.have_mechanical_heart`), and `config.passive_production(monthly_grants=…)`
+  adds `config.MONTHLY_GRANTS` (3000 Apple Cider on the 7th, 2000 Arnold Palmer on
+  the 14th of each month) as daily producers named `MONTHLY_GRANT_PRODUCER`. Each
+  grant is spread to an average daily rate over the plan span (steady-state monthly
+  average with no span; exact in-window grant-days otherwise, like a seasonal pet),
+  so it rides the same `model_calendar` fixed-point iteration.
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS
