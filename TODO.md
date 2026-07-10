@@ -1,7 +1,5 @@
 # TODO
 
-- Cap opening chests - config flag to list chests that should not be consumed.
-
 - Prune Juice - resets Grape Juice allocation for the day and so allows speedier farming at a cost.
 
 - Veggie Juice - reduces crop length by 10%. Multiple can be drunk to reduce to a minimum of 1
