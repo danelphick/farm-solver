@@ -1887,6 +1887,48 @@ class MarkdownReporter(Reporter):
             console.print(RichMarkdown(text))
 
 
+class SectionedReporter(Reporter):
+    """Like :class:`MarkdownReporter`, but one :class:`MarkdownDoc` per section.
+
+    Meant for a non-terminal caller (the web app) that renders each section
+    separately rather than one continuous document: ``solution``/``unobtainable``
+    share a "solution" doc, ``note`` calls go to "notes" (both accumulated there
+    and appended to ``self.notes`` for a caller that wants the plain text too),
+    and ``frontier``/``plan``/``crafts`` each get their own doc. :meth:`finish`
+    is a no-op -- there is no single rendering step; the caller reads
+    ``self.docs[...].render()`` per section instead.
+    """
+
+    def __init__(self) -> None:
+        self.docs: dict[str, MarkdownDoc] = {
+            key: MarkdownDoc()
+            for key in ("solution", "notes", "frontier", "plan", "crafts")
+        }
+        self.notes: list[str] = []
+
+    def solution(self, solution: farm_solver.Solution) -> None:
+        markdown_solution(self.docs["solution"], solution)
+
+    def unobtainable(self, materials: list[str]) -> None:
+        markdown_unobtainable(self.docs["solution"], materials)
+
+    def note(self, text: str) -> None:
+        self.notes.append(text)
+        self.docs["notes"].para(text)
+
+    def frontier(self, *args, **kwargs) -> None:
+        markdown_frontier(self.docs["frontier"], *args, **kwargs)
+
+    def plan(self, *args, **kwargs) -> None:
+        markdown_plan(self.docs["plan"], *args, **kwargs)
+
+    def crafts(self, *args, **kwargs) -> None:
+        markdown_crafts(self.docs["crafts"], *args, **kwargs)
+
+    def finish(self) -> None:
+        pass
+
+
 def build_reporter(format_: str, pager: bool = False) -> Reporter:
     """The :class:`Reporter` for ``--format`` (``"text"`` or ``"markdown"``).
 

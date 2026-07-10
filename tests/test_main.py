@@ -12,6 +12,7 @@ from farm_solver import (
     InventoryItem,
     ItemNeed,
     Mastery,
+    Solution,
     TowerRequirements,
 )
 from main import (
@@ -36,6 +37,7 @@ from main import (
     within_limits,
 )
 from report import (
+    SectionedReporter,
     _frontier_reasons,
     _slowest_passive_item,
     print_crafts,
@@ -1541,3 +1543,49 @@ def test_print_plan_buy_total_excludes_pumpkin_gold(capsys):
     buy_section = out.split("Buy (with gold):")[1].split("Pumpkin Juice")[0]
     assert "total 1 g" in buy_section
     assert "total 690 g" in out
+
+
+def test_sectioned_reporter_renders_each_section_independently():
+    # Drives SectionedReporter with the same calls main.run makes on the
+    # Reporter interface, and the same synthetic fixtures the print_*/markdown_*
+    # tests above use, then checks each section's own MarkdownDoc renders
+    # independently (no cross-section bleed) with the expected heading.
+    reporter = SectionedReporter()
+
+    solution = Solution(needs=[ItemNeed(item="Beet", have=10, target=100)])
+    reporter.solution(solution)
+    reporter.note("Starting 01 Jan 2026; seasonal pets count only for part of it.")
+
+    workshop = Workshop(
+        recipes={"board": WorkshopRecipe(name="Board", materials={"oak": 2})}
+    )
+    demand = {"Drum": 500, "Board": 10}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Small Pond", "fishing", {"drum": 100}, ln=1), 5)],
+        crafts={"board": 10},
+    )
+    reporter.frontier([plan], selected=0, cheapest=0)
+    reporter.plan(plan, demand, Farm(grape_juices_per_day=14), workshop, 1.0)
+    reporter.crafts(plan, workshop, 1.0, 1.1)
+    reporter.finish()  # no-op; nothing to assert
+
+    assert reporter.notes == [
+        "Starting 01 Jan 2026; seasonal pets count only for part of it."
+    ]
+    solution_text = reporter.docs["solution"].render()
+    assert "## Goal" in solution_text
+    assert "Beet" in solution_text
+
+    notes_text = reporter.docs["notes"].render()
+    assert "seasonal pets" in notes_text
+    assert "Goal" not in notes_text  # sections don't bleed into each other
+
+    frontier_text = reporter.docs["frontier"].render()
+    assert "## Sourcing plans" in frontier_text
+
+    plan_text = reporter.docs["plan"].render()
+    assert "Fishing" in plan_text
+
+    crafts_text = reporter.docs["crafts"].render()
+    assert "## Required Crafts" in crafts_text
+    assert "Board" in crafts_text
