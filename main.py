@@ -433,7 +433,18 @@ def build_parser() -> argparse.ArgumentParser:
             "is in season for (default: today)"
         ),
     )
-    parser.add_argument(
+    calendar_mode = parser.add_mutually_exclusive_group()
+    calendar_mode.add_argument(
+        "--model-calendar",
+        action="store_true",
+        help=(
+            "model the seasonal calendar -- date-aware seasonal pets and "
+            "Mechanical Heart grants, given the plan's start date -- instead of "
+            "the yearly average, overriding pets.model_calendar in the config; "
+            "costs an extra solve (a makespan fixed point)"
+        ),
+    )
+    calendar_mode.add_argument(
         "--average-seasons",
         action="store_true",
         help=(
@@ -619,15 +630,20 @@ def _makespans_close(a: timedelta, b: timedelta) -> bool:
     return abs((a - b).total_seconds()) <= max(3600.0, 0.001 * b.total_seconds())
 
 
-def _should_model_calendar(pets_config: dict, average_seasons: bool) -> bool:
+def _should_model_calendar(
+    pets_config: dict, average_seasons: bool, model_calendar: bool = False
+) -> bool:
     """Whether to model the seasonal calendar rather than a yearly average.
 
     The calendar model costs an extra solve (an iterative fixed point on the
     makespan), so it is off by default and opted into with ``pets.model_calendar``
-    in the config. ``--average-seasons`` forces it off, and there is nothing to
-    model unless the config actually has a seasonal pet.
+    in the config or the ``--model-calendar`` flag (``model_calendar``, which
+    overrides the config on). ``--average-seasons`` forces it off and wins over
+    both; there is nothing to model unless the config actually has a seasonal pet.
     """
-    if average_seasons or not pets_config.get("model_calendar"):
+    if average_seasons:
+        return False
+    if not (model_calendar or pets_config.get("model_calendar")):
         return False
     return any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
 
@@ -1015,7 +1031,9 @@ def run(args: argparse.Namespace) -> int:
     # iterate to a fixed point: solve, take the expanded plan's makespan as the plan
     # span, rebuild the seasonal pet rates for it, and solve again until the makespan
     # settles. Otherwise a single steady-state pass (horizon None) is enough.
-    model_calendar = _should_model_calendar(cfg.get("pets", {}), args.average_seasons)
+    model_calendar = _should_model_calendar(
+        cfg.get("pets", {}), args.average_seasons, args.model_calendar
+    )
     horizon: timedelta | None = None
     production = config.passive_production(
         cfg, today=start, monthly_grants=monthly_grants

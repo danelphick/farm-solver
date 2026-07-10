@@ -137,6 +137,40 @@ def test_should_model_calendar_needs_an_actual_seasonal_pet():
     )
 
 
+def test_model_calendar_flag_defaults_off():
+    parser = build_parser()
+    assert parser.parse_args([]).model_calendar is False
+    assert parser.parse_args(["--model-calendar"]).model_calendar is True
+
+
+def test_model_calendar_flag_and_average_seasons_are_mutually_exclusive():
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--model-calendar", "--average-seasons"])
+
+
+def test_model_calendar_flag_overrides_the_config_off():
+    # The CLI flag opts in even when pets.model_calendar is unset.
+    assert _should_model_calendar(
+        {"Wolf": 8}, average_seasons=False, model_calendar=True
+    )
+
+
+def test_average_seasons_still_wins_over_the_model_calendar_flag():
+    # Off beats on if both are somehow set (argparse keeps them exclusive on the
+    # CLI, but the precedence is defined regardless).
+    assert not _should_model_calendar(
+        {"Wolf": 8}, average_seasons=True, model_calendar=True
+    )
+
+
+def test_model_calendar_flag_still_needs_a_seasonal_pet():
+    # Forcing it on with only year-round pets still has nothing to model.
+    assert not _should_model_calendar(
+        {"Dog": 8}, average_seasons=False, model_calendar=True
+    )
+
+
 def test_selected_plan_defaults_to_the_fastest():
     # No --plan and no --cheapest-plan: the fastest (plan 0, sorted first) wins,
     # even though PLANS[2] is the cheapest.
