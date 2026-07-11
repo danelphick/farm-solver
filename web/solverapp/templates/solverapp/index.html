@@ -19,20 +19,24 @@
 </header>
 
 <main>
-  <section class="paste-panel">
-    <div class="field">
-      <label for="mastery-text">Masteries (paste from FarmRPG)</label>
-      <textarea id="mastery-text" rows="10" spellcheck="false"
-        placeholder="Mastery In-Progress...&#10;Item Name&#10;12,345 / 100,000 Progress&#10;..."></textarea>
+  <details id="paste-details" class="paste-panel" open>
+    <summary>Game state (masteries &amp; inventory)</summary>
+    <div class="paste-fields">
+      <div class="field">
+        <label for="mastery-text">Masteries (paste from FarmRPG)</label>
+        <textarea id="mastery-text" rows="10" spellcheck="false"
+          placeholder="Mastery In-Progress...&#10;Item Name&#10;12,345 / 100,000 Progress&#10;..."></textarea>
+      </div>
+      <div class="field">
+        <label for="inventory-text">Inventory (paste from FarmRPG)</label>
+        <textarea id="inventory-text" rows="10" spellcheck="false"
+          placeholder="Category chevron_down&#10;Item Name&#10;description&#10;1,234&#10;..."></textarea>
+      </div>
     </div>
-    <div class="field">
-      <label for="inventory-text">Inventory (paste from FarmRPG)</label>
-      <textarea id="inventory-text" rows="10" spellcheck="false"
-        placeholder="Category chevron_down&#10;Item Name&#10;description&#10;1,234&#10;..."></textarea>
-    </div>
-  </section>
+  </details>
 
   <section class="controls-panel">
+    <div class="control-group">
     <h2>Goal</h2>
     <div class="field-row">
       <label for="target">Target</label>
@@ -50,7 +54,9 @@
       <label for="items">Item goal(s)</label>
       <input id="items" type="text" placeholder="Item:Amount,Item:Amount">
     </div>
+    </div>
 
+    <div class="control-group">
     <h2>Resources</h2>
     <div class="field-row">
       <label for="current-stamina">Current stamina</label>
@@ -76,7 +82,9 @@
       <label class="inline"><input type="radio" name="calendar" value="model"> model season</label>
       <label class="inline"><input type="radio" name="calendar" value="average"> yearly average</label>
     </div>
+    </div>
 
+    <div class="control-group">
     <h2>Limits (refilter -- instant)</h2>
     <div class="field-row">
       <label for="max-gold">Max gold</label>
@@ -101,12 +109,15 @@
     <div class="field-row">
       <label class="inline"><input id="breakdown" type="checkbox"> Show full craft breakdown</label>
     </div>
+    </div>
 
+    <div class="control-group">
     <h2>Advanced</h2>
     <div class="field">
       <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)</label>
       <textarea id="overrides" rows="3" spellcheck="false"
         placeholder="sawmill.use_hickory_omelette=false"></textarea>
+    </div>
     </div>
   </section>
 </main>

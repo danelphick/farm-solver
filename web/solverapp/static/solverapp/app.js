@@ -13,6 +13,9 @@
 // selected (a refilter, so it hits the cache and returns fast).
 
 const STORAGE_KEY = "farm-solver.v1";
+// UI-only preferences (e.g. whether the paste pane is collapsed) live under
+// their own key: STORAGE_KEY's shape mirrors the POST /api/solve body.
+const UI_STORAGE_KEY = "farm-solver.ui.v1";
 const DEBOUNCE_MS = 400;
 
 function $(selector) {
@@ -288,6 +291,26 @@ function init() {
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
+  });
+
+  // Collapsing the paste pane is a UI preference, not solver state: persist
+  // it separately and never trigger a re-solve on toggle.
+  const pasteDetails = $("#paste-details");
+  try {
+    const ui = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
+    if (ui.paste_collapsed) pasteDetails.open = false;
+  } catch (err) {
+    // Corrupt/unavailable storage: keep the default (open).
+  }
+  pasteDetails.addEventListener("toggle", () => {
+    try {
+      localStorage.setItem(
+        UI_STORAGE_KEY,
+        JSON.stringify({ paste_collapsed: !pasteDetails.open })
+      );
+    } catch (err) {
+      // Persistence is a convenience; ignore storage failures.
+    }
   });
 
   if (restoreState()) {
