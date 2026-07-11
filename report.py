@@ -92,17 +92,26 @@ class MarkdownDoc:
     def bullets(self, lines: Iterable[str]) -> None:
         self._blocks.append("\n".join(f"- {line}" for line in lines))
 
-    def table(self, headers: list[str], rows: list[list[str]]) -> None:
+    def table(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        align: list[str] | None = None,
+    ) -> None:
         if not rows:
             return
         head = "| " + " | ".join(_escape_cell(h) for h in headers) + " |"
-        # Right-align a column when most of its cells are quantities --
-        # counts, gold, durations, dates all start with a digit (possibly
-        # signed/parenthesised); the odd word ("done") rides along.
-        aligns = [
-            "---:" if _column_is_numeric(rows, i) else "---"
-            for i in range(len(headers))
-        ]
+        # Per column: an explicit "left"/"right" from ``align``, else "auto" --
+        # right when most cells are quantities (counts, gold, durations, dates
+        # all start with a digit, possibly signed/parenthesised; the odd word
+        # like "done" rides along). Explicit alignment is for prose columns
+        # whose text merely *starts* with a number ("8,541 from sawmill, ...").
+        aligns = []
+        for i in range(len(headers)):
+            mode = align[i] if align is not None else "auto"
+            if mode == "auto":
+                mode = "right" if _column_is_numeric(rows, i) else "left"
+            aligns.append("---:" if mode == "right" else "---")
         sep = "| " + " | ".join(aligns) + " |"
         body = [
             "| " + " | ".join(_escape_cell(str(c)) for c in row) + " |" for row in rows
@@ -1447,7 +1456,9 @@ def markdown_plan(
             for d in ordered
         ]
         doc.heading("Fishing")
-        doc.table(["Large Nets", "Zone", "Yields"], rows)
+        doc.table(
+            ["Large Nets", "Zone", "Yields"], rows, align=["right", "left", "left"]
+        )
 
     exploring_draws = _sourced(ctx, _draws_on(plan, sources.EXPLORING_TRACK))
     palmer_draws = [
@@ -1465,7 +1476,11 @@ def markdown_plan(
             for d in ordered
         ]
         doc.heading("Exploring")
-        doc.table(["Arnold Palmers", "Location", "Yields"], rows)
+        doc.table(
+            ["Arnold Palmers", "Location", "Yields"],
+            rows,
+            align=["right", "left", "left"],
+        )
     if cider_draws:
         def ciders(d: sources.Draw) -> float:
             return d.units * d.offer.consumes.get("apple cider", 0.0)
@@ -1481,7 +1496,11 @@ def markdown_plan(
                 _wanted_counts(ctx, d),
             ])
         doc.heading("Exploring (Apple Cider)")
-        doc.table(["Apple Cider", "Zone", "Stamina", "Yields"], rows)
+        doc.table(
+            ["Apple Cider", "Zone", "Stamina", "Yields"],
+            rows,
+            align=["right", "left", "right", "left"],
+        )
 
     drinking_draws = _draws_on(plan, sources.DRINKING_TRACK)
     cider_stamina = sum(
@@ -1535,8 +1554,11 @@ def markdown_plan(
         rows = []
         for name, count in ordered:
             flow = ctx.flows_by_name[name.lower()]
-            keys = [
-                f"{round(quantity * count):,} {display.get(item, item)}"
+            # Materials used splits into a right-aligned quantity and a
+            # left-aligned name (in practice an openable consumes at most
+            # one key; several would pair up positionally).
+            used = [
+                (f"{round(quantity * count):,}", display.get(item, item))
                 for item, quantity in flow.consumes.items()
                 if item != name.lower() and round(quantity * count) >= 1
             ]
@@ -1548,11 +1570,16 @@ def markdown_plan(
             rows.append([
                 f"{math.ceil(count):,}",
                 display.get(name.lower(), name),
-                ", ".join(keys),
+                ", ".join(qty for qty, _ in used),
+                ", ".join(material for _, material in used),
                 gained,
             ])
         doc.heading("Opening (Locksmith)")
-        doc.table(["Count", "Item", "Materials used", "Yields"], rows)
+        doc.table(
+            ["Count", "Item", "Qty", "Materials used", "Yields"],
+            rows,
+            align=["right", "left", "right", "left", "left"],
+        )
 
     farming_draws = _sourced(ctx, _draws_on(plan, sources.FARMING_TRACK))
     if farming_draws:
@@ -1595,7 +1622,11 @@ def markdown_plan(
                     )
                 rows.append([action, duration, name, f"{round(total):,}", detail])
         doc.heading(heading + ")")
-        doc.table(["Action", "Duration", "Item", "Qty", "Detail"], rows)
+        doc.table(
+            ["Action", "Duration", "Item", "Qty", "Detail"],
+            rows,
+            align=["left", "right", "left", "right", "left"],
+        )
 
     passive_draw = plan.passive_draw
     if passive_draw is not None:
@@ -1643,7 +1674,11 @@ def markdown_plan(
                     name, f"{quantity:,}", passive.format_duration(wait), source,
                 ])
             doc.heading("Passive production (concurrent)")
-            doc.table(["Item", "Qty", "Time", "Source"], rows)
+            doc.table(
+                ["Item", "Qty", "Time", "Source"],
+                rows,
+                align=["left", "right", "right", "left"],
+            )
 
     held = [
         (item, min(inventory.get(item, 0.0), spent))
