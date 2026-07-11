@@ -110,7 +110,7 @@ frontier as before.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
+| `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
@@ -461,9 +461,15 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   so it rides the same `model_calendar` fixed-point iteration. An active grant is a
   date-dependent source in its own right: `_should_model_calendar` treats it like a
   seasonal pet, so the calendar model (and its extra solve) engages for the grants
-  even when every pet is year-round (on by default). `--model-calendar` /
-  `--average-calendar` force the calendar on / off from the CLI (mutually
-  exclusive; off wins).
+  even when every pet is year-round (on by default). **Calendar modes**
+  (`main.resolve_calendar_mode`: config `solver.calendar`, overridden by the
+  mutually exclusive `--model-calendar`/`--average-calendar`/`--ignore-calendar`):
+  `full` (default) models the windows exactly; `average` smears every dated source
+  to its steady-state share; `ignore` leaves them out entirely —
+  `main.strip_dated_sources` drops seasonal pets from the cfg's `[pets]` in both
+  callers (`main.run`, `webapi.solve`) and `build_inputs` gates the tower-derived
+  `monthly_grants` off itself (they aren't in the config to strip). The old
+  `solver.model_calendar` boolean is rejected with a migration error.
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS

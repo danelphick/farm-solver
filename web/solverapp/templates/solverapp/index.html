@@ -73,14 +73,14 @@
       <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
     </div>
     <div class="field-row">
-      <label for="start-date">Start date</label>
-      <input id="start-date" type="date">
+      <label>Calendar</label>
+      <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
+      <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
+      <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
     </div>
     <div class="field-row">
-      <label>Calendar</label>
-      <label class="inline"><input type="radio" name="calendar" value="" checked> default</label>
-      <label class="inline"><input type="radio" name="calendar" value="model"> model season</label>
-      <label class="inline"><input type="radio" name="calendar" value="average"> yearly average</label>
+      <label for="start-date">Start date</label>
+      <input id="start-date" type="date" disabled>
     </div>
     </div>
 

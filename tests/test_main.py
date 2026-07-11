@@ -19,6 +19,8 @@ from main import (
     DEWSTAR_TOWER_LEVEL,
     MONTHLY_GRANT_TOWER_LEVEL,
     _should_model_calendar,
+    resolve_calendar_mode,
+    strip_dated_sources,
     apply_inventory_overrides,
     build_parser,
     cheapest_plan,
@@ -114,76 +116,90 @@ def test_average_calendar_flag_defaults_off():
     assert parser.parse_args(["--average-calendar"]).average_calendar is True
 
 
-def test_should_model_calendar_is_on_by_default():
-    # With a seasonal pet, the calendar is modelled unless opted out of.
-    assert _should_model_calendar({"Wolf": 8}, average_calendar=False)
+def test_should_model_calendar_full_mode_with_a_seasonal_pet():
+    # In the full mode with a seasonal pet, the calendar is modelled.
+    assert _should_model_calendar({"Wolf": 8}, "full")
 
 
-def test_average_calendar_forces_the_calendar_off():
-    # --average-calendar overrides the default opt-in.
-    assert not _should_model_calendar(
-        {"Wolf": 8}, average_calendar=True, model_calendar=True
-    )
+def test_average_and_ignore_modes_never_model_the_calendar():
+    assert not _should_model_calendar({"Wolf": 8}, "average")
+    assert not _should_model_calendar({"Wolf": 8}, "ignore")
 
 
 def test_should_model_calendar_needs_an_actual_seasonal_pet():
-    # On by default with only year-round pets (and no grants) has nothing to model.
-    assert not _should_model_calendar(
-        {"Dog": 8}, average_calendar=False, model_calendar=True
-    )
+    # The full mode with only year-round pets (and no grants) has nothing to model.
+    assert not _should_model_calendar({"Dog": 8}, "full")
 
 
-def test_model_calendar_flag_defaults_off():
-    # The flag's own default is off; the resolved behaviour (on) comes from the
-    # caller's fallback in main() when neither the flag nor the config say otherwise.
+def test_calendar_flags_default_off():
+    # The flags' own defaults are off; the resolved mode ('full') comes from
+    # resolve_calendar_mode's fallback when neither flag nor config say otherwise.
     parser = build_parser()
-    assert parser.parse_args([]).model_calendar is False
+    args = parser.parse_args([])
+    assert (args.model_calendar, args.average_calendar, args.ignore_calendar) == (
+        False, False, False,
+    )
     assert parser.parse_args(["--model-calendar"]).model_calendar is True
+    assert parser.parse_args(["--ignore-calendar"]).ignore_calendar is True
 
 
-def test_model_calendar_flag_and_average_calendar_are_mutually_exclusive():
+def test_calendar_flags_are_mutually_exclusive():
     parser = build_parser()
-    with pytest.raises(SystemExit):
-        parser.parse_args(["--model-calendar", "--average-calendar"])
+    for pair in (
+        ["--model-calendar", "--average-calendar"],
+        ["--model-calendar", "--ignore-calendar"],
+        ["--average-calendar", "--ignore-calendar"],
+    ):
+        with pytest.raises(SystemExit):
+            parser.parse_args(pair)
 
 
-def test_model_calendar_flag_overrides_the_config_off():
-    # The CLI flag opts in even when solver.model_calendar is set off.
-    assert _should_model_calendar(
-        {"Wolf": 8}, average_calendar=False, model_calendar=True
+def test_resolve_calendar_mode_flags_beat_the_config():
+    parser = build_parser()
+    cfg = {"solver": {"calendar": "average"}}
+    assert resolve_calendar_mode(parser.parse_args(["--model-calendar"]), cfg) == "full"
+    assert (
+        resolve_calendar_mode(parser.parse_args(["--ignore-calendar"]), cfg)
+        == "ignore"
     )
+    assert resolve_calendar_mode(parser.parse_args([]), cfg) == "average"
 
 
-def test_average_calendar_still_wins_over_the_model_calendar_flag():
-    # Off beats on if both are somehow set (argparse keeps them exclusive on the
-    # CLI, but the precedence is defined regardless).
-    assert not _should_model_calendar(
-        {"Wolf": 8}, average_calendar=True, model_calendar=True
-    )
+def test_resolve_calendar_mode_defaults_to_full():
+    assert resolve_calendar_mode(build_parser().parse_args([]), {}) == "full"
 
 
-def test_model_calendar_flag_still_needs_a_dated_source():
-    # Forcing it on with only year-round pets and no grants has nothing to model.
-    assert not _should_model_calendar(
-        {"Dog": 8}, average_calendar=False, model_calendar=True
-    )
+def test_resolve_calendar_mode_rejects_a_bad_config_value():
+    args = build_parser().parse_args([])
+    with pytest.raises(ValueError, match="solver.calendar must be one of"):
+        resolve_calendar_mode(args, {"solver": {"calendar": "sometimes"}})
+
+
+def test_resolve_calendar_mode_rejects_the_old_boolean_key():
+    args = build_parser().parse_args([])
+    with pytest.raises(ValueError, match="solver.model_calendar is gone"):
+        resolve_calendar_mode(args, {"solver": {"model_calendar": True}})
+
+
+def test_strip_dated_sources_drops_only_seasonal_pets():
+    cfg = {
+        "pets": {"Wolf": 8, "Dog": 8, "Polar Bear": 6},
+        "sawmill": {"oak": 10},
+    }
+    stripped = strip_dated_sources(cfg)
+    assert stripped["pets"] == {"Dog": 8}
+    assert stripped["sawmill"] == {"oak": 10}
+    # The original config is untouched (a copy is returned).
+    assert cfg["pets"] == {"Wolf": 8, "Dog": 8, "Polar Bear": 6}
 
 
 def test_monthly_grants_are_a_dated_source_even_without_a_seasonal_pet():
     # The Mechanical Heart's grants are date-dependent, so they alone justify the
     # calendar model even when every pet is year-round.
-    assert _should_model_calendar(
-        {"Dog": 8}, average_calendar=False, model_calendar=True, monthly_grants=True
-    )
-    # ...but not when the calendar is opted out of entirely (solver.model_calendar
-    # set off in the config, with no CLI override).
-    assert not _should_model_calendar(
-        {"Dog": 8}, average_calendar=False, model_calendar=False, monthly_grants=True
-    )
-    # ...and --average-calendar still forces it off.
-    assert not _should_model_calendar(
-        {"Dog": 8}, average_calendar=True, model_calendar=True, monthly_grants=True
-    )
+    assert _should_model_calendar({"Dog": 8}, "full", monthly_grants=True)
+    # ...but not in the average or ignore modes.
+    assert not _should_model_calendar({"Dog": 8}, "average", monthly_grants=True)
+    assert not _should_model_calendar({"Dog": 8}, "ignore", monthly_grants=True)
 
 
 def test_selected_plan_defaults_to_the_fastest():

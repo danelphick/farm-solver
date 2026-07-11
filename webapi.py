@@ -41,7 +41,7 @@ import report
 RESOLVE_FIELDS = (
     "target", "level", "mastery", "items", "use_pumpkin_juice",
     "current_stamina", "cookie_sets", "plans", "start_date",
-    "model_calendar", "average_calendar", "crafting_bonus",
+    "model_calendar", "average_calendar", "ignore_calendar", "crafting_bonus",
     "mastery_bonus", "override_inventory", "override",
 )
 
@@ -148,13 +148,15 @@ def params_to_args(params: dict) -> argparse.Namespace:
         args.breakdown = bool(params["breakdown"])
 
     calendar = params.get("calendar")
-    if calendar == "model":
-        args.model_calendar, args.average_calendar = True, False
+    if calendar in ("full", "model"):  # "model" = the pre-enum wire value
+        args.model_calendar = True
     elif calendar == "average":
-        args.model_calendar, args.average_calendar = False, True
+        args.average_calendar = True
+    elif calendar == "ignore":
+        args.ignore_calendar = True
     elif calendar is not None:
         raise ValueError(
-            f"calendar must be 'model', 'average', or null, not {calendar!r}"
+            f"calendar must be 'full', 'average', 'ignore', or null, not {calendar!r}"
         )
 
     plan_select = params.get("plan_select")
@@ -268,6 +270,10 @@ def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> S
     """
     cfg = main.load_config()
     main.apply_overrides(cfg, args.override)
+    # Mirror main.run: the calendar 'ignore' mode drops seasonal pets from the
+    # config before anything reads [pets].
+    if main.resolve_calendar_mode(args, cfg) == "ignore":
+        cfg = main.strip_dated_sources(cfg)
     state = farm_solver.GameState(
         masteries=parsing.parse_masteries(mastery_text),
         inventory=parsing.parse_inventory(inventory_text),

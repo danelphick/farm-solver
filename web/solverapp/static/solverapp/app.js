@@ -59,11 +59,14 @@ function readParams() {
     const cap = $("#pumpkin-juice-cap").value;
     params.use_pumpkin_juice = cap !== "" ? Number(cap) : -1;
   }
-  const startDate = $("#start-date").value;
-  if (startDate) params.start_date = startDate;
-
   const calendar = document.querySelector('input[name="calendar"]:checked').value;
-  if (calendar) params.calendar = calendar;
+  params.calendar = calendar;
+  // The start date only means anything when the calendar is fully modelled
+  // (the input is disabled otherwise, but its value lingers -- don't send it).
+  if (calendar === "full") {
+    const startDate = $("#start-date").value;
+    if (startDate) params.start_date = startDate;
+  }
 
   const maxGold = $("#max-gold").value.trim();
   if (maxGold) params.max_gold = maxGold;
@@ -105,11 +108,15 @@ function applyParams(params) {
   $("#pumpkin-juice-cap").disabled = !hasPj;
   $("#pumpkin-juice-cap").value = hasPj && params.use_pumpkin_juice >= 0 ? params.use_pumpkin_juice : "";
 
-  $("#start-date").value = params.start_date || "";
-  const calendarValue = params.calendar || "";
+  // "model" is the pre-enum wire value for "full"; a state saved before the
+  // enum existed carries no calendar at all and gets the new default (ignore).
+  const calendarValue =
+    params.calendar === "model" ? "full" : params.calendar || "ignore";
   document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
     radio.checked = radio.value === calendarValue;
   });
+  $("#start-date").value = params.start_date || "";
+  $("#start-date").disabled = calendarValue !== "full";
 
   $("#max-gold").value = params.max_gold || "";
   $("#max-ap").value = params.max_ap ?? "";
@@ -285,9 +292,16 @@ function init() {
     $("#pumpkin-juice-cap").disabled = !$("#use-pumpkin-juice").checked;
     onAnyChange();
   });
+  document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      $("#start-date").disabled = radio.value !== "full";
+      onAnyChange();
+    });
+  });
 
   document.querySelectorAll("input, textarea, select").forEach((el) => {
     if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above
+    if (el.name === "calendar") return; // wired above
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);

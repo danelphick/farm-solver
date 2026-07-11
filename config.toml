@@ -6,11 +6,15 @@
 data_directory = "./mydata"
 # mastery_file = "./sample-mastery.txt"
 # inventory_file = "./sample-inventory.txt"
-# Model the calendar so date-dependent sources -- a seasonal pet, the Mechanical
-# Heart's monthly grants -- only count for the part of the plan they fall in (uses
-# the plan's --start-date; costs an extra solve). On by default; --model-calendar /
-# --average-calendar override it on / off for one run.
-# model_calendar = true
+# How date-dependent sources -- a seasonal pet, the Mechanical Heart's monthly
+# grants -- are treated:
+#   "full"    model the calendar: each source counts only for the part of the
+#             plan it falls in (uses the plan's --start-date; costs an extra
+#             solve). The default.
+#   "average" smear each source to its steady-state yearly/monthly share.
+#   "ignore"  leave seasonal pets and the monthly grants out entirely.
+# --model-calendar / --average-calendar / --ignore-calendar override it for one run.
+# calendar = "full"
 
 [storehouse]
 inventory = 49620

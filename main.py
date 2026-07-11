@@ -451,9 +451,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--model-calendar",
         action="store_true",
         help=(
-            "model the seasonal calendar -- date-aware seasonal pets and "
+            "model the seasonal calendar in full -- date-aware seasonal pets and "
             "Mechanical Heart grants, given the plan's start date -- instead of "
-            "the yearly average (the default; overrides solver.model_calendar in "
+            "the yearly average (the default; overrides solver.calendar in "
             "the config); costs an extra solve (a makespan fixed point)"
         ),
     )
@@ -461,9 +461,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--average-calendar",
         action="store_true",
         help=(
-            "scale seasonal pets to their yearly average instead of modelling "
-            "the calendar, overriding solver.model_calendar in the config, "
-            "forcing the single-solve fast path"
+            "scale seasonal pets and Mechanical Heart grants to their yearly "
+            "average instead of modelling the calendar, overriding "
+            "solver.calendar in the config, forcing the single-solve fast path"
+        ),
+    )
+    calendar_mode.add_argument(
+        "--ignore-calendar",
+        action="store_true",
+        help=(
+            "leave the seasonal pets and Mechanical Heart grants out of the "
+            "plan entirely (no seasonal/monthly output at all), overriding "
+            "solver.calendar in the config"
         ),
     )
     parser.add_argument(
@@ -676,26 +685,71 @@ def _makespans_close(a: timedelta, b: timedelta) -> bool:
     return abs((a - b).total_seconds()) <= max(3600.0, 0.001 * b.total_seconds())
 
 
+CALENDAR_MODES = ("full", "average", "ignore")
+
+
+def resolve_calendar_mode(args: argparse.Namespace, cfg: dict) -> str:
+    """How date-dependent sources (seasonal pets, monthly grants) are treated.
+
+    ``full`` models the calendar exactly from the plan's start date, ``average``
+    smears each source to its steady-state yearly/monthly share, and ``ignore``
+    leaves them out of the plan entirely. The three CLI flags beat the
+    ``solver.calendar`` config key; absent both, ``full`` (the historical
+    default behaviour, subject to :func:`_should_model_calendar`'s
+    is-anything-actually-dated check).
+    """
+    if args.model_calendar:
+        return "full"
+    if args.average_calendar:
+        return "average"
+    if args.ignore_calendar:
+        return "ignore"
+    solver_cfg = cfg.get("solver", {})
+    if "model_calendar" in solver_cfg:
+        raise ValueError(
+            "solver.model_calendar is gone; set solver.calendar to "
+            "'full', 'average' or 'ignore' instead"
+        )
+    mode = solver_cfg.get("calendar", "full")
+    if mode not in CALENDAR_MODES:
+        raise ValueError(
+            f"solver.calendar must be one of {', '.join(CALENDAR_MODES)}, "
+            f"not {mode!r}"
+        )
+    return mode
+
+
+def strip_dated_sources(cfg: dict) -> dict:
+    """A copy of ``cfg`` with every seasonal pet dropped (calendar ``ignore``).
+
+    Year-round pets and every building stay; the Mechanical Heart's monthly
+    grants are gated separately (``build_inputs`` forces ``monthly_grants``
+    off in this mode) since they come from the tower level, not the config.
+    """
+    kept = {
+        name: level
+        for name, level in cfg.get("pets", {}).items()
+        if name.lower() not in pets.SEASONAL_MONTHS
+    }
+    return {**cfg, "pets": kept}
+
+
 def _should_model_calendar(
     pets_config: dict,
-    average_calendar: bool,
-    model_calendar: bool = True,
+    calendar_mode: str,
     monthly_grants: bool = False,
 ) -> bool:
     """Whether to model the seasonal calendar rather than a yearly average.
 
     The calendar model costs an extra solve (an iterative fixed point on the
-    makespan), so it is on by default. ``model_calendar`` is the resolved
-    opt-out -- ``solver.model_calendar`` in the config or the ``--model-calendar``
-    flag, combined by the caller. ``--average-calendar`` forces it off and wins
-    over that. It is worth the cost only when something in the plan is
+    makespan), so only the ``full`` mode (see :func:`resolve_calendar_mode`)
+    ever pays it -- and even then only when something in the plan is actually
     date-dependent: a seasonal pet, or the Mechanical Heart's monthly grants
-    (``monthly_grants``); with neither, the yearly average is exact and the
-    extra solve is skipped.
+    (``monthly_grants``). With neither, the yearly average is exact and the
+    extra solve is skipped. ``average`` and ``ignore`` never model it
+    (``ignore`` has no dated sources left to model).
     """
-    if average_calendar:
-        return False
-    if not model_calendar:
+    if calendar_mode != "full":
         return False
     has_seasonal_pet = any(name.lower() in pets.SEASONAL_MONTHS for name in pets_config)
     return has_seasonal_pet or monthly_grants
@@ -1020,7 +1074,13 @@ def build_inputs(
     # The T300 tower artifact grants a monthly bulk of Apple Cider / Arnold Palmer
     # (config.MONTHLY_GRANTS), auto-detected from the tower level like the Scythe;
     # added to passive production below (scaled to the plan span, like a pet).
-    monthly_grants = resolve_monthly_grants(cfg, state, requirements)
+    # The grants come from the tower level rather than the config, so the
+    # calendar 'ignore' mode gates them here (seasonal pets are instead
+    # stripped from cfg by the caller, see strip_dated_sources).
+    calendar_mode = resolve_calendar_mode(args, cfg)
+    monthly_grants = (
+        resolve_monthly_grants(cfg, state, requirements) and calendar_mode != "ignore"
+    )
 
     # Without --target, -m/-i solve for that goal alone, ignoring the tower (the
     # previous behaviour). With --target given, they instead layer on top of the
@@ -1081,14 +1141,13 @@ def build_inputs(
     # A date-dependent source -- a seasonal pet in season for part of the year, or
     # the Mechanical Heart's monthly grants -- contributes an amount that depends on
     # how long the plan runs, which is itself an output of the solve. When modelling
-    # the calendar (on by default, see _should_model_calendar) iterate to a fixed
+    # the calendar (mode 'full', see _should_model_calendar) iterate to a fixed
     # point: solve, take the expanded plan's makespan as the plan span, rebuild
     # those rates for it, and solve again until the makespan settles. Otherwise
-    # (--average-calendar) a single steady-state pass (horizon None) is enough.
+    # ('average'/'ignore') a single steady-state pass (horizon None) is enough.
     model_calendar = _should_model_calendar(
         cfg.get("pets", {}),
-        args.average_calendar,
-        args.model_calendar or cfg.get("solver", {}).get("model_calendar", True),
+        calendar_mode,
         monthly_grants,
     )
 
@@ -1314,6 +1373,11 @@ def run(args: argparse.Namespace) -> int:
     reporter = report.build_reporter(args.format, pager=args.pager)
     cfg = load_config()
     apply_overrides(cfg, args.override)
+    # In the calendar 'ignore' mode seasonal pets contribute nothing: drop them
+    # from the config before anything reads [pets] (build_inputs separately
+    # gates the tower-derived monthly grants off in this mode).
+    if resolve_calendar_mode(args, cfg) == "ignore":
+        cfg = strip_dated_sources(cfg)
     # Select the LP backend before anything solves; the flag beats the config.
     backend = args.solver or cfg.get("solver", {}).get("backend")
     if backend:

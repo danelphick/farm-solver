@@ -80,13 +80,28 @@ def test_params_to_args_start_date_parses_iso_format():
     assert args.start_date == date(2026, 7, 10)
 
 
-def test_params_to_args_calendar_maps_to_model_or_average_flags():
-    model = webapi.params_to_args({"calendar": "model"})
-    assert (model.model_calendar, model.average_calendar) == (True, False)
+def test_params_to_args_calendar_maps_to_the_three_flags():
+    full = webapi.params_to_args({"calendar": "full"})
+    assert (full.model_calendar, full.average_calendar, full.ignore_calendar) == (
+        True, False, False,
+    )
+    # "model" is the pre-enum wire value for "full" (old saved client state).
+    legacy = webapi.params_to_args({"calendar": "model"})
+    assert legacy.model_calendar is True
     average = webapi.params_to_args({"calendar": "average"})
     assert (average.model_calendar, average.average_calendar) == (False, True)
+    ignore = webapi.params_to_args({"calendar": "ignore"})
+    assert (ignore.average_calendar, ignore.ignore_calendar) == (False, True)
     neither = webapi.params_to_args({})
-    assert (neither.model_calendar, neither.average_calendar) == (False, False)
+    assert (
+        neither.model_calendar, neither.average_calendar, neither.ignore_calendar
+    ) == (False, False, False)
+
+
+def test_fingerprint_changes_when_calendar_ignore_toggles():
+    base = webapi.params_to_args({})
+    ignore = webapi.params_to_args({"calendar": "ignore"})
+    assert webapi.fingerprint("m", "i", base) != webapi.fingerprint("m", "i", ignore)
 
 
 def test_params_to_args_rejects_bad_calendar_value():
