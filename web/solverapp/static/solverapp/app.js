@@ -53,6 +53,12 @@ function setStartDateDisplay(value) {
   el.classList.toggle("implicit-date", implicit);
 }
 
+// The date input and its calendar-toggle button enable/disable as one.
+function setStartDateEnabled(enabled) {
+  $("#start-date").disabled = !enabled;
+  $("#start-date-toggle").disabled = !enabled;
+}
+
 // --- Reading/writing the form <-> a {mastery_text, inventory_text, params} state ---
 
 function readParams() {
@@ -134,7 +140,7 @@ function applyParams(params) {
     radio.checked = radio.value === calendarValue;
   });
   setStartDateDisplay(params.start_date);
-  $("#start-date").disabled = calendarValue !== "full";
+  setStartDateEnabled(calendarValue === "full");
 
   $("#max-gold").value = params.max_gold || "";
   $("#max-ap").value = params.max_ap ?? "";
@@ -312,7 +318,7 @@ function init() {
   });
   document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
     radio.addEventListener("change", () => {
-      $("#start-date").disabled = radio.value !== "full";
+      setStartDateEnabled(radio.value === "full");
       onAnyChange();
     });
   });
@@ -320,6 +326,41 @@ function init() {
     setStartDateDisplay($("#start-date").value);
     onAnyChange();
   });
+
+  // Calendar popout toggling. The native indicator can't toggle: the browser
+  // closes an open popout on any outside pointerdown (including on the
+  // indicator itself) and the indicator's click then immediately reopens it.
+  // Our button tracks believed-open state instead: the pointerdown that
+  // closed an open popout marks it, and the click skips the reopen. The
+  // state can only go stale via Escape (the popout swallows that key), in
+  // which case one click re-syncs and the next toggles -- a soft failure.
+  {
+    const input = $("#start-date");
+    const btn = $("#start-date-toggle");
+    let pickerOpen = false;
+    let closedByThisPress = false;
+    btn.addEventListener("pointerdown", () => {
+      closedByThisPress = pickerOpen;
+      pickerOpen = false;
+    });
+    btn.addEventListener("click", () => {
+      if (!closedByThisPress && !input.disabled && input.showPicker) {
+        try {
+          input.showPicker();
+          pickerOpen = true;
+        } catch (err) {
+          // Not allowed (no user activation) or unsupported: nothing to do.
+        }
+      }
+      closedByThisPress = false;
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (event.target !== btn) pickerOpen = false; // outside click closes it
+    });
+    input.addEventListener("change", () => {
+      pickerOpen = false; // picking a date closes it
+    });
+  }
 
   document.querySelectorAll("input, textarea, select").forEach((el) => {
     if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above

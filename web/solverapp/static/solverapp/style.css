@@ -218,6 +218,28 @@ main {
   color: var(--muted);
 }
 
+/* The native calendar indicator can only ever (re)open the popout; our own
+   toggle button (app.js tracks the open state) replaces it so a second click
+   closes instead. */
+#start-date::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.picker-toggle {
+  flex: none;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.picker-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Make gated inputs (pumpkin-juice cap, calendar start date) visibly inert. */
 .field-row input:disabled,
 .field-row select:disabled {
