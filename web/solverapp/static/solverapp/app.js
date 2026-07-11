@@ -36,6 +36,23 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function todayISO() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+// The start date defaults to "today" without being a real setting: the input
+// always shows a date, but until the user picks one it shows today muted,
+// placeholder-style, and nothing is sent (the solver defaults to today
+// server-side). Picking today (or clearing) returns it to that implicit state.
+function setStartDateDisplay(value) {
+  const el = $("#start-date");
+  const implicit = !value || value === todayISO();
+  el.value = implicit ? todayISO() : value;
+  el.classList.toggle("implicit-date", implicit);
+}
+
 // --- Reading/writing the form <-> a {mastery_text, inventory_text, params} state ---
 
 function readParams() {
@@ -62,8 +79,9 @@ function readParams() {
   const calendar = document.querySelector('input[name="calendar"]:checked').value;
   params.calendar = calendar;
   // The start date only means anything when the calendar is fully modelled
-  // (the input is disabled otherwise, but its value lingers -- don't send it).
-  if (calendar === "full") {
+  // (the input is disabled otherwise, but its value lingers -- don't send it),
+  // and an implicit "today" (see setStartDateDisplay) is never sent either.
+  if (calendar === "full" && !$("#start-date").classList.contains("implicit-date")) {
     const startDate = $("#start-date").value;
     if (startDate) params.start_date = startDate;
   }
@@ -115,7 +133,7 @@ function applyParams(params) {
   document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
     radio.checked = radio.value === calendarValue;
   });
-  $("#start-date").value = params.start_date || "";
+  setStartDateDisplay(params.start_date);
   $("#start-date").disabled = calendarValue !== "full";
 
   $("#max-gold").value = params.max_gold || "";
@@ -298,10 +316,14 @@ function init() {
       onAnyChange();
     });
   });
+  $("#start-date").addEventListener("change", () => {
+    setStartDateDisplay($("#start-date").value);
+    onAnyChange();
+  });
 
   document.querySelectorAll("input, textarea, select").forEach((el) => {
     if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above
-    if (el.name === "calendar") return; // wired above
+    if (el.name === "calendar" || el.id === "start-date") return; // wired above
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
@@ -326,6 +348,9 @@ function init() {
       // Persistence is a convenience; ignore storage failures.
     }
   });
+
+  // A brand-new session never runs applyParams, so seed the implicit today.
+  setStartDateDisplay("");
 
   if (restoreState()) {
     solve();

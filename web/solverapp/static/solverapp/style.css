@@ -1,4 +1,8 @@
 :root {
+  /* Native widgets (the date-picker popout, scrollbars) follow the theme;
+     without this the dark theme gets a light-UA calendar popout rendered
+     black-on-dark-grey. */
+  color-scheme: light;
   --bg: #ffffff;
   --fg: #1a1a1a;
   --muted: #5f6368;
@@ -16,6 +20,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #16181c;
     --fg: #e8e8e8;
     --muted: #9aa0a6;
@@ -204,6 +209,13 @@ main {
 
 .field-row input.narrow {
   flex: 0 0 6rem;
+}
+
+/* The start date always displays a date, but until the user picks one it
+   shows today muted, placeholder-style -- the value is not sent (the solver
+   defaults to today server-side). */
+.field-row input.implicit-date {
+  color: var(--muted);
 }
 
 /* Make gated inputs (pumpkin-juice cap, calendar start date) visibly inert. */
