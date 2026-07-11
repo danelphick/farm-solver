@@ -1291,7 +1291,9 @@ def print_plan(
                 if key not in ctx.consumed or produced <= 1e-6:
                     continue
                 residual = min(produced, ctx.consumed[key])
-                if residual <= 1e-6:
+                # An LP-epsilon consumption (a plan that spends "0 AP" often
+                # burns a stray fraction) would print as a "0x ... in 0m" line.
+                if round(residual) < 1:
                     continue
             wait = timedelta(minutes=residual / rate)
             rows.append((wait, display.get(key, key), round(residual), key))
@@ -1608,7 +1610,9 @@ def markdown_plan(
                 if key not in ctx.consumed or produced <= 1e-6:
                     continue
                 residual = min(produced, ctx.consumed[key])
-                if residual <= 1e-6:
+                # An LP-epsilon consumption (a plan that spends "0 AP" often
+                # burns a stray fraction) would print as a "0x ... in 0m" line.
+                if round(residual) < 1:
                     continue
             wait = timedelta(minutes=residual / rate)
             prod_rows.append((wait, display.get(key, key), round(residual), key))
