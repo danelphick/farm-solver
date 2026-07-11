@@ -190,6 +190,17 @@ main {
   padding-bottom: 0.25rem;
 }
 
+/* The report markdown nests h3/h4 under the pane's h2 (MarkdownDoc's
+   heading_shift); unstyled they'd keep browser defaults, where h3 (1.17em)
+   outsizes the 1.1rem h2 above and inverts the hierarchy. */
+#results h3 {
+  font-size: 0.95rem;
+}
+
+#results h4 {
+  font-size: 0.85rem;
+}
+
 .report-section table {
   width: 100%;
   border-collapse: collapse;
