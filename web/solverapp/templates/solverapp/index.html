@@ -36,6 +36,7 @@
   </details>
 
   <div class="controls-grid">
+    <div class="controls-col">
     <details id="goal-details" class="pane" open>
       <summary>Goal<span id="goal-summary" class="summary-detail"></span></summary>
       <div class="field-row">
@@ -53,34 +54,6 @@
       <div class="field-row">
         <label for="items">Item goal(s)</label>
         <input id="items" type="text" placeholder="Item:Amount,Item:Amount">
-      </div>
-    </details>
-
-    <details id="resources-details" class="pane" open>
-      <summary>Resources</summary>
-      <div class="field-row">
-        <label for="current-stamina">Current stamina</label>
-        <input id="current-stamina" type="number" min="0" value="0">
-      </div>
-      <div class="field-row">
-        <label for="cookie-sets">Cookie sets</label>
-        <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
-      </div>
-      <div class="field-row">
-        <label for="use-pumpkin-juice">
-          <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
-        </label>
-        <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
-      </div>
-      <div class="field-row">
-        <label>Calendar</label>
-        <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
-        <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
-        <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
-      </div>
-      <div class="field-row">
-        <label for="start-date">Start date</label>
-        <input id="start-date" type="date" disabled>
       </div>
     </details>
 
@@ -112,6 +85,37 @@
           placeholder="sawmill.use_hickory_omelette=false"></textarea>
       </div>
     </details>
+    </div>
+
+    <div class="controls-col">
+    <details id="resources-details" class="pane" open>
+      <summary>Resources</summary>
+      <div class="field-row">
+        <label for="current-stamina">Current stamina</label>
+        <input id="current-stamina" type="number" min="0" value="0">
+      </div>
+      <div class="field-row">
+        <label for="cookie-sets">Cookie sets</label>
+        <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
+      </div>
+      <div class="field-row">
+        <label for="use-pumpkin-juice">
+          <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
+        </label>
+        <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
+      </div>
+      <div class="field-row">
+        <label>Calendar</label>
+        <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
+        <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
+        <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
+      </div>
+      <div class="field-row">
+        <label for="start-date">Start date</label>
+        <input id="start-date" type="date" disabled>
+      </div>
+    </details>
+    </div>
   </div>
 </main>
 

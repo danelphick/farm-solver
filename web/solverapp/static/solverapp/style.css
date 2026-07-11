@@ -138,16 +138,47 @@ details[open] > summary .summary-detail {
   gap: 1rem;
 }
 
+/* Two independent column stacks (Goal + Limits left, Resources right), not
+   one grid of panes: grid rows size to the tallest cell, so a collapsed Goal
+   next to an expanded Resources would leave a gap before Limits. */
 .controls-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
   align-items: start;
+}
+
+.controls-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 @media (max-width: 55rem) {
   .paste-fields {
     grid-template-columns: 1fr;
+  }
+
+  /* One column: dissolve the stacks so the panes order Goal, Resources,
+     Limits rather than the left stack's Goal, Limits pair first. */
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-col {
+    display: contents;
+  }
+
+  #goal-details {
+    order: 1;
+  }
+
+  #resources-details {
+    order: 2;
+  }
+
+  #limits-details {
+    order: 3;
   }
 }
 
