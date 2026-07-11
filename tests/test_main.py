@@ -1583,9 +1583,11 @@ def test_sectioned_reporter_renders_each_section_independently():
     frontier_text = reporter.docs["frontier"].render()
     assert "## Sourcing plans" in frontier_text
 
+    # The plan and crafts docs render under the page's own "Selected plan"
+    # heading, so their sections are demoted one level to nest beneath it.
     plan_text = reporter.docs["plan"].render()
-    assert "Fishing" in plan_text
+    assert "### Fishing" in plan_text
 
     crafts_text = reporter.docs["crafts"].render()
-    assert "## Required Crafts" in crafts_text
+    assert crafts_text.splitlines()[0] == "### Required Crafts"
     assert "Board" in crafts_text

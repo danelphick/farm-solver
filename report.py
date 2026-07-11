@@ -54,11 +54,15 @@ class MarkdownDoc:
     what makes each a distinct element to a Markdown parser/renderer.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, heading_shift: int = 0) -> None:
         self._blocks: list[str] = []
+        # Demotes every heading by this many levels: a doc rendered under an
+        # externally supplied heading (the web app's "Selected plan" pane)
+        # shifts by 1 so its sections nest instead of competing with it.
+        self._heading_shift = heading_shift
 
     def heading(self, text: str, level: int = 2) -> None:
-        self._blocks.append(f"{'#' * level} {text}")
+        self._blocks.append(f"{'#' * (level + self._heading_shift)} {text}")
 
     def para(self, text: str) -> None:
         self._blocks.append(text)
@@ -1900,9 +1904,14 @@ class SectionedReporter(Reporter):
     """
 
     def __init__(self) -> None:
+        # The plan and crafts docs render inside the page's own "Selected plan"
+        # heading, so their sections shift one level down to nest under it.
         self.docs: dict[str, MarkdownDoc] = {
-            key: MarkdownDoc()
-            for key in ("solution", "notes", "frontier", "plan", "crafts")
+            "solution": MarkdownDoc(),
+            "notes": MarkdownDoc(),
+            "frontier": MarkdownDoc(),
+            "plan": MarkdownDoc(heading_shift=1),
+            "crafts": MarkdownDoc(heading_shift=1),
         }
         self.notes: list[str] = []
 
