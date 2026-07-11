@@ -14,6 +14,7 @@ from __future__ import annotations
 import calendar
 import dataclasses
 import math
+import re
 import sys
 from collections.abc import Iterable
 from datetime import timedelta
@@ -46,6 +47,27 @@ def _escape_cell(text: str) -> str:
     return text.replace("|", "\\|")
 
 
+# A cell holding a quantity: counts, gold, durations ("6d 5h 16m"), dates and
+# percentages all start with a digit, possibly signed or parenthesised.
+_NUMERIC_CELL_RE = re.compile(r"^\(?[-−+]?\d")
+
+
+def _column_is_numeric(rows: list[list[str]], index: int) -> bool:
+    """Whether most of a column's non-empty cells hold quantities.
+
+    Majority rather than all: a stray word in a numeric column ("done" in the
+    Goal table's *Still needed*) rides along right-aligned rather than
+    flipping the whole column back to left.
+    """
+    cells = [
+        str(row[index]).strip()
+        for row in rows
+        if index < len(row) and str(row[index]).strip()
+    ]
+    numeric = sum(bool(_NUMERIC_CELL_RE.match(cell)) for cell in cells)
+    return bool(cells) and numeric * 2 > len(cells)
+
+
 class MarkdownDoc:
     """Accumulates a report as Markdown source, rendered once at the end.
 
@@ -74,7 +96,14 @@ class MarkdownDoc:
         if not rows:
             return
         head = "| " + " | ".join(_escape_cell(h) for h in headers) + " |"
-        sep = "| " + " | ".join(["---"] * len(headers)) + " |"
+        # Right-align a column when most of its cells are quantities --
+        # counts, gold, durations, dates all start with a digit (possibly
+        # signed/parenthesised); the odd word ("done") rides along.
+        aligns = [
+            "---:" if _column_is_numeric(rows, i) else "---"
+            for i in range(len(headers))
+        ]
+        sep = "| " + " | ".join(aligns) + " |"
         body = [
             "| " + " | ".join(_escape_cell(str(c)) for c in row) + " |" for row in rows
         ]
