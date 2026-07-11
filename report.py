@@ -104,24 +104,26 @@ def print_solution(solution: farm_solver.Solution) -> None:
 
 def markdown_solution(doc: MarkdownDoc, solution: farm_solver.Solution) -> None:
     """Markdown counterpart to :func:`print_solution`: the goal needs as a table."""
-    show_level = any(need.level is not None for need in solution.needs)
     if solution.needs:
         doc.heading("Goal")
-        headers = (["Level"] if show_level else []) + [
-            "Item", "Have", "Target", "Still needed",
-        ]
+        headers = ["Purpose", "Item", "Have", "Target", "Still needed"]
         rows = []
         for need in solution.needs:
-            row = [f"T{need.level}"] if show_level and need.level is not None else (
-                [""] if show_level else []
-            )
-            row += [
+            # Why the item is wanted: a tower level's requirement, or a plain
+            # -m (mastery) / -i (inventory count) goal.
+            if need.level is not None:
+                purpose = f"T{need.level}"
+            elif need.is_mastery:
+                purpose = "Mastery"
+            else:
+                purpose = "Inventory"
+            rows.append([
+                purpose,
                 need.item,
                 f"{need.have:,}",
                 f"{need.target:,}",
                 f"{need.extra:,}" if need.extra > 0 else "done",
-            ]
-            rows.append(row)
+            ])
         doc.table(headers, rows)
     for note in solution.notes:
         doc.para(note)
