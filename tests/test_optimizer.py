@@ -10,6 +10,7 @@ from optimizer import (
     _passive_completion_caps,
     _thin,
     all_offers,
+    draw_consumed,
     frontier,
     minimize,
     passive_residuals,
@@ -123,6 +124,23 @@ def test_minimize_leaves_unproducible_items_in_the_remainder():
 def test_minimize_without_any_offer_returns_everything_as_remainder():
     plan = minimize([], {"It": 10})
     assert plan == SourcingPlan(remainder={"It": 10})
+
+
+def test_held_consumable_grounds_an_offer_and_is_consumed():
+    # An explore that drops Hide but burns a held Acorn Pie (like the real acorn
+    # channel): with pies on hand the Hide is produced and the pies are spent...
+    offer = Offer("explore pie", "exploring", {"hide": 100}, consumes={"acorn pie": 1.0})
+    plan = minimize([offer], {"Hide": 250}, inventory={"acorn pie": 5})
+    assert plan.remainder == {}
+    assert draw_consumed(plan)["acorn pie"] == pytest.approx(2.5)
+
+
+def test_offer_grounded_only_in_an_unheld_consumable_is_unobtainable():
+    # ...but with no pies held (and nothing crafting them) the offer cannot run,
+    # so its Hide is unobtainable and falls to the remainder rather than infeasible.
+    offer = Offer("explore pie", "exploring", {"hide": 100}, consumes={"acorn pie": 1.0})
+    plan = minimize([offer], {"Hide": 250})
+    assert plan.remainder == {"Hide": 250}
 
 
 def test_minimize_crafts_when_cheaper_in_gold_than_gathering():

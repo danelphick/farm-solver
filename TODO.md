@@ -7,8 +7,8 @@
 
 - Recycling - Drinking OJ, AP, AC gives back glass bottles.
 
-- Acorn Butter - exploring in any zone drops Hide. Needs drop tables for every zone. Or we could
-  just restrict it to Gary's Crushroom where it's most optimal?
+- Acorn Pie - exploring in any zone drops Hide. Needs drop tables for every zone. Or we could just
+  restrict it to Gary's Crushroom where it's most optimal?
 
 - Timing should be restricted to full quanta of passive gathering. E.g. Antlers accumulate 2x a day.
   You don't get a % of them spread through the rest of the day.

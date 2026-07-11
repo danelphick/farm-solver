@@ -113,7 +113,7 @@ frontier as before.
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -122,7 +122,7 @@ frontier as before.
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `storehouse_size`, `trading_prices` |
-| `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring`, `CiderModifiers`, `*_from_config` |
+| `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config`, `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
 | `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.api_solve`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
@@ -239,10 +239,18 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
   `plan_gold(plan, prices)` is the market value of **all** consumables spent;
   **`plan_gold_breakdown`** splits it exactly into `(to_buy, self_sourced)` =
   `(plan.gold, plan_gold − plan.gold)` — to-buy is what the LP actually bought.
-  **`plan_surplus_gold`** = `Σ surplus_sale_value(plan_leftovers(...))`, the sale
-  value of what a plan banks; `frontier` stores it on each plan as `surplus_gold`,
-  so `cost`'s net gold nets it off (see the `SourcingPlan` bullet). `main.cheapest_plan`
-  ranks by **net** gold (`plan.gold − plan.surplus_gold`) — buys least, banks most.
+  **`plan_surplus_gold`** = `Σ surplus_sale_value(accumulated_leftovers(...))`, the
+  sale value of what a plan **accumulates** past its goal; `frontier` stores it on
+  each plan as `surplus_gold`, so `cost`'s net gold nets it off (see the
+  `SourcingPlan` bullet). `main.cheapest_plan` ranks by **net** gold
+  (`plan.gold − plan.surplus_gold`) — buys least, banks most.
+  **`accumulated_leftovers`** = `plan_leftovers` minus each item's
+  `leftover_inventory_share`: pre-existing inventory sitting unused is **not** counted
+  as surplus the plan banks (otherwise every plan on a save with a big consumable
+  stockpile shows a large phantom credit and a misleadingly negative net gold). Only
+  what executing the plan produces beyond all it consumes (passive, crafts, opens,
+  gathering) is credited — the same figure the report's Surplus section now shows
+  (accumulated-only; the old inventory/accumulated split is gone).
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
   `_non_dominated` then `_thin` to `count`. It builds two `_build_base` bases up
@@ -411,22 +419,21 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   the gold each purchase costs, totalling `plan.gold`.
 - **Surplus section** (`_print_surplus_value`, with trading `prices`): passive
   overshoots every resource but the slowest, so a plan banks materials past its
-  goal. `optimizer.plan_leftovers` gives each item's leftover (supply past all
-  consumption); `optimizer.surplus_sale_value` then runs one small **max-gold LP**
-  crafting those leftovers into the sellable priced goods (AP, Large Net, Apple
-  Cider, Orange Juice — Grape Juice and cookie sets excluded, no sale recipe),
-  allocating shared materials to the richest good. Lists each good with its gold
-  and the nominal total — the same figure `plan_surplus_gold` sums for the frontier
-  row's `(bank B, net N)` credit and the plan's net `cost`. Rigorous for every plan:
-  consumables are always grounded,
-  so a plan self-sources exactly what it needs (net of buying) and the leftovers
-  are genuine spare capacity (naturally zero when the binding materials are used
-  up). Each good's count and the total gold also split into *inventory* (already
-  held) vs *accumulated* (what the plan itself produced), via
-  `optimizer.leftover_inventory_share` — held stock is assumed spent before
-  anything the plan makes (same convention as the "From inventory" consumables
-  note), so a directly-demanded item contributes nothing (its stock already nets
-  out of `demand` in `plan_balance`).
+  goal. `optimizer.accumulated_leftovers` gives each item's leftover **net of stock
+  already held** (`plan_leftovers` minus `leftover_inventory_share`);
+  `optimizer.surplus_sale_value` then runs one small **max-gold LP** crafting those
+  into the sellable priced goods (AP, Large Net, Apple Cider, Orange Juice — Grape
+  Juice and cookie sets excluded, no sale recipe), allocating shared materials to
+  the richest good. Lists each good with its gold and the nominal total — the same
+  figure `plan_surplus_gold` sums for the frontier row's `(bank B, net N)` credit and
+  the plan's net `cost`. **Only what the plan accumulates counts, never pre-held
+  inventory**: an untouched stockpile is not surplus the plan produces, and counting
+  it made every plan look profitable and its net gold misleadingly negative. Rigorous
+  for every plan: consumables are always grounded, so a plan self-sources exactly
+  what it needs (net of buying) and the accumulated leftovers are genuine spare
+  capacity (naturally zero when the binding materials are used up, or when every
+  leftover was already held — then the section is omitted). A directly-demanded item
+  contributes nothing (its stock already nets out of `demand` in `plan_balance`).
 
 ## Invariants & gotchas
 
@@ -482,6 +489,26 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   and sweep are unchanged but their (and every plan's) `cost` is re-scored net.
 - **Buying can't earn mastery**: a demanded (goal) consumable must be crafted or
   gathered; `buy ≤ derived` confines purchases to non-goal (tool/material) uses.
+- **Acorn Pie** (a held meal, not an artifact): eating one makes a zone drop Hide
+  in place of its primary drop for the next `ACORN_PIE_EXPLORES` (450) Arnold
+  Palmers *or* Apple Ciders. Modelled (only for Gary's Crushroom so far) not as a
+  base-table swap like Fungus Processing but as **extra offers** alongside the
+  plain ones — `sources.exploring_offers`/`cider_offers` emit a `... with acorn
+  pie` variant per location with an `Exploring.acorn_table` (the CSV's
+  `acorn_pie` / `fungus_processing+acorn_pie` flagged rows, picked by
+  `Exploring.acorn_flag` per whether Fungus Processing is active), each burning
+  `1/450` of an `acorn pie` (a cider explore burns `cider_per_explore/450`) on top
+  of its Arnold Palmer / Apple Cider. So the LP takes it only when it wants the
+  Hide and only up to the pies held — "use whenever available, don't waste."
+  Bounded by inventory in the `acorn pie` balance; the pie spend surfaces in the
+  report's **From inventory** section via `draw_consumed` (it is a `consumes`, not
+  a yield, so `report._build_plan_context` adds it to `spent_consumables`).
+- **Held items seed obtainability**: `_obtainable` takes a `held` set —
+  `_build_base` passes the held, non-demanded items any offer *consumes* (e.g. an
+  Acorn Pie) so a channel grounded only in a held consumable is usable. Excludes
+  demanded items, leaving their demand/inventory netting and the remainder set
+  unchanged; the buyable/craftable inputs it also covers were already obtainable,
+  so the only practical new entrant today is `acorn pie`.
 
 ## Dependency
 

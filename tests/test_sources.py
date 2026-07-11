@@ -384,6 +384,63 @@ def test_ungrounded_exploring_has_no_consumes():
     assert offer.consumes == {}
 
 
+def _crushroom(acorn_flag="acorn_pie"):
+    """Gary's Crushroom with a base table and an Acorn Pie flagged table."""
+    location = ExploringLocation(
+        "Gary's Crushroom",
+        {"mushroom": 0.9998},
+        flagged_drop_rates={acorn_flag: {"mushroom": 0.8328, "hide": 0.167}},
+    )
+    return Exploring(
+        modifiers=ExploringModifiers(),  # base yield 200
+        locations={"gary's crushroom": location},
+        acorn_flag=acorn_flag,
+    )
+
+
+def test_exploring_adds_an_acorn_pie_offer_dropping_hide():
+    offers = {o.name: o for o in exploring_offers(_crushroom(), ground=True)}
+    pie = offers["explore Gary's Crushroom with acorn pie"]
+    # Yields the pie table (Hide displacing Mushroom), still costs a palmer, and
+    # burns 1/450 of a held Acorn Pie per explore.
+    assert pie.ap == 1
+    assert pie.yields == {"mushroom": 0.8328 * 200, "hide": 0.167 * 200}
+    assert pie.consumes == {"arnold palmer": 1.0, "acorn pie": pytest.approx(1 / 450)}
+
+
+def test_no_acorn_pie_offer_without_a_flagged_table():
+    exploring = Exploring(
+        locations={"cave": ExploringLocation("Cave", {"wood": 0.4})},
+        acorn_flag="acorn_pie",
+    )
+    names = [o.name for o in exploring_offers(exploring)]
+    assert names == ["explore Cave"]  # no pie variant where no table is tagged
+
+
+def test_no_acorn_pie_offer_when_flag_unset():
+    exploring = _crushroom()
+    exploring.acorn_flag = None
+    names = [o.name for o in exploring_offers(exploring)]
+    assert names == ["explore Gary's Crushroom"]
+
+
+def test_cider_adds_an_acorn_pie_offer_scaling_the_pie_by_the_cider():
+    exploring = _crushroom()
+    exploring.effectiveness = {"gary's crushroom": 100}
+    offers = {o.name: o for o in cider_offers(exploring)}
+    plain = offers["cider Gary's Crushroom"]
+    pie = offers["cider Gary's Crushroom with acorn pie"]
+    per_cider = exploring.cider.explores_per_cider(100)
+    # A pie covers 450 ciders, i.e. 450*per_cider explores, so one explore burns
+    # the same slice of an Apple Cider as the plain offer, divided by 450.
+    assert pie.consumes["apple cider"] == plain.consumes["apple cider"]
+    assert pie.consumes["acorn pie"] == pytest.approx((1 / per_cider) / 450)
+    assert pie.yields == {
+        "mushroom": CIDER_DROP_RATE * 0.8328,
+        "hide": CIDER_DROP_RATE * 0.167,
+    }
+
+
 def test_grounded_fishing_consumes_a_real_large_net():
     fishing = Fishing(zones={"lake": FishingZone("Lake", {"trout": 0.4})})
     [offer] = fishing_offers(fishing, ground=True)

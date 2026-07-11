@@ -417,6 +417,22 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
     assert "3x Magicite" in out
 
 
+def test_print_plan_names_the_acorn_pies_a_pie_explore_eats(capsys):
+    # A pie-boosted explore burns 1/450 of an Acorn Pie per palmer; 109 palmers is
+    # 0.24 of a pie, but you eat whole pies, so the line rounds up to 1.
+    offer = Offer(
+        "explore Gary's Crushroom with acorn pie",
+        "exploring",
+        {"hide": 92},
+        consumes={"arnold palmer": 1.0, "acorn pie": 1 / 450},
+        ap=1,
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 109)])
+    print_plan(plan, {"Hide": 10000}, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Arnold Palmer at Gary's Crushroom with 1 acorn pie" in out
+
+
 def test_print_plan_critical_path_counts_marginal_passive_as_fill(capsys):
     # Farming caps at 100h; passive overshoots to 101h (~1%) making the last Beets.
     # That sliver is fill, so farming stays the named critical path.
@@ -1214,17 +1230,18 @@ def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
     print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
     out = capsys.readouterr().out
     assert "Surplus (accumulates past the goal)" in out
-    assert "500x Large Net (0 inventory + 500 accumulated) = 5 g" in out
-    assert "nominal value = 5 g (0 g inventory + 5 g accumulated)" in out
+    assert "500x Large Net = 5 g" in out
+    assert "nominal value = 5 g" in out
 
     print_plan(plan, {}, Farm(), workshop, 1.0)  # no prices -> no surplus section
     assert "Surplus" not in capsys.readouterr().out
 
 
-def test_print_plan_splits_surplus_into_inventory_and_accumulated(capsys):
-    # 300 Large Net already held (none of it consumed) plus 1,000 surplus Straw
-    # the plan crafts into 500 more -- the 800 total should read as 300 held +
-    # 500 made, and the nominal value the same way in gold.
+def test_print_plan_surplus_excludes_already_held_inventory(capsys):
+    # 300 Large Net already held (none of it consumed) plus 1,000 surplus Straw the
+    # plan crafts into 500 more. Only the 500 the plan *accumulates* is surplus --
+    # the held 300 is a pre-existing stockpile, not something executing the plan
+    # banks, so it must not inflate the surplus value (which credits the net cost).
     workshop = Workshop({"large net": WorkshopRecipe("Large Net", {"Straw": 2})})
     passive_offer = Offer(
         "passive", "passive", {"straw": 10}, time_per_unit=timedelta(minutes=1)
@@ -1240,8 +1257,9 @@ def test_print_plan_splits_surplus_into_inventory_and_accumulated(capsys):
         inventory={"large net": 300.0},
     )
     out = capsys.readouterr().out
-    assert "800x Large Net (300 inventory + 500 accumulated) = 8 g" in out
-    assert "nominal value = 8 g (3 g inventory + 5 g accumulated)" in out
+    assert "500x Large Net = 5 g" in out  # only the accumulated 500, not 800
+    assert "nominal value = 5 g" in out
+    assert "800x Large Net" not in out  # the held 300 is not folded into surplus
 
 
 def test_print_frontier_splits_gold_into_buy_and_self_sourced(capsys):

@@ -1,7 +1,9 @@
 import pytest
 
 from exploring import (
+    ACORN_PIE_FLAG,
     DEFAULT_EXPLORING_CSV,
+    FUNGUS_ACORN_PIE_FLAG,
     FUNGUS_PROCESSING_FLAG,
     CiderModifiers,
     Exploring,
@@ -121,6 +123,25 @@ def test_without_fungus_processing_garys_crushroom_is_unchanged():
     drop_rates = exploring.locations["gary's crushroom"].drop_rates
     assert "mushroom" in drop_rates
     assert "mushroom paste" not in drop_rates
+
+
+def test_acorn_flag_is_the_plain_pie_table_without_fungus_processing():
+    exploring = exploring_from_config({})
+    assert exploring.acorn_flag == ACORN_PIE_FLAG
+    table = exploring.acorn_table(exploring.locations["gary's crushroom"])
+    assert table and "hide" in table and "mushroom" in table
+
+
+def test_acorn_flag_is_the_fungus_pie_table_with_fungus_processing():
+    exploring = exploring_from_config({}, have_fungus_processing=True)
+    assert exploring.acorn_flag == FUNGUS_ACORN_PIE_FLAG
+    table = exploring.acorn_table(exploring.locations["gary's crushroom"])
+    assert table and "hide" in table and "mushroom paste" in table
+
+
+def test_acorn_table_is_none_for_a_location_without_a_pie_table():
+    exploring = exploring_from_config({})
+    assert exploring.acorn_table(exploring.locations["forest"]) is None
 
 
 def test_explores_per_cider_without_cinnamon_is_ten_per_effectiveness():

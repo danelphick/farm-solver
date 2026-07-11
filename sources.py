@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from crops import Farm
-from exploring import Exploring
+from exploring import ACORN_PIE_EXPLORES, Exploring
 from fishing import Fishing
 from locksmith import Locksmith
 from passive import PassiveProduction
@@ -54,6 +54,11 @@ APPLE_STAMINA = 15.0
 # explore (one stamina). The zone's own drop-rate distribution then says which
 # item each discovery is (see :func:`cider_offers`).
 CIDER_DROP_RATE = 0.40
+
+# The consumable an Acorn Pie explore burns, and how much of one each explore
+# costs (one pie covers ACORN_PIE_EXPLORES explores; see :mod:`exploring`).
+ACORN_PIE = "acorn pie"
+ACORN_PIE_PER_EXPLORE = 1.0 / ACORN_PIE_EXPLORES
 
 
 @dataclass
@@ -200,18 +205,39 @@ def exploring_offers(exploring: Exploring, ground: bool = False) -> list[Offer]:
     With ``ground`` (the inventory plan mode) each Arnold Palmer is also a real
     item the plan must craft or hold (``consumes``), grounding exploring in the
     Lemonade/Iced Tea chain; otherwise the Arnold Palmer is an abstract cost.
+
+    A location with an Acorn Pie table (see :meth:`Exploring.acorn_table`) also
+    gets a pie-boosted variant that drops Hide: same Arnold Palmer cost plus
+    ``1/450`` of a held Acorn Pie per explore, so the LP takes it only when it
+    wants the Hide and only up to the pies on hand.
     """
     palmer_yield = exploring.modifiers.palmer_yield()
-    return [
-        Offer(
-            name=f"explore {location.name}",
-            track=EXPLORING_TRACK,
-            yields=location.explore(palmer_yield),
-            consumes={"arnold palmer": 1.0} if ground else {},
-            ap=1,
+    offers: list[Offer] = []
+    for location in exploring.locations.values():
+        offers.append(
+            Offer(
+                name=f"explore {location.name}",
+                track=EXPLORING_TRACK,
+                yields=location.explore(palmer_yield),
+                consumes={"arnold palmer": 1.0} if ground else {},
+                ap=1,
+            )
         )
-        for location in exploring.locations.values()
-    ]
+        acorn_table = exploring.acorn_table(location)
+        if acorn_table:
+            consumes = {ACORN_PIE: ACORN_PIE_PER_EXPLORE}
+            if ground:
+                consumes["arnold palmer"] = 1.0
+            offers.append(
+                Offer(
+                    name=f"explore {location.name} with acorn pie",
+                    track=EXPLORING_TRACK,
+                    yields={item: rate * palmer_yield for item, rate in acorn_table.items()},
+                    consumes=consumes,
+                    ap=1,
+                )
+            )
+    return offers
 
 
 def cider_offers(exploring: Exploring) -> list[Offer]:
@@ -233,6 +259,7 @@ def cider_offers(exploring: Exploring) -> list[Offer]:
         per_cider = exploring.cider.explores_per_cider(effectiveness)
         if per_cider <= 0:
             continue
+        cider_per_explore = 1.0 / per_cider
         offers.append(
             Offer(
                 name=f"cider {location.name}",
@@ -241,9 +268,28 @@ def cider_offers(exploring: Exploring) -> list[Offer]:
                     item: CIDER_DROP_RATE * rate
                     for item, rate in location.drop_rates.items()
                 },
-                consumes={"stamina": stamina, "apple cider": 1.0 / per_cider},
+                consumes={"stamina": stamina, "apple cider": cider_per_explore},
             )
         )
+        acorn_table = exploring.acorn_table(location)
+        if acorn_table:
+            # One pie covers 450 Apple Ciders, i.e. 450*per_cider explores, so a
+            # single explore burns cider_per_explore/450 of a pie.
+            offers.append(
+                Offer(
+                    name=f"cider {location.name} with acorn pie",
+                    track=EXPLORING_TRACK,
+                    yields={
+                        item: CIDER_DROP_RATE * rate
+                        for item, rate in acorn_table.items()
+                    },
+                    consumes={
+                        "stamina": stamina,
+                        "apple cider": cider_per_explore,
+                        ACORN_PIE: cider_per_explore * ACORN_PIE_PER_EXPLORE,
+                    },
+                )
+            )
     return offers
 
 

@@ -860,49 +860,31 @@ def _print_surplus_value(
     prices: dict[str, float],
     display: dict[str, str],
 ) -> None:
-    """The gold a plan's leftovers are worth if crafted into sellable goods.
+    """The gold a plan's *accumulated* surplus is worth if crafted into sellable goods.
 
     Passive production overshoots every resource but the slowest, so a plan banks
-    materials far past what its goal needs (see :func:`optimizer.plan_leftovers`).
-    Assuming they are crafted into the sellable priced goods -- Arnold Palmers,
-    Large Nets, Apple Cider, Orange Juice -- :func:`optimizer.surplus_sale_value`
-    finds the most gold they are worth; this lists each good and the nominal total.
-    Each count and the total always split into inventory (already held) versus
-    accumulated (what the plan itself produced), via
-    :func:`optimizer.leftover_inventory_share`, so the nominal value shows how
-    much value executing the plan actually adds -- zero on either side when a
-    good was entirely held or entirely made.
+    materials far past what its goal needs. Only what the plan itself accumulates
+    counts (:func:`optimizer.accumulated_leftovers` -- stock already held is netted
+    off, since an untouched stockpile is not surplus the plan produced): assuming
+    those are crafted into the sellable priced goods -- Arnold Palmers, Large Nets,
+    Apple Cider, Orange Juice -- :func:`optimizer.surplus_sale_value` finds the most
+    gold they are worth. Lists each good and the nominal total, matching the frontier
+    row's banked-surplus credit (:func:`optimizer.plan_surplus_gold`).
     """
-    leftovers = optimizer.plan_leftovers(
+    leftovers = optimizer.accumulated_leftovers(
         plan, demand, recipes, crafting_bonus, open_flows, inventory
     )
     rows = optimizer.surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
     if not rows:
         return
-    # Split each good's count (and so its gold) into what was already held versus
-    # what the plan itself accumulated, so the nominal value shows how much value
-    # executing the plan actually added on top of stock the player already owned.
-    inventory_share = optimizer.leftover_inventory_share(
-        plan, demand, recipes, crafting_bonus, open_flows, inventory
-    )
     total = sum(gold for _, _, gold in rows)
-    inventory_gold = sum(
-        min(inventory_share.get(item, 0.0), count) * prices[item] for item, count, _ in rows
-    )
     print("\nSurplus (accumulates past the goal), craftable into sellable goods:")
     width = _num_width(round(count) for _, count, _ in rows)
     for item, count, gold in rows:
-        held = min(inventory_share.get(item, 0.0), count)
         print(
-            f"  {round(count):>{width},}x {display.get(item, item)}"
-            f" ({round(held):,} inventory + {round(count - held):,} accumulated)"
-            f" = {round(gold):,} g"
+            f"  {round(count):>{width},}x {display.get(item, item)} = {round(gold):,} g"
         )
-    print(
-        f"  nominal value = {round(total):,} g"
-        f" ({round(inventory_gold):,} g inventory"
-        f" + {round(total - inventory_gold):,} g accumulated)"
-    )
+    print(f"  nominal value = {round(total):,} g")
 
 
 def markdown_surplus_value(
@@ -917,36 +899,20 @@ def markdown_surplus_value(
     display: dict[str, str],
 ) -> None:
     """Markdown counterpart to :func:`_print_surplus_value`."""
-    leftovers = optimizer.plan_leftovers(
+    leftovers = optimizer.accumulated_leftovers(
         plan, demand, recipes, crafting_bonus, open_flows, inventory
     )
     rows = optimizer.surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
     if not rows:
         return
-    inventory_share = optimizer.leftover_inventory_share(
-        plan, demand, recipes, crafting_bonus, open_flows, inventory
-    )
     total = sum(gold for _, _, gold in rows)
-    inventory_gold = sum(
-        min(inventory_share.get(item, 0.0), count) * prices[item] for item, count, _ in rows
-    )
     doc.heading("Surplus (accumulates past the goal), craftable into sellable goods")
-    table_rows = []
-    for item, count, gold in rows:
-        held = min(inventory_share.get(item, 0.0), count)
-        table_rows.append([
-            display.get(item, item),
-            f"{round(count):,}",
-            f"{round(held):,}",
-            f"{round(count - held):,}",
-            f"{round(gold):,} g",
-        ])
-    doc.table(["Item", "Qty", "Inventory", "Accumulated", "Gold"], table_rows)
-    doc.para(
-        f"Nominal value: {round(total):,} g "
-        f"({round(inventory_gold):,} g inventory + "
-        f"{round(total - inventory_gold):,} g accumulated)"
-    )
+    table_rows = [
+        [display.get(item, item), f"{round(count):,}", f"{round(gold):,} g"]
+        for item, count, gold in rows
+    ]
+    doc.table(["Item", "Qty", "Gold"], table_rows, align=["left", "right", "right"])
+    doc.para(f"Nominal value: {round(total):,} g")
 
 
 @dataclasses.dataclass
@@ -1017,9 +983,15 @@ def _build_plan_context(
             "apple cider": plan.apple_ciders,
             "orange juice": plan.orange_juice,
             "grape juice": plan.grape_juices,
+            # Acorn Pies are a held meal the exploring channel burns (1/450 per
+            # explore) but never yields, so unlike the tools above it is read off
+            # the draws' consumes, not a plan tally; surfaced here so its held
+            # spend shows in the From-inventory section like any other tool.
+            sources.ACORN_PIE: consumed.get(sources.ACORN_PIE, 0.0),
         }.items()
         if round(spent) >= 1
     }
+    display.setdefault(sources.ACORN_PIE, "Acorn Pie")
     # An open is worth reporting if it yields a needed item, restocks a tool, or
     # gathers something a draw goes on to consume (an Apple-yielding chest opened
     # to feed the eat-Apple stamina flow, say) -- the same `consumed` union the
@@ -1038,6 +1010,20 @@ def _wanted(ctx: _PlanContext, offer: sources.Offer) -> str:
     return ", ".join(
         sorted(ctx.display.get(key, key) for key in offer.yields if key in ctx.interesting)
     )
+
+
+def _zone_label(name: str, draw: sources.Draw) -> str:
+    """A zone/location label with the Acorn Pies a pie-boosted draw eats spelled out.
+
+    A pie-boosted offer's name ends ``with acorn pie``; rewrite that to
+    ``with N acorn pie`` where N is the whole pies the draw burns (rounded up --
+    you eat whole pies, each covering 450 explores). A draw that burns no pie is
+    returned unchanged.
+    """
+    pies = draw.units * draw.offer.consumes.get(sources.ACORN_PIE, 0.0)
+    if pies <= 0:
+        return name
+    return name.replace("with acorn pie", f"with {math.ceil(pies):,} acorn pie")
 
 
 def _wanted_counts(ctx: _PlanContext, draw: sources.Draw) -> str:
@@ -1126,7 +1112,7 @@ def print_plan(
         ordered = sorted(palmer_draws, key=lambda d: d.ap, reverse=True)
         width = _num_width(math.ceil(d.units) for d in ordered)
         for draw in ordered:
-            location = draw.offer.name.removeprefix("explore ")
+            location = _zone_label(draw.offer.name.removeprefix("explore "), draw)
             print(
                 f"  {math.ceil(draw.units):>{width},}x Arnold Palmer at {location}"
                 f" ({_wanted_counts(ctx, draw)})"
@@ -1141,7 +1127,7 @@ def print_plan(
         ordered = sorted(cider_draws, key=ciders, reverse=True)
         width = _num_width(math.ceil(ciders(d)) for d in ordered)
         for draw in ordered:
-            zone = draw.offer.name.removeprefix("cider ")
+            zone = _zone_label(draw.offer.name.removeprefix("cider "), draw)
             stamina = draw.units * draw.offer.consumes.get("stamina", 0.0)
             print(
                 f"  {math.ceil(ciders(draw)):>{width},}x Apple Cider at {zone}"
@@ -1470,7 +1456,7 @@ def markdown_plan(
         rows = [
             [
                 f"{math.ceil(d.units):,}",
-                d.offer.name.removeprefix("explore "),
+                _zone_label(d.offer.name.removeprefix("explore "), d),
                 _wanted_counts(ctx, d),
             ]
             for d in ordered
@@ -1491,7 +1477,7 @@ def markdown_plan(
             stamina = d.units * d.offer.consumes.get("stamina", 0.0)
             rows.append([
                 f"{math.ceil(ciders(d)):,}",
-                d.offer.name.removeprefix("cider "),
+                _zone_label(d.offer.name.removeprefix("cider "), d),
                 f"{-round(stamina):,}",
                 _wanted_counts(ctx, d),
             ])

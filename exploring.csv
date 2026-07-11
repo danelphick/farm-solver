@@ -136,6 +136,15 @@ Gary's Crushroom,Gary's Diary Page 36,0.0000001,
 Gary's Crushroom,Mushroom Paste,0.999818,fungus_processing
 Gary's Crushroom,Piece 30,0.00009,fungus_processing
 Gary's Crushroom,Painite,0.00009,fungus_processing
+Gary's Crushroom,Mushroom,0.8328,acorn_pie
+Gary's Crushroom,Hide,0.167,acorn_pie
+Gary's Crushroom,Piece 30,0.0002,acorn_pie
+Gary's Crushroom,Gary's Diary Page 77,0.00000012,acorn_pie
+Gary's Crushroom,Gary's Diary Page 36,0.0000001,acorn_pie
+Gary's Crushroom,Mushroom Paste,0.832818,fungus_processing+acorn_pie
+Gary's Crushroom,Hide,0.167,fungus_processing+acorn_pie
+Gary's Crushroom,Piece 30,0.00009,fungus_processing+acorn_pie
+Gary's Crushroom,Painite,0.00009,fungus_processing+acorn_pie
 Sinking Swamp,Bamboo,0.1923636364,
 Sinking Swamp,Swamp Thistle,0.1169090909,
 Sinking Swamp,Scrap Cloth,0.1150909091,

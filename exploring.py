@@ -40,6 +40,19 @@ NEIGH_STAMINA_REDUCTION = 0.20
 # drop table (the Mushroom crushes into Mushroom Paste, plus rarer byproducts).
 FUNGUS_PROCESSING_FLAG = "fungus_processing"
 
+# Eating an Acorn Pie makes exploring drop Hide (in place of some of the zone's
+# primary drop) for the next 450 Arnold Palmers -- or 450 Apple Ciders -- spent
+# there. Unlike Fungus Processing (a permanent artifact that swaps the base
+# table), the pie is a consumable held in inventory, so it is modelled not as a
+# base-table swap but as *extra* offers alongside the plain ones, each burning
+# 1/450 of a pie per explore (see :func:`sources.exploring_offers`). The two
+# flagged tables give the pie-boosted drops without and with Fungus Processing
+# also active (Hide displacing Mushroom / Mushroom Paste respectively).
+ACORN_PIE_FLAG = "acorn_pie"
+FUNGUS_ACORN_PIE_FLAG = "fungus_processing+acorn_pie"
+# Explores one Acorn Pie covers, whether spent as Arnold Palmers or Apple Ciders.
+ACORN_PIE_EXPLORES = 450
+
 
 @dataclass
 class ExploringModifiers:
@@ -152,9 +165,24 @@ class Exploring:
     # Exploring Effectiveness per zone, keyed lower-cased -- drives how many
     # explores an Apple Cider does there (see :func:`sources.cider_offers`).
     effectiveness: dict[str, int] = field(default_factory=dict)
+    # Which flagged drop table an Acorn Pie activates, given the rest of the
+    # player's perks: FUNGUS_ACORN_PIE_FLAG when Fungus Processing is also active
+    # (Hide displaces Mushroom Paste), else ACORN_PIE_FLAG (Hide displaces
+    # Mushroom). None disables the pie channel. Consumed by the offer builders.
+    acorn_flag: str | None = None
 
     def location(self, name: str) -> ExploringLocation | None:
         return self.locations.get(name.lower())
+
+    def acorn_table(self, location: ExploringLocation) -> dict[str, float] | None:
+        """The pie-boosted drop table for ``location``, or None if it has none.
+
+        A location has a pie table only where the CSV tags one under the active
+        :attr:`acorn_flag` (currently just Gary's Crushroom).
+        """
+        if self.acorn_flag is None:
+            return None
+        return location.flagged_drop_rates.get(self.acorn_flag)
 
 
 def read_locations(path: Path) -> dict[str, ExploringLocation]:
@@ -239,4 +267,9 @@ def exploring_from_config(
             key: location.with_flags(active_flags)
             for key, location in exploring.locations.items()
         }
+    # An Acorn Pie boosts whichever base table is in force, so which flagged pie
+    # table applies depends on Fungus Processing (with_flags preserves both).
+    exploring.acorn_flag = (
+        FUNGUS_ACORN_PIE_FLAG if have_fungus_processing else ACORN_PIE_FLAG
+    )
     return exploring

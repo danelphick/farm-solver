@@ -264,20 +264,24 @@ def _obtainable(
     recipes: dict[str, dict[str, float]],
     openables: list[OpenFlow],
     buyable: set[str] = frozenset(),
+    held: set[str] = frozenset(),
 ) -> set[str]:
-    """Every item that can be produced: gathered, crafted, opened, or bought.
+    """Every item that can be produced: gathered, crafted, opened, bought, or held.
 
     A fixed point: an offer's yields are obtainable once its ``consumes`` inputs
     all are (an offer with no inputs is unconditionally so); a craftable item once
     its materials all are; an openable's outputs once its consumed items (the
     openable and its key) all are. A ``buyable`` consumable is unconditionally
     obtainable -- it can always be bought for gold, so a channel grounded in one is
-    usable even where nothing crafts or gathers it. So an item only an *unusable*
+    usable even where nothing crafts or gathers it. A ``held`` item likewise seeds
+    the set: something the plan holds in inventory grounds any offer that burns it
+    (e.g. an Acorn Pie the exploring channel spends) even when nothing crafts or
+    gathers it. So an item only an *unusable*
     offer could make -- one whose input can never be sourced -- is correctly *not*
     obtainable, and a demand for it falls to the remainder rather than an infeasible
     LP. Auto-supplied materials (iron, nails) are expected stripped from ``recipes``.
     """
-    obtainable: set[str] = set(buyable)
+    obtainable: set[str] = set(buyable) | set(held)
     changed = True
     while changed:
         changed = False
@@ -397,7 +401,17 @@ def _build_base(
     # A buyable consumable can always be bought, so it is obtainable even where
     # nothing crafts or gathers it (a channel grounded in one is then still usable).
     buyable = {item for item in BUYABLE if prices.get(item, 0.0) > 0}
-    obtainable = _obtainable(offers, recipes, openables, buyable)
+    # A held, non-demanded item an offer consumes (e.g. an Acorn Pie the exploring
+    # channel burns) grounds that offer even when nothing crafts or gathers it. It
+    # is bounded by the held stock in each item's balance, and excluding demanded
+    # items keeps their demand-vs-inventory netting (and remainder) unchanged.
+    offer_inputs_held = {
+        item
+        for offer in offers
+        for item in offer.consumes
+        if inventory.get(item, 0.0) > 0 and item not in wanted
+    }
+    obtainable = _obtainable(offers, recipes, openables, buyable, offer_inputs_held)
     craftable = {
         item
         for item, materials in recipes.items()
@@ -986,6 +1000,37 @@ def leftover_inventory_share(
     return shares
 
 
+def accumulated_leftovers(
+    plan: SourcingPlan,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> dict[str, float]:
+    """The leftovers a plan itself accumulates, net of stock already held.
+
+    :func:`plan_leftovers` with each item's already-held share
+    (:func:`leftover_inventory_share`) subtracted, so pre-existing inventory sitting
+    unused past the goal is not mistaken for surplus the plan banks. What remains is
+    only what executing the plan produced beyond all it consumes (passive, crafts,
+    opens, gathering). This is what the surplus value (and its gold credit against
+    the frontier's net cost) should be measured on -- see
+    :func:`plan_surplus_gold`.
+    """
+    leftovers = plan_leftovers(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    shares = leftover_inventory_share(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    accumulated: dict[str, float] = {}
+    for item, left in leftovers.items():
+        if (net := left - shares.get(item, 0.0)) > UNIT_EPSILON:
+            accumulated[item] = net
+    return accumulated
+
+
 def surplus_sale_value(
     leftovers: dict[str, float],
     recipes: dict[str, dict[str, float]],
@@ -1125,16 +1170,22 @@ def plan_surplus_gold(
     inventory: dict[str, float],
     prices: dict[str, float],
 ) -> float:
-    """Total gold ``plan``'s banked surplus is worth.
+    """Gold the surplus ``plan`` *accumulates* past its goal is worth.
 
-    The sum of :func:`surplus_sale_value` over the plan's :func:`plan_leftovers` --
-    the sale value of everything the plan produces past all it consumes, as sellable
-    goods crafted from the leftovers. This is the credit :attr:`SourcingPlan.cost`
-    subtracts from bought gold, so :func:`frontier` sets it on every plan and the
-    gold axis can dip below zero for one that banks more than it buys. Zero when
-    nothing is priced or nothing is left over.
+    The sale value (:func:`surplus_sale_value` over :func:`plan_leftovers`) of what
+    the plan produces past all it consumes, as sellable goods -- but **only the
+    portion the plan itself accumulates, not stock already held**. A player's
+    pre-existing inventory sitting unused is not something executing the plan banks;
+    crediting its market value against gold only confused the frontier (every plan
+    looked hugely profitable by the sale value of an untouched stockpile). So the
+    held share of each good (:func:`leftover_inventory_share`) is netted off, exactly
+    the "accumulated" half of the report's Surplus section. This is the credit
+    :attr:`SourcingPlan.cost` subtracts from bought gold, so :func:`frontier` sets it
+    on every plan and the gold axis can dip below zero for one that banks more than
+    it buys. Zero when nothing is priced, nothing is left over, or every leftover was
+    already held.
     """
-    leftovers = plan_leftovers(
+    leftovers = accumulated_leftovers(
         plan, demand, recipes, crafting_bonus, openables, inventory
     )
     rows = surplus_sale_value(leftovers, recipes, crafting_bonus, prices)
