@@ -170,6 +170,10 @@ function goalSpecSummary(spec, kindLabel) {
   return `custom ${kindLabel.toLowerCase()}`;
 }
 
+// What the server said "highest reachable" resolves to (response
+// target_level); labels the dropdown option and the Goal pane's summary.
+let towerTargetLevel = null;
+
 function updateGoalSummary() {
   const parts = [];
   const mastery = $("#mastery").value.trim();
@@ -180,11 +184,21 @@ function updateGoalSummary() {
   if (level) {
     parts.push(`Masteries for Tower Level ${level}`);
   } else if (!mastery && !items) {
-    parts.push("Masteries for the Tower");
+    parts.push(
+      towerTargetLevel
+        ? `Masteries for the Tower (T${towerTargetLevel})`
+        : "Masteries for the Tower"
+    );
   }
   if (mastery) parts.push(goalSpecSummary(mastery, "Mastery"));
   if (items) parts.push(goalSpecSummary(items, "Inventory"));
   $("#goal-summary").textContent = " — " + parts.join(" + ");
+}
+
+function updateTowerOptionLabel() {
+  $('#target option[value=""]').textContent = towerTargetLevel
+    ? `Tower (highest reachable — T${towerTargetLevel})`
+    : "Tower (highest reachable)";
 }
 
 function collectState() {
@@ -294,6 +308,12 @@ function renderResult(data) {
     data.cached ? `cached (${data.solved_ms} ms)` : `solved in ${data.solved_ms} ms`,
     "ok"
   );
+
+  if (data.target_level) {
+    towerTargetLevel = data.target_level;
+    updateTowerOptionLabel();
+    updateGoalSummary();
+  }
 
   $("#solution-section").innerHTML = data.solution_html;
 

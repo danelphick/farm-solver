@@ -235,6 +235,9 @@ class SolveResult:
     frontier_rows: list[dict]
     selected: int
     resolved: bool  # True when this render triggered a re-solve (horizon guard)
+    # The tower level the goal targeted (see SolveInputs.target_level) -- the
+    # UI shows what "highest reachable" resolved to. None for pure -m/-i goals.
+    target_level: int | None = None
 
 
 def _empty_plan_context() -> main.PlanContextData:
@@ -256,7 +259,7 @@ def _nothing_to_source_result(inputs: main.SolveInputs, resolved: bool) -> Solve
     return SolveResult(
         sections={name: doc.render() for name, doc in reporter.docs.items()},
         notes=list(reporter.notes), warnings=[], frontier_rows=[],
-        selected=-1, resolved=resolved,
+        selected=-1, resolved=resolved, target_level=inputs.target_level,
     )
 
 
@@ -423,5 +426,6 @@ def render(
         frontier_rows=frontier_rows,
         selected=selected,
         resolved=resolved,
+        target_level=session.inputs.target_level,
     )
     return result, session

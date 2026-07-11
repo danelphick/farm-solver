@@ -1036,6 +1036,9 @@ class SolveInputs:
     pj_limit: int | None
     model_calendar: bool
     start: date
+    # The tower level the goal targets (an explicit --target/-l, else the
+    # tower's top level), or None when a pure -m/-i goal has no tower part.
+    target_level: int | None = None
 
 
 def build_inputs(
@@ -1094,11 +1097,16 @@ def build_inputs(
     )
     if args.target is None and (mastery_goals is not None or item_goals is not None):
         solution = farm_solver.solve_goals(state, mastery_goals, item_goals)
+        target_level = None  # no tower component to this goal
     else:
         target_level = args.target if isinstance(args.target, int) else args.level
         solution = farm_solver.solve_target(
             state, requirements, target_level, mastery_goals, item_goals
         )
+        if target_level is None:
+            # What "the tower" resolves to (solve_tower's own default), so a
+            # caller can display the level actually targeted.
+            target_level = requirements.max_level
 
     # Every recipe is a craft flow; the optimiser sources the top-level demand,
     # choosing craft-vs-gather for itself. Openables are free multi-output flows
@@ -1173,6 +1181,7 @@ def build_inputs(
         pj_limit=pj_limit,
         model_calendar=model_calendar,
         start=start,
+        target_level=target_level,
     )
 
 
