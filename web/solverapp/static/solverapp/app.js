@@ -93,7 +93,9 @@ function readParams() {
   const passiveLimit = $("#passive-limit").value.trim();
   if (passiveLimit) params.passive_limit = passiveLimit;
   if ($("#plans").value) params.plans = Number($("#plans").value);
-  if ($("#breakdown").checked) params.breakdown = true;
+  // The craft breakdown renders into its own collapsible pane, so it is
+  // always requested (a refilter field -- asking costs no extra solve).
+  params.breakdown = true;
 
   const overrides = $("#overrides").value
     .split("\n")
@@ -141,8 +143,48 @@ function applyParams(params) {
   $("#max-ln").value = params.max_ln ?? "";
   $("#passive-limit").value = params.passive_limit || "";
   $("#plans").value = params.plans || 5;
-  $("#breakdown").checked = !!params.breakdown;
   $("#overrides").value = (params.overrides || []).join("\n");
+  updateGoalSummary();
+}
+
+// --- The Goal pane's collapsed-state summary --------------------------------
+
+// One "Item:Amount" goal spec entry, readable: "1,000,000 Grand Piano".
+function formatGoalEntry(entry) {
+  const colon = entry.lastIndexOf(":");
+  if (colon === -1) return entry.trim();
+  const item = entry.slice(0, colon).trim();
+  const amount = entry.slice(colon + 1).trim();
+  const pretty = /^\d+$/.test(amount) ? Number(amount).toLocaleString() : amount;
+  return `${pretty} ${item}`;
+}
+
+// A -m/-i goal spec for the summary: spelled out when it is one short goal
+// ("1,000,000 Grand Piano Mastery"), else a generic "custom mastery".
+function goalSpecSummary(spec, kindLabel) {
+  const entries = spec.split(",").filter((e) => e.trim());
+  if (entries.length === 1) {
+    const text = `${formatGoalEntry(entries[0])} ${kindLabel}`;
+    if (text.length <= 40) return text;
+  }
+  return `custom ${kindLabel.toLowerCase()}`;
+}
+
+function updateGoalSummary() {
+  const parts = [];
+  const mastery = $("#mastery").value.trim();
+  const items = $("#items").value.trim();
+  const level = $("#target").value === "level" ? $("#level").value : "";
+  // Mirrors the server: -m/-i goals REPLACE the tower goal unless an explicit
+  // tower level is set alongside them (farm_solver.solve_goals/solve_target).
+  if (level) {
+    parts.push(`Masteries for Tower Level ${level}`);
+  } else if (!mastery && !items) {
+    parts.push("Masteries for the Tower");
+  }
+  if (mastery) parts.push(goalSpecSummary(mastery, "Mastery"));
+  if (items) parts.push(goalSpecSummary(items, "Inventory"));
+  $("#goal-summary").textContent = " — " + parts.join(" + ");
 }
 
 function collectState() {
@@ -269,6 +311,10 @@ function renderResult(data) {
 
   $("#plan-section").innerHTML = data.plan.html;
 
+  const craftsHtml = (data.crafts && data.crafts.html) || "";
+  $("#crafts-section").innerHTML = craftsHtml;
+  $("#crafts-details").hidden = !craftsHtml;
+
   $("#results").hidden = false;
 }
 
@@ -297,6 +343,7 @@ const debouncedSolve = debounce(solve, DEBOUNCE_MS);
 
 function onAnyChange() {
   planSelect = null;
+  updateGoalSummary();
   debouncedSave();
   debouncedSolve();
 }
@@ -329,28 +376,38 @@ function init() {
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
   });
 
-  // Collapsing the paste pane is a UI preference, not solver state: persist
-  // it separately and never trigger a re-solve on toggle.
-  const pasteDetails = $("#paste-details");
+  // Collapsing a pane is a UI preference, not solver state: persist each
+  // pane's state separately and never trigger a re-solve on toggle. Each
+  // pane's default open/closed state comes from the markup's `open`
+  // attribute (limits & crafts start collapsed).
+  let ui = {};
   try {
-    const ui = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
-    if (ui.paste_collapsed) pasteDetails.open = false;
+    ui = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
   } catch (err) {
-    // Corrupt/unavailable storage: keep the default (open).
+    // Corrupt/unavailable storage: keep the markup defaults.
   }
-  pasteDetails.addEventListener("toggle", () => {
-    try {
-      localStorage.setItem(
-        UI_STORAGE_KEY,
-        JSON.stringify({ paste_collapsed: !pasteDetails.open })
-      );
-    } catch (err) {
-      // Persistence is a convenience; ignore storage failures.
-    }
+  if (!ui.panes) ui.panes = {};
+  if (ui.paste_collapsed !== undefined) {
+    // Migrate the pre-panes shape.
+    ui.panes["paste-details"] = !!ui.paste_collapsed;
+    delete ui.paste_collapsed;
+  }
+  document.querySelectorAll("details.pane").forEach((pane) => {
+    if (ui.panes[pane.id] !== undefined) pane.open = !ui.panes[pane.id];
+    pane.addEventListener("toggle", () => {
+      ui.panes[pane.id] = !pane.open;
+      try {
+        localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui));
+      } catch (err) {
+        // Persistence is a convenience; ignore storage failures.
+      }
+    });
   });
 
-  // A brand-new session never runs applyParams, so seed the implicit today.
+  // A brand-new session never runs applyParams, so seed the implicit today
+  // and the Goal pane's summary.
   setStartDateDisplay("");
+  updateGoalSummary();
 
   if (restoreState()) {
     solve();

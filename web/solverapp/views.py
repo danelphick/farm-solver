@@ -94,13 +94,15 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         },
         "plan": {
             "index": result.selected,
-            "html": _section_html(
-                result.sections["plan"]
-                + (
-                    "\n\n" + result.sections["crafts"]
-                    if result.sections.get("crafts", "").strip()
-                    else ""
-                )
+            "html": _section_html(result.sections["plan"]),
+        },
+        # Rendered into its own collapsible pane after the plan; empty when
+        # the request didn't ask for the breakdown.
+        "crafts": {
+            "html": (
+                _section_html(result.sections["crafts"])
+                if result.sections.get("crafts", "").strip()
+                else ""
             ),
         },
     })

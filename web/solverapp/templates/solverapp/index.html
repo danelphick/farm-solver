@@ -19,7 +19,7 @@
 </header>
 
 <main>
-  <details id="paste-details" class="paste-panel" open>
+  <details id="paste-details" class="pane" open>
     <summary>Game state (masteries &amp; inventory)</summary>
     <div class="paste-fields">
       <div class="field">
@@ -35,91 +35,84 @@
     </div>
   </details>
 
-  <section class="controls-panel">
-    <div class="control-group">
-    <h2>Goal</h2>
-    <div class="field-row">
-      <label for="target">Target</label>
-      <select id="target">
-        <option value="">Tower (highest reachable)</option>
-        <option value="level">Specific tower level</option>
-      </select>
-      <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
-    </div>
-    <div class="field-row">
-      <label for="mastery">Mastery goal(s)</label>
-      <input id="mastery" type="text" placeholder="Item:Amount,Item:Amount">
-    </div>
-    <div class="field-row">
-      <label for="items">Item goal(s)</label>
-      <input id="items" type="text" placeholder="Item:Amount,Item:Amount">
-    </div>
-    </div>
+  <div class="controls-grid">
+    <details id="goal-details" class="pane" open>
+      <summary>Goal<span id="goal-summary" class="summary-detail"></span></summary>
+      <div class="field-row">
+        <label for="target">Target</label>
+        <select id="target">
+          <option value="">Tower (highest reachable)</option>
+          <option value="level">Specific tower level</option>
+        </select>
+        <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
+      </div>
+      <div class="field-row">
+        <label for="mastery">Mastery goal(s)</label>
+        <input id="mastery" type="text" placeholder="Item:Amount,Item:Amount">
+      </div>
+      <div class="field-row">
+        <label for="items">Item goal(s)</label>
+        <input id="items" type="text" placeholder="Item:Amount,Item:Amount">
+      </div>
+    </details>
 
-    <div class="control-group">
-    <h2>Resources</h2>
-    <div class="field-row">
-      <label for="current-stamina">Current stamina</label>
-      <input id="current-stamina" type="number" min="0" value="0">
-    </div>
-    <div class="field-row">
-      <label for="cookie-sets">Cookie sets</label>
-      <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
-    </div>
-    <div class="field-row">
-      <label for="use-pumpkin-juice">
-        <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
-      </label>
-      <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
-    </div>
-    <div class="field-row">
-      <label>Calendar</label>
-      <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
-      <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
-      <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
-    </div>
-    <div class="field-row">
-      <label for="start-date">Start date</label>
-      <input id="start-date" type="date" disabled>
-    </div>
-    </div>
+    <details id="resources-details" class="pane" open>
+      <summary>Resources</summary>
+      <div class="field-row">
+        <label for="current-stamina">Current stamina</label>
+        <input id="current-stamina" type="number" min="0" value="0">
+      </div>
+      <div class="field-row">
+        <label for="cookie-sets">Cookie sets</label>
+        <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
+      </div>
+      <div class="field-row">
+        <label for="use-pumpkin-juice">
+          <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
+        </label>
+        <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
+      </div>
+      <div class="field-row">
+        <label>Calendar</label>
+        <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
+        <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
+        <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
+      </div>
+      <div class="field-row">
+        <label for="start-date">Start date</label>
+        <input id="start-date" type="date" disabled>
+      </div>
+    </details>
 
-    <div class="control-group">
-    <h2>Limits (refilter -- instant)</h2>
-    <div class="field-row">
-      <label for="max-gold">Max gold</label>
-      <input id="max-gold" type="text" placeholder="unlimited">
-    </div>
-    <div class="field-row">
-      <label for="max-ap">Max Arnold Palmers</label>
-      <input id="max-ap" type="number" min="0" placeholder="none">
-    </div>
-    <div class="field-row">
-      <label for="max-ln">Max Large Nets</label>
-      <input id="max-ln" type="number" min="0" placeholder="none">
-    </div>
-    <div class="field-row">
-      <label for="passive-limit">Max plan duration</label>
-      <input id="passive-limit" type="text" placeholder="e.g. 5d, 1d6h">
-    </div>
-    <div class="field-row">
-      <label for="plans">Plans across frontier</label>
-      <input id="plans" type="number" min="1" value="5">
-    </div>
-    <div class="field-row">
-      <label class="inline"><input id="breakdown" type="checkbox"> Show full craft breakdown</label>
-    </div>
-    </div>
-
-    <div class="control-group">
-    <h2>Advanced</h2>
-    <div class="field">
-      <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)</label>
-      <textarea id="overrides" rows="3" spellcheck="false"
-        placeholder="sawmill.use_hickory_omelette=false"></textarea>
-    </div>
-    </div>
-  </section>
+    <details id="limits-details" class="pane">
+      <summary>Limits &amp; advanced</summary>
+      <div class="field-row">
+        <label for="max-gold">Max gold</label>
+        <input id="max-gold" type="text" placeholder="unlimited">
+      </div>
+      <div class="field-row">
+        <label for="max-ap">Max Arnold Palmers</label>
+        <input id="max-ap" type="number" min="0" placeholder="none">
+      </div>
+      <div class="field-row">
+        <label for="max-ln">Max Large Nets</label>
+        <input id="max-ln" type="number" min="0" placeholder="none">
+      </div>
+      <div class="field-row">
+        <label for="passive-limit">Max plan duration</label>
+        <input id="passive-limit" type="text" placeholder="e.g. 5d, 1d6h">
+      </div>
+      <div class="field-row">
+        <label for="plans">Plans across frontier</label>
+        <input id="plans" type="number" min="1" value="5">
+      </div>
+      <div class="field">
+        <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)</label>
+        <textarea id="overrides" rows="3" spellcheck="false"
+          placeholder="sawmill.use_hickory_omelette=false"></textarea>
+      </div>
+    </details>
+  </div>
 </main>
 
 <section id="results" hidden>
@@ -134,6 +127,11 @@
 
   <h2>Selected plan</h2>
   <div id="plan-section" class="report-section"></div>
+
+  <details id="crafts-details" class="pane" hidden>
+    <summary>Required crafts</summary>
+    <div id="crafts-section" class="report-section"></div>
+  </details>
 </section>
 
 <script src="{% static 'solverapp/app.js' %}"></script>

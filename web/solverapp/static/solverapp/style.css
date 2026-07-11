@@ -99,17 +99,16 @@ main {
   gap: 1.5rem;
 }
 
-.paste-panel,
-.controls-panel {
+/* Collapsible panes: the game-state paste boxes, each controls group, and
+   the report's craft breakdown all share this box + summary-heading look. */
+details.pane {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 1rem;
 }
 
-/* The game-state pane sits above the controls, collapsible once pasted;
-   its two paste boxes go side by side when the screen is wide enough. */
-.paste-panel summary {
+details.pane > summary {
   cursor: pointer;
   font-size: 0.95rem;
   text-transform: uppercase;
@@ -118,8 +117,19 @@ main {
   user-select: none;
 }
 
-.paste-panel[open] summary {
+details.pane[open] > summary {
   margin-bottom: 0.75rem;
+}
+
+/* The Goal pane's summary describes the configured goal -- but only while
+   collapsed; open, the fields themselves say it. */
+.summary-detail {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+details[open] > summary .summary-detail {
+  display: none;
 }
 
 .paste-fields {
@@ -128,28 +138,17 @@ main {
   gap: 1rem;
 }
 
-.controls-panel {
+.controls-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-  gap: 0.5rem 2rem;
-}
-
-.controls-panel .control-group h2:first-child {
-  margin-top: 0;
+  gap: 1rem;
+  align-items: start;
 }
 
 @media (max-width: 55rem) {
   .paste-fields {
     grid-template-columns: 1fr;
   }
-}
-
-.controls-panel h2 {
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  margin: 1.1rem 0 0.5rem;
 }
 
 .field {
@@ -284,6 +283,16 @@ main {
 
 #frontier-section table tbody tr.cheapest td:first-child {
   border-left: 3px solid var(--row-cheapest-border);
+}
+
+/* The crafts pane's summary already says "Required crafts": the markdown's
+   own leading heading would just repeat it. */
+#crafts-details {
+  margin-top: 1.5rem;
+}
+
+#crafts-section > h3:first-child {
+  display: none;
 }
 
 .note {
