@@ -206,6 +206,16 @@ main {
   flex: 0 0 6rem;
 }
 
+/* Make gated inputs (pumpkin-juice cap, calendar start date) visibly inert. */
+.field-row input:disabled,
+.field-row select:disabled {
+  background: var(--panel);
+  color: var(--muted);
+  border-style: dashed;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 #results {
   max-width: 60rem;
   margin: 2rem auto 0;
