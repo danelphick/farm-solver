@@ -48,7 +48,7 @@ from report import (
     print_plan,
 )
 from optimizer import SourcingPlan
-from passive import MINUTE, PassiveProducer, PassiveProduction
+from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
 
 PLANS = [
@@ -478,6 +478,63 @@ def test_print_plan_highlights_the_passive_bottleneck(capsys):
     assert "Critical path (sets the 1h 40m total):" in out
     assert "100x Slow from passive production (1h 40m)" in out
     assert "Fast" not in out.split("Critical path")[1].split("Passive")[0]
+
+
+def test_print_plan_quantizes_passive_waits_to_whole_deposits(capsys):
+    # Antlers land once a day, 100 a deposit; 250 need the third deposit at day 3.
+    # The LP's continuous makespan is 2.5 days (Draw of 3600 rate-minutes), but the
+    # plan time was lifted to the deposit boundary and every printed wait -- the
+    # critical-path header, its passive line, and the passive section row -- agrees.
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100.0})]
+    )
+    offer = Offer(
+        "passive", "passive", {"antlers": 100.0 / 1440}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 3600)], time=timedelta(days=3))
+    print_plan(plan, {"Antlers": 250}, Farm(), Workshop(), 1.0, production=production)
+    out = capsys.readouterr().out
+    assert "Critical path (sets the 3d total):" in out
+    assert "250x Antlers from passive production (3d)" in out
+    assert "250x Antlers in 3d" in out
+    assert "2d 12h" not in out
+
+
+def test_print_plan_shows_the_staggered_half_day_deposit(capsys):
+    # The pen and its snare each fill the storehouse, phase-staggered 12h apart,
+    # so one storehouse-worth of Antlers is a 12h wait -- not a whole day.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("raptor pen", DAILY, {"antlers": 2_617_810}),
+            PassiveProducer("raptor pen snare", DAILY, {"antlers": 261_781}),
+        ],
+        inventory_size=49_440,
+    )
+    offer = Offer(
+        "passive", "passive", {"antlers": 2 * 49_440 / 1440},
+        time_per_unit=timedelta(minutes=1),
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 720)], time=timedelta(hours=12))
+    print_plan(
+        plan, {"Antlers": 49_440}, Farm(), Workshop(), 1.0, production=production
+    )
+    out = capsys.readouterr().out
+    assert "49,440x Antlers in 12h" in out
+
+
+def test_print_plan_pet_waits_stay_continuous(capsys):
+    # A pet's daily output is an averaged rate, not a real deposit, so its wait is
+    # not lifted to a whole day: 250 Horn at 100/day reads 2d 12h, as before.
+    production = PassiveProduction(
+        producers=[PassiveProducer("pet Dog", DAILY, {"horn": 100.0})]
+    )
+    offer = Offer(
+        "passive", "passive", {"horn": 100.0 / 1440}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 3600)], time=timedelta(days=2.5))
+    print_plan(plan, {"Horn": 250}, Farm(), Workshop(), 1.0, production=production)
+    out = capsys.readouterr().out
+    assert "250x Horn in 2d 12h" in out
 
 
 def test_slowest_passive_item_skips_pet_topups():

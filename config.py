@@ -7,7 +7,9 @@ the ``[storehouse]`` size are read out of it.
 
 from __future__ import annotations
 
+import functools
 import tomllib
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -456,6 +458,38 @@ MONTHLY_GRANTS: tuple[tuple[str, int, int], ...] = (
 
 # Name of the passive producer standing in for those grants.
 MONTHLY_GRANT_PRODUCER = "Mechanical Heart"
+
+
+def is_smeared_producer(name: str) -> bool:
+    """Whether ``name`` stands for an *averaged* rate rather than a real deposit.
+
+    A pet's ``daily_output`` (see :func:`_pet_producers`) and the Mechanical
+    Heart's monthly grants (see :func:`_monthly_grant_producers`) are already
+    smoothed averages standing in for lumpy real events (a pet's random finds
+    over a day, a grant landing once a month) -- there is no real per-cycle
+    deposit to round to, so :meth:`passive.PassiveProduction.quantized_wait`
+    treats them as a continuous ramp instead of a stepped depositor. Every other
+    producer name is a real building with a real deposit schedule. This is the
+    producer-name convention :mod:`passive` cannot use directly (it must not
+    import :mod:`config`), so it is injected as a predicate -- see
+    :func:`passive_quantizer`.
+    """
+    return name.startswith(PET_PRODUCER_PREFIX) or name == MONTHLY_GRANT_PRODUCER
+
+
+def passive_quantizer(
+    production: PassiveProduction,
+) -> Callable[[str, float], timedelta | None]:
+    """A ``(item, quantity) -> wait`` callable bound to ``production``.
+
+    Wraps :meth:`passive.PassiveProduction.quantized_wait` with
+    :func:`is_smeared_producer` already wired in as the smeared predicate, so
+    callers elsewhere (``optimizer``, ``main``, ``report``) that must not import
+    ``config`` themselves can still get a fully-configured quantizer -- the same
+    "producer-name semantics live in config" split as :func:`is_smeared_producer`.
+    """
+    return functools.partial(production.quantized_wait, smeared=is_smeared_producer)
+
 
 # Average days in a month (365/12), for a grant's steady-state daily rate.
 _DAYS_PER_MONTH = DAYS_PER_YEAR / 12

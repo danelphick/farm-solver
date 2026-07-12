@@ -116,16 +116,16 @@ frontier as before.
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource`, `_passive_wait` (quantized deposit waits) |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers` (Hickory Omelette boost, `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
-| `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
+| `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
-| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `storehouse_size`, `trading_prices` |
+| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices` |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config`, `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
@@ -288,8 +288,10 @@ A building material (Steel Wire, Oak) is needed only up to its products' full
 demand. **`passive_residuals(plan, ...)`** gives each passive item's net
 requirement in a plan; computed on the **fastest fully self-sourced plan** (the
 cheap endpoint — buys nothing, moderate strategy) it is that item's *full*
-requirement. `residual/rate` = the makespan at which it finishes gathering — a
-natural plateau. So the frontier segments by resource: fast crop-bound → Steel
+requirement. Its completion — the makespan at which it finishes gathering, a
+natural plateau — is `quantized_wait(item, residual)` (the real deposit-schedule
+wait; `residual/rate` continuous only without a quantizer, see the deposit
+quantisation gotcha). So the frontier segments by resource: fast crop-bound → Steel
 Wire's full completion → Oak's → cheapest. `main.run` passes
 `_pet_dominated_items(production)` to exclude pet materials, and passes that
 reference plan's `passive_residuals` into `print_plan` as `max_passive_residuals`.
@@ -482,6 +484,28 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   callers (`main.run`, `webapi.solve`) and `build_inputs` gates the tower-derived
   `monthly_grants` off itself (they aren't in the config to strip). The old
   `solver.model_calendar` boolean is rejected with a migration error.
+- **Passive deposit quantisation (always-on)**: the LP is pure continuous (the
+  aggregate passive offer's smooth per-minute rates are load-bearing for the
+  ~80-solve frontier sweep), but real production lands in whole deposits, so
+  every residual→time boundary — `minimize`/`frontier` plan times
+  (`optimizer._quantize_plan_time`, which only ever *raises* `plan.time`),
+  `_passive_completion_caps`, and the report waits (`report._passive_wait`) —
+  computes the wait from the deposit schedule via
+  `passive.PassiveProduction.quantized_wait`: whole storehouse-clamped
+  per-producer deposits (`per_cycle`), same-period producers evenly
+  phase-staggered (the raptor pen + snare land 12h apart, so one
+  storehouse-worth of Antlers takes 12h), unequal same-period deposits assumed
+  to arrive smallest-first (worst case), and *smeared* producers — pets and the
+  Mechanical Heart's monthly grants, per `config.is_smeared_producer` — as
+  continuous ramps (their per-day figure is already an average; quantising it
+  would quantise a fiction). `config.passive_quantizer(production)` binds the
+  predicate; `main.solve_frontier` threads the callable into
+  `fastest_endpoint`/`frontier` (both, so the seasonal fixed point's horizon
+  seed and the frontier agree within `_makespans_close`). Draws, `produced`
+  and surplus accounting stay continuous — only reported times move. The
+  report's makespan (`_critical_path_summary`, `_farming_drives`) takes
+  `max(plan.time, track times)` so the header matches the quantized frontier
+  row.
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
 - `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS

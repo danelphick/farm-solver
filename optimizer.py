@@ -48,6 +48,7 @@ that is neither is dropped into the plan's ``remainder``.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import NamedTuple
@@ -813,6 +814,45 @@ def _solve_configured(
     )
 
 
+def _quantize_plan_time(
+    plan: SourcingPlan,
+    quantize: Callable[[str, float], timedelta | None] | None,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    openables: list[OpenFlow],
+    inventory: dict[str, float],
+) -> None:
+    """Lift ``plan.time`` in place to the next real passive deposit boundary.
+
+    The LP's own makespan is the continuous ``residual / rate`` estimate for
+    every passive item; the real wait for a whole deposit schedule to supply
+    that residual (see :meth:`passive.PassiveProduction.quantized_wait`) is
+    never sooner and often later, so this only ever *raises* ``plan.time``,
+    never lowers it -- idempotent, safe to call more than once on the same
+    plan. A no-op when ``quantize`` is not supplied (quantisation is opt-in per
+    caller) or the plan has no passive draw at all (nothing to quantize). The
+    LP itself, ``Draw.units``/``Draw.produced`` and surplus accounting are
+    untouched -- only the reported completion time moves. Parameter order
+    mirrors :func:`passive_residuals`, whose result this walks. Cost: one
+    :func:`plan_balance` (the same work :func:`passive_residuals` already does)
+    plus a handful of small schedule walks -- negligible next to the LP solve
+    itself.
+    """
+    if quantize is None or plan.passive_draw is None:
+        return
+    residuals = passive_residuals(
+        plan, demand, recipes, crafting_bonus, openables, inventory
+    )
+    plan.time = max(
+        plan.time,
+        max(
+            (quantize(item, residual) or timedelta(0) for item, residual in residuals.items()),
+            default=timedelta(0),
+        ),
+    )
+
+
 def minimize(
     offers: list[Offer],
     demand: dict[str, float],
@@ -828,6 +868,7 @@ def minimize(
     pj_gain: dict[str, float] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
+    quantize: Callable[[str, float], timedelta | None] | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -876,6 +917,13 @@ def minimize(
     a gold-for-time trade, so it is off in ``favour_passive`` mode (the buy-nothing
     slow regime); its gold folds into ``gold``, tracked apart on the plan.
 
+    **Quantisation.** The LP itself always stays continuous -- ``quantize``
+    (a ``(item, quantity) -> wait`` callable, see :func:`config.passive_quantizer`)
+    only lifts the *reported* ``plan.time`` to the next real passive deposit
+    boundary after solving (see :func:`_quantize_plan_time`), never the makespan
+    constraint the LP optimised against. ``None`` (the default) leaves ``plan.time``
+    at the continuous estimate, as before.
+
     A single-shot call: builds one :func:`_build_base` and solves it once via
     :func:`_solve_configured`. :func:`frontier` instead builds a base per
     ``favour_passive`` regime and drives every sweep call through
@@ -886,9 +934,13 @@ def minimize(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
     )
-    return _solve_configured(
+    plan = _solve_configured(
         base, gold_weight=gold_weight, time_cap=time_cap, favour_passive=favour_passive,
     )
+    _quantize_plan_time(
+        plan, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
+    )
+    return plan
 
 
 def _consumable_spend(plan: SourcingPlan) -> dict[str, float]:
@@ -1127,6 +1179,7 @@ def self_sourced_endpoint(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
+    quantize: Callable[[str, float], timedelta | None] | None = None,
 ) -> SourcingPlan:
     """The cheap endpoint: the fastest plan that buys nothing (fully self-sourced).
 
@@ -1137,12 +1190,13 @@ def self_sourced_endpoint(
     can source cider stamina from Apples rather than Orange Juice and so understate
     the Orange requirement -- and unlike the fast plans, which over-buy net materials
     like Antler. Recomputed rather than read off the thinned frontier, where it may
-    not survive as an interior point.
+    not survive as an interior point. ``quantize`` forwards to :func:`minimize`, so
+    this endpoint's own reported time is lifted to a real deposit boundary too.
     """
     return minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets,
+        cookie_sets=cookie_sets, quantize=quantize,
     )
 
 
@@ -1158,6 +1212,7 @@ def fastest_endpoint(
     pj_gain: dict[str, float] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
+    quantize: Callable[[str, float], timedelta | None] | None = None,
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
 
@@ -1172,12 +1227,18 @@ def fastest_endpoint(
     (same ``_FAST_PRICE``, same underlying inputs, both bottoming out in
     ``_solve_configured``), but that equivalence is no longer enforced by
     shared code -- if the fast-endpoint call in either place ever changes,
-    update the other to match.
+    update the other to match. This one matters for ``quantize``, too:
+    ``main.solve_frontier``'s fast path seeds the seasonal fixed-point horizon
+    from this call's ``.time``, and ``_makespans_close``'s tolerance is only
+    ``max(1h, 0.1%)`` -- an unquantized seed against a quantized frontier
+    horizon would force an extra full-frontier iteration to reconverge, so both
+    must be quantized alike.
     """
     return minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
         cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+        quantize=quantize,
     )
 
 
@@ -1376,14 +1437,20 @@ def _passive_completion_caps(
     openables: list[OpenFlow],
     inventory: dict[str, float],
     exclude: set[str] = frozenset(),
+    quantize: Callable[[str, float], timedelta | None] | None = None,
 ) -> list[float]:
     """Makespan seconds at which each passively-made item finishes, in ``plan``.
 
     Each item finishes after ``residual / rate`` (see :func:`passive_residuals`) --
     the natural plateaus of the frontier: cap the makespan at one and every slower
     item must be sped up with consumables while that item, and all faster ones,
-    still come for free. Items in ``exclude`` -- those a pet mostly supplies, a
-    slow last-resort trickle rather than a real gathering plateau -- are skipped.
+    still come for free. With ``quantize`` supplied, an item's completion is
+    instead its real deposit-schedule wait (``quantize(item, residual)``) when
+    that resolves to an answer, falling back to ``residual / rate`` only when it
+    does not (e.g. an item with no producers at all, which cannot happen for a
+    passive-yielded item, but keeps this total). Items in ``exclude`` -- those a
+    pet mostly supplies, a slow last-resort trickle rather than a real gathering
+    plateau -- are skipped.
     """
     passive = plan.passive_draw
     if passive is None:
@@ -1396,8 +1463,12 @@ def _passive_completion_caps(
         if item in exclude:
             continue
         rate = passive.offer.yields.get(item, 0.0)
-        if rate > 0:
-            caps.append(residual / rate * 60.0)  # rate is per minute -> seconds
+        if rate <= 0:
+            continue
+        wait = quantize(item, residual) if quantize is not None else None
+        caps.append(
+            wait.total_seconds() if wait is not None else residual / rate * 60.0
+        )
     return caps
 
 
@@ -1429,6 +1500,7 @@ def frontier(
     pj_gain: dict[str, float] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
+    quantize: Callable[[str, float], timedelta | None] | None = None,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -1453,6 +1525,11 @@ def frontier(
 
     The non-dominated results are thinned to about ``count`` plans. Returns a single
     plan when gold buys no speed and there is nothing to bank (the ends coincide).
+    With ``quantize`` supplied, ``fast``/``cheap`` are quantized before their times
+    seed the sweep range and every breakpoint/plan below is computed or lifted
+    through it too, so the whole frontier -- caps, bounds and every plan's reported
+    time -- lands on real passive deposit boundaries rather than continuous
+    estimates (see :func:`_quantize_plan_time`, :func:`_passive_completion_caps`).
 
     ``prices`` (per-unit gold, from :func:`config.trading_prices`) is what makes a
     consumable buyable and banked surplus sellable; without it nothing can be bought,
@@ -1471,6 +1548,16 @@ def frontier(
     )
     fast = _solve_configured(base_active, gold_weight=_FAST_PRICE)
     cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE)
+    # Quantize the two endpoints before anything downstream reads their time --
+    # the epsilon-sweep range, the _CAP_MARGIN lo/hi filter and (in the slow
+    # regime) t_cheap should all sit on real deposit boundaries, not the
+    # continuous estimate.
+    _quantize_plan_time(
+        fast, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
+    )
+    _quantize_plan_time(
+        cheap, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
+    )
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
@@ -1486,7 +1573,7 @@ def frontier(
     breakpoints = [
         cap for cap in _passive_completion_caps(
             cheap, demand, recipes or {}, crafting_bonus, openables or [],
-            inventory or {}, passive_pet_items,
+            inventory or {}, passive_pet_items, quantize,
         )
         if lo < cap < hi
     ]
@@ -1511,7 +1598,7 @@ def frontier(
         probe = _solve_configured(base_passive, favour_passive=True)
         nonpet = _passive_completion_caps(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
-            inventory or {}, passive_pet_items,
+            inventory or {}, passive_pet_items, quantize,
         )
         t_bound = max(nonpet, default=t_cheap)
         if t_bound > t_cheap * (1 + _CAP_MARGIN):
@@ -1526,11 +1613,19 @@ def frontier(
                 for cap in ext_caps
             ]
 
-    # Credit each plan for the surplus it banks (see :func:`plan_surplus_gold`), so
-    # its ``cost`` gold is net of what it can sell -- a slow, passive-leaning plan
-    # dips below zero and the frontier extends past the "buy nothing" line. Done
-    # before pruning: ``_non_dominated`` and ``_thin`` both rank by the net cost.
+    # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
+    # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
+    # real deposit-boundary times: two epsilon-cap plans that landed inside the
+    # same deposit window now collapse to equal (quantized) time, and the
+    # lower-gold one dominates. Then credit each plan for the surplus it banks
+    # (see :func:`plan_surplus_gold`), so its ``cost`` gold is net of what it can
+    # sell -- a slow, passive-leaning plan dips below zero and the frontier
+    # extends past the "buy nothing" line. Both done before pruning:
+    # ``_non_dominated`` and ``_thin`` both rank by the net cost.
     for plan in plans:
+        _quantize_plan_time(
+            plan, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
+        )
         plan.surplus_gold = plan_surplus_gold(
             plan, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, prices or {},

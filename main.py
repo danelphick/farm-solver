@@ -1228,7 +1228,9 @@ class FrontierResult:
     within: list[optimizer.SourcingPlan]
     shown: list[optimizer.SourcingPlan]
     offers: list[sources.Offer]
-    production: passive.PassiveProduction
+    # None only in stripped-down callers (hand-built test FrontierResults); the
+    # solve pipeline always fills it in.
+    production: passive.PassiveProduction | None
     horizon: timedelta | None
 
 
@@ -1294,6 +1296,7 @@ def solve_frontier(
                 cfg, today=start, start=start, horizon=horizon,
                 monthly_grants=monthly_grants,
             )
+            quantize = config.passive_quantizer(production)
             offers = optimizer.all_offers(
                 production, fish, explore, farm, inputs.boost_offers
             )
@@ -1301,6 +1304,7 @@ def solve_frontier(
                 offers, demand, recipes, args.crafting_bonus, prices=prices,
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
                 pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+                quantize=quantize,
             )
             if not fast.draws and not fast.crafts:  # nothing to source
                 break
@@ -1313,6 +1317,7 @@ def solve_frontier(
             cfg, today=start, start=start, horizon=horizon,
             monthly_grants=monthly_grants,
         )
+        quantize = config.passive_quantizer(production)
         offers = optimizer.all_offers(
             production, fish, explore, farm, inputs.boost_offers
         )
@@ -1320,6 +1325,7 @@ def solve_frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+            quantize=quantize,
         )
         if not plans:
             return FrontierResult(
@@ -1335,6 +1341,11 @@ def solve_frontier(
             )
         ]
         shown = within or plans
+        # Now quantized (see optimizer.frontier's quantize kwarg above), so this
+        # can in principle flip between two adjacent deposit boundaries as the
+        # seasonal rates driving `production` shift with the horizon -- no
+        # different in kind from the unquantized value changing, and still
+        # bounded by the same _MAX_SEASON_ITERS cap below.
         new_horizon = shown[
             selected_plan(shown, args.plan, args.cheapest_plan)
         ].time
@@ -1375,10 +1386,18 @@ def derive_report_inputs(
     # stable, moderate-strategy reference, where the slow passive-leaning extension
     # understates some items (cider stamina from Apples cuts the Orange requirement)
     # and the fast plans overstate net materials (Antler) -- and thinning may drop it.
+    # Its own `.time` is unused here (only its residuals are), but quantizing it
+    # too keeps the invariant that every plan carrying a printable time is quantized.
+    # `production` is None only in stripped-down callers (see the webapi tests'
+    # hand-built FrontierResults); the report side is equally tolerant of that.
+    quantize = (
+        config.passive_quantizer(fr.production) if fr.production is not None else None
+    )
     reference = optimizer.self_sourced_endpoint(
         fr.offers, inputs.demand, inputs.recipes, args.crafting_bonus,
         openables=inputs.open_flows, inventory=inputs.inventory,
         cookie_sets=inputs.cookie_sets, prices=inputs.prices,
+        quantize=quantize,
     )
     max_passive_residuals = optimizer.passive_residuals(
         reference, inputs.demand, inputs.recipes, args.crafting_bonus,

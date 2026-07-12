@@ -6,12 +6,14 @@ import pytest
 import config
 from config import (
     MONTHLY_GRANT_PRODUCER,
+    is_smeared_producer,
     load_config,
     passive_production,
+    passive_quantizer,
     storehouse_size,
     trading_prices,
 )
-from passive import DAILY, HOURLY, MINUTE
+from passive import DAILY, HOURLY, MINUTE, PassiveProducer, PassiveProduction
 
 
 def test_load_config_reads_toml(tmp_path):
@@ -625,3 +627,29 @@ def test_trading_prices_grape_juice_free_without_grape_price():
 
 def test_trading_prices_absent_section_is_none():
     assert trading_prices({"vineyard": {"grapes": 1}}) is None
+
+
+def test_is_smeared_producer_flags_pets_and_grants():
+    # Pets' daily output and the Mechanical Heart's monthly grants are averaged
+    # rates standing in for lumpy real events; buildings are real depositors.
+    assert is_smeared_producer("pet Dog")
+    assert is_smeared_producer(MONTHLY_GRANT_PRODUCER)
+    assert not is_smeared_producer("sawmill")
+
+
+def test_passive_quantizer_wires_the_smeared_predicate_through():
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("raptor pen", DAILY, {"antlers": 100}),
+            PassiveProducer("pet Dog", DAILY, {"antlers": 50}),
+        ]
+    )
+    quantize = passive_quantizer(production)
+    # Matches calling quantized_wait with is_smeared_producer directly: the
+    # pet's share ramps continuously while the pen's deposits step, so 100
+    # antlers arrive with the pen's first whole deposit at day one -- treating
+    # the pet as a real depositor too would say 12 hours (staggered half-day
+    # slots), and ignoring it entirely would still say a day; the point is the
+    # bound partial gives the same schedule as the explicit predicate.
+    expected = production.quantized_wait("antlers", 100, is_smeared_producer)
+    assert quantize("antlers", 100) == expected == timedelta(days=1)

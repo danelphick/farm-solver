@@ -23,7 +23,7 @@ from optimizer import (
     self_sourced_endpoint,
     surplus_sale_value,
 )
-from passive import HOURLY, PassiveProducer, PassiveProduction
+from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow, passive_offers, sawmill_boost_offers
 
 # Per-unit gold prices for the buyable consumables (see config.trading_prices).
@@ -547,6 +547,61 @@ def test_passive_completion_caps_skip_excluded_items():
         plan, {"Oak": 100, "Horn": 60}, {}, 1.0, [], {}, exclude={"horn"}
     )
     assert [round(c) for c in caps] == [600]
+
+
+# --- Deposit quantisation: plan times lifted to whole passive cycles -----------
+
+# Antlers land once a day; needing 250 at 100 a deposit means the third deposit,
+# at day 3 -- the continuous rate estimate of 2.5 days credits half a deposit
+# that has not landed yet.
+ANTLER_PEN = PassiveProduction(
+    producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100})]
+)
+
+
+def test_minimize_lifts_plan_time_to_whole_deposits():
+    offers = passive_offers(ANTLER_PEN)
+    plan = minimize(offers, {"Antlers": 250}, quantize=ANTLER_PEN.quantized_wait)
+    assert plan.time == timedelta(days=3)
+    # Without quantize the continuous 2.5-day estimate stands, as before.
+    continuous = minimize(offers, {"Antlers": 250})
+    assert abs(continuous.time - timedelta(days=2.5)) < timedelta(seconds=1)
+
+
+def test_minimize_quantized_exact_multiple_is_unchanged():
+    offers = passive_offers(ANTLER_PEN)
+    plan = minimize(offers, {"Antlers": 200}, quantize=ANTLER_PEN.quantized_wait)
+    assert abs(plan.time - timedelta(days=2)) < timedelta(seconds=1)
+
+
+def test_passive_completion_caps_quantize_to_deposit_boundaries():
+    (offer,) = passive_offers(ANTLER_PEN)
+    plan = SourcingPlan(draws=[Draw(offer, 3600)])
+    caps = _passive_completion_caps(
+        plan, {"Antlers": 250}, {}, 1.0, [], {}, quantize=ANTLER_PEN.quantized_wait
+    )
+    # 3 whole days, not the continuous 250 / (100/1440) * 60 = 216000 s.
+    assert [round(c) for c in caps] == [3 * 86400]
+
+
+def test_frontier_plans_land_on_deposit_boundaries():
+    # Antlers come free from the daily pen or fast from bought-net fishing, so the
+    # frontier trades gold for time -- and with quantize every plan's time sits on
+    # a whole-day deposit boundary (or zero for the all-fished fast end), with the
+    # cheap end at the full 3-deposit wait.
+    offers = passive_offers(ANTLER_PEN) + [
+        Offer("fish Lake", "fishing", {"antlers": 1}, consumes={"large net": 1}, ln=1),
+    ]
+    plans = frontier(
+        offers, {"Antlers": 250}, count=5, prices=GOLD,
+        quantize=ANTLER_PEN.quantized_wait,
+    )
+    day = 86400.0
+    for plan in plans:
+        seconds = plan.time.total_seconds()
+        offset = seconds % day
+        assert min(offset, day - offset) < 1, f"{plan.time} is off-boundary"
+    assert max(p.time for p in plans) == timedelta(days=3)
 
 
 # --- Grounded consumables: offer inputs (consumes) -----------------------------

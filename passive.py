@@ -8,10 +8,18 @@ material instead of crafting it.
 
 from __future__ import annotations
 
-import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
+
+# Absolute slack for "has this deposit reached the target yet" comparisons, so a
+# quantity that is an exact multiple of a per-cycle amount is not pushed into an
+# extra, unneeded cycle by float noise (e.g. a chain of divisions landing on
+# 200.0000001 instead of 200). Comfortably below any real quantity this module
+# deals in (storehouse caps and passive hauls are all whole items or cents of a
+# rate), so it never masks a genuine shortfall.
+_QUANTITY_EPSILON = 1e-6
 
 # Cadences at which the game tops up passive producers.
 MINUTE = timedelta(minutes=1)
@@ -53,24 +61,39 @@ class PassiveProduction:
     producers: list[PassiveProducer] = field(default_factory=list)
     inventory_size: int | None = None
 
+    def per_cycle(self, producer: PassiveProducer, item: str) -> float:
+        """``producer``'s effective per-deposit output of ``item``, storehouse-clamped.
+
+        The single place the storehouse-cap rule (see the class docstring) is
+        applied to a producer's raw ``outputs`` entry -- :meth:`producer_rates`
+        divides this by the period to get a rate, and :meth:`quantized_wait` walks
+        it directly as the size of each scheduled deposit. 0.0 when the producer
+        does not make ``item`` at all (absent, zero, or a non-positive amount),
+        never negative.
+        """
+        key = item.lower()
+        quantity = producer.outputs.get(key)
+        if not quantity or quantity <= 0:
+            return 0.0
+        if self.inventory_size is not None and key not in UNCAPPED_ITEMS:
+            return min(quantity, self.inventory_size)
+        return quantity
+
     def producer_rates(self, item: str) -> list[tuple[str, float]]:
         """Each producer's per-minute rate for ``item`` as ``(name, rate)``.
 
-        Only producers that actually make the item are listed. The same per-cycle
-        storehouse cap and :data:`UNCAPPED_ITEMS` exemption as
-        :meth:`rate_per_minute` are applied, so this is the single place that rule
-        lives; callers wanting a total sum the rates, and callers wanting the
+        Only producers that actually make the item are listed, at their
+        storehouse-clamped :meth:`per_cycle` amount (the single place that rule
+        lives). Callers wanting a total sum the rates, and callers wanting the
         per-building breakdown (see :func:`main._passive_sources`,
         :func:`main._pet_passive_rate`) read them directly.
         """
         key = item.lower()
-        capped = self.inventory_size is not None and key not in UNCAPPED_ITEMS
         rates: list[tuple[str, float]] = []
         for producer in self.producers:
-            quantity = producer.outputs.get(key)
-            if not quantity:
+            per_cycle = self.per_cycle(producer, key)
+            if per_cycle <= 0:
                 continue
-            per_cycle = min(quantity, self.inventory_size) if capped else quantity
             rate = per_cycle / (producer.period.total_seconds() / 60)
             if rate > 0:
                 rates.append((producer.name, rate))
@@ -87,36 +110,147 @@ class PassiveProduction:
     def time_to_produce(self, item: str, quantity: int) -> timedelta | None:
         """Time to passively generate ``quantity`` of ``item``.
 
-        With a single producer the wait is rounded up to a whole number of its
-        periods, since production arrives in whole cycles and you cannot collect
-        part of one. When several producers make the item (e.g. the main run
-        plus an offset bonus deposit like the raptor snare or orchard shaker),
-        the wait falls back to their combined rate and is *not* clamped to a
-        whole cycle -- so such items can report a fraction of a period.
-        Returns ``None`` when nothing produces the item.
+        Delegates to :meth:`quantized_wait` with no ``smeared`` predicate, so
+        every producer -- including a pet's own averaged daily haul -- is treated
+        as a real whole-cycle depositor. With a single producer this reproduces
+        the old rounded-up-to-a-whole-period behaviour exactly. **Behaviour
+        change:** an item made by several producers on the same period (the main
+        raptor pen run plus its antler snare, say) used to fall back to their
+        combined continuous rate and could report a fraction of a period; it now
+        staggers the producers across the period instead (see
+        :meth:`quantized_wait`), which is the real deposit schedule and only ever
+        reports whole cycle-times. Returns ``None`` when nothing produces the
+        item.
+        """
+        return self.quantized_wait(item, quantity)
+
+    def quantized_wait(
+        self,
+        item: str,
+        quantity: float,
+        smeared: Callable[[str], bool] | None = None,
+    ) -> timedelta | None:
+        """Minimal time for whole passive deposits (plus smeared rates) to supply
+        ``quantity`` of ``item``; ``None`` when nothing produces it.
+
+        The real-world rule: a building deposits its storehouse-clamped
+        :meth:`per_cycle` amount at its own scheduled times, and you hold only
+        whatever has *landed* -- not a smooth fraction of the next deposit. A
+        *smeared* producer -- one ``smeared`` flags true for, e.g. a pet's
+        averaged daily haul or the Mechanical Heart's monthly grant, both of
+        which are themselves already an average standing in for lumpy real
+        events -- is instead treated as a continuous ramp, since quantising an
+        average would be quantising a fiction. ``smeared`` defaults to "nothing
+        is smeared" (every producer is a real depositor); it is injected rather
+        than read off a name convention because this module must not import
+        :mod:`config`, which owns that convention (see
+        :func:`config.passive_quantizer`).
+
+        Producers that share one ``period`` are evenly phase-staggered across it
+        (deposits at ``period/N``, ``2*period/N``, ..., cycling) rather than
+        landing together -- the raptor pen and its antler snare, both daily and
+        both storehouse-clamped, so bank one storehouse-worth every twelve hours,
+        not two at once every day. When their per-cycle amounts differ, the
+        *order* they arrive within a cycle is unknown, so the k-th stagger slot
+        is assumed to hold the k *smallest* deposits of the cycle (ascending,
+        worst case) -- never optimistic, and by the end of a full period the
+        whole cycle's total has landed regardless of the true order. Producers on
+        different periods run independent schedules. A lone producer on a period
+        is the ``N=1`` case of this same rule: its first deposit lands one full
+        period out, exactly the old single-producer behaviour.
+
+        The result is the minimal ``t`` at which the summed step functions (plus
+        the smeared ramp) reach ``quantity`` -- never below the continuous
+        ``quantity / total_rate`` estimate, and exact to the real deposit
+        schedule rather than merely the combined rate. Small floating error
+        (a quantity landing a hair past an exact multiple) is absorbed by
+        :data:`_QUANTITY_EPSILON` rather than forced into an extra cycle.
         """
         key = item.lower()
-        sources = [
-            producer for producer in self.producers if producer.outputs.get(key)
-        ]
-        if not sources:
-            return None
-        if len(sources) == 1:
-            producer = sources[0]
-            per_cycle = producer.outputs[key]
-            if self.inventory_size is not None and key not in UNCAPPED_ITEMS:
-                per_cycle = min(per_cycle, self.inventory_size)
+        if quantity <= 0:
+            return timedelta(0)
+
+        smeared_rate = 0.0
+        groups: dict[timedelta, list[float]] = {}
+        for producer in self.producers:
+            per_cycle = self.per_cycle(producer, key)
             if per_cycle <= 0:
-                return None
-            return math.ceil(quantity / per_cycle) * producer.period
-        # Several producers make it, possibly on different cadences; fall back
-        # to the combined rate. There is no single period to round up to here,
-        # so unlike the single-producer case the result is not clamped to a
-        # whole cycle and may show a fraction of a period.
-        rate = self.rate_per_minute(item)
-        if rate <= 0:
+                continue
+            if smeared is not None and smeared(producer.name):
+                smeared_rate += per_cycle / (producer.period.total_seconds() / 60)
+            else:
+                groups.setdefault(producer.period, []).append(per_cycle)
+        real_rate = sum(
+            sum(amounts) / (period.total_seconds() / 60)
+            for period, amounts in groups.items()
+        )
+        total_rate = smeared_rate + real_rate
+        if total_rate <= 0:
             return None
-        return timedelta(minutes=quantity / rate)
+        t0 = timedelta(minutes=quantity / total_rate)
+        if not groups:
+            return t0  # purely smeared: the continuous estimate is already exact
+
+        # The crossing can only sit between t0 (supply never beats the combined
+        # continuous rate) and t0 + the longest real period (by then every real
+        # producer has deposited at least `rate * t0`-worth -- see the
+        # docstring). So rather than enumerate every deposit from the start of
+        # the plan -- a per-minute mill days into a plan would mean thousands of
+        # events for a crossing that only ever lands in the last couple -- sum
+        # everything landed by the window's start in closed form and walk only
+        # the deposits inside the window.
+        for amounts in groups.values():
+            amounts.sort()  # ascending -- the worst-case fill order
+        prefix: dict[timedelta, list[float]] = {}
+        for period, amounts in groups.items():
+            sums = [0.0]
+            for amount in amounts:
+                sums.append(sums[-1] + amount)
+            prefix[period] = sums
+
+        def landed(period: timedelta, t: timedelta) -> float:
+            """A group's whole deposits at or before ``t``, in closed form."""
+            sums = prefix[period]
+            n = len(sums) - 1
+            # The +epsilon keeps a deposit landing exactly at ``t`` counted in
+            # the face of the float division (t and slot are both timedeltas).
+            k = int(t / (period / n) + 1e-9)
+            return (k // n) * sums[n] + sums[k % n]
+
+        # Start the walk at the last deposit at or before t0 (a real event time,
+        # so an exact-multiple quantity still reports the deposit's own time).
+        start = max(
+            (period / len(amounts)) * int(t0 / (period / len(amounts)) + 1e-9)
+            for period, amounts in groups.items()
+        )
+        window_end = t0 + max(groups)
+
+        def supply_at(t: timedelta) -> float:
+            ramp = smeared_rate * (t.total_seconds() / 60)
+            return ramp + sum(landed(period, t) for period in groups)
+
+        supply = supply_at(start)
+        if supply >= quantity - _QUANTITY_EPSILON:
+            return start
+        events: set[timedelta] = set()
+        for period, amounts in groups.items():
+            slot = period / len(amounts)
+            k = int(start / slot + 1e-9) + 1
+            while (when := slot * k) <= window_end:
+                events.add(when)
+                k += 1
+        t = start
+        for when in sorted(events):
+            if smeared_rate > 0:
+                span = (when - t).total_seconds() / 60
+                if supply + smeared_rate * span >= quantity - _QUANTITY_EPSILON:
+                    short = (quantity - supply) / smeared_rate
+                    return t + timedelta(minutes=short)
+            reached = supply_at(when)
+            if reached >= quantity - _QUANTITY_EPSILON:
+                return when
+            supply, t = reached, when
+        return window_end  # defensive: the window bound above should preempt this
 
 
 def time_to_produce_all(

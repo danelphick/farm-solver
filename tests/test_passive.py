@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from passive import (
+    DAILY,
     HOURLY,
     TEN_MINUTES,
     PassiveProducer,
@@ -128,6 +129,133 @@ def test_parse_duration_rejects_garbage(text):
 )
 def test_format_duration(duration, expected):
     assert format_duration(duration) == expected
+
+
+def test_quantized_wait_rounds_up_to_whole_deposits():
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100})]
+    )
+    # 250 antlers at 100 a day: the third deposit lands at day 3, so the wait is
+    # a whole 3 days, not the continuous 2.5-day estimate.
+    assert production.quantized_wait("antlers", 250) == timedelta(days=3)
+
+
+def test_quantized_wait_exact_multiple_is_not_rounded_up():
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100})]
+    )
+    assert production.quantized_wait("antlers", 200) == timedelta(days=2)
+    # Float noise a hair past an exact multiple must not cost a whole extra day.
+    assert production.quantized_wait("antlers", 200.0000001) == timedelta(days=2)
+
+
+def test_quantized_wait_of_nothing_is_zero():
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100})]
+    )
+    assert production.quantized_wait("antlers", 0) == timedelta(0)
+
+
+def test_quantized_wait_unknown_item_is_none():
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100})]
+    )
+    assert production.quantized_wait("steel", 100) is None
+
+
+def test_quantized_wait_deposits_are_storehouse_clamped():
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 2_617_810})],
+        inventory_size=49_440,
+    )
+    # Each daily deposit fills the storehouse and voids the rest, so one
+    # storehouse-worth takes a day and one item more takes a second day.
+    assert production.quantized_wait("antlers", 49_440) == timedelta(days=1)
+    assert production.quantized_wait("antlers", 49_441) == timedelta(days=2)
+
+
+def test_quantized_wait_staggers_same_period_producers():
+    # The pen and its snare share a daily period but not a phase: both clamp to
+    # a full storehouse, landing 12 hours apart -- so one storehouse-worth takes
+    # 12 hours, not a day, and the schedule steps every half day thereafter.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("raptor pen", DAILY, {"antlers": 2_617_810}),
+            PassiveProducer("raptor pen snare", DAILY, {"antlers": 261_781}),
+        ],
+        inventory_size=49_440,
+    )
+    assert production.quantized_wait("antlers", 49_440) == timedelta(hours=12)
+    assert production.quantized_wait("antlers", 60_000) == timedelta(hours=24)
+    assert production.quantized_wait("antlers", 98_880) == timedelta(hours=24)
+    assert production.quantized_wait("antlers", 98_881) == timedelta(hours=36)
+
+
+def test_quantized_wait_assumes_worst_case_deposit_order():
+    # Unequal same-period deposits arrive in an unknown order within the cycle,
+    # so each stagger slot is assumed to hold the smallest deposits first: 0.2
+    # at 12h, then 2 at 24h, cycling.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("raptor pen", DAILY, {"antlers": 2}),
+            PassiveProducer("raptor pen snare", DAILY, {"antlers": 0.2}),
+        ]
+    )
+    assert production.quantized_wait("antlers", 0.2) == timedelta(hours=12)
+    assert production.quantized_wait("antlers", 0.3) == timedelta(hours=24)
+    assert production.quantized_wait("antlers", 2.3) == timedelta(hours=36)
+
+
+def test_quantized_wait_mixed_periods_run_independent_schedules():
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("hourly mill", HOURLY, {"board": 60}),
+            PassiveProducer("daily mill", DAILY, {"board": 240}),
+        ]
+    )
+    # The hourly schedule alone covers a small ask at its first deposit.
+    assert production.quantized_wait("board", 60) == timedelta(hours=1)
+    # 1440 needs all 24 hourly deposits; the daily lump lands at the same
+    # moment, so the crossing is exactly 24h -- not the continuous estimate
+    # (under 21h at the combined 1680/day rate).
+    assert production.quantized_wait("board", 1440) == timedelta(hours=24)
+
+
+def test_quantized_wait_smeared_producers_ramp_continuously():
+    smeared = lambda name: name.startswith("pet ")  # noqa: E731
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("stable", DAILY, {"horn": 100}),
+            PassiveProducer("pet Dog", DAILY, {"horn": 50}),
+        ]
+    )
+    # The pet's averaged 50/day ramps continuously but only reaches 50 by the
+    # time the stable's first real deposit of 100 lands -- the deposit is what
+    # crosses 100, at a whole day.
+    assert production.quantized_wait("horn", 100, smeared) == timedelta(days=1)
+
+
+def test_quantized_wait_purely_smeared_item_stays_continuous():
+    smeared = lambda name: name.startswith("pet ")  # noqa: E731
+    production = PassiveProduction(
+        producers=[PassiveProducer("pet Dog", DAILY, {"horn": 50})]
+    )
+    # A pet-only item has no real deposits to quantize to; the averaged rate is
+    # the whole story, so the continuous estimate stands.
+    assert production.quantized_wait("horn", 100, smeared) == timedelta(days=2)
+
+
+def test_time_to_produce_staggers_same_period_producers():
+    # time_to_produce treats every producer as a real depositor (no smeared
+    # predicate); the multi-producer same-period case used to fall back to the
+    # combined continuous rate and could report a fraction of a period.
+    production = PassiveProduction(
+        producers=[
+            PassiveProducer("raptor pen", DAILY, {"antlers": 2}),
+            PassiveProducer("raptor pen snare", DAILY, {"antlers": 0.2}),
+        ]
+    )
+    assert production.time_to_produce("antlers", 5) == timedelta(days=3)
 
 
 def test_total_time_is_the_longest_concurrent_wait():

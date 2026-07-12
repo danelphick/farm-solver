@@ -347,12 +347,15 @@ def passive_offers(production: PassiveProduction) -> list[Offer]:
     low rates make any item that *only* a pet supplies expensive in time, so the
     optimiser leaves pets as a last resort on its own, without a hand-coded rule.
 
-    Compromise: unlike :meth:`PassiveProduction.time_to_produce`, which rounds a
-    single producer's wait up to a whole cycle (you cannot collect part of a
-    ten-minute deposit), this uses a continuous per-minute rate and never rounds.
-    The optimiser needs smooth costs to compare channels, the error is at most one
-    cycle, and it matches what ``time_to_produce`` already does whenever several
-    producers share an item. Final reporting can round to whole cycles again.
+    Compromise: production really arrives in whole deposits (you cannot collect
+    part of a ten-minute cycle), but this offer uses a continuous per-minute rate
+    and never rounds -- the optimiser needs smooth costs to compare channels, and
+    the error is at most one cycle per item. The rounding happens *after* the LP
+    instead: plan times, the frontier's breakpoint caps and every report wait are
+    lifted to the real deposit schedule via
+    :meth:`PassiveProduction.quantized_wait` (see
+    :func:`optimizer._quantize_plan_time`, :func:`report._passive_wait`), so the
+    smooth rate is purely the LP's internal view.
     """
     items: set[str] = set()
     for producer in production.producers:
