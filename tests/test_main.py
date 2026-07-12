@@ -41,7 +41,7 @@ from main import (
 from report import (
     SectionedReporter,
     _frontier_reasons,
-    _slowest_passive_item,
+    _slowest_passive_items,
     print_crafts,
     print_critical_path,
     print_frontier,
@@ -355,6 +355,23 @@ def test_frontier_reasons_name_the_full_requirement_resource():
     assert reasons == ["all Steel Wire from passive"]
 
 
+def test_frontier_reasons_name_every_tied_resource():
+    # Orange and Lemon both sit at their full requirement and finish at the same
+    # 10-min makespan, so the reason names the whole tie instead of arbitrarily
+    # picking whichever an alternate LP optimum listed first.
+    passive_offer = Offer(
+        "passive", "passive", {"orange": 10.0, "lemon": 10.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    plan = SourcingPlan(draws=[Draw(passive_offer, 10)], time=timedelta(minutes=10))
+    reasons = _frontier_reasons(
+        [plan], {"orange": 100, "lemon": 100}, {}, 1.0, [], {},
+        max_passive_residuals={"orange": 100, "lemon": 100}, production=None,
+        display={"orange": "Orange", "lemon": "Lemon"},
+    )
+    assert reasons == ["all Lemon and Orange from passive"]
+
+
 def test_print_frontier_shows_per_plan_reasons(capsys):
     # A resource plan's reason rides alongside its number (and any fastest/cheapest
     # tag); a plan with no reason shows nothing extra.
@@ -554,8 +571,8 @@ def test_slowest_passive_item_skips_pet_topups():
     elsewhere = {"horn": 900.0}  # exploring supplies most Horn; 100 left to the pet
     display = {"oak": "Oak", "horn": "Horn"}
     # Oak wait 1000/100 = 10 min; Horn residual 100/1 = 100 min (slower) but a top-up.
-    item = _slowest_passive_item(plan, need, elsewhere, display, production)
-    assert item is not None and item[0] == "Oak"
+    items = _slowest_passive_items(plan, need, elsewhere, display, production)
+    assert [item[0] for item in items] == ["Oak"]
 
 
 def test_slowest_passive_item_keeps_pet_when_it_is_primary_source():
@@ -566,8 +583,54 @@ def test_slowest_passive_item_keeps_pet_when_it_is_primary_source():
     )
     offer = Offer("passive", "passive", {"horn": 1.0}, time_per_unit=MINUTE)
     plan = SourcingPlan(draws=[Draw(offer, 1)])
-    item = _slowest_passive_item(plan, {"horn": 100.0}, {}, {"horn": "Horn"}, production)
-    assert item is not None and item[0] == "Horn"
+    items = _slowest_passive_items(
+        plan, {"horn": 100.0}, {}, {"horn": "Horn"}, production
+    )
+    assert [item[0] for item in items] == ["Horn"]
+
+
+def test_slowest_passive_items_reports_a_whole_tie():
+    # Orange and Lemon both quantize to the same daily boundary; naming just one
+    # flapped run to run with the LP's alternate optima, so the whole tie is
+    # returned, biggest quantity first.
+    production = PassiveProduction(
+        producers=[PassiveProducer("orchard", DAILY, {"orange": 100.0, "lemon": 100.0})]
+    )
+    offer = Offer(
+        "passive", "passive",
+        {"orange": 100.0 / 1440, "lemon": 100.0 / 1440},
+        time_per_unit=timedelta(minutes=1),
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 3600)])
+    need = {"orange": 250.0, "lemon": 240.0}  # both need the day-3 deposit
+    display = {"orange": "Orange", "lemon": "Lemon"}
+    items = _slowest_passive_items(plan, need, {}, display, production)
+    assert [(name, quantity) for name, quantity, _, _ in items] == [
+        ("Orange", 250),
+        ("Lemon", 240),
+    ]
+    assert all(wait == timedelta(days=3) for _, _, wait, _ in items)
+
+
+def test_print_plan_critical_path_names_every_tied_item(capsys):
+    production = PassiveProduction(
+        producers=[PassiveProducer("orchard", DAILY, {"orange": 100.0, "lemon": 100.0})]
+    )
+    offer = Offer(
+        "passive", "passive",
+        {"orange": 100.0 / 1440, "lemon": 100.0 / 1440},
+        time_per_unit=timedelta(minutes=1),
+    )
+    plan = SourcingPlan(draws=[Draw(offer, 3600)], time=timedelta(days=3))
+    print_plan(
+        plan, {"Orange": 250, "Lemon": 240}, Farm(), Workshop(), 1.0,
+        production=production,
+    )
+    out = capsys.readouterr().out
+    assert (
+        "250x Orange and 240x Lemon from passive production (3d)"
+        " — the slowest items to build up"
+    ) in out
 
 
 def test_print_plan_passive_section_leads_with_building_over_pet_topup(capsys):

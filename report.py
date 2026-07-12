@@ -38,7 +38,7 @@ _FARMING_COMAX_MARGIN = 0.01
 
 # How close to its full (cheapest-plan) requirement a passive item's residual must
 # be to count as fully gathered -- the resource whose completion gates the plan
-# (see :func:`_defining_passive_resource`).
+# (see :func:`_defining_passive_resources`).
 _FULL_REQUIREMENT_MARGIN = 0.02
 
 
@@ -377,21 +377,23 @@ def _frontier_reasons(
     production: passive.PassiveProduction | None,
     display: dict[str, str],
 ) -> list[str | None]:
-    """Why each plan is on the frontier: the resource whose full-requirement
-    gathering plateau it sits at ("all Steel Wire from passive"), else ``None``
-    (an endpoint or a farming-accelerated intermediate). Mirrors the chosen plan's
-    critical path (see :func:`_defining_passive_resource`)."""
+    """Why each plan is on the frontier: the resource(s) whose full-requirement
+    gathering plateau it sits at ("all Steel Wire from passive"; exact ties on a
+    deposit boundary are all named, "all Orange and Lemon from passive"), else
+    ``None`` (an endpoint or a farming-accelerated intermediate). Mirrors the
+    chosen plan's critical path (see :func:`_defining_passive_resources`)."""
     reasons: list[str | None] = []
     for plan in plans:
         residuals = optimizer.passive_residuals(
             plan, demand, recipes, crafting_bonus, open_flows, inventory
         )
         tolerance = max(timedelta(seconds=1), plan.time * _FARMING_COMAX_MARGIN)
-        defining = _defining_passive_resource(
+        defining = _defining_passive_resources(
             plan, residuals, display, plan.time, tolerance,
             max_passive_residuals, production,
         )
-        reasons.append(f"all {defining[0]} from passive" if defining else None)
+        names = _join_names([name for name, _, _, _ in defining])
+        reasons.append(f"all {names} from passive" if defining else None)
     return reasons
 
 
@@ -448,18 +450,48 @@ def _passive_wait(
     return timedelta(minutes=residual / rate)
 
 
-def _slowest_passive_item(
+def _tied_slowest(
+    rows: list[tuple[str, int, timedelta, str]],
+) -> list[tuple[str, int, timedelta, str]]:
+    """The rows whose wait equals the longest, biggest-quantity-first.
+
+    Deposit quantisation lands many items on the same boundary (Orange and
+    Lemon both complete at exactly 7d), and which of an exact tie a picker
+    happened to see first flapped run to run with the LP's alternate optima --
+    so a tie is reported whole, in a deterministic order, rather than
+    arbitrarily broken. Quantized waits are exact timedelta arithmetic, so
+    equality (not a tolerance) is the right tie test.
+    """
+    if not rows:
+        return []
+    slowest = max(wait for _, _, wait, _ in rows)
+    return sorted(
+        (row for row in rows if row[2] == slowest),
+        key=lambda row: (-row[1], row[0]),
+    )
+
+
+def _join_names(names: list[str]) -> str:
+    """``"A"``, ``"A and B"``, ``"A, B and C"`` -- prose-joined names."""
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _slowest_passive_items(
     plan: optimizer.SourcingPlan,
     need: dict[str, float],
     elsewhere: dict[str, float],
     display: dict[str, str],
     production: passive.PassiveProduction | None = None,
-) -> tuple[str, int, timedelta, str] | None:
-    """The passive item that caps the plan's time: ``(name, quantity, wait, key)``.
+) -> list[tuple[str, int, timedelta, str]]:
+    """The passive item(s) that cap the plan's time: ``(name, quantity, wait, key)``.
 
     Each item's wait is its residual (what other channels and crafting did not
-    cover) over its per-minute rate; the longest of these is the passive track's
-    time, so it is what caps a passive-bound plan.
+    cover) on the real deposit schedule (see :func:`_passive_wait`); the longest
+    of these is the passive track's time, so it is what caps a passive-bound
+    plan. Every item tied at that longest wait is returned (see
+    :func:`_tied_slowest`); the list is empty when nothing qualifies.
 
     A pet slowly trickling out a small top-up is skipped, though: pets are a last
     resort, so unless a pet is the *primary* source of an item it should not be
@@ -470,10 +502,10 @@ def _slowest_passive_item(
     """
     passive_draw = plan.passive_draw
     if passive_draw is None:
-        return None
+        return []
     offer = passive_draw.offer
-    best: tuple[str, int, timedelta, str] | None = None  # slowest non-pet-top-up
-    fallback: tuple[str, int, timedelta, str] | None = None  # slowest of any, backup
+    real: list[tuple[str, int, timedelta, str]] = []  # non-pet-top-up candidates
+    topups: list[tuple[str, int, timedelta, str]] = []  # pet top-ups, backup
     for key, rate in offer.yields.items():
         if rate <= 0:
             continue
@@ -483,16 +515,15 @@ def _slowest_passive_item(
             continue
         wait = _passive_wait(production, key, residual, rate)
         row = (display.get(key, key), round(residual), wait, key)
-        if fallback is None or wait > fallback[2]:
-            fallback = row
         # A pet top-up: pets make most of this item's passive supply yet supply
         # less than half of the item overall (another channel is its main source).
         pet_rate = _pet_passive_rate(production, key)
         pet_made = residual * (pet_rate / rate)
-        pet_topup = pet_rate > rate / 2 and pet_made < total_need / 2
-        if not pet_topup and (best is None or wait > best[2]):
-            best = row
-    return best or fallback
+        if pet_rate > rate / 2 and pet_made < total_need / 2:
+            topups.append(row)
+        else:
+            real.append(row)
+    return _tied_slowest(real or topups)
 
 
 def _num_width(counts: Iterable[int]) -> int:
@@ -532,8 +563,8 @@ def _farming_drives(
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
     if farming_time < makespan - tolerance:
         return False
-    item = _slowest_passive_item(plan, need, elsewhere, display, production)
-    passive_comaximal = item is not None and item[2] >= makespan - tolerance
+    items = _slowest_passive_items(plan, need, elsewhere, display, production)
+    passive_comaximal = bool(items) and items[0][2] >= makespan - tolerance
     return not (passive_comaximal and _binding_crop_is_fill(plan, sourceable_elsewhere))
 
 
@@ -603,7 +634,7 @@ def _binding_crop_is_fill(
     return _crop_of(biggest.offer).lower() in sourceable_elsewhere
 
 
-def _defining_passive_resource(
+def _defining_passive_resources(
     plan: optimizer.SourcingPlan,
     residuals: dict[str, float],
     display: dict[str, str],
@@ -611,8 +642,8 @@ def _defining_passive_resource(
     tolerance: timedelta,
     max_passive_residuals: dict[str, float] | None,
     production: passive.PassiveProduction | None,
-) -> tuple[str, int, timedelta, str] | None:
-    """The passive item at its full requirement whose completion sets the makespan.
+) -> list[tuple[str, int, timedelta, str]]:
+    """The passive item(s) at full requirement whose completion sets the makespan.
 
     A material like Steel Wire is needed only up to its products' full demand;
     gather that much passively and no more is required, so the time it takes is a
@@ -621,15 +652,18 @@ def _defining_passive_resource(
     completes at the makespan; a resource still being sped up sits below its full
     requirement, and one that finishes early is not co-maximal. A pet-made
     material is skipped -- its trickle is a last resort, and the pet-primary case
-    is handled by :func:`_slowest_passive_item`. Shared by the critical-path line
-    and the frontier's per-plan reason (see :func:`print_frontier`).
+    is handled by :func:`_slowest_passive_items`. Every qualifying item tied at
+    the longest wait is returned (see :func:`_tied_slowest`; deposit boundaries
+    make exact ties common); empty when none qualifies. Shared by the
+    critical-path line and the frontier's per-plan reason (see
+    :func:`print_frontier`).
     """
     if not max_passive_residuals:
-        return None
+        return []
     passive_draw = plan.passive_draw
     if passive_draw is None:
-        return None
-    best: tuple[str, int, timedelta, str] | None = None
+        return []
+    rows: list[tuple[str, int, timedelta, str]] = []
     for key, rate in passive_draw.offer.yields.items():
         if rate <= 0:
             continue
@@ -644,9 +678,8 @@ def _defining_passive_resource(
             continue  # finishes early, so it is not what caps the plan
         if _pet_passive_rate(production, key) > rate / 2:
             continue  # a pet trickle, not a real gathering plateau
-        if best is None or wait > best[2]:
-            best = (display.get(key, key), round(residual), wait, key)
-    return best
+        rows.append((display.get(key, key), round(residual), wait, key))
+    return _tied_slowest(rows)
 
 
 def _passive_residuals_of(
@@ -703,32 +736,43 @@ def _critical_path_summary(
         return None  # everything is instant; there is no wait to explain
 
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
-    defining = _defining_passive_resource(
+    defining = _defining_passive_resources(
         plan, _passive_residuals_of(plan, need, elsewhere), display, makespan,
         tolerance, max_passive_residuals, production,
     )
-    if defining is not None:
-        # A resource gathered to its full requirement exactly here: its completion
-        # is the gate, and this is its plan (more time gathers no more of it).
-        name, quantity, wait, _ = defining
+    if defining:
+        # Resource(s) gathered to their full requirement exactly here: their
+        # completion is the gate, and this is their plan (more time gathers no
+        # more). Deposit boundaries make exact ties common; name them all.
+        counts = _join_names([f"{q:,}x {name}" for name, q, _, _ in defining])
+        wait = defining[0][2]
+        suffix = (
+            "its full requirement" if len(defining) == 1
+            else "their full requirements"
+        )
         line = (
-            f"{quantity:,}x {name} from passive production "
-            f"({passive.format_duration(wait)}) — its full requirement, "
+            f"{counts} from passive production "
+            f"({passive.format_duration(wait)}) — {suffix}, "
             "after which no more is needed"
         )
     elif _farming_drives(
         plan, need, elsewhere, display, production, sourceable_elsewhere
     ):
         line = _farming_bottleneck(plan, makespan)
-    elif (item := _slowest_passive_item(
+    elif items := _slowest_passive_items(
         plan, need, elsewhere, display, production
-    )) is not None:
+    ):
         # Passive sets the pace: it is the sole longest track, or farming beside it
-        # is merely filling the wait this item forces with free crops.
-        name, quantity, wait, _ = item
+        # is merely filling the wait these items force with free crops.
+        counts = _join_names([f"{q:,}x {name}" for name, q, _, _ in items])
+        wait = items[0][2]
+        suffix = (
+            "the slowest item to build up" if len(items) == 1
+            else "the slowest items to build up"
+        )
         line = (
-            f"{quantity:,}x {name} from passive production "
-            f"({passive.format_duration(wait)}) — the slowest item to build up"
+            f"{counts} from passive production "
+            f"({passive.format_duration(wait)}) — {suffix}"
         )
     else:
         return None
@@ -1367,22 +1411,26 @@ def print_plan(
             rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
-            # List the item on the critical path first (only when passive is the
-            # plan's bottleneck track), then the rest by quantity, then by how long
-            # they take. The critical item is whatever print_critical_path names --
-            # not simply the slowest, since a pet top-up is skipped over a building.
-            critical_key = None
+            # List the item(s) on the critical path first (only when passive is
+            # the plan's bottleneck track), then the rest by quantity, then by how
+            # long they take. The critical items are whatever print_critical_path
+            # names -- not simply the slowest, since a pet top-up is skipped over
+            # a building -- and an exact tie is a set, not one arbitrary pick.
+            critical_keys: set[str] = set()
             if not _farming_drives(
                 plan, need, elsewhere, display, production, sourceable_elsewhere
             ):
-                critical = _slowest_passive_item(
-                    plan, need, elsewhere, display, production
-                )
-                if critical is not None:
-                    critical_key = critical[3]
+                critical_keys = {
+                    key for _, _, _, key in _slowest_passive_items(
+                        plan, need, elsewhere, display, production
+                    )
+                }
             width = _num_width(quantity for _, _, quantity, _ in rows)
+            # Final name tie-break: rows tied on quantity and wait otherwise sit
+            # in yields-iteration order, which flaps run to run with the LP's
+            # alternate optima (hash-seeded set orderings upstream).
             ordered = sorted(
-                rows, key=lambda r: (r[3] != critical_key, -r[2], -r[0])
+                rows, key=lambda r: (r[3] not in critical_keys, -r[2], -r[0], r[1])
             )
             for wait, name, quantity, key in ordered:
                 source = (
@@ -1718,17 +1766,18 @@ def markdown_plan(
             wait = _passive_wait(production, key, residual, rate)
             prod_rows.append((wait, display.get(key, key), round(residual), key))
         if prod_rows:
-            critical_key = None
+            critical_keys: set[str] = set()
             if not _farming_drives(
                 plan, need, elsewhere, display, production, sourceable_elsewhere
             ):
-                critical = _slowest_passive_item(
-                    plan, need, elsewhere, display, production
-                )
-                if critical is not None:
-                    critical_key = critical[3]
+                critical_keys = {
+                    key for _, _, _, key in _slowest_passive_items(
+                        plan, need, elsewhere, display, production
+                    )
+                }
+            # Same final name tie-break as print_plan's passive section.
             ordered = sorted(
-                prod_rows, key=lambda r: (r[3] != critical_key, -r[2], -r[0])
+                prod_rows, key=lambda r: (r[3] not in critical_keys, -r[2], -r[0], r[1])
             )
             rows = []
             for wait, name, quantity, key in ordered:

@@ -116,7 +116,7 @@ frontier as before.
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource`, `_passive_wait` (quantized deposit waits) |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers` (Hickory Omelette boost, `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -300,7 +300,7 @@ slowest (cheapest-net) plan: the slow, passive-leaning extension can adopt an
 extreme strategy (cider stamina from Apples not Orange Juice) that *understates* an
 item's requirement, so it is a poor yardstick. It also builds the frontier table's
 per-plan **reason** (`_frontier_reasons` → "all Steel Wire from passive") from the
-same `_defining_passive_resource`, so the table label and the chosen plan's
+same `_defining_passive_resources`, so the table label and the chosen plan's
 critical path agree.
 
 ## Critical-path naming (report.print_critical_path) — read this before touching it
@@ -309,7 +309,7 @@ This logic took many iterations; the precedence is deliberate. Tracks run
 concurrently; fishing/exploring are instant, so the makespan is a **farming** or
 **passive** wait. Decision order in `print_critical_path`:
 
-1. **Defining passive resource** (`_defining_passive_resource`, takes the plan's
+1. **Defining passive resource** (`_defining_passive_resources`, takes the plan's
    passive `residuals`) — a passive item whose residual has reached its **full**
    requirement (`max_passive_residuals`, within `_FULL_REQUIREMENT_MARGIN`) **and**
    completes at the makespan. This is the gate ("its full requirement, after which
@@ -321,15 +321,21 @@ concurrently; fishing/exploring are instant, so the makespan is a **farming** or
    **fill** (`_binding_crop_is_fill`) if a consumable channel could supply it
    (`sourceable_elsewhere`) — then farming is just filling a passive-forced wait,
    so passive drives instead.
-3. else **slowest passive item** (`_slowest_passive_item`) — but a **pet
+3. else **slowest passive item** (`_slowest_passive_items`) — but a **pet
    top-up** is skipped: a pet supplying most of an item's *passive* rate yet a
    minority of its *total* need is a last resort, not a bottleneck, unless the
    pet is the item's primary source.
 
 `_farming_drives` is shared by the critical-path line and the **Passive
-production** section's ordering (lead item = the critical one) so they agree.
+production** section's ordering (lead items = the critical ones) so they agree.
 `_pet_passive_rate` distinguishes pets (name-prefixed `PET_PRODUCER_PREFIX`) from
-buildings.
+buildings. Both pickers return **every item tied at the longest wait**
+(`_tied_slowest`, exact timedelta equality — deposit quantisation makes exact
+ties common, e.g. Orange and Lemon both completing at 7d), ordered
+biggest-quantity-first; the line, the frontier reason ("all Orange and Lemon
+from passive") and the section lead all name the whole tie, so which item an
+alternate LP optimum happened to list first no longer flips the report between
+runs.
 
 ## Two renderers, one set of decisions (report.py)
 
@@ -347,8 +353,8 @@ shared pieces:
   the logic itself.
 - **`_craft_order`** — the parents-before-materials ordering `print_crafts` and
   `markdown_crafts` both walk.
-- Every other named helper below (`_defining_passive_resource`, `_farming_drives`,
-  `_slowest_passive_item`, `_passive_sources`, ...) is called directly by both
+- Every other named helper below (`_defining_passive_resources`, `_farming_drives`,
+  `_slowest_passive_items`, `_passive_sources`, ...) is called directly by both
   `print_plan` and `markdown_plan` -- there is no markdown-specific copy of any
   of this reasoning, only of the loop that turns its output into a printed line
   vs. a table row.
