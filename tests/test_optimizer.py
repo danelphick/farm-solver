@@ -574,6 +574,21 @@ def test_minimize_quantized_exact_multiple_is_unchanged():
     assert abs(plan.time - timedelta(days=2)) < timedelta(seconds=1)
 
 
+def test_minimize_does_not_lift_passive_fill_past_the_driving_track():
+    # Farming the 3,900 It (one a minute) takes 2d 17h and sets the makespan; the
+    # 250 antlers finish continuously at 2.5 days *inside* that wait, so passive
+    # is fill -- rounding its last deposit up to day 3 would push the whole plan
+    # past the track that really drives it, for a sliver the plan would absorb
+    # elsewhere. The lift only applies when passive is itself the bottleneck.
+    offers = passive_offers(ANTLER_PEN) + [
+        Offer("grow It", "farming", {"it": 1}, time_per_unit=timedelta(minutes=1)),
+    ]
+    plan = minimize(
+        offers, {"Antlers": 250, "It": 3900}, quantize=ANTLER_PEN.quantized_wait
+    )
+    assert abs(plan.time - timedelta(minutes=3900)) < timedelta(seconds=1)
+
+
 def test_passive_completion_caps_quantize_to_deposit_boundaries():
     (offer,) = passive_offers(ANTLER_PEN)
     plan = SourcingPlan(draws=[Draw(offer, 3600)])

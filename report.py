@@ -423,11 +423,25 @@ def _pet_dominated_items(production: passive.PassiveProduction) -> set[str]:
     }
 
 
+def _plan_makespan(plan: optimizer.SourcingPlan) -> timedelta:
+    """The plan's real makespan: ``plan.time`` or the longest draw track.
+
+    Take whichever is bigger, not the draws alone: quantisation (see
+    :func:`optimizer._quantize_plan_time`) can bump ``plan.time`` past every
+    draw's own time to the next real deposit boundary, and the header, the
+    frontier row and the per-item waits must all quote the same figure.
+    Hand-built test plans with no cached time (``plan.time == 0``) still fall
+    back to the draws' own times.
+    """
+    return max([plan.time, *plan.track_times().values()], default=timedelta(0))
+
+
 def _passive_wait(
     production: passive.PassiveProduction | None,
     key: str,
     residual: float,
     rate: float,
+    limit: timedelta | None = None,
 ) -> timedelta:
     """The real wait for ``residual`` of ``key`` to accumulate, on the actual
     deposit schedule when ``production`` is known -- the plain
@@ -437,15 +451,24 @@ def _passive_wait(
     text and Markdown renderers -- and the critical-path line, and the
     slowest-item/defining-resource pickers that feed it -- all show the same
     quantized number (see :meth:`passive.PassiveProduction.quantized_wait`,
-    :func:`config.is_smeared_producer`). Falls back to the continuous estimate
-    when ``production`` is absent (a hand-built plan/report call with no
-    production passed) or the schedule genuinely has nothing for this item
-    (should not happen for a real passive-offer key, since its ``rate`` is
-    already positive, but stay defensive).
+    :func:`config.is_smeared_producer`).
+
+    ``limit`` is the plan's makespan: a deposit boundary past it means this
+    item is *fill* whose last sliver the plan absorbs through the channels that
+    co-source it (see :func:`optimizer._quantize_plan_time`'s fill exemption),
+    so the continuous estimate -- which fits the plan, exactly as reported
+    before quantisation -- is shown instead of a wait the plan does not
+    actually incur. Also falls back to the continuous estimate when
+    ``production`` is absent (a hand-built plan/report call with no production
+    passed) or the schedule genuinely has nothing for this item (should not
+    happen for a real passive-offer key, since its ``rate`` is already
+    positive, but stay defensive).
     """
     if production is not None:
         wait = production.quantized_wait(key, residual, config.is_smeared_producer)
-        if wait is not None:
+        if wait is not None and (
+            limit is None or wait <= limit + timedelta(seconds=1)
+        ):
             return wait
     return timedelta(minutes=residual / rate)
 
@@ -484,11 +507,14 @@ def _slowest_passive_items(
     elsewhere: dict[str, float],
     display: dict[str, str],
     production: passive.PassiveProduction | None = None,
+    limit: timedelta | None = None,
 ) -> list[tuple[str, int, timedelta, str]]:
     """The passive item(s) that cap the plan's time: ``(name, quantity, wait, key)``.
 
     Each item's wait is its residual (what other channels and crafting did not
-    cover) on the real deposit schedule (see :func:`_passive_wait`); the longest
+    cover) on the real deposit schedule (see :func:`_passive_wait`, to which
+    ``limit`` -- the plan's makespan -- forwards, so a fill item's boundary past
+    the plan shows its continuous estimate); the longest
     of these is the passive track's time, so it is what caps a passive-bound
     plan. Every item tied at that longest wait is returned (see
     :func:`_tied_slowest`); the list is empty when nothing qualifies.
@@ -513,7 +539,7 @@ def _slowest_passive_items(
         residual = total_need - elsewhere.get(key, 0.0)
         if residual <= 1e-6:
             continue
-        wait = _passive_wait(production, key, residual, rate)
+        wait = _passive_wait(production, key, residual, rate, limit)
         row = (display.get(key, key), round(residual), wait, key)
         # A pet top-up: pets make most of this item's passive supply yet supply
         # less than half of the item overall (another channel is its main source).
@@ -552,18 +578,19 @@ def _farming_drives(
     passive is named the driver instead of a farming track that only looked
     co-maximal against the unquantized time.
     """
-    track_time = plan.track_times()
-    makespan = max([plan.time, *track_time.values()], default=timedelta(0))
+    makespan = _plan_makespan(plan)
     if makespan <= timedelta(0):
         return False
-    farming_time = track_time.get(sources.FARMING_TRACK, timedelta(0))
+    farming_time = plan.track_times().get(sources.FARMING_TRACK, timedelta(0))
     if farming_time <= timedelta(0):
         return False  # no farming to drive the makespan (a sub-second tolerance on a
         # near-instant plan could otherwise round zero farming up to co-maximal)
     tolerance = max(timedelta(seconds=1), makespan * _FARMING_COMAX_MARGIN)
     if farming_time < makespan - tolerance:
         return False
-    items = _slowest_passive_items(plan, need, elsewhere, display, production)
+    items = _slowest_passive_items(
+        plan, need, elsewhere, display, production, limit=makespan
+    )
     passive_comaximal = bool(items) and items[0][2] >= makespan - tolerance
     return not (passive_comaximal and _binding_crop_is_fill(plan, sourceable_elsewhere))
 
@@ -673,7 +700,7 @@ def _defining_passive_resources(
             continue
         if residual < full * (1 - _FULL_REQUIREMENT_MARGIN):
             continue  # still being sped up with consumables, not the gate
-        wait = _passive_wait(production, key, residual, rate)
+        wait = _passive_wait(production, key, residual, rate, makespan)
         if wait < makespan - tolerance:
             continue  # finishes early, so it is not what caps the plan
         if _pet_passive_rate(production, key) > rate / 2:
@@ -724,14 +751,10 @@ def _critical_path_summary(
     :func:`print_critical_path` and :func:`markdown_plan` so both name the same
     driver from the same logic.
     """
-    # Concurrent tracks; the makespan is the longest one -- take whichever is
-    # bigger of the draws' own track times or plan.time itself, not the draws
-    # alone: quantization (see optimizer._quantize_plan_time) can bump plan.time
-    # past every draw's own time to the next real deposit boundary, and without
-    # this the frontier row would report that bumped time while this header still
-    # quoted the shorter, unquantized one. Hand-built test plans with no cached
-    # time (plan.time == 0) still fall back to the draws' own times.
-    makespan = max([plan.time, *plan.track_times().values()], default=timedelta(0))
+    # Concurrent tracks; the makespan is the longest one -- see _plan_makespan
+    # for why plan.time joins the draws' own track times (quantized deposit
+    # boundaries live only on plan.time).
+    makespan = _plan_makespan(plan)
     if makespan <= timedelta(0):
         return None  # everything is instant; there is no wait to explain
 
@@ -760,7 +783,7 @@ def _critical_path_summary(
     ):
         line = _farming_bottleneck(plan, makespan)
     elif items := _slowest_passive_items(
-        plan, need, elsewhere, display, production
+        plan, need, elsewhere, display, production, limit=makespan
     ):
         # Passive sets the pace: it is the sole longest track, or farming beside it
         # is merely filling the wait these items force with free crops.
@@ -1387,6 +1410,7 @@ def print_plan(
         # passive wait. Each item's own wait is its residual over its per-minute
         # rate; the longest is the whole track's time, so listing them longest-first
         # shows what drives it.
+        makespan = _plan_makespan(plan)
         rows = []
         for key, rate in offer.yields.items():
             if rate <= 0:
@@ -1407,7 +1431,7 @@ def print_plan(
                 # burns a stray fraction) would print as a "0x ... in 0m" line.
                 if round(residual) < 1:
                     continue
-            wait = _passive_wait(production, key, residual, rate)
+            wait = _passive_wait(production, key, residual, rate, makespan)
             rows.append((wait, display.get(key, key), round(residual), key))
         if rows:
             print("\nPassive production (concurrent):")
@@ -1422,7 +1446,7 @@ def print_plan(
             ):
                 critical_keys = {
                     key for _, _, _, key in _slowest_passive_items(
-                        plan, need, elsewhere, display, production
+                        plan, need, elsewhere, display, production, limit=makespan
                     )
                 }
             width = _num_width(quantity for _, _, quantity, _ in rows)
@@ -1749,6 +1773,7 @@ def markdown_plan(
     passive_draw = plan.passive_draw
     if passive_draw is not None:
         offer = passive_draw.offer
+        makespan = _plan_makespan(plan)
         prod_rows = []
         for key, rate in offer.yields.items():
             if rate <= 0:
@@ -1763,7 +1788,7 @@ def markdown_plan(
                 # burns a stray fraction) would print as a "0x ... in 0m" line.
                 if round(residual) < 1:
                     continue
-            wait = _passive_wait(production, key, residual, rate)
+            wait = _passive_wait(production, key, residual, rate, makespan)
             prod_rows.append((wait, display.get(key, key), round(residual), key))
         if prod_rows:
             critical_keys: set[str] = set()
@@ -1772,7 +1797,7 @@ def markdown_plan(
             ):
                 critical_keys = {
                     key for _, _, _, key in _slowest_passive_items(
-                        plan, need, elsewhere, display, production
+                        plan, need, elsewhere, display, production, limit=makespan
                     )
                 }
             # Same final name tie-break as print_plan's passive section.

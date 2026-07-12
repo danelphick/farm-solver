@@ -504,7 +504,17 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   to arrive smallest-first (worst case), and *smeared* producers — pets and the
   Mechanical Heart's monthly grants, per `config.is_smeared_producer` — as
   continuous ramps (their per-day figure is already an average; quantising it
-  would quantise a fiction). `config.passive_quantizer(production)` binds the
+  would quantise a fiction). **Fill exemption**: the lift applies only when the
+  passive track is the plan's own bottleneck (its track time exceeds every
+  other track's). Passive that merely *fills* another track's wait — the
+  fastest plan's Orange/Lemon feeding OJ/Lemonade inside farming's 6d 5h — is
+  not rounded up past the real driver: the boundary sliver is in practice
+  absorbed by the channels already co-sourcing those items (buy a few more OJ),
+  an allocation the continuous LP cannot see it should make. `report._passive_wait`
+  applies the same rule per row via its `limit` (the plan makespan,
+  `_plan_makespan`): a boundary past the plan shows the continuous fill
+  estimate, so header, frontier row and rows stay consistent.
+  `config.passive_quantizer(production)` binds the
   predicate; `main.solve_frontier` threads the callable into
   `fastest_endpoint`/`frontier` (both, so the seasonal fixed point's horizon
   seed and the frontier agree within `_makespans_close`). Draws, `produced`

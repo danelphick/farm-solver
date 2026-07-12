@@ -539,6 +539,37 @@ def test_print_plan_shows_the_staggered_half_day_deposit(capsys):
     assert "49,440x Antlers in 12h" in out
 
 
+def test_print_plan_passive_fill_keeps_the_farming_critical_path(capsys):
+    # Farming (2d 17h) drives the plan; the antlers' continuous wait (2d 12h)
+    # fits inside it, so passive is fill and its day-3 deposit boundary must not
+    # take over the critical path or the displayed wait -- the report reads as it
+    # did before quantisation (see optimizer._quantize_plan_time's fill exemption;
+    # plan.time was likewise not lifted).
+    production = PassiveProduction(
+        producers=[PassiveProducer("raptor pen", DAILY, {"antlers": 100.0})]
+    )
+    passive_offer = Offer(
+        "passive", "passive", {"antlers": 100.0 / 1440},
+        time_per_unit=timedelta(minutes=1),
+    )
+    farming = Offer(
+        "grow Corn", "farming", {"corn": 1}, time_per_unit=timedelta(minutes=1)
+    )
+    plan = SourcingPlan(
+        draws=[Draw(passive_offer, 3600), Draw(farming, 3900)],
+        time=timedelta(minutes=3900),
+    )
+    print_plan(
+        plan, {"Antlers": 250, "Corn": 3900}, Farm(), Workshop(), 1.0,
+        production=production,
+    )
+    out = capsys.readouterr().out
+    assert "Critical path (sets the 2d 17h total):" in out
+    assert "Harvest Alls of Corn" in out
+    assert "250x Antlers in 2d 12h" in out  # continuous fill, not the 3d boundary
+    assert "3d" not in out
+
+
 def test_print_plan_pet_waits_stay_continuous(capsys):
     # A pet's daily output is an averaged rate, not a real deposit, so its wait is
     # not lifted to a whole day: 250 Horn at 100/day reads 2d 12h, as before.

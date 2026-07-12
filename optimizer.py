@@ -823,14 +823,32 @@ def _quantize_plan_time(
     openables: list[OpenFlow],
     inventory: dict[str, float],
 ) -> None:
-    """Lift ``plan.time`` in place to the next real passive deposit boundary.
+    """Lift ``plan.time`` in place to the next real passive deposit boundary --
+    but only when passive production is the plan's own bottleneck.
 
     The LP's own makespan is the continuous ``residual / rate`` estimate for
     every passive item; the real wait for a whole deposit schedule to supply
     that residual (see :meth:`passive.PassiveProduction.quantized_wait`) is
     never sooner and often later, so this only ever *raises* ``plan.time``,
     never lowers it -- idempotent, safe to call more than once on the same
-    plan. A no-op when ``quantize`` is not supplied (quantisation is opt-in per
+    plan.
+
+    **Fill exemption**: when another track (farming, in practice) sets the
+    makespan, the passive track is *fill* -- the LP opportunistically leans on
+    free passive supply up to exactly that wait because, continuously, it costs
+    nothing. Rounding such an item's last deposit up would then push the whole
+    plan past the track that really drives it (the fastest plan's Orange fill
+    completing a few hours after farming would round it from 6d 5h to 7d), when
+    in reality the boundary sliver is trivially absorbed by the channels that
+    already co-source those items (buy a few more Orange Juice, explore a few
+    more ciders) -- an allocation the continuous LP cannot see it should make.
+    So the lift applies only when the passive track's own time exceeds every
+    other track's: then the plan genuinely waits on deposits and the boundary
+    is real. The accepted residue: a fill item nothing else could source
+    overshoots by at most one cycle, the same one-cycle error the continuous
+    offer already carries (see :func:`sources.passive_offers`).
+
+    A no-op when ``quantize`` is not supplied (quantisation is opt-in per
     caller) or the plan has no passive draw at all (nothing to quantize). The
     LP itself, ``Draw.units``/``Draw.produced`` and surplus accounting are
     untouched -- only the reported completion time moves. Parameter order
@@ -841,6 +859,16 @@ def _quantize_plan_time(
     """
     if quantize is None or plan.passive_draw is None:
         return
+    track_times = plan.track_times()
+    passive_time = track_times.get(PASSIVE_TRACK, timedelta(0))
+    others = max(
+        (t for track, t in track_times.items() if track != PASSIVE_TRACK),
+        default=timedelta(0),
+    )
+    # LP float noise between two views of the same pinned makespan is far below
+    # a second; a real bottleneck gap is minutes to days.
+    if passive_time <= others + timedelta(seconds=1):
+        return  # passive is fill inside another track's wait (see docstring)
     residuals = passive_residuals(
         plan, demand, recipes, crafting_bonus, openables, inventory
     )
