@@ -28,10 +28,15 @@ from passive import (
 # faster buildings and used only as a last-resort source (pets are slow).
 PET_PRODUCER_PREFIX = "pet "
 
-# The Hickory Omelette meal adds this fraction of the sawmill's hourly output as
-# an extra deposit every ten minutes (see the sawmill handling in
-# :func:`passive_production`).
-HICKORY_OMELETTE_FRACTION = 0.2
+# The Hickory Omelette is a held/bought meal (see :data:`sources.HICKORY_OMELETTE`)
+# that boosts the sawmill by :data:`sources.HICKORY_OMELETTE_FRACTION` for the hour
+# it lasts. The ``[sawmill] hickory_omelette`` setting picks how it is used; the
+# boost itself is modelled as a grounded, omelette-consuming offer built by
+# :func:`sources.sawmill_boost_offers` (not baked into passive production here).
+HICKORY_NONE = "none"
+HICKORY_ALL = "all"
+HICKORY_ONLY_OAK = "only_oak"
+HICKORY_MODES = (HICKORY_NONE, HICKORY_ALL, HICKORY_ONLY_OAK)
 
 # The Farmhouse tops actual stamina up each day by this multiple of the natural
 # stamina cap, capped at :data:`FARMHOUSE_GAIN_CAP` (raised to
@@ -50,6 +55,52 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     return tomllib.loads(source.read_text())
 
 
+def sawmill_outputs(config: dict[str, Any]) -> dict[str, float]:
+    """The sawmill's base (unboosted) hourly outputs, lower-cased.
+
+    The numeric ``[sawmill]`` entries are the hourly quantities; string/boolean
+    entries (``hickory_omelette``, ``have_sturdy_saw``, ...) are settings, not
+    outputs. Oak is only produced with ``have_sturdy_saw``. Pine board (a
+    per-minute output, never omelette-boosted) is not included here.
+    """
+    sawmill = config.get("sawmill") or {}
+    outputs = {
+        item.lower(): float(qty)
+        for item, qty in sawmill.items()
+        if isinstance(qty, (int, float)) and not isinstance(qty, bool)
+    }
+    if not sawmill.get("have_sturdy_saw"):
+        outputs.pop("oak", None)
+    return outputs
+
+
+def hickory_omelette_mode(config: dict[str, Any]) -> str:
+    """How the Hickory Omelette sawmill boost is used: one of :data:`HICKORY_MODES`.
+
+    * ``"none"``     -- no boost (the default when the setting is absent).
+    * ``"all"``      -- boost every hourly output (oak, board, wood) for as long
+      as the plan runs; each boosted hour eats one omelette.
+    * ``"only_oak"`` -- only ever eat omelettes to speed **oak** (the sawmill's
+      scarce output); board/wood are not boosted in the plan, so an omelette is
+      never spent to get them.
+
+    The pre-existing ``use_hickory_omelette`` boolean is rejected with a
+    migration hint, mirroring the ``solver.model_calendar`` retirement.
+    """
+    sawmill = config.get("sawmill") or {}
+    if "use_hickory_omelette" in sawmill:
+        raise ValueError(
+            "[sawmill] use_hickory_omelette is gone; set hickory_omelette to "
+            'one of "none" / "all" / "only_oak" instead'
+        )
+    mode = sawmill.get("hickory_omelette", HICKORY_NONE)
+    if mode not in HICKORY_MODES:
+        raise ValueError(
+            f"[sawmill] hickory_omelette must be one of {HICKORY_MODES}, not {mode!r}"
+        )
+    return mode
+
+
 def passive_production(
     config: dict[str, Any],
     today: date | None = None,
@@ -64,10 +115,10 @@ def passive_production(
     * ``[sawmill]`` -- hourly; its numeric keys are item names and values the
       hourly quantity (oak only with ``have_sturdy_saw``). It also makes pine
       board a minute at a time, doubled with ``have_pine_boost``. The Hickory
-      Omelette (``use_hickory_omelette``) adds 20% of the hourly output every
-      ten minutes: the top-of-the-hour deposit merges with the main run into one
-      1.2x deposit (still storehouse-capped), and the other five deposits an
-      hour each land 20% separately (each capped on its own).
+      Omelette boost is **not** applied here: it is a held/bought consumable, so
+      it is modelled as a grounded offer (see :func:`sawmill_outputs`,
+      :func:`hickory_omelette_mode` and :func:`sources.sawmill_boost_offers`), not
+      baked into these free rates.
     * ``[chicken_coop]`` -- ``produces`` eggs and feathers each day, plus (when
       ``completed_starmap``) gold feathers at five percent of the feathers.
     * ``[worm_habitat]`` -- worms, gummy worms and mealworms every hour.
@@ -107,52 +158,16 @@ def passive_production(
 
     sawmill = config.get("sawmill")
     if sawmill:
-        # The hourly outputs are the numeric entries; flags like
-        # have_pine_boost are handled separately below.
-        outputs = {
-            item.lower(): int(qty)
-            for item, qty in sawmill.items()
-            if not isinstance(qty, bool)
-        }
-        # Oak is only produced with the sturdy saw.
-        if not sawmill.get("have_sturdy_saw"):
-            outputs.pop("oak", None)
-        if sawmill.get("use_hickory_omelette"):
-            # The Hickory Omelette deposits 20% of the hourly output every ten
-            # minutes. The deposit at the top of the hour coincides with the
-            # main run, so that combined deposit is 1.2x the base output (still
-            # subject to the storehouse cap, like any deposit). The other five
-            # deposits an hour each land 20% on their own, each capped
-            # independently, like the orchard shaker / raptor snare -- so they
-            # are a separate producer whose per-cycle output is one such deposit.
-            # A fifth-of-an-hour period makes each producer_rates cycle exactly
-            # one off-hour deposit, giving 5 x min(0.2*out, cap) an hour.
-            producers.append(
-                PassiveProducer(
-                    name="sawmill",
-                    period=HOURLY,
-                    outputs={
-                        item: qty * (1 + HICKORY_OMELETTE_FRACTION)
-                        for item, qty in outputs.items()
-                    },
-                )
-            )
-            producers.append(
-                PassiveProducer(
-                    name="sawmill_omelette",
-                    period=HOURLY / 5,
-                    outputs={
-                        item: qty * HICKORY_OMELETTE_FRACTION
-                        for item, qty in outputs.items()
-                    },
-                )
-            )
-        else:
-            producers.append(
-                PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
-            )
+        # The base (unboosted) hourly outputs. The Hickory Omelette boost is a
+        # grounded, omelette-consuming offer (see sawmill_boost_offers), never
+        # part of these free rates.
+        outputs = sawmill_outputs(config)
+        producers.append(
+            PassiveProducer(name="sawmill", period=HOURLY, outputs=outputs)
+        )
         # Pine board comes off the sawmill a minute at a time, like the flour
-        # and feed mills, doubled with the pine boost.
+        # and feed mills, doubled with the pine boost (the omelette never boosts
+        # pine board, so it is unaffected by the setting).
         rate = 2 if sawmill.get("have_pine_boost") else 1
         producers.append(
             PassiveProducer(
@@ -550,8 +565,9 @@ def trading_prices(
     """Per-unit gold prices for the tradable consumables, or None if unpriced.
 
     Reads the ``[trading]`` section: ``orange_juice``, ``apple_cider``,
-    ``arnold_palmer`` and ``large_net`` are gold per 1000 units (divided by
-    :data:`GK_UNITS`), and ``cookie_set`` is gold each. Grape Juice is not traded
+    ``arnold_palmer``, ``large_net`` and ``hickory_omelette`` are gold per 1000
+    units (divided by :data:`GK_UNITS`), and ``cookie_set`` is gold each. Grape
+    Juice is not traded
     directly; its price is its **production cost** in grapes: pressing
     :data:`GRAPES_PER_JUICE` grapes yields ``crafting_bonus`` juices, so a juice is
     ``GRAPES_PER_JUICE / crafting_bonus`` grapes, each worth ``grapes/1000`` Arnold
@@ -579,4 +595,6 @@ def trading_prices(
         # Production cost: grapes per juice (recipe / crafting bonus) at grape gold.
         "grape juice": GRAPES_PER_JUICE / crafting_bonus * grape,
         "cookie set": float(section.get("cookie_set", 0.0)),  # priced per unit
+        # Hickory Omelette: a held/bought sawmill-boost meal, priced per 1000.
+        "hickory omelette": per_unit("hickory_omelette"),
     }

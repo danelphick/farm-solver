@@ -99,6 +99,12 @@ def test_limit_shortfall_reports_too_tight_consumable_limits():
     assert "within 5 AP (fewest is 100)" in message
 
 
+def test_limit_shortfall_reports_a_too_tight_apple_cider_limit():
+    plan = SourcingPlan(time=timedelta(0), apple_ciders=40)
+    message = limit_shortfall([plan], None, None, None, None, max_ac=5)
+    assert "within 5 AC (fewest is 40)" in message
+
+
 def test_limit_shortfall_names_joint_infeasibility():
     # Each limit is reachable alone (a 5h plan, a 0-AP plan) but no single plan
     # meets both, so no axis is individually to blame.
@@ -222,12 +228,16 @@ def test_selected_plan_rejects_out_of_range_number():
 
 
 def test_within_limits_checks_time_and_consumables():
-    plan = SourcingPlan(time=timedelta(days=2), arnold_palmers=500, large_nets=50)
+    plan = SourcingPlan(
+        time=timedelta(days=2), arnold_palmers=500, large_nets=50, apple_ciders=30
+    )
     assert within_limits(plan)  # no limits
     assert within_limits(plan, time_limit=timedelta(days=3), max_ap=500, max_ln=50)
+    assert within_limits(plan, max_ac=30)
     assert not within_limits(plan, time_limit=timedelta(days=1))  # too slow
     assert not within_limits(plan, max_ap=499)  # too many palmers
     assert not within_limits(plan, max_ln=49)  # too many nets
+    assert not within_limits(plan, max_ac=29)  # too many ciders
 
 
 def test_within_limits_checks_the_gold_ceiling():
@@ -250,6 +260,11 @@ def test_parse_gold_budget_maps_the_named_aliases():
 def test_parse_target_accepts_tower_case_insensitively():
     assert parse_target("tower") == "tower"
     assert parse_target("Tower") == "tower"
+
+
+def test_parse_target_accepts_none_case_insensitively():
+    assert parse_target("none") == "none"
+    assert parse_target("None") == "none"
 
 
 def test_parse_target_accepts_a_bare_level_number():
@@ -278,6 +293,9 @@ def test_target_defaults_to_none_so_bare_dash_m_ignores_the_tower():
     assert parser.parse_args([]).target is None
     assert parser.parse_args(["--target", "T150"]).target == 150
     assert parser.parse_args(["--target", "tower"]).target == "tower"
+    # 'none' is an explicit "drop the tower" that survives argparse as a string
+    # distinct from the unset default (None); build_inputs treats it as goals-only.
+    assert parser.parse_args(["--target", "none"]).target == "none"
 
 
 def test_mastery_and_items_flags_can_be_combined():

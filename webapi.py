@@ -28,6 +28,7 @@ import hashlib
 from dataclasses import dataclass, replace
 from datetime import date
 
+import config
 import farm_solver
 import main
 import optimizer
@@ -48,7 +49,7 @@ RESOLVE_FIELDS = (
 # Args fields that only change how the cached frontier is displayed --
 # render() recomputes these against the cached SolveSession, no re-solve.
 REFILTER_FIELDS = (
-    "max_gold", "max_ap", "max_ln", "passive_limit",
+    "max_gold", "max_ap", "max_ln", "max_ac", "passive_limit",
     "plan", "cheapest_plan", "fastest_plan", "breakdown",
 )
 
@@ -59,9 +60,34 @@ _KNOWN_PARAM_KEYS = frozenset({
     "target", "level", "mastery", "items", "override_inventory",
     "use_pumpkin_juice", "max_gold", "cookie_sets", "current_stamina",
     "plans", "start_date", "calendar", "plan_select", "max_ap", "max_ln",
-    "passive_limit", "overrides", "crafting_bonus", "mastery_bonus",
+    "max_ac", "passive_limit", "overrides", "crafting_bonus", "mastery_bonus",
     "breakdown",
+    # Trading Values / Advanced config knobs -- exposed with their own web
+    # controls but funnelled through args.override (see _CONFIG_PARAM_FLAGS).
+    "price_orange_juice", "price_apple_cider", "price_arnold_palmer",
+    "price_large_net", "price_cookie_set", "price_pumpkin_juice",
+    "price_hickory_omelette",
+    "instant_grow_time", "hickory_omelette",
 })
+
+# Web params that map straight onto a single ``section.flag`` config override.
+# They get first-class controls (labelled, validated, defaulted) in the UI
+# instead of being typed into the free-text overrides box, but there is no need
+# for a dedicated ``args`` field or solve wiring: params_to_args appends each as
+# an override string, so solve()'s one apply_overrides call feeds both these and
+# the free-text overrides into the config. Because they land in ``args.override``
+# (a RESOLVE_FIELDS member) a price change re-solves and re-keys the cache. The
+# Grape Juice price is deliberately not here -- it is derived from the grapes
+# price, not set directly (see config.trading_prices).
+_CONFIG_PARAM_FLAGS = {
+    "price_orange_juice": "trading.orange_juice",
+    "price_apple_cider": "trading.apple_cider",
+    "price_arnold_palmer": "trading.arnold_palmer",
+    "price_large_net": "trading.large_net",
+    "price_cookie_set": "trading.cookie_set",
+    "price_pumpkin_juice": "mastery.pumpkin_juice_price",
+    "price_hickory_omelette": "trading.hickory_omelette",
+}
 
 
 def _wrap_argument_error(fn, value):
@@ -135,6 +161,9 @@ def params_to_args(params: dict) -> argparse.Namespace:
     if "max_ln" in params:
         value = params["max_ln"]
         args.max_ln = int(value) if value is not None else None
+    if "max_ac" in params:
+        value = params["max_ac"]
+        args.max_ac = int(value) if value is not None else None
     if "passive_limit" in params:
         raw = params["passive_limit"]
         if raw is not None:
@@ -177,10 +206,31 @@ def params_to_args(params: dict) -> argparse.Namespace:
                 f"not {kind!r}"
             )
 
+    # Free-text overrides plus the first-class config knobs (Trading Values,
+    # instant grow time) both become args.override entries, applied in order --
+    # the dedicated knobs come last so an explicit control wins over a
+    # conflicting free-text line for the same flag.
+    config_overrides: list[str] = []
     if "overrides" in params and params["overrides"] is not None:
         overrides = list(params["overrides"])
         main.apply_overrides({}, overrides)  # validate syntax only; cfg discarded
-        args.override = overrides
+        config_overrides.extend(overrides)
+    for key, flag in _CONFIG_PARAM_FLAGS.items():
+        if key in params and params[key] is not None:
+            config_overrides.append(f"{flag}={float(params[key])}")
+    if "instant_grow_time" in params and params["instant_grow_time"] is not None:
+        raw = str(params["instant_grow_time"])
+        passive.parse_duration(raw)  # validate the duration before it is solved
+        config_overrides.append(f'farming.instant_grow_time="{raw}"')
+    if "hickory_omelette" in params and params["hickory_omelette"] is not None:
+        raw = str(params["hickory_omelette"])
+        if raw not in config.HICKORY_MODES:  # validate before it is solved
+            raise ValueError(
+                f"hickory_omelette must be one of {config.HICKORY_MODES}, not {raw!r}"
+            )
+        config_overrides.append(f'sawmill.hickory_omelette="{raw}"')
+    if config_overrides:
+        args.override = config_overrides
 
     return args
 
@@ -326,7 +376,9 @@ def render(
     ) -> tuple[list[optimizer.SourcingPlan], list[optimizer.SourcingPlan], int]:
         within = [
             p for p in frontier.plans
-            if main.within_limits(p, time_limit, args.max_ap, args.max_ln, args.max_gold)
+            if main.within_limits(
+                p, time_limit, args.max_ap, args.max_ln, args.max_gold, args.max_ac
+            )
         ]
         shown = within or frontier.plans
         selected = main.selected_plan(shown, args.plan, args.cheapest_plan)
@@ -387,7 +439,7 @@ def render(
     warnings = []
     if not within:
         message = main.limit_shortfall(
-            fr.plans, time_limit, args.max_ap, args.max_ln, args.max_gold
+            fr.plans, time_limit, args.max_ap, args.max_ln, args.max_gold, args.max_ac
         )
         reporter.note(message)
         warnings.append(message)
@@ -415,6 +467,9 @@ def render(
             "pumpkin_juices": round(report._pumpkin_juices(plan)),
             "selected": i == selected,
             "cheapest": i == ctx.cheapest,
+            # The frontier is fastest-first, so shown[0] is the fastest plan --
+            # the same row markdown_frontier tags "[fastest]".
+            "fastest": i == 0,
         }
         for i, plan in enumerate(shown)
     ]

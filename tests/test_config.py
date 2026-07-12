@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 
+import config
 from config import (
     MONTHLY_GRANT_PRODUCER,
     load_config,
@@ -76,41 +77,46 @@ def test_pine_boost_doubles_pine_board():
     assert hourly.outputs == {"wood": 46000}  # boost flag excluded
 
 
-def test_hickory_omelette_boosts_the_hourly_run_and_adds_off_hour_deposits():
-    production = passive_production(
-        {"sawmill": {"board": 46000, "use_hickory_omelette": True}}
+def test_hickory_omelette_setting_does_not_boost_passive_production():
+    # The Hickory Omelette boost is a grounded offer, not part of passive
+    # production: the setting never touches the sawmill's free hourly rates.
+    base = passive_production({"sawmill": {"board": 46000}})
+    boosted = passive_production(
+        {"sawmill": {"board": 46000, "hickory_omelette": "all"}}
     )
-    # The main hourly run is boosted to 1.2x (the top-of-hour combined deposit).
+    assert base.rate_per_minute("board") == boosted.rate_per_minute("board")
+    # The string setting is a config flag, never an output item.
     hourly = next(
-        p
-        for p in production.producers
-        if p.name == "sawmill" and p.period == HOURLY
+        p for p in boosted.producers if p.name == "sawmill" and p.period == HOURLY
     )
-    assert hourly.outputs == {"board": 46000 * 1.2}
-    # A separate producer carries the five off-hour deposits, each 20% of the
-    # base output, on a fifth-of-an-hour cadence.
-    off_hour = next(p for p in production.producers if p.name == "sawmill_omelette")
-    assert off_hour.period == HOURLY / 5
-    assert off_hour.outputs == {"board": 46000 * 0.2}
-    # Uncapped: 1.2x on the hour plus 5 x 0.2x off-hour = 2.2x the base rate.
-    assert production.rate_per_minute("board") == pytest.approx(46000 * 2.2 / 60)
+    assert hourly.outputs == {"board": 46000}
 
 
-def test_hickory_omelette_off_hour_deposits_are_capped_independently():
-    # With a storehouse smaller than the boosted on-hour deposit, that deposit
-    # is capped once at the storehouse size, while each 20% off-hour deposit is
-    # well under the cap and lands in full.
-    production = passive_production(
-        {
-            "sawmill": {"wood": 60000, "use_hickory_omelette": True},
-            "storehouse": {"inventory": 49440},
-        }
+def test_sawmill_outputs_gates_oak_on_the_sturdy_saw():
+    cfg = {"sawmill": {"Wood": 60000, "board": 46000, "oak": 6000}}
+    # Without the sturdy saw, no oak; string/bool settings are not outputs.
+    assert config.sawmill_outputs(cfg) == {"wood": 60000, "board": 46000}
+    cfg["sawmill"]["have_sturdy_saw"] = True
+    cfg["sawmill"]["hickory_omelette"] = "only_oak"
+    assert config.sawmill_outputs(cfg) == {
+        "wood": 60000,
+        "board": 46000,
+        "oak": 6000,
+    }
+
+
+def test_hickory_omelette_mode_reads_and_validates():
+    assert config.hickory_omelette_mode({}) == "none"
+    assert config.hickory_omelette_mode({"sawmill": {}}) == "none"
+    assert (
+        config.hickory_omelette_mode({"sawmill": {"hickory_omelette": "only_oak"}})
+        == "only_oak"
     )
-    on_hour = min(60000 * 1.2, 49440)  # 49440, capped
-    off_hour = 5 * min(60000 * 0.2, 49440)  # 5 x 12000, uncapped
-    assert production.rate_per_minute("wood") == pytest.approx(
-        (on_hour + off_hour) / 60
-    )
+    with pytest.raises(ValueError, match="none.*all.*only_oak|only_oak"):
+        config.hickory_omelette_mode({"sawmill": {"hickory_omelette": "some"}})
+    # The retired boolean is rejected with a migration hint.
+    with pytest.raises(ValueError, match="use_hickory_omelette"):
+        config.hickory_omelette_mode({"sawmill": {"use_hickory_omelette": True}})
 
 
 def test_passive_production_lowercases_item_names():
@@ -586,6 +592,7 @@ def test_trading_prices_converts_gk_and_cookie():
                 "large_net": 10,
                 "grapes": 5,
                 "cookie_set": 20,
+                "hickory_omelette": 350,
             }
         },
         crafting_bonus=1.0,
@@ -597,6 +604,7 @@ def test_trading_prices_converts_gk_and_cookie():
         "orange juice": 0.008,
         "grape juice": 0.06,
         "cookie set": 20.0,
+        "hickory omelette": 0.35,
     }
 
 

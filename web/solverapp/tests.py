@@ -138,6 +138,7 @@ class SessionCacheTests(SimpleTestCase):
             farm=Farm(), explore=Exploring(), fish=Fishing(), workshop=Workshop(),
             monthly_grants=False, solution=Solution(), recipes={}, smith=Locksmith(),
             open_flows=[], demand={}, inventory={}, cookie_sets=0.0, prices=None,
+            boost_offers=[],
             pj_gain={}, pj_price=0.0, pj_limit=None, model_calendar=False,
             start=date(2026, 1, 1),
         )

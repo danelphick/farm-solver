@@ -60,6 +60,19 @@ CIDER_DROP_RATE = 0.40
 ACORN_PIE = "acorn pie"
 ACORN_PIE_PER_EXPLORE = 1.0 / ACORN_PIE_EXPLORES
 
+# The Hickory Omelette: a held/bought meal that lasts one hour and boosts the
+# sawmill's output by HICKORY_OMELETTE_FRACTION while active. The boost is a
+# grounded activity on its own concurrent track (see :func:`sawmill_boost_offers`
+# and :data:`config.HICKORY_MODES`): one unit is one boosted hour, yielding that
+# fraction of the sawmill's hourly output and eating one omelette.
+HICKORY_OMELETTE = "hickory omelette"
+HICKORY_OMELETTE_FRACTION = 0.2
+# The boost runs concurrently with the base sawmill (same wall clock), so it gets
+# its own track: a unit costs one hour there, and the LP can run it for at most
+# the makespan-worth of hours (past that it would become the binding track and
+# only lengthen the plan), which bounds the omelettes to the plan's span.
+SAWMILL_BOOST_TRACK = "sawmill boost"
+
 
 @dataclass
 class Offer:
@@ -353,6 +366,48 @@ def passive_offers(production: PassiveProduction) -> list[Offer]:
             track=PASSIVE_TRACK,
             yields=yields,
             time_per_unit=timedelta(minutes=1),
+        )
+    ]
+
+
+def sawmill_boost_offers(
+    outputs: dict[str, float], mode: str
+) -> list[Offer]:
+    """The Hickory Omelette sawmill boost, as a grounded offer (or none).
+
+    ``outputs`` are the sawmill's base hourly outputs (see
+    :func:`config.sawmill_outputs`); ``mode`` is one of :data:`config.HICKORY_MODES`.
+
+    One unit is a single boosted **hour**: it yields :data:`HICKORY_OMELETTE_FRACTION`
+    of the boosted outputs and eats one :data:`HICKORY_OMELETTE` (which the plan
+    must hold or buy). It lives on its own :data:`SAWMILL_BOOST_TRACK`, so it runs
+    concurrently with the base sawmill yet still costs an hour of makespan per
+    omelette -- which stops the LP boosting for more hours than the plan actually
+    spans (past that the boost track becomes the binding one, only lengthening the
+    plan). At the fast end that recovers the same +20% throughput as baking the
+    boost into the sawmill's rate; nearer the cheap end the LP can boost fewer
+    hours, trading omelette gold against makespan like any other consumable.
+
+    * ``"all"``      boosts every output (oak, board, wood).
+    * ``"only_oak"`` boosts oak alone -- board and wood are left out entirely, so
+      an omelette is never spent to source them (they are so much more plentiful
+      per hour than oak that the boost's only real value is oak anyway).
+    * ``"none"``     produces no offer.
+    """
+    if mode == "none":
+        return []
+    boosted = dict(outputs)
+    if mode == "only_oak":
+        boosted = {"oak": outputs["oak"]} if "oak" in outputs else {}
+    if not boosted:
+        return []
+    return [
+        Offer(
+            name="hickory omelette boost",
+            track=SAWMILL_BOOST_TRACK,
+            yields={item: HICKORY_OMELETTE_FRACTION * qty for item, qty in boosted.items()},
+            consumes={HICKORY_OMELETTE: 1.0},
+            time_per_unit=timedelta(hours=1),
         )
     ]
 

@@ -63,11 +63,15 @@ and drives the `Reporter` off their results:
    `main.apply_inventory_overrides` forces any `--override-inventory` items to
    their given held amount, replacing whatever the file said.
 2. **Goal → demand** — `farm_solver.solve_tower/solve_mastery/solve_acquire`
-   produce a `Solution` with `ItemNeed`s; without `--target`, `-m`/`-i` replace
-   the tower goal (as before), and `farm_solver.solve_goals` combines them when
-   both are given (each just contributes its own need list). With `--target`
-   given, `farm_solver.solve_target` instead concatenates the tower's needs
-   with `solve_goals`' extra `-m`/`-i` need list. `crafting.top_level_demand` is
+   produce a `Solution` with `ItemNeed`s. `build_inputs` computes a `goals_only`
+   flag = `args.target == "none"` **or** (`args.target is None` and `-m`/`-i`
+   set) — i.e. `--target none` drops the tower explicitly, and omitting
+   `--target` does the same implicitly when `-m`/`-i` are set (the previous
+   behaviour). When `goals_only`, `farm_solver.solve_goals` combines `-m`/`-i`
+   with no tower (each just contributes its own need list; empty when neither is
+   set). Otherwise (`--target tower`/`N`, or a bare tower run),
+   `farm_solver.solve_target` concatenates the tower's needs with `solve_goals`'
+   extra `-m`/`-i` need list. `parse_target` accepts `tower`/`none`/`N`/`TN`. `crafting.top_level_demand` is
    what reduces same-item needs (whatever the mix of tower/`-m`/`-i`) to one
    demand figure: converted to a common "items produced" unit (a mastery
    shortfall of `n` becomes `n / mastery_bonus`, a plain `-i` count stays `n`),
@@ -111,17 +115,17 @@ frontier as before.
 | File | Owns | Key names |
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
-| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
+| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resource` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `set_solver_backend` |
-| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, track constants |
+| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers` (Hickory Omelette boost, `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
 | `passive.py` | passive producers, durations | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
-| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `storehouse_size`, `trading_prices` |
+| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `storehouse_size`, `trading_prices` |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config`, `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
@@ -233,9 +237,10 @@ seed_drops) and `config.toml`; game state comes from pasted text files.
     outside `__main__` by default), which is why it wasn't caught until after
     the fact.
 - **Gold prices** (`config.trading_prices`, the `[trading]` section): per-unit gold
-  for each buyable consumable (AP/LN/cider/OJ per-1000 → ÷1000; cookie sets per
-  unit; Grape Juice at its production cost, kept for `plan_gold`'s market value but
-  never bought). Absent, nothing is buyable and every plan is fully self-sourced.
+  for each buyable consumable (AP/LN/cider/OJ/hickory-omelette per-1000 → ÷1000;
+  cookie sets per unit; Grape Juice at its production cost, kept for `plan_gold`'s
+  market value but never bought). Absent, nothing is buyable and every plan is fully
+  self-sourced.
   `plan_gold(plan, prices)` is the market value of **all** consumables spent;
   **`plan_gold_breakdown`** splits it exactly into `(to_buy, self_sourced)` =
   `(plan.gold, plan_gold − plan.gold)` — to-buy is what the LP actually bought.
@@ -503,6 +508,29 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   Bounded by inventory in the `acorn pie` balance; the pie spend surfaces in the
   report's **From inventory** section via `draw_consumed` (it is a `consumes`, not
   a yield, so `report._build_plan_context` adds it to `spent_consumables`).
+- **Hickory Omelette** (a held/bought sawmill-boost meal): the `[sawmill]
+  hickory_omelette` setting (`config.hickory_omelette_mode`, enum
+  none/all/only_oak; the old `use_hickory_omelette` boolean is rejected) picks how
+  the sawmill's +20% (`sources.HICKORY_OMELETTE_FRACTION`) boost is used. It is
+  **not** baked into passive rates any more; `sources.sawmill_boost_offers` builds
+  it as a grounded offer on its own concurrent `SAWMILL_BOOST_TRACK`: one unit is a
+  boosted **hour**, yielding that fraction of the boosted outputs and consuming one
+  `hickory omelette` (a `BUYABLE`, priced in `[trading]` at 350 gk = 0.35/unit, or
+  drawn from held stock). Its own track costs an hour of makespan per omelette, so
+  the LP can't boost for more hours than the plan spans (past that the boost track
+  becomes binding) — at the fast end this recovers the same +20% throughput as
+  baking it into the rate, nearer the cheap end it boosts fewer hours (trading
+  omelette gold for makespan) and `favour_passive` drops it entirely (omelettes are
+  in `spend_value`). `all` boosts oak+board+wood; `only_oak` boosts oak alone (board
+  and wood are so much more plentiful per hour that oak is the only real value, and
+  this guarantees an omelette is never spent to source them). `main.build_inputs`
+  builds the offers once (static across the fixed point) onto `SolveInputs.boost_offers`,
+  passed to `optimizer.all_offers`; the spend surfaces in the report's **Sawmill
+  boost** section (`report._sawmill_boost_summary`) plus From-inventory/Buy, and the
+  boost oak nets out of the passive section via `plan_balance`'s `elsewhere`. Web:
+  the `hickory_omelette` select + `price_hickory_omelette` params
+  (`webapi._CONFIG_PARAM_FLAGS` and the string-override special-case) map to the
+  `sawmill.hickory_omelette` / `trading.hickory_omelette` overrides.
 - **Held items seed obtainability**: `_obtainable` takes a `held` set —
   `_build_base` passes the held, non-demanded items any offer *consumes* (e.g. an
   Acorn Pie) so a channel grounded only in a held consumable is usable. Excludes

@@ -36,22 +36,28 @@ import sources
 
 
 def parse_target(value: str) -> str | int:
-    """Parse ``--target``: ``tower``, or a level number (``150`` or ``T150``).
+    """Parse ``--target``: ``tower``, ``none``, or a level number (``150``/``T150``).
 
     ``tower`` (matched case-insensitively) climbs to the highest reachable
-    level, same as omitting ``--target``. Anything else is a level number, an
-    optional leading ``T``/``t`` stripped first (so ``T150`` and ``150`` are
+    level, and additionally always keeps the tower as a goal even when -m/-i
+    are given. ``none`` drops the tower entirely, solving only the -m/-i goals
+    -- an *explicit* form of the behaviour that omitting ``--target`` gives when
+    -m/-i are set (see :func:`build_inputs`). Anything else is a level number,
+    an optional leading ``T``/``t`` stripped first (so ``T150`` and ``150`` are
     the same), which must parse as a positive integer.
     """
     text = value.strip()
     if text.lower() == "tower":
         return "tower"
+    if text.lower() == "none":
+        return "none"
     level_text = text[1:] if text[:1].lower() == "t" else text
     try:
         level = int(level_text)
     except ValueError:
         raise argparse.ArgumentTypeError(
-            f"--target must be 'tower', a level number, or 'T<level>', not {value!r}"
+            "--target must be 'tower', 'none', a level number, or 'T<level>', "
+            f"not {value!r}"
         ) from None
     if level < 1:
         raise argparse.ArgumentTypeError("--target level must be positive")
@@ -418,7 +424,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--target",
         type=parse_target,
         default=None,
-        metavar="tower|N|TN",
+        metavar="tower|none|N|TN",
         help=(
             "the goal to solve for: 'tower' (the default) climbs to the highest "
             "reachable level (or -l's level); a level number ('150' or 'T150') "
@@ -432,9 +438,9 @@ def build_parser() -> argparse.ArgumentParser:
             "more items than a mastery goal already produces). An -i goal on a "
             "pure crafting material (not itself mastered) is instead a floor on "
             "top of what the tower's crafting already consumes of it, so the "
-            "solver crafts extra to leave that many spare. Without --target, "
-            "-m/-i solve for that goal alone, ignoring the tower (the previous "
-            "behaviour)"
+            "solver crafts extra to leave that many spare. 'none' drops the "
+            "tower and solves only the -m/-i goals; omitting --target does the "
+            "same implicitly when -m/-i are set (the previous behaviour)"
         ),
     )
     parser.add_argument(
@@ -589,6 +595,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="drop frontier plans that spend more than N Large Nets",
     )
     parser.add_argument(
+        "--max-ac",
+        type=int,
+        metavar="N",
+        help="drop frontier plans that spend more than N Apple Ciders",
+    )
+    parser.add_argument(
         "--cookie-sets",
         type=int,
         metavar="N",
@@ -622,8 +634,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # -m and -i can be combined (each just contributes its own need list, see
-    # farm_solver.solve_goals/solve_target); without --target they replace the
-    # tower goal, with --target they are added on top of it instead.
+    # farm_solver.solve_goals/solve_target); without --target (or with
+    # --target none) they replace the tower goal, with --target tower/N they are
+    # added on top of it instead.
     parser.add_argument(
         "-m",
         "--mastery",
@@ -896,12 +909,14 @@ def within_limits(
     max_ap: int | None = None,
     max_ln: int | None = None,
     max_gold: int | None = None,
+    max_ac: int | None = None,
 ) -> bool:
     """Whether a plan respects every given time, consumable and gold ceiling."""
     return (
         (time_limit is None or plan.time <= time_limit)
         and (max_ap is None or round(plan.arnold_palmers) <= max_ap)
         and (max_ln is None or round(plan.large_nets) <= max_ln)
+        and (max_ac is None or round(plan.apple_ciders) <= max_ac)
         and (max_gold is None or round(plan.gold) <= max_gold)
     )
 
@@ -912,6 +927,7 @@ def limit_shortfall(
     max_ap: int | None,
     max_ln: int | None,
     max_gold: int | None = None,
+    max_ac: int | None = None,
 ) -> str:
     """Explain why no plan met the limits, naming the best each axis reaches.
 
@@ -937,6 +953,10 @@ def limit_shortfall(
         fewest = round(min(p.large_nets for p in plans))
         if fewest > max_ln:
             parts.append(f"within {max_ln:,} LN (fewest is {fewest:,})")
+    if max_ac is not None:
+        fewest = round(min(p.apple_ciders for p in plans))
+        if fewest > max_ac:
+            parts.append(f"within {max_ac:,} AC (fewest is {fewest:,})")
     if max_gold is not None:
         least = round(min(p.gold for p in plans))
         if least > max_gold:
@@ -1031,6 +1051,9 @@ class SolveInputs:
     inventory: dict[str, float]
     cookie_sets: float | None
     prices: dict[str, float] | None
+    # Hickory Omelette sawmill-boost offers (empty unless [sawmill] hickory_omelette
+    # is set); static across the seasonal fixed point, so built once here.
+    boost_offers: list[sources.Offer]
     pj_gain: dict[str, float]
     pj_price: float
     pj_limit: int | None
@@ -1085,17 +1108,21 @@ def build_inputs(
         resolve_monthly_grants(cfg, state, requirements) and calendar_mode != "ignore"
     )
 
-    # Without --target, -m/-i solve for that goal alone, ignoring the tower (the
-    # previous behaviour). With --target given, they instead layer on top of the
-    # tower goal (see farm_solver.solve_target and the --target help text). -m
-    # and -i can be combined either way.
+    # Goal selection (see farm_solver.solve_goals/solve_target and the --target
+    # help text). --target none drops the tower explicitly; omitting --target
+    # does the same implicitly *when -m/-i are set* (the previous behaviour).
+    # Otherwise the tower is a goal, with any -m/-i layered on top. -m and -i can
+    # be combined either way.
     mastery_goals = (
         parsing.parse_item_amounts(args.mastery) if args.mastery is not None else None
     )
     item_goals = (
         parsing.parse_item_amounts(args.items) if args.items is not None else None
     )
-    if args.target is None and (mastery_goals is not None or item_goals is not None):
+    goals_only = args.target == "none" or (
+        args.target is None and (mastery_goals is not None or item_goals is not None)
+    )
+    if goals_only:
         solution = farm_solver.solve_goals(state, mastery_goals, item_goals)
         target_level = None  # no tower component to this goal
     else:
@@ -1132,6 +1159,13 @@ def build_inputs(
     # makes each buyable, so the frontier can trade makespan against real gold.
     # Absent, nothing is buyable and every plan is fully self-sourced.
     prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
+
+    # Hickory Omelette sawmill boost: a grounded, omelette-consuming channel (see
+    # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs and
+    # the [sawmill] hickory_omelette setting. Static across the seasonal fixed point.
+    boost_offers = sources.sawmill_boost_offers(
+        config.sawmill_outputs(cfg), config.hickory_omelette_mode(cfg)
+    )
 
     # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
     # mastery goal's shortfall directly, trading gold for a faster (or cheaper) plan;
@@ -1176,6 +1210,7 @@ def build_inputs(
         inventory=inventory,
         cookie_sets=cookie_sets,
         prices=prices,
+        boost_offers=boost_offers,
         pj_gain=pj_gain,
         pj_price=pj_price,
         pj_limit=pj_limit,
@@ -1251,7 +1286,7 @@ def solve_frontier(
     fast_path = (
         model_calendar and args.plan is None and not args.cheapest_plan
         and time_limit is None and args.max_ap is None and args.max_ln is None
-        and args.max_gold is None
+        and args.max_ac is None and args.max_gold is None
     )
     if fast_path:
         for _ in range(_MAX_SEASON_ITERS):
@@ -1259,7 +1294,9 @@ def solve_frontier(
                 cfg, today=start, start=start, horizon=horizon,
                 monthly_grants=monthly_grants,
             )
-            offers = optimizer.all_offers(production, fish, explore, farm)
+            offers = optimizer.all_offers(
+                production, fish, explore, farm, inputs.boost_offers
+            )
             fast = optimizer.fastest_endpoint(
                 offers, demand, recipes, args.crafting_bonus, prices=prices,
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
@@ -1276,7 +1313,9 @@ def solve_frontier(
             cfg, today=start, start=start, horizon=horizon,
             monthly_grants=monthly_grants,
         )
-        offers = optimizer.all_offers(production, fish, explore, farm)
+        offers = optimizer.all_offers(
+            production, fish, explore, farm, inputs.boost_offers
+        )
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
@@ -1291,7 +1330,9 @@ def solve_frontier(
         # would leave none (then the whole frontier is shown, with a warning below).
         within = [
             p for p in plans
-            if within_limits(p, time_limit, args.max_ap, args.max_ln, args.max_gold)
+            if within_limits(
+                p, time_limit, args.max_ap, args.max_ln, args.max_gold, args.max_ac
+            )
         ]
         shown = within or plans
         new_horizon = shown[
@@ -1452,7 +1493,8 @@ def run(args: argparse.Namespace) -> int:
     if not fr.within:
         reporter.note(
             limit_shortfall(
-                fr.plans, inputs.time_limit, args.max_ap, args.max_ln, args.max_gold
+                fr.plans, inputs.time_limit, args.max_ap, args.max_ln,
+                args.max_gold, args.max_ac,
             )
         )
     reporter.frontier(

@@ -18,6 +18,19 @@ const STORAGE_KEY = "farm-solver.v1";
 const UI_STORAGE_KEY = "farm-solver.ui.v1";
 const DEBOUNCE_MS = 400;
 
+// Trading-value price params (each maps to a config override server-side) and
+// the input they read from. Sent only when non-empty; blank means "use the
+// bundled default". See webapi._CONFIG_PARAM_FLAGS.
+const PRICE_FIELDS = {
+  price_arnold_palmer: "#price-arnold-palmer",
+  price_apple_cider: "#price-apple-cider",
+  price_orange_juice: "#price-orange-juice",
+  price_large_net: "#price-large-net",
+  price_cookie_set: "#price-cookie-set",
+  price_pumpkin_juice: "#price-pumpkin-juice",
+  price_hickory_omelette: "#price-hickory-omelette",
+};
+
 function $(selector) {
   return document.querySelector(selector);
 }
@@ -58,8 +71,18 @@ function setStartDateDisplay(value) {
 function readParams() {
   const params = {};
 
-  if ($("#target").value === "level" && $("#level").value) {
+  // Target dropdown -> --target (see main.parse_target):
+  //  - "No Tower" ("none")        -> --target none: solve only the -m/-i goals.
+  //  - "Specific tower level"     -> --target <level>.
+  //  - "Tower (highest reachable)" (and a half-typed "level") -> --target tower,
+  //    which keeps the tower as a goal even alongside -m/-i.
+  const targetSel = $("#target").value;
+  if (targetSel === "none") {
+    params.target = "none";
+  } else if (targetSel === "level" && $("#level").value) {
     params.target = $("#level").value;
+  } else {
+    params.target = "tower";
   }
   const mastery = $("#mastery").value.trim();
   if (mastery) params.mastery = mastery;
@@ -72,6 +95,9 @@ function readParams() {
   if ($("#cookie-sets").value !== "") {
     params.cookie_sets = Number($("#cookie-sets").value);
   }
+  // Always sent (a config override, so the UI select is authoritative over the
+  // bundled config.toml default); "none" means no sawmill boost.
+  params.hickory_omelette = $("#hickory-omelette").value;
   if ($("#use-pumpkin-juice").checked) {
     const cap = $("#pumpkin-juice-cap").value;
     params.use_pumpkin_juice = cap !== "" ? Number(cap) : -1;
@@ -90,12 +116,19 @@ function readParams() {
   if (maxGold) params.max_gold = maxGold;
   if ($("#max-ap").value !== "") params.max_ap = Number($("#max-ap").value);
   if ($("#max-ln").value !== "") params.max_ln = Number($("#max-ln").value);
+  if ($("#max-ac").value !== "") params.max_ac = Number($("#max-ac").value);
   const passiveLimit = $("#passive-limit").value.trim();
   if (passiveLimit) params.passive_limit = passiveLimit;
   if ($("#plans").value) params.plans = Number($("#plans").value);
   // The craft breakdown renders into its own collapsible pane, so it is
   // always requested (a refilter field -- asking costs no extra solve).
   params.breakdown = true;
+
+  for (const [key, sel] of Object.entries(PRICE_FIELDS)) {
+    if ($(sel).value !== "") params[key] = Number($(sel).value);
+  }
+  const instantGrow = $("#instant-grow-time").value.trim();
+  if (instantGrow) params.instant_grow_time = instantGrow;
 
   const overrides = $("#overrides").value
     .split("\n")
@@ -109,19 +142,31 @@ function readParams() {
 }
 
 function applyParams(params) {
-  if (params.target) {
-    $("#target").value = "level";
-    $("#level").hidden = false;
-    $("#level").value = params.target;
-  } else {
+  // Map --target back onto the dropdown. Legacy states omitted `target` for
+  // BOTH "tower, no goals" and "goals-only": disambiguate by whether goals are
+  // set, which reproduces the old server behaviour exactly ("none" == no tower).
+  let target = params.target;
+  if (target === undefined || target === null) {
+    target = params.mastery || params.items ? "none" : "tower";
+  }
+  if (target === "none") {
+    $("#target").value = "none";
+    $("#level").hidden = true;
+    $("#level").value = "";
+  } else if (target === "tower") {
     $("#target").value = "";
     $("#level").hidden = true;
     $("#level").value = "";
+  } else {
+    $("#target").value = "level";
+    $("#level").hidden = false;
+    $("#level").value = target;
   }
   $("#mastery").value = params.mastery || "";
   $("#items").value = params.items || "";
   $("#current-stamina").value = params.current_stamina ?? 0;
   $("#cookie-sets").value = params.cookie_sets ?? "";
+  $("#hickory-omelette").value = params.hickory_omelette ?? "none";
 
   const hasPj = params.use_pumpkin_juice !== undefined && params.use_pumpkin_juice !== null;
   $("#use-pumpkin-juice").checked = hasPj;
@@ -141,8 +186,13 @@ function applyParams(params) {
   $("#max-gold").value = params.max_gold || "";
   $("#max-ap").value = params.max_ap ?? "";
   $("#max-ln").value = params.max_ln ?? "";
+  $("#max-ac").value = params.max_ac ?? "";
   $("#passive-limit").value = params.passive_limit || "";
   $("#plans").value = params.plans || 5;
+  for (const [key, sel] of Object.entries(PRICE_FIELDS)) {
+    $(sel).value = params[key] ?? "";
+  }
+  $("#instant-grow-time").value = params.instant_grow_time || "";
   $("#overrides").value = (params.overrides || []).join("\n");
   updateGoalSummary();
 }
@@ -178,12 +228,15 @@ function updateGoalSummary() {
   const parts = [];
   const mastery = $("#mastery").value.trim();
   const items = $("#items").value.trim();
-  const level = $("#target").value === "level" ? $("#level").value : "";
-  // Mirrors the server: -m/-i goals REPLACE the tower goal unless an explicit
-  // tower level is set alongside them (farm_solver.solve_goals/solve_target).
+  const targetSel = $("#target").value;
+  const level = targetSel === "level" ? $("#level").value : "";
+  // Mirrors the server: the tower is a goal unless "No Tower" is picked; a
+  // specific level or the highest-reachable tower both stand alongside any
+  // -m/-i (farm_solver.solve_target). "No Tower" (--target none) leaves only
+  // the -m/-i goals.
   if (level) {
     parts.push(`Masteries for Tower Level ${level}`);
-  } else if (!mastery && !items) {
+  } else if (targetSel !== "none") {
     parts.push(
       towerTargetLevel
         ? `Masteries for the Tower (T${towerTargetLevel})`
@@ -192,6 +245,7 @@ function updateGoalSummary() {
   }
   if (mastery) parts.push(goalSpecSummary(mastery, "Mastery"));
   if (items) parts.push(goalSpecSummary(items, "Inventory"));
+  if (!parts.length) parts.push("No goal set");
   $("#goal-summary").textContent = " — " + parts.join(" + ");
 }
 
@@ -338,6 +392,18 @@ function renderResult(data) {
   $("#results").hidden = false;
 }
 
+// Tint the "[fastest]"/"[cheapest]" tags in a frontier row's Notes cell to
+// match the left-edge bars. The tags live inside the leading "[...]" bracket
+// (see report.markdown_frontier); the reason text after it never contains these
+// words, so a word-boundary wrap is safe.
+function colourNoteTags(row) {
+  const cell = row.querySelector("td:last-child");
+  if (!cell) return;
+  cell.innerHTML = cell.innerHTML
+    .replace(/\bfastest\b/g, '<span class="tag-fastest">fastest</span>')
+    .replace(/\bcheapest\b/g, '<span class="tag-cheapest">cheapest</span>');
+}
+
 function wireFrontierRows(plans) {
   const rows = document.querySelectorAll("#frontier-section table tbody tr");
   rows.forEach((row, i) => {
@@ -345,6 +411,8 @@ function wireFrontierRows(plans) {
     if (!info) return;
     row.classList.toggle("selected", !!info.selected);
     row.classList.toggle("cheapest", !!info.cheapest);
+    row.classList.toggle("fastest", !!info.fastest);
+    colourNoteTags(row);
     row.classList.add("clickable");
     row.addEventListener("click", () => {
       // The API's plan_select index is 1-based (matches --plan N on the CLI);

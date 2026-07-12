@@ -59,6 +59,13 @@ def test_params_to_args_rejects_bad_max_gold_as_value_error():
         webapi.params_to_args({"max_gold": "not-a-number"})
 
 
+def test_params_to_args_parses_consumable_limits():
+    args = webapi.params_to_args({"max_ap": 100, "max_ln": 50, "max_ac": 25})
+    assert (args.max_ap, args.max_ln, args.max_ac) == (100, 50, 25)
+    # An explicit null clears a limit (the client sends null to unset it).
+    assert webapi.params_to_args({"max_ac": None}).max_ac is None
+
+
 def test_params_to_args_validates_mastery_spec_but_stores_the_raw_string():
     args = webapi.params_to_args({"mastery": "Gold Bar:5000000"})
     assert args.mastery == "Gold Bar:5000000"  # raw string, re-parsed by build_inputs
@@ -133,6 +140,67 @@ def test_params_to_args_rejects_malformed_override():
         webapi.params_to_args({"overrides": ["not-a-dotted-key"]})
 
 
+def test_params_to_args_trading_prices_become_config_overrides():
+    args = webapi.params_to_args(
+        {
+            "price_arnold_palmer": 55,
+            "price_apple_cider": 18,
+            "price_orange_juice": 7,
+            "price_large_net": 9,
+            "price_cookie_set": 25,
+            "price_pumpkin_juice": 200,
+        }
+    )
+    assert args.override == [
+        "trading.orange_juice=7.0",
+        "trading.apple_cider=18.0",
+        "trading.arnold_palmer=55.0",
+        "trading.large_net=9.0",
+        "trading.cookie_set=25.0",
+        "mastery.pumpkin_juice_price=200.0",
+    ]
+
+
+def test_params_to_args_instant_grow_time_becomes_a_config_override():
+    args = webapi.params_to_args({"instant_grow_time": "5s"})
+    assert args.override == ['farming.instant_grow_time="5s"']
+
+
+def test_params_to_args_rejects_bad_instant_grow_time():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"instant_grow_time": "not-a-duration"})
+
+
+def test_params_to_args_hickory_omelette_setting_and_price_become_overrides():
+    args = webapi.params_to_args(
+        {"hickory_omelette": "only_oak", "price_hickory_omelette": 350}
+    )
+    assert args.override == [
+        "trading.hickory_omelette=350.0",
+        'sawmill.hickory_omelette="only_oak"',
+    ]
+
+
+def test_params_to_args_rejects_bad_hickory_omelette_setting():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"hickory_omelette": "sometimes"})
+
+
+def test_params_to_args_config_knobs_follow_free_text_overrides():
+    # An explicit control wins over a conflicting free-text line: both land in
+    # args.override, the dedicated knob last, and apply_overrides is last-wins.
+    args = webapi.params_to_args(
+        {
+            "overrides": ["trading.arnold_palmer=1"],
+            "price_arnold_palmer": 60,
+        }
+    )
+    assert args.override == [
+        "trading.arnold_palmer=1",
+        "trading.arnold_palmer=60.0",
+    ]
+
+
 # --- fingerprint -------------------------------------------------------------
 
 
@@ -146,7 +214,7 @@ def test_fingerprint_is_stable_for_identical_inputs():
 def test_fingerprint_is_invariant_under_refilter_field_changes():
     base = webapi.params_to_args({})
     changed = webapi.params_to_args(
-        {"max_gold": "500", "max_ap": 100, "max_ln": 50, "passive_limit": "5d"}
+        {"max_gold": "500", "max_ap": 100, "max_ln": 50, "max_ac": 25, "passive_limit": "5d"}
     )
     assert webapi.fingerprint("m", "i", base) == webapi.fingerprint("m", "i", changed)
 
@@ -169,6 +237,8 @@ def test_fingerprint_changes_with_every_resolve_field():
         "mastery_bonus": {"mastery_bonus": 2.0},
         "override_inventory": {"override_inventory": "Wood:100"},
         "overrides": {"overrides": ["sawmill.use_hickory_omelette=false"]},
+        "price_arnold_palmer": {"price_arnold_palmer": 55},
+        "instant_grow_time": {"instant_grow_time": "5s"},
     }
     for name, params in variants.items():
         args = webapi.params_to_args(params)
@@ -214,6 +284,7 @@ def _minimal_inputs(model_calendar: bool) -> main.SolveInputs:
         inventory={},
         cookie_sets=0.0,
         prices=None,
+        boost_offers=[],
         pj_gain={},
         pj_price=0.0,
         pj_limit=None,

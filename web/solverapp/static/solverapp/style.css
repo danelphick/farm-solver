@@ -16,6 +16,7 @@
   --error-bg: #fdecea;
   --row-selected: #e4f2ea;
   --row-cheapest-border: #2f6f4f;
+  --row-fastest-border: #2f5fbf;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,7 @@
     --error-bg: #3a1917;
     --row-selected: #1d2b23;
     --row-cheapest-border: #4caf7d;
+    --row-fastest-border: #6ea8ff;
   }
 }
 
@@ -132,6 +134,13 @@ details[open] > summary .summary-detail {
   display: none;
 }
 
+/* Explanatory blurb at the top of a pane (e.g. Trading values' unit note). */
+.pane-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .paste-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -159,8 +168,10 @@ details[open] > summary .summary-detail {
     grid-template-columns: 1fr;
   }
 
-  /* One column: dissolve the stacks so the panes order Goal, Resources,
-     Limits rather than the left stack's Goal, Limits pair first. */
+  /* One column: dissolve the stacks and order the panes explicitly, rather
+     than letting the left stack's Goal/Limits/Advanced trio come first. Every
+     pane needs an order (an unset one defaults to 0 and would jump ahead of
+     these); Advanced is deliberately last. */
   .controls-grid {
     grid-template-columns: 1fr;
   }
@@ -179,6 +190,14 @@ details[open] > summary .summary-detail {
 
   #limits-details {
     order: 3;
+  }
+
+  #trading-details {
+    order: 4;
+  }
+
+  #advanced-details {
+    order: 5;
   }
 }
 
@@ -312,8 +331,27 @@ details[open] > summary .summary-detail {
   font-weight: 600;
 }
 
+/* Left-edge bars flag the fastest and cheapest plans (independent of which row
+   is selected). A row that is both takes the cheapest bar (this rule comes
+   last); the coloured note tags below still show both facts. */
+#frontier-section table tbody tr.fastest td:first-child {
+  border-left: 3px solid var(--row-fastest-border);
+}
+
 #frontier-section table tbody tr.cheapest td:first-child {
   border-left: 3px solid var(--row-cheapest-border);
+}
+
+/* The matching "[fastest]" / "[cheapest]" words in the Notes column, tinted to
+   reinforce the left-edge bars (wrapped in spans by wireFrontierRows). */
+.tag-fastest {
+  color: var(--row-fastest-border);
+  font-weight: 600;
+}
+
+.tag-cheapest {
+  color: var(--row-cheapest-border);
+  font-weight: 600;
 }
 
 /* The crafts pane's summary already says "Required crafts": the markdown's

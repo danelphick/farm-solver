@@ -44,6 +44,7 @@
         <select id="target">
           <option value="">Tower (highest reachable)</option>
           <option value="level">Specific tower level</option>
+          <option value="none">No Tower</option>
         </select>
         <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
       </div>
@@ -58,7 +59,7 @@
     </details>
 
     <details id="limits-details" class="pane">
-      <summary>Limits &amp; advanced</summary>
+      <summary>Limits</summary>
       <div class="field-row">
         <label for="max-gold">Max gold</label>
         <input id="max-gold" type="text" placeholder="unlimited">
@@ -72,6 +73,10 @@
         <input id="max-ln" type="number" min="0" placeholder="none">
       </div>
       <div class="field-row">
+        <label for="max-ac">Max Apple Ciders</label>
+        <input id="max-ac" type="number" min="0" placeholder="none">
+      </div>
+      <div class="field-row">
         <label for="passive-limit">Max plan duration</label>
         <input id="passive-limit" type="text" placeholder="e.g. 5d, 1d6h">
       </div>
@@ -79,10 +84,18 @@
         <label for="plans">Plans across frontier</label>
         <input id="plans" type="number" min="1" value="5">
       </div>
+    </details>
+
+    <details id="advanced-details" class="pane">
+      <summary>Advanced</summary>
+      <div class="field-row">
+        <label for="instant-grow-time">Instant grow time</label>
+        <input id="instant-grow-time" type="text" placeholder="3s" class="narrow">
+      </div>
       <div class="field">
         <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)</label>
         <textarea id="overrides" rows="3" spellcheck="false"
-          placeholder="sawmill.use_hickory_omelette=false"></textarea>
+          placeholder="sawmill.have_pine_boost=false"></textarea>
       </div>
     </details>
     </div>
@@ -99,6 +112,14 @@
         <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
       </div>
       <div class="field-row">
+        <label for="hickory-omelette">Hickory Omelette</label>
+        <select id="hickory-omelette" class="narrow">
+          <option value="none">None</option>
+          <option value="all">All</option>
+          <option value="only_oak">Only Oak</option>
+        </select>
+      </div>
+      <div class="field-row">
         <label for="use-pumpkin-juice">
           <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
         </label>
@@ -113,6 +134,44 @@
       <div class="field-row">
         <label for="start-date">Start date</label>
         <input id="start-date" type="date" disabled>
+      </div>
+    </details>
+
+    <details id="trading-details" class="pane">
+      <summary>Trading values</summary>
+      <p class="pane-hint">
+        Gold trade prices used to rank plans by real cost. Arnold Palmer, Apple
+        Cider, Orange Juice, Large Net and Hickory Omelette are priced per 1,000
+        units; Cookie Set and Pumpkin Juice are gold each. Blank uses the bundled
+        default.
+      </p>
+      <div class="field-row">
+        <label for="price-arnold-palmer">Arnold Palmer /1k</label>
+        <input id="price-arnold-palmer" type="number" min="0" step="any" placeholder="60" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-apple-cider">Apple Cider /1k</label>
+        <input id="price-apple-cider" type="number" min="0" step="any" placeholder="20" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-orange-juice">Orange Juice /1k</label>
+        <input id="price-orange-juice" type="number" min="0" step="any" placeholder="8" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-large-net">Large Net /1k</label>
+        <input id="price-large-net" type="number" min="0" step="any" placeholder="10" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-cookie-set">Cookie Set each</label>
+        <input id="price-cookie-set" type="number" min="0" step="any" placeholder="20" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-pumpkin-juice">Pumpkin Juice each</label>
+        <input id="price-pumpkin-juice" type="number" min="0" step="any" placeholder="230" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="price-hickory-omelette">Hickory Omelette /1k</label>
+        <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow">
       </div>
     </details>
     </div>

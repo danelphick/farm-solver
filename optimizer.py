@@ -78,8 +78,12 @@ UNIT_EPSILON = 1e-6
 # Consumables that can be bought for gold instead of self-sourced (the items with
 # a player-to-player gold price). Cookie sets are buyable too, but handled apart
 # (they are a farming cap, not a balance item). Grape Juice is deliberately absent:
-# it is not traded, only pressed from grapes, so it is always self-sourced.
-BUYABLE = frozenset({"arnold palmer", "large net", "apple cider", "orange juice"})
+# it is not traded, only pressed from grapes, so it is always self-sourced. The
+# Hickory Omelette (a sawmill-boost meal, see :func:`sources.sawmill_boost_offers`)
+# has no self-sourced recipe, so it is only ever bought or drawn from held stock.
+BUYABLE = frozenset(
+    {"arnold palmer", "large net", "apple cider", "orange juice", "hickory omelette"}
+)
 
 # Price-of-time anchors for the two frontier endpoints, in minutes saved per
 # consumable. A tiny price barely penalises consumables (the fastest plan, using
@@ -142,6 +146,7 @@ def all_offers(
     fishing: Fishing,
     exploring: Exploring,
     farm: Farm,
+    boost_offers: list[Offer] | None = None,
 ) -> list[Offer]:
     """Every production offer across the channels, ready for the optimiser.
 
@@ -152,9 +157,14 @@ def all_offers(
     available. Whether a
     consumable is self-sourced (costs time) or bought (costs gold) is the LP's
     call, set by the gold budget the frontier sweeps.
+
+    ``boost_offers`` (from :func:`sources.sawmill_boost_offers`) are the optional
+    Hickory Omelette sawmill-boost offers: each is grounded in an omelette the plan
+    holds or buys, so it too is just another gathering channel here.
     """
     return [
         *passive_offers(production),
+        *(boost_offers or []),
         *fishing_offers(fishing, ground=True),
         *exploring_offers(exploring, ground=True),
         *farming_offers(farm, ground=True),
@@ -186,6 +196,10 @@ class SourcingPlan:
     grape_juices: float = 0.0
     apple_ciders: float = 0.0
     orange_juice: float = 0.0
+    # Hickory Omelettes eaten (one per boosted sawmill-hour, see
+    # :func:`sources.sawmill_boost_offers`) -- a held/bought meal, so it is priced
+    # like the other consumables and never self-sourced.
+    hickory_omelettes: float = 0.0
     # Consumables bought for gold (lower-cased name -> units) and the gold spent on
     # them. The rest of each consumable's spend is self-sourced (costs time, not
     # gold); ``gold`` is the plan's real cost, what the frontier trades against time.
@@ -532,6 +546,8 @@ def _build_base(
             + o.gj * (prices.get("grape juice", 0.0) or 1e-4)
             + o.consumes.get("apple cider", 0.0) * prices.get("apple cider", 0.0)
             + o.consumes.get("orange juice", 0.0) * prices.get("orange juice", 0.0)
+            + o.consumes.get("hickory omelette", 0.0)
+            * prices.get("hickory omelette", 0.0)
         )
         * x
         for o, x in zip(used, usage)
@@ -783,6 +799,9 @@ def _solve_configured(
         orange_juice=sum(
             d.offer.consumes.get("orange juice", 0.0) * d.units for d in draws
         ),
+        hickory_omelettes=sum(
+            d.offer.consumes.get("hickory omelette", 0.0) * d.units for d in draws
+        ),
         bought=bought,
         gold=pulp.value(base.gold) or 0.0,
         pumpkin_juices=pumpkin_juices,
@@ -885,6 +904,7 @@ def _consumable_spend(plan: SourcingPlan) -> dict[str, float]:
         "orange juice": plan.orange_juice,
         "grape juice": plan.grape_juices,
         "cookie set": plan.cookie_sets,
+        "hickory omelette": plan.hickory_omelettes,
     }
 
 

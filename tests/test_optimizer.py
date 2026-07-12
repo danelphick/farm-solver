@@ -24,7 +24,7 @@ from optimizer import (
     surplus_sale_value,
 )
 from passive import HOURLY, PassiveProducer, PassiveProduction
-from sources import Draw, Offer, OpenFlow
+from sources import Draw, Offer, OpenFlow, passive_offers, sawmill_boost_offers
 
 # Per-unit gold prices for the buyable consumables (see config.trading_prices).
 GOLD = {
@@ -64,6 +64,31 @@ def test_all_offers_gathers_every_channel():
     # Orange Juice, eat Apple). No cider offer here: the cave has no Effectiveness.
     assert names == {"passive", "fish Lake", "explore Cave", "grow Corn",
                      "drink orange juice", "eat apple"}
+
+
+def test_sawmill_boost_is_grounded_and_speeds_oak_for_omelette_gold():
+    # Sawmill makes 6000 oak/hour (100/min). To make 60000 oak, base passive alone
+    # takes 600 min; the +20% boost cuts that to 500 min but eats 8.33 omelettes.
+    passive = PassiveProduction([PassiveProducer("sawmill", HOURLY, {"oak": 6000})])
+    offers = passive_offers(passive) + sawmill_boost_offers({"oak": 6000}, "all")
+    prices = {"hickory omelette": 0.35}
+
+    # Buy freely: takes the boost, buying every omelette it needs.
+    fast = minimize(offers, {"oak": 60000}, prices=prices, gold_weight=BUY_FREELY)
+    assert fast.time == pytest.approx(timedelta(minutes=500), abs=timedelta(seconds=1))
+    assert fast.hickory_omelettes == pytest.approx(500 / 60, rel=1e-3)
+    assert fast.bought["hickory omelette"] == pytest.approx(500 / 60, rel=1e-3)
+    assert fast.gold == pytest.approx(500 / 60 * 0.35, rel=1e-3)
+
+    # Buy nothing: the omelette has no self-sourced form, so the boost is dropped
+    # and oak comes entirely from the slower base passive run.
+    cheap = minimize(offers, {"oak": 60000}, prices=prices, gold_weight=SELF_SOURCE)
+    assert cheap.time == pytest.approx(timedelta(minutes=600), abs=timedelta(seconds=1))
+    assert cheap.hickory_omelettes == 0
+
+    # Unpriced and unheld: the boost is ungroundable and simply unusable.
+    none = minimize(offers, {"oak": 60000}, prices={}, gold_weight=BUY_FREELY)
+    assert none.hickory_omelettes == 0
 
 
 def test_all_offers_grounds_consumables_and_adds_the_cider_channel():

@@ -27,7 +27,14 @@ board = 46000
 oak = 6000
 have_pine_boost = true
 have_sturdy_saw = true
-use_hickory_omelette = true
+# Hickory Omelette: a held/bought meal (priced in [trading]) that boosts the
+# sawmill by 20% for the hour it lasts. One of:
+#   "none"     don't use it.
+#   "all"      boost every output (oak, board, wood) for as long as the plan
+#              runs -- one omelette per boosted hour.
+#   "only_oak" only ever eat omelettes to speed Oak (the scarce output); Board
+#              and Wood are not boosted, so an omelette is never spent to get them.
+hickory_omelette = "all"
 
 [chicken_coop]
 produces = 18304
@@ -153,8 +160,9 @@ orange_juice  = 8
 apple_cider   = 20
 arnold_palmer = 60
 large_net     = 10
-grapes        = 5    # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
-cookie_set    = 20   # priced individually, in gold each (not gk)
+grapes          = 5  # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
+cookie_set      = 20 # priced individually, in gold each (not gk)
+hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
 
 [mastery]    # Pumpkin Juice: a bought item that instantly boosts one mastery goal
 # by 10% of its tier. Off by default; --use-pumpkin-juice[=N] overrides this.

@@ -24,8 +24,42 @@ from sources import (
     fishing_offers,
     open_flows,
     passive_offers,
+    sawmill_boost_offers,
     stamina_offers,
 )
+from sources import (
+    HICKORY_OMELETTE,
+    HICKORY_OMELETTE_FRACTION,
+    SAWMILL_BOOST_TRACK,
+)
+
+
+def test_sawmill_boost_offers_none_mode_is_empty():
+    assert sawmill_boost_offers({"oak": 6000}, "none") == []
+
+
+def test_sawmill_boost_all_mode_boosts_every_output_and_eats_an_omelette():
+    [offer] = sawmill_boost_offers({"oak": 6000, "board": 46000}, "all")
+    assert offer.track == SAWMILL_BOOST_TRACK
+    assert offer.time_per_unit == timedelta(hours=1)
+    # One unit is a boosted hour: HICKORY_OMELETTE_FRACTION of each hourly output.
+    assert offer.yields == {
+        "oak": HICKORY_OMELETTE_FRACTION * 6000,
+        "board": HICKORY_OMELETTE_FRACTION * 46000,
+    }
+    assert offer.consumes == {HICKORY_OMELETTE: 1.0}
+
+
+def test_sawmill_boost_only_oak_mode_boosts_oak_alone():
+    [offer] = sawmill_boost_offers({"oak": 6000, "board": 46000, "wood": 60000}, "only_oak")
+    # Board and wood are left out entirely, so an omelette is never spent on them.
+    assert offer.yields == {"oak": HICKORY_OMELETTE_FRACTION * 6000}
+    assert offer.consumes == {HICKORY_OMELETTE: 1.0}
+
+
+def test_sawmill_boost_only_oak_without_oak_is_empty():
+    # No oak output (no sturdy saw) means nothing for only_oak to boost.
+    assert sawmill_boost_offers({"board": 46000}, "only_oak") == []
 
 
 def test_units_for_is_driven_by_the_binding_item():

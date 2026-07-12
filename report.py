@@ -988,10 +988,16 @@ def _build_plan_context(
             # the draws' consumes, not a plan tally; surfaced here so its held
             # spend shows in the From-inventory section like any other tool.
             sources.ACORN_PIE: consumed.get(sources.ACORN_PIE, 0.0),
+            # Hickory Omelettes are a held/bought meal the sawmill-boost channel
+            # burns (one per boosted hour) but never yields; like the Acorn Pie it
+            # is read off the draws' consumes, so its held spend shows in the
+            # From-inventory section and the bought portion in the Buy section.
+            sources.HICKORY_OMELETTE: consumed.get(sources.HICKORY_OMELETTE, 0.0),
         }.items()
         if round(spent) >= 1
     }
     display.setdefault(sources.ACORN_PIE, "Acorn Pie")
+    display.setdefault(sources.HICKORY_OMELETTE, "Hickory Omelette")
     # An open is worth reporting if it yields a needed item, restocks a tool, or
     # gathers something a draw goes on to consume (an Apple-yielding chest opened
     # to feed the eat-Apple stamina flow, say) -- the same `consumed` union the
@@ -1051,6 +1057,36 @@ def _sourced(ctx: _PlanContext, draws: list[sources.Draw]) -> list[sources.Draw]
 
 def _draws_on(plan: optimizer.SourcingPlan, track: str) -> list[sources.Draw]:
     return [d for d in plan.draws if d.offer.track == track]
+
+
+def _sawmill_boost_summary(
+    plan: optimizer.SourcingPlan, ctx: _PlanContext
+) -> tuple[int, timedelta, list[tuple[str, int]]] | None:
+    """The Hickory Omelette sawmill boost this plan runs, or None if it runs none.
+
+    Returns ``(omelettes, hours, yields)`` where ``omelettes`` is how many are
+    eaten (one per boosted hour), ``hours`` the boosted span, and ``yields`` the
+    extra items the boost produced ``[(display name, quantity), ...]``, biggest
+    first. Both renderers print the same tuple (see the "Sawmill boost" section).
+    """
+    draws = _draws_on(plan, sources.SAWMILL_BOOST_TRACK)
+    if not draws:
+        return None
+    hours = sum((d.time for d in draws), timedelta(0))
+    omelettes = round(sum(d.offer.consumes.get(sources.HICKORY_OMELETTE, 0.0) * d.units
+                          for d in draws))
+    produced: dict[str, float] = {}
+    for draw in draws:
+        for item, qty in draw.produced.items():
+            produced[item] = produced.get(item, 0.0) + qty
+    yields = sorted(
+        ((ctx.display.get(item, item), round(qty)) for item, qty in produced.items()
+         if round(qty) >= 1),
+        key=lambda kv: -kv[1],
+    )
+    if omelettes < 1 or not yields:
+        return None
+    return omelettes, hours, yields
 
 
 def print_plan(
@@ -1321,6 +1357,17 @@ def print_plan(
                     f"  {quantity:>{width},}x {name}"
                     f" in {passive.format_duration(wait)}{source}"
                 )
+
+    boost = _sawmill_boost_summary(plan, ctx)
+    if boost is not None:
+        omelettes, hours, yields = boost
+        extra = ", ".join(f"+{qty:,} {name}" for name, qty in yields)
+        print("\nSawmill boost (Hickory Omelette):")
+        print(
+            f"  {omelettes:,} Hickory Omelette"
+            f"{'s' if omelettes != 1 else ''} over {passive.format_duration(hours)}:"
+            f" {extra}"
+        )
 
     # Consumable tools drawn from held stock (spent before any are crafted, opened
     # or bought). Surfacing these makes the spend tallies reconcile: a plan can burn
@@ -1665,6 +1712,17 @@ def markdown_plan(
                 rows,
                 align=["left", "right", "right", "left"],
             )
+
+    boost = _sawmill_boost_summary(plan, ctx)
+    if boost is not None:
+        omelettes, hours, yields = boost
+        extra = ", ".join(f"+{qty:,} {name}" for name, qty in yields)
+        doc.heading("Sawmill boost (Hickory Omelette)")
+        doc.para(
+            f"{omelettes:,} Hickory Omelette"
+            f"{'s' if omelettes != 1 else ''} over {passive.format_duration(hours)}:"
+            f" {extra}"
+        )
 
     held = [
         (item, min(inventory.get(item, 0.0), spent))
