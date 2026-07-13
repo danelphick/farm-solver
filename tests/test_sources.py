@@ -496,6 +496,45 @@ def test_grounded_farming_consumes_grape_juice_matching_its_gj_cost():
     assert offers["grow Grape without grape juice"].consumes == {}
 
 
+def test_grounded_farming_consumes_limited_seeds_a_full_field_per_planting():
+    farm = Farm(
+        crops={
+            "mega cotton": Crop(
+                "Mega Cotton", timedelta(days=4), {"cotton": 40}, primary="Cotton"
+            )
+        },
+        rows=10,
+    )
+    # One unit is a full-field planting: a seed in every plot, four per row.
+    (offer,) = farming_offers(farm, ground=True)
+    assert offer.consumes == {"mega cotton seeds": 40.0}
+    # Ungrounded offers carry no consumes (the abstract-cost mode).
+    (plain,) = farming_offers(farm)
+    assert plain.consumes == {}
+
+
+def test_limited_seed_spend_covers_every_farming_offer_variant():
+    farm = Farm(
+        crops={
+            "mega beet": Crop(
+                "Mega Beet", timedelta(days=1), {"beet": 40}, primary="Beet"
+            )
+        },
+        rows=10,
+        grape_juices_per_day=11,
+        cookie_time_threshold=timedelta(hours=1),
+    )
+    blended, natural, cookie = farming_offers(farm, ground=True)
+    # The blended and natural offers are one planting each: 10 rows x 4 plots.
+    assert blended.consumes["mega beet seeds"] == pytest.approx(40.0)
+    assert blended.consumes["grape juice"] == pytest.approx(11 / 12)
+    assert natural.consumes == {"mega beet seeds": 40.0}
+    # A cookie day plants the day's harvests -- 1 natural + 11 Grape Juice grows
+    # (the window boosts yields, not plantings) -- at 40 seeds apiece.
+    assert cookie.consumes["mega beet seeds"] == pytest.approx(480.0)
+    assert cookie.consumes["grape juice"] == pytest.approx(11)
+
+
 def test_cider_offer_yields_drop_rate_times_zone_rates_and_consumes_stamina():
     exploring = Exploring(
         locations={"cave": ExploringLocation("Cave", {"wood": 0.5, "stone": 0.25})},

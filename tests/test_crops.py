@@ -7,7 +7,7 @@ from crops import (
     Farm,
     farm_from_config,
     load_farm,
-    per_seed_rate,
+    per_row_rate,
     read_crops,
     read_drops,
 )
@@ -36,21 +36,21 @@ def make_farm(**kwargs):
         ("  crops/harvest all ", 48, 4),
     ],
 )
-def test_per_seed_rate_converts_the_in_game_metrics(metric, value, expected):
-    assert per_seed_rate(metric, value, rows=12) == pytest.approx(expected)
+def test_per_row_rate_converts_the_in_game_metrics(metric, value, expected):
+    assert per_row_rate(metric, value, rows=12) == pytest.approx(expected)
 
 
-def test_per_seed_rate_rejects_unknown_metric():
+def test_per_row_rate_rejects_unknown_metric():
     with pytest.raises(ValueError):
-        per_seed_rate("Widgets/day", 5, rows=12)
+        per_row_rate("Widgets/day", 5, rows=12)
 
 
 def test_carrot_seed_drops_sum_to_the_total_harvest():
-    # The example: the three per-seed rates add up to 4 an seed (48 at 12 rows).
+    # The example: the three per-row rates add up to 4 a row (48 at 12 rows).
     total = (
-        per_seed_rate("Crops/harvest all", 47.55, 12)
-        + per_seed_rate("Harvest alls/crop", 3.34, 12)
-        + per_seed_rate("Harvest alls/crop", 6.71, 12)
+        per_row_rate("Crops/harvest all", 47.55, 12)
+        + per_row_rate("Harvest alls/crop", 3.34, 12)
+        + per_row_rate("Harvest alls/crop", 6.71, 12)
     )
     assert total == pytest.approx(4, abs=1e-3)
 
@@ -558,3 +558,16 @@ def test_instant_crops_are_never_given_grape_juice():
     assert farm.grape_juices_used(timedelta(days=1), "Beet") == 14
     # So a Peppers planting just takes the instant grow time, unshortened.
     assert farm.time_to_grow("Peppers", 28800) == timedelta(days=1)
+
+
+def test_seed_item_marks_limited_seeds_only():
+    # A differing primary marks a limited seed (Mega/Spring): plantings are
+    # bounded by the held seed item. A normal crop's seeds are freely bought.
+    mega = Crop("Mega Cotton", timedelta(days=4), {"cotton": 40}, primary="Cotton")
+    spring = Crop(
+        "Spring", timedelta(hours=2), {"mixed flowers": 10}, primary="Mixed Flowers"
+    )
+    plain = Crop("Cotton", timedelta(days=4), {"cotton": 4})
+    assert mega.seed_item == "mega cotton seeds"
+    assert spring.seed_item == "spring seeds"
+    assert plain.seed_item is None

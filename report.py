@@ -1100,6 +1100,13 @@ def _build_plan_context(
         }.items()
         if round(spent) >= 1
     }
+    # Limited seeds (Mega/Spring) are a held-only input a planting burns (see
+    # crops.Crop.seed_item) -- like the meals above they never reach crafting
+    # `need`, so surface the spend here for the From-inventory section.
+    for item, spent in consumed.items():
+        if item.endswith(crops.SEED_ITEM_SUFFIX) and round(spent) >= 1:
+            spent_consumables[item] = spent
+            display.setdefault(item, item.title())
     display.setdefault(sources.ACORN_PIE, "Acorn Pie")
     display.setdefault(sources.HICKORY_OMELETTE, "Hickory Omelette")
     # An open is worth reporting if it yields a needed item, restocks a tool, or

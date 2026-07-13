@@ -14,14 +14,27 @@ at 12 rows::
 The two metrics are inverses: "Crops/harvest all" is how many of that item a
 full harvest of every row yields, while "Harvest alls/crop" is how many full
 harvests it takes to get one (used for the rare drops). Both scale with the row
-count, so the row-independent figure we keep is the **per-seed** expected count
-(see :func:`per_seed_rate`). These raw figures include no yield bonuses.
+count, so the row-independent figure we keep is the **per-row** expected count
+(see :func:`per_row_rate`). A row holds :data:`PLOTS_PER_ROW` (four) seeds, so
+the per-row figure is four times the true per-seed yield -- a normal crop's ~4
+per row is ~1 per seed, a Mega/Spring seed's 40 is the in-game "10x per seed".
+These raw figures include no yield bonuses.
 
 A few seeds are bulkier: Mushroom, and the "Mega" seed versions of some crops
 (Cotton, Sunflower and Beet), yield ten times as many items per seed as a normal
 crop. Their in-game drop tables already reflect that, so they are stored like any
 other crop -- a mega seed is simply another data row whose figures are ten times
 its base crop's and whose ``primary`` names the base crop it grows.
+
+A differing ``primary`` also marks the seed as **limited**: unlike a normal
+crop's seeds (bought from the store in any quantity), a Mega or Spring seed
+cannot be readily replaced, so plantings are bounded by the seeds held in
+inventory (see :meth:`Crop.seed_item` and :func:`sources.farming_offers`).
+Spring Seeds each yield ten flowers, one of the five colours at random, so the
+drop table carries an expected two per seed of each (Red/Blue/White/Orange/
+Yellow Flowers) and the usual row/yield multipliers apply on top; the crop's
+``primary`` is the seed description's collective "Mixed Flowers", not itself a
+real item (and so excluded from the Dewstar pool, see :data:`DEWSTAR_EXCLUDED`).
 
 Two independent kinds of modifier then change a harvest:
 
@@ -81,11 +94,22 @@ COOKIE_SET_MULTIPLIER = 9
 # it, so it bounds how many boosted harvests one set buys.
 COOKIE_WINDOW = timedelta(minutes=5)
 
-# Excluded from the Scythe of Dewstar's bonus-crop pool (see Farm.dewstar_bonus).
-DEWSTAR_EXCLUDED = "mushroom"
+# The inventory item a crop's seeds are held as: the crop's name plus this,
+# lower-cased like every inventory key ("Mega Cotton" -> "mega cotton seeds").
+# Only a limited seed's stock is modelled (see :meth:`Crop.seed_item`).
+SEED_ITEM_SUFFIX = " seeds"
 
-# One bonus crop is rolled per farm plot -- four per row.
-DEWSTAR_PLOTS_PER_ROW = 4
+# Excluded from the Scythe of Dewstar's bonus-crop pool (see Farm.dewstar_bonus):
+# Mushroom, and Spring -- whose "primary" (Mixed Flowers, the seed description's
+# collective name) is not a real item; its actual drops are the five flower
+# colours, which a Dewstar pick never gives.
+DEWSTAR_EXCLUDED = frozenset({"mushroom", "spring"})
+
+# A farm row has four plots, each planted with one seed -- so a full-field
+# planting sows ``PLOTS_PER_ROW * rows`` seeds (what a limited-seed crop's offer
+# consumes, see :func:`sources.farming_offers`), and the Scythe of Dewstar rolls
+# one bonus crop per plot (see :meth:`Farm.dewstar_bonus`).
+PLOTS_PER_ROW = 4
 
 # Config gives modifiers as whole-number percentages.
 PERCENT = 100
@@ -95,16 +119,17 @@ CROPS_PER_HARVEST = "crops/harvest all"  # items yielded per full harvest
 HARVESTS_PER_CROP = "harvest alls/crop"  # full harvests needed for one item
 
 # The row count the figures in seed_drops.csv were captured at; each is
-# normalised from this to a row-independent per-seed rate at load.
+# normalised from this to a row-independent per-row rate at load.
 CAPTURE_ROWS = 12
 
 
-def per_seed_rate(metric: str, value: float, rows: int) -> float:
-    """Convert an in-game drop figure at ``rows`` rows to a per-seed rate.
+def per_row_rate(metric: str, value: float, rows: int) -> float:
+    """Convert an in-game drop figure at ``rows`` rows to a per-row rate.
 
-    ``Crops/harvest all`` counts items across every row, so the per-seed rate is
+    ``Crops/harvest all`` counts items across every row, so the per-row rate is
     ``value / rows``; ``Harvest alls/crop`` is the inverse (harvests per item),
-    so the per-seed rate is ``1 / (value * rows)``.
+    so the per-row rate is ``1 / (value * rows)``. A row is four seeds
+    (:data:`PLOTS_PER_ROW`), so this is *not* a per-seed figure.
     """
     label = metric.strip().lower()
     if label == CROPS_PER_HARVEST:
@@ -120,9 +145,9 @@ class Crop:
 
     ``growth`` is the base time one planting takes to mature. ``drops`` maps each
     lower-cased item the seed can produce (its primary crop included) to the
-    bonus-free expected count per seed. ``primary`` names the main item produced;
-    it defaults to the crop's own name but differs for a mega seed (``Mega
-    Cotton`` produces ``Cotton``).
+    bonus-free expected count per planted row (see :func:`per_row_rate`).
+    ``primary`` names the main item produced; it defaults to the crop's own name
+    but differs for a mega seed (``Mega Cotton`` produces ``Cotton``).
     """
 
     name: str
@@ -133,6 +158,22 @@ class Crop:
     def __post_init__(self) -> None:
         if not self.primary:
             self.primary = self.name
+
+    @property
+    def seed_item(self) -> str | None:
+        """The held seed item one planting consumes -- for a limited seed only.
+
+        A limited seed (its ``primary`` names another item -- the Mega seeds and
+        Spring Seeds) cannot be readily replaced, so plantings are bounded by the
+        seeds held in inventory; the item is the crop's name plus
+        :data:`SEED_ITEM_SUFFIX`, lower-cased as inventory keys are (``Mega
+        Cotton`` -> ``mega cotton seeds``). A normal crop's seeds are freely
+        purchasable in any quantity, so their stock is not modelled and this is
+        ``None``.
+        """
+        if self.primary.lower() == self.name.lower():
+            return None
+        return self.name.lower() + SEED_ITEM_SUFFIX
 
 
 @dataclass
@@ -215,7 +256,7 @@ class Farm:
     def per_harvest(self, name: str, item: str | None = None) -> float | None:
         """Expected count of ``item`` from one full harvest of crop ``name``.
 
-        ``item`` defaults to the crop's primary produce. The bonus-free per-seed
+        ``item`` defaults to the crop's primary produce. The bonus-free per-row
         rate is scaled by the row count and the double-drop chance. Returns
         ``None`` if the crop is unknown or does not drop that item.
         """
@@ -287,20 +328,21 @@ class Farm:
 
         Every crop no slower than ``name`` (compared on raw seed :attr:`Crop.growth`,
         unmodified by speed perks -- so, e.g., Carrot's pool is Carrot and Peppers
-        regardless of :attr:`speed`), :data:`DEWSTAR_EXCLUDED` (Mushroom) aside.
+        regardless of :attr:`speed`), :data:`DEWSTAR_EXCLUDED` (Mushroom, Spring)
+        aside.
         """
         crop = self.crop(name)
         if crop is None:
             return []
         return [
             c for c in self.crops.values()
-            if c.name.lower() != DEWSTAR_EXCLUDED and c.growth <= crop.growth
+            if c.name.lower() not in DEWSTAR_EXCLUDED and c.growth <= crop.growth
         ]
 
     def dewstar_bonus(self, name: str) -> dict[str, float]:
         """Extra crops one harvest of ``name`` yields via the Scythe of Dewstar.
 
-        One bonus crop is rolled per farm plot (:data:`DEWSTAR_PLOTS_PER_ROW` *
+        One bonus crop is rolled per farm plot (:data:`PLOTS_PER_ROW` *
         ``rows``), each choosing uniformly among :meth:`_dewstar_pool` and giving
         exactly one of the chosen crop's *primary* item -- never a rarer drop, and
         never scaled by a picked Mega seed's own tenfold yield. Empty when
@@ -311,7 +353,7 @@ class Farm:
         pool = self._dewstar_pool(name)
         if not pool:
             return {}
-        share = (DEWSTAR_PLOTS_PER_ROW * self.rows) / len(pool)
+        share = (PLOTS_PER_ROW * self.rows) / len(pool)
         bonus: dict[str, float] = {}
         for crop in pool:
             item = crop.primary.lower()
@@ -432,10 +474,10 @@ def read_drops(path: Path) -> dict[str, dict[str, float]]:
     """Read seed drops from a ``Crop,Item,Metric,Value`` CSV.
 
     Each row is an in-game drop figure (``Metric`` one of the two units, see
-    :func:`per_seed_rate`) captured at :data:`CAPTURE_ROWS` rows; it is
-    normalised to a row-independent per-seed rate. The result maps a crop's
+    :func:`per_row_rate`) captured at :data:`CAPTURE_ROWS` rows; it is
+    normalised to a row-independent per-row rate. The result maps a crop's
     lower-cased name to its drops -- each dropped item (lower-cased) to its
-    bonus-free per-seed expected count. A missing file yields no drops, so crops
+    bonus-free per-row expected count. A missing file yields no drops, so crops
     fall back to growth times alone.
     """
     drops: dict[str, dict[str, float]] = {}
@@ -445,7 +487,7 @@ def read_drops(path: Path) -> dict[str, dict[str, float]]:
         for row in csv.DictReader(f):
             crop = row["Crop"].strip().lower()
             item = row["Item"].strip().lower()
-            rate = per_seed_rate(row["Metric"], float(row["Value"]), CAPTURE_ROWS)
+            rate = per_row_rate(row["Metric"], float(row["Value"]), CAPTURE_ROWS)
             drops.setdefault(crop, {})[item] = rate
     return drops
 

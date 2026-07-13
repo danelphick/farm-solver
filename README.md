@@ -429,7 +429,7 @@ The `[farmhouse]` section is the passive stamina source. The building raises you
 Farming grows items from seeds. A seed's harvest is a *distribution* of items — mostly its primary crop, occasionally a rarer drop — so one crop can supply several different items. The model has three parts:
 
 - `crops.csv` — each crop's base growth time, and (via an optional `Primary` column) the crop a differently-named seed grows, such as a *Mega* seed.
-- `seed_drops.csv` — each seed's in-game drop table (`Crops/harvest all` for common items, `Harvest alls/crop` for rare ones), captured at a fixed row count and normalised to a per-seed rate.
+- `seed_drops.csv` — each seed's in-game drop table (`Crops/harvest all` for common items, `Harvest alls/crop` for rare ones), captured at a fixed row count and normalised to a per-row rate (a row is four seeds).
 - the `[farming]` config — your row count and modifiers:
 
 ```toml
@@ -444,6 +444,8 @@ instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth 
 ```
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
+
+A seed whose `Primary` differs from its crop's name — the *Mega* seeds and *Spring Seeds* — is **limited**: unlike ordinary seeds (bought from the store in any quantity, so not modelled) it cannot be readily replaced, so each planting consumes held seeds from your inventory (one per plot, four per row) and the plan can never plant more than you hold plus whatever passive production or chest openings supply (the Hummingbird pet makes Spring Seeds; a Bag of Spring Seeds opens into 25). The seed spend appears in the plan's *From inventory* section, and a goal that would need more than the seeds can ever grow is reported as unsatisfiable rather than silently planned. Spring Seeds each grow ten flowers, split evenly in expectation across Red, Blue, White, Orange and Yellow Flowers; their nominal primary, "Mixed Flowers", is just the seed description's collective name and the Scythe of Dewstar never picks it.
 
 Growth can be sped up with **Grape Juice**, which grows the whole field instantly but only `grape_juices_per_day` times a day. Because the rows grow one crop at a time, whichever crop is being farmed gets the full daily allowance, adding those instant harvests on top of natural growth — a big saving for slow crops (a nine-day Beet gains far more from a free daily harvest than a fast crop does) and a small one for quick ones. When a plan farms a crop, the report notes the Harvest Alls (full-field harvests), the wait, how many Grape Juices it consumes, and how many of each item those harvests produce — split between the instant Grape Juice grows and normal farming:
 

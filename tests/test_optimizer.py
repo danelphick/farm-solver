@@ -160,6 +160,38 @@ def test_held_consumable_grounds_an_offer_and_is_consumed():
     assert draw_consumed(plan)["acorn pie"] == pytest.approx(2.5)
 
 
+def test_limited_seeds_bound_mega_plantings_to_the_held_stock():
+    # Mega Cotton out-yields plain Cotton tenfold in the same time, but each
+    # planting burns 10 held seeds (see crops.Crop.seed_item / farming_offers).
+    # With 20 seeds only two plantings fit; plain Cotton grows the rest.
+    mega = Offer(
+        "grow Mega Cotton", "farming", {"cotton": 400},
+        consumes={"mega cotton seeds": 10.0}, time_per_unit=timedelta(days=4),
+    )
+    plain = Offer(
+        "grow Cotton", "farming", {"cotton": 40}, time_per_unit=timedelta(days=4)
+    )
+    plan = minimize(
+        [mega, plain], {"Cotton": 1000}, inventory={"mega cotton seeds": 20}
+    )
+    units = {d.offer.name: d.units for d in plan.draws}
+    assert units["grow Mega Cotton"] == pytest.approx(2)
+    assert units["grow Cotton"] == pytest.approx(5)
+    assert draw_consumed(plan)["mega cotton seeds"] == pytest.approx(20)
+
+
+def test_demand_beyond_a_limited_channel_capacity_raises():
+    # Flowers grow only from held Spring Seeds; a demand past what the stock can
+    # ever produce makes the LP infeasible -- surfaced as an error, not silently
+    # returned as an empty 0-minute plan (see _assert_optimal).
+    spring = Offer(
+        "grow Spring", "farming", {"red flowers": 96},
+        consumes={"spring seeds": 48.0}, time_per_unit=timedelta(hours=2),
+    )
+    with pytest.raises(ValueError, match="no plan can satisfy the demand"):
+        minimize([spring], {"Red Flowers": 1000}, inventory={"spring seeds": 96})
+
+
 def test_offer_grounded_only_in_an_unheld_consumable_is_unobtainable():
     # ...but with no pies held (and nothing crafting them) the offer cannot run,
     # so its Hide is unobtainable and falls to the remainder rather than infeasible.

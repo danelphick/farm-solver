@@ -1,16 +1,16 @@
 """Farmed items for Farm Solver.
 
 Most farmed items are modelled by :mod:`crops` (growth times and per-seed drops)
-and sourced through the optimiser like any other channel. A small fixed set (the
-flowers) is not in the crop model but is still farmed; :data:`FARMING_ITEMS` and
-:func:`is_farmed` record those so they still count as obtainable (see
-``main.obtainable_items``).
+and sourced through the optimiser like any other channel -- since the Spring crop
+was added that includes the five flower colours. :data:`FARMING_ITEMS` and
+:func:`is_farmed` record the farmed items independently of a built farm, so they
+still count as obtainable when no farm is given (see ``main.obtainable_items``).
 """
 
 from __future__ import annotations
 
 # Materials grown on the farm (keys are lower-cased for case-insensitive
-# matching), including flowers the crop model does not otherwise cover.
+# matching), flowers included.
 FARMING_ITEMS = frozenset(
     {
         "beet",

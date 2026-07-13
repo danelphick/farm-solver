@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from crops import Farm
+from crops import PLOTS_PER_ROW, Farm
 from exploring import ACORN_PIE_EXPLORES, Exploring
 from fishing import Fishing
 from locksmith import Locksmith
@@ -446,6 +446,13 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
     the same bundles; the cookie-day bundle instead uses
     :meth:`Farm.dewstar_cookie_bonus`, which only carries the Cookie multiplier
     onto the bonus crops when Dewstar's Journal is held.
+
+    A seed-limited crop's (a Mega crop's or Spring's) grounded offers also consume
+    its seeds (:meth:`crops.Crop.seed_item` -- a full field per planting, one seed
+    per plot: ``PLOTS_PER_ROW * rows``), so the LP is bounded by the seeds held in
+    inventory: a limited seed cannot be readily replaced, and with none held the
+    offer is unusable. A normal crop's seeds are freely purchasable, so they are
+    not modelled.
     """
     day = timedelta(days=1)
     offers: list[Offer] = []
@@ -459,12 +466,21 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
         for item, rate in farm.dewstar_bonus(crop.name).items():
             bundle[item] = bundle.get(item, 0.0) + rate
         gj_per_unit = juices / (day / grow_time + juices)
+        # One unit of a plain grow offer is one full-field planting, sowing a
+        # seed in every plot -- a limited-seed crop's spend per unit.
+        seed = crop.seed_item if ground else None
+        seeds_per_planting = float(PLOTS_PER_ROW * farm.rows)
+        consumes: dict[str, float] = {}
+        if ground and gj_per_unit:
+            consumes["grape juice"] = gj_per_unit
+        if seed:
+            consumes[seed] = seeds_per_planting
         offers.append(
             Offer(
                 name=f"grow {crop.name}",
                 track=FARMING_TRACK,
                 yields=bundle,
-                consumes={"grape juice": gj_per_unit} if ground and gj_per_unit else {},
+                consumes=consumes,
                 gj=gj_per_unit,
                 time_per_unit=day / harvests_per_day,
             )
@@ -476,6 +492,7 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
                     name=f"grow {crop.name} without grape juice",
                     track=FARMING_TRACK,
                     yields=bundle,
+                    consumes={seed: seeds_per_planting} if seed else {},
                     time_per_unit=grow_time,
                 )
             )
@@ -485,12 +502,19 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
             }
             for item, rate in farm.dewstar_cookie_bonus(crop.name).items():
                 cookie_bundle[item] = cookie_bundle.get(item, 0.0) + rate
+            cookie_consumes: dict[str, float] = {}
+            if ground and juices:
+                cookie_consumes["grape juice"] = juices
+            if seed:
+                # A cookie day's plantings are the day's natural harvests plus the
+                # Grape Juice grows -- the window boosts yields, not plantings.
+                cookie_consumes[seed] = seeds_per_planting * harvests_per_day
             offers.append(
                 Offer(
                     name=f"grow {crop.name} with cookies",
                     track=FARMING_TRACK,
                     yields=cookie_bundle,
-                    consumes={"grape juice": juices} if ground and juices else {},
+                    consumes=cookie_consumes,
                     cookies=1,
                     gj=juices,
                     time_per_unit=day,

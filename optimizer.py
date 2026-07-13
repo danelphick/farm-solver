@@ -631,6 +631,49 @@ def _build_base(
     )
 
 
+def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
+    """Raise when a solve did not reach an optimum.
+
+    With every channel unbounded an obtainable demand is always satisfiable, but
+    a finitely-bounded supply -- a limited-seed crop (see
+    :meth:`crops.Crop.seed_item`) whose held seeds cap what it can ever grow --
+    makes a too-large demand *infeasible* rather than unobtainable. Unchecked,
+    the solver then leaves every variable at zero and the empty plan would be
+    reported as a 0-minute success.
+
+    Only an *uncapped* call's first solve is checked: those run first (the
+    endpoints, the favour_passive probe, a bare ``minimize``), so a genuine
+    capacity overflow raises there before any sweep begins. A capped sweep solve
+    and the refinement stages are feasible by construction -- the caps sit at or
+    above the endpoint times, and the pins at the previous stage's optimum -- so
+    a non-optimal status there is solver numerics (observed: HiGHS calls a
+    constraint with a ~1e-8-minute RHS infeasible), where keeping the
+    still-loaded solution is the right fallback.
+
+    A non-optimal status is itself only *suspected* infeasibility: HiGHS has been
+    seen flagging a feasible model "Unbounded" (impossible here -- the objective
+    is a sum of nonnegative terms -- so it is presolve mis-flagging the tiny
+    ~1e-8 gold-weight coefficients). Before declaring the demand unsatisfiable,
+    re-solve once with the bundled CBC as a second opinion; if it finds an
+    optimum, that (equally valid) solution is left loaded and the CBC solver is
+    returned so the caller's remaining refinement solves stay on the backend
+    that can actually handle this model. Returns the solver the rest of the
+    call should use.
+    """
+    if pulp.LpStatus[problem.status] == "Optimal":
+        return solver
+    fallback = pulp.PULP_CBC_CMD(msg=False)
+    problem.solve(fallback)
+    status = pulp.LpStatus[problem.status]
+    if status != "Optimal":
+        raise ValueError(
+            f"no plan can satisfy the demand (solver status: {status}); "
+            "a demanded item likely needs more than its limited sources "
+            "(e.g. held Mega/Spring seeds) can ever supply"
+        )
+    return fallback
+
+
 def _solve_configured(
     base: _Base,
     *,
@@ -689,7 +732,10 @@ def _solve_configured(
         # A tiny gold_weight buys freely for the fastest plan; a huge one buys
         # nothing (gold 0) for the slowest, fully self-sourced plan.
         problem.setObjective(base.makespan + gold_weight * base.gold)
-    problem.solve(_solver())
+    solver = _solver()
+    problem.solve(solver)
+    if time_cap is None:
+        solver = _assert_optimal(problem, solver)
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
     # optima CBC picks between at random across processes. Refine it in a
@@ -741,7 +787,7 @@ def _solve_configured(
                 )
             else:
                 problem.setObjective(base.gold)
-                problem.solve(_solver())
+                problem.solve(solver)
                 problem += (
                     base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
                     "stage2_pin",
@@ -755,7 +801,7 @@ def _solve_configured(
             + pulp.lpSum(base.pj.values())
             + (base.buy_cookie if base.buy_cookie is not None else 0)
         )
-        problem.solve(_solver())
+        problem.solve(solver)
 
     draws = [
         Draw(offer, units)

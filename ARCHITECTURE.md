@@ -122,7 +122,7 @@ frontier as before.
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
-| `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar) | `Crop`, `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE` |
+| `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
 | `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices` |
@@ -571,6 +571,32 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   the `hickory_omelette` select + `price_hickory_omelette` params
   (`webapi._CONFIG_PARAM_FLAGS` and the string-override special-case) map to the
   `sawmill.hickory_omelette` / `trading.hickory_omelette` overrides.
+- **Limited seeds (Mega/Spring)**: a crop whose CSV `Primary` differs from its
+  name (`crops.Crop.seed_item` — the Mega crops and Spring) has finite,
+  not-readily-replaceable seeds, so its grounded farming offers consume the held
+  seed item (`"<crop name> seeds"`, `PLOTS_PER_ROW * rows` seeds per full-field
+  planting; a cookie day consumes a day's plantings' worth). The LP's inventory
+  balance then caps plantings at seeds held **plus any modelled supply** (the
+  Hummingbird pet passively makes Spring Seeds; Bag of Spring Seeds opens into
+  them) — the same held-consumable grounding as the Acorn Pie, surfacing in the
+  report's From-inventory section. Ordinary seeds are store-bought in any
+  quantity and not modelled. Spring's real drops are the five flower colours
+  (its `Primary`, "Mixed Flowers", is the seed description's collective name,
+  not an item — hence `spring` sits in `DEWSTAR_EXCLUDED` alongside `mushroom`).
+  Note `seed_drops.csv` figures are **per row** (4 seeds each, `per_row_rate`),
+  not per seed — a normal crop is ~1/seed, a Mega/Spring seed 10/seed.
+- **Infeasible ≠ unobtainable** (`optimizer._assert_optimal`): a demand an
+  unusable channel can't source falls to `remainder`, but a demand *beyond a
+  bounded channel's total capacity* (only limited seeds create one today) makes
+  the LP infeasible — caught after every **uncapped** first solve (endpoints,
+  probe, bare `minimize`; capped sweep/refinement solves are feasible by
+  construction and HiGHS mis-flags their tiny-RHS pins, so they are exempt and
+  fall back to the still-loaded previous solution) and raised as a `ValueError`
+  (CLI: `error: ...`; web: HTTP error) instead of an empty 0-minute plan. A
+  non-Optimal status is first re-checked with the bundled CBC — HiGHS has
+  mis-flagged a feasible model "Unbounded" (impossible: the objective is a sum
+  of nonnegative terms) on the tiny gold-weight coefficients — and on rescue the
+  rest of that call's refinement stays on CBC.
 - **Held items seed obtainability**: `_obtainable` takes a `held` set —
   `_build_base` passes the held, non-demanded items any offer *consumes* (e.g. an
   Acorn Pie) so a channel grounded only in a held consumable is usable. Excludes
