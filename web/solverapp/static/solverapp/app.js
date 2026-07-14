@@ -47,9 +47,12 @@ const PRICE_FIELDS = {
 //   text/date -> <input type=text|date>, sent as a JSON string
 //   bool      -> <input type=checkbox>, initialised to the config default and
 //                sent (as a JSON boolean) only when toggled away from it -- so a
-//                checkbox left at its default sends nothing, and an auto-detected
-//                perk (Scythe of Dewstar, Dewstar's Journal -- absent from the
-//                config, so unchecked) stays auto-detected until you tick it.
+//                checkbox left at its default sends nothing. For definite
+//                settings (perks the game state can't reveal).
+//   autobool  -> Auto-detect / On / Off <select>, for perks the solver
+//                auto-detects from mastery/inventory (Scythe of Dewstar,
+//                Dewstar's Journal). "Auto-detect" (the default) sends nothing,
+//                leaving the auto-detection in place; On/Off force a JSON boolean.
 
 const EXPLORING_ZONES = [
   "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
@@ -77,8 +80,8 @@ const CONFIG_FIELDS = {
     { key: "farming.corn_speed_reduction", label: "Corn speed reduction (%)", type: "int" },
     { key: "farming.grape_juices_per_day", label: "Grape Juices / day", type: "int" },
     { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text" },
-    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "bool" },
-    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "bool" },
+    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "autobool" },
+    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool" },
   ],
 };
 
@@ -166,6 +169,13 @@ function configDefault(key) {
   );
 }
 
+// The initial value of an autobool <select>: "" (Auto-detect) unless the config
+// pins the perk on/off, in which case it starts at "true"/"false".
+function autoboolDefaultValue(key) {
+  const def = configDefault(key);
+  return def == null ? "" : String(!!def);
+}
+
 // One config control: a `.field-row` (or `.field-compact` in a grid) whose
 // input/select carries data-config-key/-type for readConfigParams/applyConfigParams.
 function createConfigField(field) {
@@ -181,6 +191,13 @@ function createConfigField(field) {
     input = document.createElement("input");
     input.type = "checkbox";
     input.checked = !!def;  // start at the config default; only a toggle is sent
+  } else if (field.type === "autobool") {
+    input = document.createElement("select");
+    input.add(new Option("Auto-detect", ""));
+    input.add(new Option("On", "true"));
+    input.add(new Option("Off", "false"));
+    input.classList.add("narrow");
+    input.value = autoboolDefaultValue(field.key);  // "" (auto) unless config forces it
   } else if (field.type === "date") {
     input = document.createElement("input");
     input.type = "date";
@@ -250,8 +267,9 @@ function readConfigParams() {
       return;
     }
     const raw = el.value;
-    if (raw === "" || raw == null) return;
-    if (type === "int") config[key] = parseInt(raw, 10);
+    if (raw === "" || raw == null) return;  // "" autobool = Auto-detect, no override
+    if (type === "autobool") config[key] = raw === "true";
+    else if (type === "int") config[key] = parseInt(raw, 10);
     else if (type === "float") config[key] = parseFloat(raw);
     else config[key] = raw; // text / date -> string
   });
@@ -262,8 +280,11 @@ function applyConfigParams(config) {
   config = config || {};
   document.querySelectorAll("[data-config-key]").forEach((el) => {
     const key = el.dataset.configKey;
-    if (el.dataset.configType === "bool") {
+    const type = el.dataset.configType;
+    if (type === "bool") {
       el.checked = key in config ? !!config[key] : !!configDefault(key);
+    } else if (type === "autobool") {
+      el.value = key in config ? String(!!config[key]) : autoboolDefaultValue(key);
     } else {
       el.value = key in config ? config[key] : "";
     }

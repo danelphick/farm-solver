@@ -716,13 +716,15 @@ that imports it without going through `manage.py`.
   collects every set control into one `{dotted key: value}` object sent as the
   `config` param (blank/"Default" omitted); `applyConfigParams` restores them.
   They all funnel through `webapi`'s generic `config` override channel, so no
-  per-field wiring exists server-side. Booleans are plain checkboxes
-  initialised to the config default; only a checkbox toggled *away* from its
-  default is sent (so an untouched auto-detected perk -- Scythe of Dewstar,
-  Dewstar's Journal, absent from the config -- stays auto-detected). Placeholders
-  and the checkboxes' initial states come from `configDefault`, which walks the
-  `#config-defaults` `<script>` JSON the index view injects via
-  `webapi.config_defaults` (from `web_default_config.toml`). Buildings groups its controls under `<h4>`
+  per-field wiring exists server-side. Definite booleans are plain checkboxes
+  initialised to the config default, only sent when toggled *away* from it;
+  perks the solver **auto-detects** from mastery/inventory (Scythe of Dewstar,
+  Dewstar's Journal -- the `autobool` type) instead get an Auto-detect / On /
+  Off `<select>`, where "Auto-detect" (the default) sends nothing and leaves
+  the auto-detection in place. Placeholders and the controls' initial states
+  come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
+  the index view injects via `webapi.config_defaults` (from
+  `web_default_config.toml`). Buildings groups its controls under `<h4>`
   sub-sections (mills combined); Pets renders a compact `.pet-grid`; Instant
   grow time moved from Advanced into the Farming pane (still its own
   `instant_grow_time` param, not the generic channel). `buildConfigPanels` runs
