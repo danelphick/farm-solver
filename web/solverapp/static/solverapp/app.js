@@ -45,9 +45,11 @@ const PRICE_FIELDS = {
 // `type` drives both the control and how its value is (de)serialised:
 //   int/float -> <input type=number>, sent as a JSON number
 //   text/date -> <input type=text|date>, sent as a JSON string
-//   bool      -> tri-state <select> (Default / On / Off); "Default" omits the
-//                key, On/Off send a JSON boolean. Auto-detected perks
-//                (Scythe of Dewstar, Dewstar's Journal) rely on "Default".
+//   bool      -> <input type=checkbox>, initialised to the config default and
+//                sent (as a JSON boolean) only when toggled away from it -- so a
+//                checkbox left at its default sends nothing, and an auto-detected
+//                perk (Scythe of Dewstar, Dewstar's Journal -- absent from the
+//                config, so unchecked) stays auto-detected until you tick it.
 
 const EXPLORING_ZONES = [
   "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
@@ -176,11 +178,9 @@ function createConfigField(field) {
   const def = configDefault(field.key);
   let input;
   if (field.type === "bool") {
-    input = document.createElement("select");
-    input.add(new Option(`Default (${def ? "on" : "off"})`, ""));
-    input.add(new Option("On", "true"));
-    input.add(new Option("Off", "false"));
-    input.classList.add("narrow");
+    input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!def;  // start at the config default; only a toggle is sent
   } else if (field.type === "date") {
     input = document.createElement("input");
     input.type = "date";
@@ -242,12 +242,16 @@ function buildConfigPanels() {
 function readConfigParams() {
   const config = {};
   document.querySelectorAll("[data-config-key]").forEach((el) => {
-    const raw = el.value;
-    if (raw === "" || raw == null) return;
     const key = el.dataset.configKey;
     const type = el.dataset.configType;
-    if (type === "bool") config[key] = raw === "true";
-    else if (type === "int") config[key] = parseInt(raw, 10);
+    if (type === "bool") {
+      // Only a checkbox toggled away from its default is an override.
+      if (el.checked !== !!configDefault(key)) config[key] = el.checked;
+      return;
+    }
+    const raw = el.value;
+    if (raw === "" || raw == null) return;
+    if (type === "int") config[key] = parseInt(raw, 10);
     else if (type === "float") config[key] = parseFloat(raw);
     else config[key] = raw; // text / date -> string
   });
@@ -258,10 +262,10 @@ function applyConfigParams(config) {
   config = config || {};
   document.querySelectorAll("[data-config-key]").forEach((el) => {
     const key = el.dataset.configKey;
-    if (key in config) {
-      el.value = el.dataset.configType === "bool" ? String(config[key]) : config[key];
+    if (el.dataset.configType === "bool") {
+      el.checked = key in config ? !!config[key] : !!configDefault(key);
     } else {
-      el.value = "";
+      el.value = key in config ? config[key] : "";
     }
   });
 }

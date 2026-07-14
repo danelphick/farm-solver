@@ -28,6 +28,7 @@ import hashlib
 import json
 from dataclasses import dataclass, replace
 from datetime import date
+from pathlib import Path
 
 import config
 import farm_solver
@@ -120,15 +121,36 @@ def _config_override_line(key: str, value: object) -> str:
     return f"{key}={literal}"
 
 
+# The web app's own default config, deliberately separate from the developer's
+# personal ``config.toml`` (which the CLI uses): a fresh browser session starts
+# from these values -- both the base config every solve builds on and the
+# placeholders the preference panels show. Copied from ``config.toml`` and
+# edited independently thereafter.
+WEB_CONFIG_PATH = Path(__file__).with_name("web_default_config.toml")
+
+
+def load_web_config() -> dict:
+    """Load the web app's default config (:data:`WEB_CONFIG_PATH`).
+
+    The web counterpart to :func:`main.load_config`: falls back to an empty
+    config if the file is missing, so the app still starts (every solve just
+    self-sources from scratch) rather than erroring.
+    """
+    try:
+        return config.load_config(WEB_CONFIG_PATH)
+    except FileNotFoundError:
+        return {}
+
+
 def config_defaults() -> dict:
     """The config sections the web UI's preference panels read for their defaults.
 
-    Each panel control shows the bundled ``config.toml`` value as its
-    placeholder (and drives the tri-state "Default (on/off)" bool labels), so a
-    blank control means "use the default". The ``[solver]`` section is withheld
-    -- it holds server-side file paths, nothing a control maps to.
+    Each panel control shows the :data:`WEB_CONFIG_PATH` value as its
+    placeholder (and a bool checkbox's initial on/off state), so a control left
+    at its default sends no override. The ``[solver]`` section is withheld -- it
+    holds server-side file paths, nothing a control maps to.
     """
-    cfg = main.load_config()
+    cfg = load_web_config()
     cfg.pop("solver", None)
     return cfg
 
@@ -373,7 +395,7 @@ def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> S
     request text) followed by the same three solve stages build_inputs /
     solve_frontier / derive_report_inputs main.run itself drives.
     """
-    cfg = main.load_config()
+    cfg = load_web_config()
     main.apply_overrides(cfg, args.override)
     # Mirror main.run: the calendar 'ignore' mode drops seasonal pets from the
     # config before anything reads [pets].

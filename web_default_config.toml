@@ -1,0 +1,202 @@
+[solver]
+# If data_directory is supplied and either of mastery_file or inventory_file are not then it will
+# look in the directory for data-files that start mastery and inventory. It will then treat the
+# suffix as a data and then sort to find the most recent files. E.g. mydata/inventory-2026-07-08.txt
+# and mydata/mastery-2026-07-08.txt
+data_directory = "./mydata"
+# mastery_file = "./sample-mastery.txt"
+# inventory_file = "./sample-inventory.txt"
+# How date-dependent sources -- a seasonal pet, the Mechanical Heart's monthly
+# grants -- are treated:
+#   "full"    model the calendar: each source counts only for the part of the
+#             plan it falls in (uses the plan's --start-date; costs an extra
+#             solve). The default.
+#   "average" smear each source to its steady-state yearly/monthly share.
+#   "ignore"  leave seasonal pets and the monthly grants out entirely.
+# --model-calendar / --average-calendar / --ignore-calendar override it for one run.
+# calendar = "full"
+
+[storehouse]
+inventory = 49620
+updated_on = "2026-07-09"
+growth = 20
+
+[sawmill]
+wood = 60000
+board = 46000
+oak = 6000
+have_pine_boost = true
+have_sturdy_saw = true
+# Hickory Omelette: a held/bought meal (priced in [trading]) that boosts the
+# sawmill by 20% for the hour it lasts. One of:
+#   "none"     don't use it.
+#   "all"      boost every output (oak, board, wood) for as long as the plan
+#              runs -- one omelette per boosted hour.
+#   "only_oak" only ever eat omelettes to speed Oak (the scarce output); Board
+#              and Wood are not boosted, so an omelette is never spent to get them.
+hickory_omelette = "all"
+
+[chicken_coop]
+produces = 18304
+completed_starmap = true
+
+[cow_pasture]
+milk = 16650
+
+[worm_habitat]
+worms = 10000
+gummy_worms = 4000
+mealworms = 4000
+
+[orchard]
+apple_trees = 6162
+orange_trees = 6175
+lemon_trees = 6165
+bonus = 1.3
+have_tree_shaker = true
+
+[raptor_pen]
+antlers = 2617810
+have_antler_snare = true
+
+[farmhouse]    # daily stamina for Apple Cider (inventory plan mode)
+stamina_cap = 98387          # natural max stamina on registered_on
+registered_on = "2026-07-05"
+have_mattress_pad = true     # cap grows +2/day instead of +1
+have_apple_pie_enthusiast = true  # daily stamina gain capped at 1M, not 500k
+
+[trout_bait_farm]
+trout = 25000
+grubs = 7000
+minnows = 6000
+
+[vineyard]
+grapes = 44000
+
+[steelworks]
+steel = 10296
+
+[hay_field]
+hay = 30000
+
+[quarry]
+stone = 8000
+coal = 8000
+
+[flour_mill]
+have_flour_power = true
+
+[feed_mill]
+have_feed_boost = true
+
+[sugar_cane_mill]
+have_sugar_boost_i = true
+have_sugar_boost_ii = true
+
+[fishing]
+have_reinforced_netting = true
+have_fishing_trawl = true
+use_sea_pincher = true
+
+[exploring]
+have_lemon_squeezer = true
+use_quandary_chowder = true
+# Apple Cider perks/meals (inventory plan mode). Cinnamon Sticks raises explores
+# per cider; wanderer_level (1=4%, 2=11%, 3=20%, 4=33%), the Neigh Neigh perk and
+# the Neigh meal each cut the stamina a cider explore costs, multiplicatively.
+have_cinnamon_sticks = true
+wanderer_level = 4
+have_neigh_neigh = true
+use_neigh = true
+# Gary's Crushroom's drop table changes if the "Fungus Processing and You"
+# artifact is held. By default this is auto-detected from the inventory file;
+# uncomment to force it on/off instead.
+# have_fungus_processing = true
+# The Mechanical Heart (the tower level 300 artifact) grants a monthly bulk of
+# consumables (3000 Apple Cider on the 7th, 2000 Arnold Palmer on the 14th), added
+# to passive production spread over the plan. Like the Scythe of Dewstar it is an
+# account perk, not a held item, so by default it is auto-detected from having met
+# every mastery requirement for level 300; uncomment to force it on/off instead.
+# have_mechanical_heart = true
+
+[exploring.effectiveness]  # per-zone Exploring Effectiveness for Apple Cider
+Forest = 136
+"Small Cave" = 104
+"Small Spring" = 120
+"Highland Hills" = 128
+"Cane Pole Ridge" = 104
+"Misty Forest" = 128
+"Black Rock Canyon" = 120
+"Mount Banon" = 104
+"Ember Lagoon" = 120
+"Whispering Creek" = 128
+"Jundland Desert" = 72
+"Gary's Crushroom" = 96
+"Sinking Swamp" = 152
+
+[farming]    # crop rows and growth modifiers; crops/drops come from the CSVs
+rows = 13
+double_crop_chance = 25    # percent chance a seed drops a second item
+speed_reduction = 90       # percent faster every crop grows
+corn_speed_reduction = 20  # corn's further percent reduction
+grape_juices_per_day = 14
+cookies_grow_time_threshold = "18m"  # min grow time a cookie set may boost
+instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
+# The Scythe of Dewstar gives 4 bonus crops per row every harvest. It is an
+# account perk, not a held item, so by default it is auto-detected from having
+# met every mastery requirement for level 250; uncomment to force it on/off instead.
+# have_scythe_of_dewstar = true
+# Dewstar's Journal extends the Cookie bonus to those bonus crops. It IS a held
+# item, so by default it is auto-detected from the inventory file; uncomment to
+# force it on/off instead.
+# have_dewstars_journal = true
+
+[trading]    # player-to-player gold trade prices, to rank plans by real gold cost
+# Priced in gold per 1000 units ("gk"); the solver divides by 1000 for the
+# per-unit gold. Grape Juice is not traded directly -- its price is derived from
+# grapes (200 to a juice, its workshop recipe), which trade for Arnold Palmers
+# rather than gold, so `grapes` is in "apk" (Arnold Palmers per 1000).
+orange_juice  = 8
+apple_cider   = 20
+arnold_palmer = 60
+large_net     = 10
+grapes          = 5  # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
+cookie_set      = 20 # priced individually, in gold each (not gk)
+hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
+
+[mastery]    # Pumpkin Juice: a bought item that instantly boosts one mastery goal
+# by 10% of its tier. Off by default; --use-pumpkin-juice[=N] overrides this.
+# `true` lets the solver use any number, an integer caps the total, `false` is off.
+use_pumpkin_juice = false
+pumpkin_juice_price = 230   # nominal gold cost of one Pumpkin Juice
+
+[pets]    # each pet's current level; tier items come from pets.csv
+use_crunchy_omelette = true
+"Cat" = 8
+"Wolf" = 8
+"Owl" = 8
+"Dog" = 8
+"Squirrel" = 8
+"Swine" = 8
+"Snake" = 8
+"Lemur" = 8
+"Baboon" = 8
+"Frog" = 8
+"Hedgehog" = 8
+"Fox" = 8
+"Armadillo" = 8
+"Spider" = 8
+"Pet Rock" = 8
+"Bird" = 8
+"Penguin" = 8
+"Green Dragon" = 8
+"Red Dragon" = 8
+"Blue Dragon" = 8
+"Bear" = 8
+"Capybara" = 8
+"Strange Onion" = 8
+"Seal" = 8
+"Skunk" = 8
+"Polar Bear" = 8
+"Hummingbird" = 8
+"Shark" = 8

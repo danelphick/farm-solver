@@ -229,6 +229,14 @@ def test_params_to_args_rejects_config_key_that_is_not_dotted():
         webapi.params_to_args({"config": {"rows": 15}})
 
 
+def test_load_web_config_reads_the_web_default_file():
+    # The web app's defaults come from web_default_config.toml, separate from
+    # the developer's personal config.toml that the CLI uses.
+    assert webapi.WEB_CONFIG_PATH.name == "web_default_config.toml"
+    cfg = webapi.load_web_config()
+    assert cfg["farming"]["rows"] == 13
+
+
 def test_config_defaults_exposes_game_sections_without_solver():
     defaults = webapi.config_defaults()
     assert "solver" not in defaults  # withheld: holds server file paths

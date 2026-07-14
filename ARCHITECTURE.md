@@ -133,7 +133,7 @@ frontier as before.
 | File | Owns | Key names |
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule` |
-| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `config_defaults` (bundled `config.toml` minus `[solver]`, injected into the page for the panels' placeholders), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
+| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers` (Hickory Omelette boost, `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
@@ -150,7 +150,9 @@ frontier as before.
 | `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.api_solve`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
 
 Data lives in `*.csv` (crops, fishing, exploring, pets, openables, tower,
-seed_drops) and `config.toml`; game state comes from pasted text files.
+seed_drops) and `config.toml`; game state comes from pasted text files. The
+web app has its own `web_default_config.toml` (a copy of `config.toml`, edited
+independently) for a fresh session's defaults -- see `webapi.load_web_config`.
 
 ## Core data types
 
@@ -714,10 +716,13 @@ that imports it without going through `manage.py`.
   collects every set control into one `{dotted key: value}` object sent as the
   `config` param (blank/"Default" omitted); `applyConfigParams` restores them.
   They all funnel through `webapi`'s generic `config` override channel, so no
-  per-field wiring exists server-side. Placeholders (and the tri-state bool
-  "Default (on/off)" labels) come from `configDefault`, which walks the
+  per-field wiring exists server-side. Booleans are plain checkboxes
+  initialised to the config default; only a checkbox toggled *away* from its
+  default is sent (so an untouched auto-detected perk -- Scythe of Dewstar,
+  Dewstar's Journal, absent from the config -- stays auto-detected). Placeholders
+  and the checkboxes' initial states come from `configDefault`, which walks the
   `#config-defaults` `<script>` JSON the index view injects via
-  `webapi.config_defaults`. Buildings groups its controls under `<h4>`
+  `webapi.config_defaults` (from `web_default_config.toml`). Buildings groups its controls under `<h4>`
   sub-sections (mills combined); Pets renders a compact `.pet-grid`; Instant
   grow time moved from Advanced into the Farming pane (still its own
   `instant_grow_time` param, not the generic channel). `buildConfigPanels` runs
