@@ -513,6 +513,7 @@ function renderResult(data) {
   }
 
   $("#solution-section").innerHTML = data.solution_html;
+  markUnreachableGoalRows();
 
   const noteBlocks = [];
   (data.notes || []).forEach((note) => {
@@ -527,6 +528,7 @@ function renderResult(data) {
   wireFrontierRows(data.frontier.plans || []);
 
   $("#plan-section").innerHTML = data.plan.html;
+  collapsePlanGroups();
 
   const craftsHtml = (data.crafts && data.crafts.html) || "";
   $("#crafts-section").innerHTML = craftsHtml;
@@ -545,6 +547,168 @@ function colourNoteTags(row) {
   cell.innerHTML = cell.innerHTML
     .replace(/\bfastest\b/g, '<span class="tag-fastest">fastest</span>')
     .replace(/\bcheapest\b/g, '<span class="tag-cheapest">cheapest</span>');
+}
+
+// report.UNREACHABLE_GOAL_MARK ("✗") flags a Goal row whose item has no known
+// source at all (report.markdown_solution appends it to "Still needed"); tint
+// that row so it stands out from the rows the plan can actually cover.
+function markUnreachableGoalRows() {
+  const rows = document.querySelectorAll("#solution-section table tbody tr");
+  rows.forEach((row) => {
+    if (row.textContent.includes("✗")) {
+      row.classList.add("unreachable-goal");
+    }
+  });
+}
+
+// Parses a table cell/text's leading number the way report.py formats them
+// ("47,427", "-44,371,440", "2,009 ✗") -- comma thousands, optional sign,
+// trailing junk ignored.
+function parseReportNumber(text) {
+  const match = text.replace(/,/g, "").match(/-?\d+(\.\d+)?/);
+  return match ? parseFloat(match[0]) : 0;
+}
+
+// Sums a group's table's first column (each of Fishing/Exploring/Exploring
+// (Apple Cider)/Opening (Locksmith)'s first column is exactly the one count
+// that section is "about" -- Large Nets, Arnold Palmers, Apple Cider, opens).
+function sumFirstColumn(body, unitLabel) {
+  const table = body.find((el) => el.tagName === "TABLE");
+  if (!table) return null;
+  let total = 0;
+  table.querySelectorAll("tbody tr").forEach((row) => {
+    const cell = row.querySelector("td");
+    if (cell) total += parseReportNumber(cell.textContent);
+  });
+  if (total <= 0) return null;
+  return `${Math.round(total).toLocaleString()} ${unitLabel}`;
+}
+
+// report.markdown_plan's Stamina section (see the doc.heading("Stamina") call)
+// is a bullet list: one "N spent on Apple Cider" line (the only stamina sink
+// modelled) plus one "Drink/Eat ... -> N stamina" line per topup source --
+// sum those for gained, since the banked-at-start and Farmhouse-rate lines
+// aren't sums of a plan action the way the topups are.
+function staminaStat(body) {
+  const list = body.find((el) => el.tagName === "UL");
+  if (!list) return null;
+  let used = 0;
+  let gained = 0;
+  list.querySelectorAll("li").forEach((li) => {
+    const text = li.textContent;
+    const spent = text.match(/^([\d,]+) spent on Apple Cider/);
+    if (spent) used += parseReportNumber(spent[1]);
+    const topup = text.match(/-> ([\d,]+) stamina$/);
+    if (topup) gained += parseReportNumber(topup[1]);
+  });
+  if (!used && !gained) return null;
+  return (
+    `${Math.round(gained).toLocaleString()} gained, ` +
+    `${Math.round(used).toLocaleString()} used`
+  );
+}
+
+// Per-group summary-stat extractors, keyed by the group's exact (static)
+// heading text -- Sawmill boost isn't here because its heading text is
+// static but has no single number to sum. Groups with neither an extractor
+// nor a match in DYNAMIC_HEADING_RE (Passive production, From inventory)
+// fall through to GROUP_TOTAL_LINE_RE below, or show no stat at all when
+// collapsed -- per spec, only "if one exists".
+const GROUP_STAT_EXTRACTORS = {
+  "Fishing": (body) => sumFirstColumn(body, "Large Nets"),
+  "Exploring (Arnold Palmer)": (body) => sumFirstColumn(body, "Arnold Palmers"),
+  "Exploring (Apple Cider)": (body) => sumFirstColumn(body, "Apple Cider"),
+  "Opening (Locksmith)": (body) => sumFirstColumn(body, "opened"),
+  "Stamina": staminaStat,
+};
+
+// Buy/Pumpkin Juice/Surplus each end in their own "Total: ..."/"Nominal
+// value: ..." paragraph (see markdown_plan/markdown_surplus_value) -- no
+// extractor needed, just echo that line.
+const GROUP_TOTAL_LINE_RE = /^(Total|Nominal value):/i;
+
+// Farming and Critical path bake their one number straight into the heading
+// text (`f"Farming ({duration}, ...)"` / `f"Critical path (sets the
+// {duration} total)"` in report.markdown_plan) instead of a static label --
+// unlike Exploring (Apple Cider)/Opening (Locksmith), where the parenthesised
+// text is part of the group's name, not a figure. Split those two off here so
+// they read the same as every other group: a plain bold label plus the stat
+// in a muted `.summary-detail`, not baked into the always-visible heading.
+const DYNAMIC_HEADINGS = [
+  { label: "Farming", re: /^Farming \((.+)\)$/ },
+  { label: "Critical path", re: /^Critical path \((.+)\)$/ },
+];
+
+// report.markdown_plan renders the selected plan as a flat run of <h3>
+// section headings (Fishing, Exploring (Arnold Palmer), Farming, Surplus,
+// ...) each followed by that section's table/list/paragraphs. Turn every one
+// into its own collapsible <details> so a long plan can be skimmed section by
+// section -- collapsed by default (the "Expand all"/"Collapse all" buttons
+// next to the "Selected plan" heading, wired in init(), open/close every one
+// at once).
+//
+// Collapsed, a section still needs to read at a glance, so each gets a
+// summary stat where one is available (a DYNAMIC_HEADINGS split,
+// GROUP_STAT_EXTRACTORS, or a trailing total paragraph) echoed into the
+// <summary> as a `.summary-detail` span -- the same class the Goal pane's
+// collapsed-state summary uses; existing CSS already hides `.summary-detail`
+// while its <details> is open, so it only appears once collapsed, and the
+// section's own content (table, total paragraph, ...) is left in place for
+// the expanded view.
+function collapsePlanGroups() {
+  const container = $("#plan-section");
+  if (!container) return;
+  const headings = Array.from(container.querySelectorAll(":scope > h3"));
+  headings.forEach((heading) => {
+    const body = [];
+    for (let node = heading.nextElementSibling; node && node.tagName !== "H3"; ) {
+      const next = node.nextElementSibling;
+      body.push(node);
+      node = next;
+    }
+    const rawText = heading.textContent.trim();
+    let label = rawText;
+    let statText = null;
+    for (const { label: dynLabel, re } of DYNAMIC_HEADINGS) {
+      const match = rawText.match(re);
+      if (match) {
+        label = dynLabel;
+        statText = match[1];
+        break;
+      }
+    }
+    if (!statText) {
+      const extractor = GROUP_STAT_EXTRACTORS[label];
+      statText = extractor ? extractor(body) : null;
+    }
+    if (!statText) {
+      const totalLine = body.find(
+        (el) => el.tagName === "P" && GROUP_TOTAL_LINE_RE.test(el.textContent)
+      );
+      if (totalLine) statText = totalLine.textContent;
+    }
+    const details = document.createElement("details");
+    details.className = "plan-group";
+    details.open = false;
+    const summary = document.createElement("summary");
+    summary.textContent = label;
+    if (statText) {
+      const stat = document.createElement("span");
+      stat.className = "summary-detail";
+      stat.textContent = ` — ${statText}`;
+      summary.appendChild(stat);
+    }
+    details.appendChild(summary);
+    body.forEach((el) => details.appendChild(el));
+    heading.replaceWith(details);
+  });
+}
+
+// Wired to the "Expand all"/"Collapse all" buttons next to "Selected plan".
+function setAllPlanGroupsOpen(open) {
+  document.querySelectorAll("#plan-section > details.plan-group").forEach((details) => {
+    details.open = open;
+  });
 }
 
 function wireFrontierRows(plans) {
@@ -580,6 +744,8 @@ function onAnyChange() {
 }
 
 function init() {
+  $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
+  $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));
   $("#target").addEventListener("change", () => {
     $("#level").hidden = $("#target").value !== "level";
     onAnyChange();

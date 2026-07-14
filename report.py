@@ -21,6 +21,8 @@ from datetime import timedelta
 
 from rich.console import Console
 from rich.markdown import Markdown as RichMarkdown
+from rich.segment import Segment, Segments
+from rich.style import Style
 
 import config
 import crafting
@@ -65,7 +67,11 @@ def _column_is_numeric(rows: list[list[str]], index: int) -> bool:
         if index < len(row) and str(row[index]).strip()
     ]
     numeric = sum(bool(_NUMERIC_CELL_RE.match(cell)) for cell in cells)
-    return bool(cells) and numeric * 2 > len(cells)
+    # >= not >: at least half (not a strict majority) reads as numeric, so an
+    # even split -- one "done" Goal row against one real shortfall, the case
+    # that motivated this heuristic -- still rides along right-aligned instead
+    # of flipping the whole column back to left.
+    return bool(cells) and numeric * 2 >= len(cells)
 
 
 class MarkdownDoc:
@@ -122,13 +128,27 @@ class MarkdownDoc:
         return "\n\n".join(self._blocks) + "\n"
 
 
-def print_solution(solution: farm_solver.Solution) -> None:
+# Marks a goal item the frontier can't source at all (it's fully stuck in
+# ``remainder`` -- see ``optimizer._obtainable``); appended to its "Still
+# needed" cell/line. A plain Unicode glyph rather than markup, so it reads the
+# same in plain text, a raw-markdown redirect, rich's terminal rendering and
+# the web UI's rendered HTML -- the web UI additionally styles the row red by
+# detecting this glyph client-side (see app.js's ``markUnreachableGoalRows``).
+UNREACHABLE_GOAL_MARK = "✗"  # ✗
+
+
+def print_solution(
+    solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+) -> None:
+    remainder = remainder or {}
+    unreachable = {item.lower() for item in remainder}
     for need in solution.needs:
         prefix = f"T{need.level}: " if need.level is not None else ""
         if need.extra > 0:
+            mark = f" {UNREACHABLE_GOAL_MARK}" if need.item.lower() in unreachable else ""
             print(
                 f"{prefix}{need.item}: need {need.extra:,} more "
-                f"(have {need.have:,} of {need.target:,})"
+                f"(have {need.have:,} of {need.target:,}){mark}"
             )
         else:
             print(
@@ -139,9 +159,29 @@ def print_solution(solution: farm_solver.Solution) -> None:
     for note in solution.notes:
         print(note)
 
+    if remainder:
+        print("\nMaterials with no known source (supply yourself):")
+        for material in sorted(remainder):
+            print(f"  {remainder[material]:,}x {material}")
 
-def markdown_solution(doc: MarkdownDoc, solution: farm_solver.Solution) -> None:
-    """Markdown counterpart to :func:`print_solution`: the goal needs as a table."""
+
+def markdown_solution(
+    doc: MarkdownDoc,
+    solution: farm_solver.Solution,
+    remainder: dict[str, int] | None = None,
+) -> None:
+    """Markdown counterpart to :func:`print_solution`: the goal needs as a table.
+
+    ``remainder`` (a completed frontier's ``plans[0].remainder`` -- identical
+    across every plan in one run, since it comes from demand vs. obtainability,
+    not any plan's own choices) flags a goal item the frontier could not source
+    at all: its "Still needed" cell gets :data:`UNREACHABLE_GOAL_MARK` appended,
+    and the "Materials with no known source" table -- moved here from the foot
+    of the selected plan so it reads before, not after, everything the frontier
+    *did* work out -- lists what's missing right below.
+    """
+    remainder = remainder or {}
+    unreachable = {item.lower() for item in remainder}
     if solution.needs:
         doc.heading("Goal")
         headers = ["Purpose", "Item", "Have", "Target", "Still needed"]
@@ -155,16 +195,26 @@ def markdown_solution(doc: MarkdownDoc, solution: farm_solver.Solution) -> None:
                 purpose = "Mastery"
             else:
                 purpose = "Inventory"
+            if need.extra > 0:
+                still_needed = f"{need.extra:,}"
+                if need.item.lower() in unreachable:
+                    still_needed += f" {UNREACHABLE_GOAL_MARK}"
+            else:
+                still_needed = "done"
             rows.append([
                 purpose,
                 need.item,
                 f"{need.have:,}",
                 f"{need.target:,}",
-                f"{need.extra:,}" if need.extra > 0 else "done",
+                still_needed,
             ])
         doc.table(headers, rows)
     for note in solution.notes:
         doc.para(note)
+    if remainder:
+        rows = [[material, f"{remainder[material]:,}"] for material in sorted(remainder)]
+        doc.heading("Materials with no known source (supply yourself)")
+        doc.table(["Material", "Qty"], rows)
 
 
 def print_unobtainable(materials: list[str]) -> None:
@@ -1255,7 +1305,7 @@ def print_plan(
     ]
     cider_draws = [d for d in exploring_draws if d.offer.consumes.get("apple cider")]
     if palmer_draws:
-        print("\nExploring:")
+        print("\nExploring (Arnold Palmer):")
         ordered = sorted(palmer_draws, key=lambda d: d.ap, reverse=True)
         width = _num_width(math.ceil(d.units) for d in ordered)
         for draw in ordered:
@@ -1548,11 +1598,11 @@ def print_plan(
             plan, demand, recipes, crafting_bonus, open_flows, inventory, prices,
             display,
         )
-
-    if plan.remainder:
-        print("\nMaterials with no known source (supply yourself):")
-        for material in sorted(plan.remainder):
-            print(f"  {plan.remainder[material]:,}x {material}")
+    # plan.remainder (materials with no known source) is reported once, up in
+    # the Goal section (print_solution/markdown_solution) rather than here --
+    # it's identical across every plan in the frontier (a property of demand
+    # vs. obtainability, not this plan's own choices), and reads better before
+    # the frontier/plan detail than after it.
 
 
 def markdown_plan(
@@ -1624,7 +1674,7 @@ def markdown_plan(
             ]
             for d in ordered
         ]
-        doc.heading("Exploring")
+        doc.heading("Exploring (Arnold Palmer)")
         doc.table(
             ["Arnold Palmers", "Location", "Yields"],
             rows,
@@ -1893,14 +1943,9 @@ def markdown_plan(
             doc, plan, demand, ctx.recipes, crafting_bonus, ctx.open_flows,
             inventory, prices, display,
         )
-
-    if plan.remainder:
-        rows = [
-            [material, f"{plan.remainder[material]:,}"]
-            for material in sorted(plan.remainder)
-        ]
-        doc.heading("Materials with no known source (supply yourself)")
-        doc.table(["Material", "Qty"], rows)
+    # plan.remainder (materials with no known source) is reported once, up in
+    # the Goal section (print_solution/markdown_solution) rather than here --
+    # see print_plan's matching comment.
 
 
 def _craft_order(plan: optimizer.SourcingPlan, workshop: crafting.Workshop) -> list[str]:
@@ -1998,7 +2043,9 @@ class Reporter:
     stdout isn't one (so redirecting to a ``.md`` file gets real Markdown).
     """
 
-    def solution(self, solution: farm_solver.Solution) -> None:
+    def solution(
+        self, solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+    ) -> None:
         raise NotImplementedError
 
     def unobtainable(self, materials: list[str]) -> None:
@@ -2052,8 +2099,10 @@ class Reporter:
 class TextReporter(Reporter):
     """Prints straight to stdout, exactly as every report function always has."""
 
-    def solution(self, solution: farm_solver.Solution) -> None:
-        print_solution(solution)
+    def solution(
+        self, solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+    ) -> None:
+        print_solution(solution, remainder)
 
     def unobtainable(self, materials: list[str]) -> None:
         print_unobtainable(materials)
@@ -2069,6 +2118,30 @@ class TextReporter(Reporter):
 
     def crafts(self, *args, **kwargs) -> None:
         print_crafts(*args, **kwargs)
+
+
+def _highlight_unreachable_rows(console: Console, text: str) -> Segments:
+    """Recolor red any rendered line naming an unreachable goal.
+
+    Plain Markdown (and rich's parser of it) has no per-row/per-cell colour, so
+    :data:`UNREACHABLE_GOAL_MARK` is the only signal available -- this renders
+    the document once via the normal Markdown path, then walks the resulting
+    lines and overrides just the foreground colour of any line containing the
+    mark, leaving everything else (bold headers, table rules, wrapping) as
+    `rich` already laid it out.
+    """
+    lines = console.render_lines(RichMarkdown(text), console.options, pad=True)
+    red = Style(color="red")
+    segments: list[Segment] = []
+    for line in lines:
+        if UNREACHABLE_GOAL_MARK in "".join(segment.text for segment in line):
+            line = [
+                Segment(segment.text, (segment.style or Style()) + red, segment.control)
+                for segment in line
+            ]
+        segments.extend(line)
+        segments.append(Segment.line())
+    return Segments(segments)
 
 
 class MarkdownReporter(Reporter):
@@ -2088,8 +2161,10 @@ class MarkdownReporter(Reporter):
         self.doc = MarkdownDoc()
         self.pager = pager
 
-    def solution(self, solution: farm_solver.Solution) -> None:
-        markdown_solution(self.doc, solution)
+    def solution(
+        self, solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+    ) -> None:
+        markdown_solution(self.doc, solution, remainder)
 
     def unobtainable(self, materials: list[str]) -> None:
         markdown_unobtainable(self.doc, materials)
@@ -2116,11 +2191,16 @@ class MarkdownReporter(Reporter):
             print(text)
             return
         console = Console()
+        renderable = (
+            _highlight_unreachable_rows(console, text)
+            if UNREACHABLE_GOAL_MARK in text
+            else RichMarkdown(text)
+        )
         if self.pager:
             with console.pager(styles=True):
-                console.print(RichMarkdown(text))
+                console.print(renderable)
         else:
-            console.print(RichMarkdown(text))
+            console.print(renderable)
 
 
 class SectionedReporter(Reporter):
@@ -2147,8 +2227,10 @@ class SectionedReporter(Reporter):
         }
         self.notes: list[str] = []
 
-    def solution(self, solution: farm_solver.Solution) -> None:
-        markdown_solution(self.docs["solution"], solution)
+    def solution(
+        self, solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+    ) -> None:
+        markdown_solution(self.docs["solution"], solution, remainder)
 
     def unobtainable(self, materials: list[str]) -> None:
         markdown_unobtainable(self.docs["solution"], materials)

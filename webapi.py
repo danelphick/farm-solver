@@ -304,7 +304,7 @@ def _empty_plan_context() -> main.PlanContextData:
 
 def _nothing_to_source_result(inputs: main.SolveInputs, resolved: bool) -> SolveResult:
     reporter = report.SectionedReporter()
-    reporter.solution(inputs.solution)
+    reporter.solution(inputs.solution)  # no plans, so no remainder to report
     reporter.note("Nothing left to source.")
     return SolveResult(
         sections={name: doc.render() for name, doc in reporter.docs.items()},
@@ -425,7 +425,7 @@ def render(
     session = replace(session, ctx=ctx)
 
     reporter = report.SectionedReporter()
-    reporter.solution(inputs.solution)
+    reporter.solution(inputs.solution, fr.plans[0].remainder)
     if inputs.model_calendar:
         dated = []
         if any(name.lower() in pets.SEASONAL_MONTHS for name in session.cfg.get("pets", {})):

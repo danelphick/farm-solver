@@ -350,6 +350,33 @@ details[open] > summary .summary-detail {
   padding-bottom: 0.25rem;
 }
 
+/* Wraps the "Selected plan" h2 with the expand/collapse-all buttons; the row
+   itself carries the border-bottom/padding #results h2 normally would, so
+   the h2 inside doesn't double it up. */
+.plan-heading-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+
+/* #results h2's specificity (ID + element) beats a plain ".plan-heading-row
+   > h2" class rule, so the override needs the #results prefix too, or the h2's
+   own border-bottom (sized to its fit-content flex-item width, not the row's
+   full width) still shows as a short underline under just the text. */
+#results .plan-heading-row > h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.plan-group-controls {
+  display: flex;
+  gap: 0.4rem;
+  flex: none;
+}
+
 /* The report markdown nests h3/h4 under the pane's h2 (MarkdownDoc's
    heading_shift); unstyled they'd keep browser defaults, where h3 (1.17em)
    outsizes the 1.1rem h2 above and inverts the hierarchy. */
@@ -359,6 +386,30 @@ details[open] > summary .summary-detail {
 
 #results h4 {
   font-size: 0.85rem;
+}
+
+/* Each plan section (Fishing, Farming, Surplus, ...) collapses on its own
+   (collapsePlanGroups in app.js wraps report.markdown_plan's h3-delimited
+   groups into these); summary takes over #results h3's sizing since the
+   original heading is gone. */
+.plan-group {
+  margin: 0.5rem 0 1rem;
+}
+
+.plan-group > summary {
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.plan-group > summary .summary-detail {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.plan-group[open] > summary {
+  margin-bottom: 0.5rem;
 }
 
 .report-section table {
@@ -424,6 +475,14 @@ details[open] > summary .summary-detail {
 
 #crafts-section > h3:first-child {
   display: none;
+}
+
+/* A Goal row with no known source at all (report.UNREACHABLE_GOAL_MARK, "✗",
+   flagged client-side by markUnreachableGoalRows). Reuses the error palette,
+   already tuned for contrast in both themes. */
+#solution-section table tbody tr.unreachable-goal {
+  background: var(--error-bg);
+  color: var(--error);
 }
 
 .note {

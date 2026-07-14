@@ -93,7 +93,25 @@ and drives the `Reporter` off their results:
    fastest first.
 5. **Print** — `main.run` picks a `report.Reporter` from `--format`
    (`report.build_reporter`; `TextReporter` prints immediately as before,
-   `MarkdownReporter` buffers into a `MarkdownDoc`) and calls its `.frontier`
+   `MarkdownReporter` buffers into a `MarkdownDoc`) and calls `solve_frontier`
+   *before* `.solution` (not after, despite the Goal section printing first) so
+   it can pass the frontier's `plans[0].remainder` in — identical across every
+   plan in one run (demand vs. obtainability, not any plan's own choices), so
+   any plan names the same goal items nothing can source. `.solution` flags
+   each such row with `report.UNREACHABLE_GOAL_MARK` ("✗") and lists them in a
+   "Materials with no known source" table right below the Goal table — moved
+   there (from the foot of `.plan`) so it reads before, not after, what the
+   frontier *did* work out; the web UI (`app.js`'s `markUnreachableGoalRows`)
+   tints that row red client-side by detecting the same mark. Markdown itself
+   (and `rich`'s parser of it) has no per-row colour, so `MarkdownReporter`'s
+   terminal path gets the same red row a different way:
+   `report._highlight_unreachable_rows` renders the document once through the
+   normal `rich` Markdown path, then walks the resulting lines and overrides
+   just the foreground of any line containing the mark — everything else
+   (borders, headers, wrapping) stays as `rich` laid it out. Skipped (falls
+   straight back to `RichMarkdown`) when the mark never appears, and moot for
+   a non-tty redirect, which prints the raw Markdown source with no ANSI at
+   all. Then `.frontier`
    (the table), `.plan` for the selected plan (critical path + per-channel
    actions), optional `.crafts`, then `.finish()` (a no-op for text; for
    Markdown, renders through `rich` to a terminal or prints the raw Markdown
@@ -388,7 +406,9 @@ this process's own stdout to a pager externally makes stdout a non-tty before
 
 - Sections: Fishing, Exploring, Opening (Locksmith), Farming, Passive production,
   From inventory (held consumables), Buy (with gold), Pumpkin Juice (mastery boost),
-  Surplus, remainder. The Buy total is `plan.gold` **net of `pumpkin_gold`** (the
+  Surplus. (`plan.remainder` — materials with no known source — is reported once, up
+  in the Goal section via `print_solution`/`markdown_solution`, not repeated here; see
+  the pipeline's "Print" step.) The Buy total is `plan.gold` **net of `pumpkin_gold`** (the
   juice is listed apart); the frontier table gains a **Pumpkin Juice** column
   (`_pumpkin_juices`) when a plan drinks any. The Pumpkin Juice section names the
   **mastery levels to drink each juice at** (`main.pumpkin_juice_schedule`: `target −
@@ -685,7 +705,31 @@ that imports it without going through `manage.py`.
   `items.txt` (the broad catalogue the Item picker suggests -- every
   `mydata/mastery-*.txt`/`inventory-*.txt` snapshot unioned with every
   per-domain data file: crops, seed drops, fishing, exploring, pets,
-  openables, tower, workshop recipes + materials).
+  openables, tower, workshop recipes + materials). `collapsePlanGroups`
+  (called after `plan.html` is set) turns `markdown_plan`'s flat run of `<h3>`
+  sections (Fishing, Exploring (Arnold Palmer), Farming, Surplus, ...) into
+  individually collapsible `<details class="plan-group">`, collapsed by
+  default; the "Expand all"/"Collapse all" buttons next to the "Selected
+  plan" heading (`setAllPlanGroupsOpen`) toggle every one at once. Collapsed,
+  a group still needs to read at a glance, so every group's `<summary>` is
+  its plain label plus a stat in a `.summary-detail` span -- the same class
+  the Goal pane's collapsed-state summary uses, so existing CSS
+  (`details[open] > summary .summary-detail { display: none; }`) already
+  hides it once expanded. The label/stat split comes from one of three
+  places: `DYNAMIC_HEADINGS` regex-splits Farming's and Critical path's
+  heading text (the only two that bake a number straight into the heading --
+  `f"Farming ({duration}, ...)"` / `f"Critical path (sets the {duration}
+  total)"` in `report.markdown_plan` -- unlike Exploring (Apple Cider)/Opening
+  (Locksmith), where the parenthesised text is part of the group's *name*,
+  not a figure); `GROUP_STAT_EXTRACTORS` (keyed by the group's exact static
+  heading text) sums the one column each of Fishing/Exploring (Arnold
+  Palmer)/Exploring (Apple Cider)/Opening (Locksmith) is "about" (Large
+  Nets/Arnold Palmers/Apple Cider/opens -- always that table's first column)
+  and parses Stamina's bullet list for its gained/used totals; failing both,
+  `GROUP_TOTAL_LINE_RE` echoes a trailing "Total: .../Nominal value: ..."
+  paragraph (Buy, Pumpkin Juice, Surplus). Groups matching none of the three
+  (Passive production, From inventory, Sawmill boost) show no stat when
+  collapsed -- per spec, only "if one exists".
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --

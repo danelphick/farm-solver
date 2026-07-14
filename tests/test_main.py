@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from crafting import Workshop, WorkshopRecipe
 from crops import Farm
+from rich.console import Console
 import pytest
 
 import argparse
@@ -39,13 +40,18 @@ from main import (
     within_limits,
 )
 from report import (
+    UNREACHABLE_GOAL_MARK,
+    MarkdownDoc,
     SectionedReporter,
     _frontier_reasons,
+    _highlight_unreachable_rows,
     _slowest_passive_items,
+    markdown_solution,
     print_crafts,
     print_critical_path,
     print_frontier,
     print_plan,
+    print_solution,
 )
 from optimizer import SourcingPlan
 from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
@@ -419,7 +425,7 @@ def test_print_frontier_rounds_partial_cookie_sets_up(capsys):
     assert "12 sets" in out
 
 
-def test_print_plan_renders_each_channel_and_the_remainder(capsys):
+def test_print_plan_renders_each_channel(capsys):
     demand = {"Drum": 500, "Bone": 100, "Corn": 1000, "Board": 2000}
     plan = SourcingPlan(
         draws=[
@@ -434,6 +440,8 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
                 200,
             ),
         ],
+        # Materials with no known source (e.g. Magicite here) are reported once,
+        # up in the Goal section (print_solution), not repeated in the plan.
         remainder={"Magicite": 3},
     )
     print_plan(plan, demand, Farm(grape_juices_per_day=14), Workshop(), 1.45)
@@ -441,15 +449,68 @@ def test_print_plan_renders_each_channel_and_the_remainder(capsys):
 
     assert "Fishing:" in out
     assert "5x Large Net at Small Pond (Drum)" in out
-    assert "Exploring:" in out
+    assert "Exploring (Arnold Palmer):" in out
     assert "2x Arnold Palmer at Cave (100x Bone)" in out
     assert "Farming (1d 1h):" in out  # 25 Harvest Alls * 1h, grown one at a time
     assert "Harvest Alls of Corn" in out
     # Board at 10/min needs 200 min = 3h 20m, shown per item under passive.
     assert "Passive production (concurrent):" in out
     assert "2,000x Board in 3h 20m" in out
-    # Items with no offer to make them are listed as a remainder.
-    assert "3x Magicite" in out
+    assert "Magicite" not in out
+
+
+def test_print_solution_flags_a_goal_with_no_known_source(capsys):
+    solution = Solution(
+        needs=[
+            ItemNeed(item="Yule Goat", have=17991, target=20000, is_mastery=True),
+            ItemNeed(item="Wood", have=10, target=100),
+        ]
+    )
+    print_solution(solution, remainder={"Yule Goat": 1826})
+    out = capsys.readouterr().out
+
+    assert "Yule Goat: need 2,009 more (have 17,991 of 20,000) ✗" in out
+    assert "Wood: need 90 more (have 10 of 100)\n" in out
+    assert "Materials with no known source (supply yourself):" in out
+    assert "1,826x Yule Goat" in out
+
+
+def test_markdown_solution_flags_a_goal_with_no_known_source():
+    doc = MarkdownDoc()
+    solution = Solution(
+        needs=[ItemNeed(item="Yule Goat", have=17991, target=20000, is_mastery=True)]
+    )
+    markdown_solution(doc, solution, remainder={"Yule Goat": 1826})
+    text = doc.render()
+
+    assert "## Goal" in text
+    assert "| 2,009 ✗ |" in text
+    heading_index = text.index("## Materials with no known source")
+    goal_index = text.index("## Goal")
+    assert goal_index < heading_index
+    assert "| Yule Goat | 1,826 |" in text
+
+
+def test_highlight_unreachable_rows_colours_only_the_flagged_line():
+    # MarkdownReporter.finish's terminal path: plain Markdown/rich have no
+    # per-row colour, so this walks rich's own rendered lines and recolours
+    # the ones naming an unreachable goal -- everything else (borders,
+    # headers, the "done" row) keeps rich's default styling.
+    console = Console(width=40, force_terminal=True, color_system="standard")
+    text = (
+        "| Item | Still needed |\n"
+        "| --- | --- |\n"
+        f"| Yule Goat | 5 {UNREACHABLE_GOAL_MARK} |\n"
+        "| Wood | done |\n"
+    )
+    segments = _highlight_unreachable_rows(console, text)
+    with console.capture() as capture:
+        console.print(segments)
+    out = capture.get()
+    goat_line = next(line for line in out.splitlines() if "Yule Goat" in line)
+    wood_line = next(line for line in out.splitlines() if "Wood" in line)
+    assert "\x1b[31m" in goat_line
+    assert "\x1b[31m" not in wood_line
 
 
 def test_print_plan_names_the_acorn_pies_a_pie_explore_eats(capsys):

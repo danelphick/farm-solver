@@ -1489,9 +1489,13 @@ def run(args: argparse.Namespace) -> int:
         )
 
     inputs = build_inputs(args, cfg, state)
-    reporter.solution(inputs.solution)
 
     fr = solve_frontier(inputs, args, cfg)
+    # plan.remainder is identical across every plan the frontier produced (it
+    # comes from demand vs. obtainability, not any plan's own choices), so any
+    # one of them names the goal items nothing can source -- report it here,
+    # up in the Goal section, rather than waiting for the selected plan below.
+    reporter.solution(inputs.solution, fr.plans[0].remainder if fr.plans else None)
     if not fr.plans:
         reporter.finish()
         return 0  # nothing left to source
