@@ -708,9 +708,18 @@ that imports it without going through `manage.py`.
   openables, tower, workshop recipes + materials). `collapsePlanGroups`
   (called after `plan.html` is set) turns `markdown_plan`'s flat run of `<h3>`
   sections (Fishing, Exploring (Arnold Palmer), Farming, Surplus, ...) into
-  individually collapsible `<details class="plan-group">`, collapsed by
-  default; the "Expand all"/"Collapse all" buttons next to the "Selected
-  plan" heading (`setAllPlanGroupsOpen`) toggle every one at once. Collapsed,
+  individually collapsible `<details class="plan-group">`, closed by default
+  the first time a group is seen; the "Expand all"/"Collapse all" buttons
+  next to the "Selected plan" heading (`setAllPlanGroupsOpen`) toggle every
+  currently-shown one at once. `#plan-section`'s whole DOM is torn down and
+  rebuilt on every re-solve (a plan switch, any param edit), so each group's
+  open/closed state is persisted separately, in the module-level
+  `planGroupOpenState` map keyed by the group's label -- a `"toggle"`
+  listener on each `<details>` covers a manual click, `setAllPlanGroupsOpen`
+  writes the map directly for its batch of programmatic changes rather than
+  relying on that listener (browsers -- and jsdom -- don't guarantee
+  `"toggle"` fires synchronously for those). A never-before-seen group still
+  defaults closed. Collapsed,
   a group still needs to read at a glance, so every group's `<summary>` is
   its plain label plus a stat in a `.summary-detail` span -- the same class
   the Goal pane's collapsed-state summary uses, so existing CSS

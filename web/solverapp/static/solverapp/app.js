@@ -639,13 +639,23 @@ const DYNAMIC_HEADINGS = [
   { label: "Critical path", re: /^Critical path \((.+)\)$/ },
 ];
 
+// Persists each group's open/closed state across re-renders (switching
+// plans, changing a param, ...) within this page load, keyed by the group's
+// label -- #plan-section's whole DOM is torn down and rebuilt on every
+// render, so the <details> elements themselves don't survive to remember it.
+// A live-session convenience only, not saved to localStorage. A group not
+// yet seen this session (or never toggled) defaults to closed.
+const planGroupOpenState = {};
+
 // report.markdown_plan renders the selected plan as a flat run of <h3>
 // section headings (Fishing, Exploring (Arnold Palmer), Farming, Surplus,
 // ...) each followed by that section's table/list/paragraphs. Turn every one
 // into its own collapsible <details> so a long plan can be skimmed section by
-// section -- collapsed by default (the "Expand all"/"Collapse all" buttons
-// next to the "Selected plan" heading, wired in init(), open/close every one
-// at once).
+// section -- closed by default the first time a group is seen, but remembers
+// each one's open/closed state after that (planGroupOpenState) so re-solving
+// (a plan switch, any param edit) doesn't reset what the user had open. The
+// "Expand all"/"Collapse all" buttons next to the "Selected plan" heading
+// (wired in init()) open/close every currently-shown one at once.
 //
 // Collapsed, a section still needs to read at a glance, so each gets a
 // summary stat where one is available (a DYNAMIC_HEADINGS split,
@@ -689,7 +699,15 @@ function collapsePlanGroups() {
     }
     const details = document.createElement("details");
     details.className = "plan-group";
-    details.open = false;
+    details.dataset.groupLabel = label;
+    details.open = planGroupOpenState[label] || false;
+    // Real clicks toggle synchronously enough for this to stay in sync, but
+    // setAllPlanGroupsOpen below writes planGroupOpenState directly rather
+    // than relying on this for its batch of programmatic changes -- browsers
+    // (and jsdom) don't guarantee "toggle" fires synchronously for those.
+    details.addEventListener("toggle", () => {
+      planGroupOpenState[label] = details.open;
+    });
     const summary = document.createElement("summary");
     summary.textContent = label;
     if (statText) {
@@ -708,6 +726,7 @@ function collapsePlanGroups() {
 function setAllPlanGroupsOpen(open) {
   document.querySelectorAll("#plan-section > details.plan-group").forEach((details) => {
     details.open = open;
+    planGroupOpenState[details.dataset.groupLabel] = open;
   });
 }
 
