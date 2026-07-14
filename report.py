@@ -349,8 +349,18 @@ def markdown_frontier(
     reasons: list[str | None] | None = None,
     prices: dict[str, float] | None = None,
     golds: list[tuple[float, float]] | None = None,
+    include_selected_tag: bool = True,
 ) -> None:
-    """Markdown counterpart to :func:`print_frontier`: the same rows, as a table."""
+    """Markdown counterpart to :func:`print_frontier`: the same rows, as a table.
+
+    ``include_selected_tag`` is off for the web app (see
+    ``SectionedReporter.frontier``): its frontier table already highlights the
+    selected row with a CSS class/border (``wireFrontierRows`` in app.js), so
+    a redundant "selected" word in the Notes cell only costs a reflow every
+    time a click moves it from one row's text to another's. The CLI (through
+    ``MarkdownReporter``, both the raw Markdown source and the terminal
+    render) has no such highlight, so it keeps the word -- the default.
+    """
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
     show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
@@ -401,7 +411,7 @@ def markdown_frontier(
             tags.append("fastest")
         if i == cheapest:
             tags.append("cheapest")
-        if i == selected:
+        if include_selected_tag and i == selected:
             tags.append("selected")
         notes = []
         if tags:
@@ -2240,7 +2250,11 @@ class SectionedReporter(Reporter):
         self.docs["notes"].para(text)
 
     def frontier(self, *args, **kwargs) -> None:
-        markdown_frontier(self.docs["frontier"], *args, **kwargs)
+        # The web app's own row highlight already shows selection; see
+        # markdown_frontier's include_selected_tag docstring.
+        markdown_frontier(
+            self.docs["frontier"], *args, include_selected_tag=False, **kwargs
+        )
 
     def plan(self, *args, **kwargs) -> None:
         markdown_plan(self.docs["plan"], *args, **kwargs)

@@ -46,6 +46,7 @@ from report import (
     _frontier_reasons,
     _highlight_unreachable_rows,
     _slowest_passive_items,
+    markdown_frontier,
     markdown_solution,
     print_crafts,
     print_critical_path,
@@ -344,6 +345,24 @@ def test_print_frontier_tags_fastest_selected_and_cheapest(capsys):
     lines = [line.rstrip() for line in capsys.readouterr().out.splitlines()]
     assert "   1. 0m + 100 AP + 20 LN  [fastest]" in lines
     assert " > 3. 3d + 0 AP + 0 LN  [cheapest]" in lines
+
+
+def test_markdown_frontier_tags_selected_by_default_but_not_for_the_web_app():
+    # The CLI's raw Markdown/terminal render has no row highlight, so it keeps
+    # the "selected" word (default include_selected_tag=True); the web app's
+    # SectionedReporter forces it off since its own CSS row highlight already
+    # shows selection, and the word appearing/disappearing on click was
+    # causing a layout shift.
+    doc = MarkdownDoc()
+    markdown_frontier(doc, PLANS, selected=2, cheapest=2)
+    text = doc.render()
+    assert "[cheapest, selected]" in text
+
+    reporter = SectionedReporter()
+    reporter.frontier(PLANS, selected=2, cheapest=2)
+    web_text = reporter.docs["frontier"].render()
+    assert "selected" not in web_text
+    assert "[cheapest]" in web_text
 
 
 def test_frontier_reasons_name_the_full_requirement_resource():

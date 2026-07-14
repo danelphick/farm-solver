@@ -387,7 +387,14 @@ document, so a caller can render/refresh sections independently (e.g. a
 refilter only touches the frontier and plan tables); `.finish()` is a no-op,
 there being no single rendering step. It calls the exact same `markdown_*`
 functions as `MarkdownReporter`, so it shares every decision with both other
-reporters -- only which `MarkdownDoc` a call's output lands in differs.
+reporters -- only which `MarkdownDoc` a call's output lands in differs -- with
+one deliberate exception: `SectionedReporter.frontier` passes
+`markdown_frontier`'s `include_selected_tag=False`, dropping the "selected"
+word from the Notes cell's `[fastest, cheapest, selected]` tag. The web app's
+own row highlight (`wireFrontierRows` in app.js) already shows which plan is
+selected, so the redundant word only cost a layout shift each time a click
+moved it from one row's Notes cell to another's; the CLI (through
+`MarkdownReporter`, no such highlight) keeps it, the default.
 `MarkdownReporter` buffers
 into a `MarkdownDoc` (one block per heading/paragraph/bullet-list/table) and
 only renders in `.finish()`: via `rich.markdown.Markdown` through
