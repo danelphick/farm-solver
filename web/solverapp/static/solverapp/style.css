@@ -173,9 +173,11 @@ details[open] > summary .summary-detail {
   }
 
   /* One column: dissolve the stacks and order the panes explicitly, rather
-     than letting the left stack's Goal/Limits/Advanced trio come first. Every
-     pane needs an order (an unset one defaults to 0 and would jump ahead of
-     these); Advanced is deliberately last. */
+     than letting the whole left stack come first then the whole right one.
+     Every pane needs an order (an unset one defaults to 0 and would jump ahead
+     of these); Advanced is deliberately last. The two-column split (which pane
+     sits in which .controls-col) is independent of this order and is balanced
+     by hand -- keep it ~even (currently 5 left / 4 right) when adding panes. */
   .controls-grid {
     grid-template-columns: 1fr;
   }
