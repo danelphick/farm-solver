@@ -69,13 +69,17 @@ h1 {
 }
 
 .status {
-  display: inline-block;
-  margin-top: 0.5rem;
-  padding: 0.25rem 0.6rem;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 100;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.35rem 0.7rem;
   border-radius: 0.4rem;
   background: var(--panel);
   border: 1px solid var(--border);
   font-size: 0.85rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
 
 .status-pending {

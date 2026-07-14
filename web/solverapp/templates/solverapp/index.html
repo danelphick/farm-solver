@@ -15,7 +15,6 @@
     the server -- your state and settings are saved to this browser's
     <code>localStorage</code> only.
   </p>
-  <div id="status" class="status" aria-live="polite">Paste your data to begin.</div>
 </header>
 
 <main>
@@ -206,6 +205,8 @@
     <div id="crafts-section" class="report-section"></div>
   </details>
 </section>
+
+<div id="status" class="status" role="status" aria-live="polite">Paste your data to begin.</div>
 
 <script type="module" src="{% static 'solverapp/app.js' %}"></script>
 </body>
