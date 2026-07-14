@@ -514,6 +514,7 @@ function renderResult(data) {
 
   $("#solution-section").innerHTML = data.solution_html;
   markUnreachableGoalRows();
+  collapseGoalSection();
 
   const noteBlocks = [];
   (data.notes || []).forEach((note) => {
@@ -559,6 +560,68 @@ function markUnreachableGoalRows() {
       row.classList.add("unreachable-goal");
     }
   });
+}
+
+// Persists the Goal section's open/closed state across re-renders within this
+// page load (#solution-section is rebuilt every solve, so the <details> itself
+// doesn't survive). Session-only, like planGroupOpenState; defaults open.
+let goalSectionOpen = true;
+
+// report.markdown_solution renders the goal needs as an <h2>Goal</h2> heading
+// followed by a table (and any note paragraphs), then optionally a separate
+// "Materials with no known source" <h2> + table. Wrap just the Goal heading and
+// its table into a collapsible <details> so a long goal list (a full tower run
+// expands to dozens of per-level requirement rows) can be folded away; the
+// Materials section, being a warning, is deliberately left outside so it never
+// hides. Collapsed, the summary reads at a glance: the number of goal rows plus
+// the highest tower level named (the Purpose column's "T<level>" cells), echoed
+// into a `.summary-detail` span that existing CSS hides once expanded.
+function collapseGoalSection() {
+  const container = $("#solution-section");
+  if (!container) return;
+  const heading = Array.from(container.querySelectorAll(":scope > h2")).find(
+    (h) => h.textContent.trim() === "Goal"
+  );
+  if (!heading) return;
+
+  const body = [];
+  for (let node = heading.nextElementSibling; node && node.tagName !== "H2"; ) {
+    const next = node.nextElementSibling;
+    body.push(node);
+    node = next;
+  }
+
+  // Only the goal table sits in `body`; the "Materials with no known source"
+  // table is a later <h2> section, outside it.
+  const table = body.find((el) => el.tagName === "TABLE");
+  const rows = table ? table.querySelectorAll("tbody tr") : [];
+  const count = rows.length;
+  let maxLevel = 0;
+  rows.forEach((row) => {
+    const purpose = row.querySelector("td");
+    const match = purpose && purpose.textContent.trim().match(/^T(\d+)$/);
+    if (match) maxLevel = Math.max(maxLevel, parseInt(match[1], 10));
+  });
+
+  const parts = [`${count} goal${count === 1 ? "" : "s"}`];
+  if (maxLevel) parts.push(`Tower Level ${maxLevel}`);
+  const statText = parts.join(", ");
+
+  const details = document.createElement("details");
+  details.className = "goal-group";
+  details.open = goalSectionOpen;
+  details.addEventListener("toggle", () => {
+    goalSectionOpen = details.open;
+  });
+  const summary = document.createElement("summary");
+  summary.textContent = "Goal";
+  const stat = document.createElement("span");
+  stat.className = "summary-detail";
+  stat.textContent = ` — ${statText}`;
+  summary.appendChild(stat);
+  details.appendChild(summary);
+  body.forEach((el) => details.appendChild(el));
+  heading.replaceWith(details);
 }
 
 // Parses a table cell/text's leading number the way report.py formats them

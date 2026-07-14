@@ -416,6 +416,28 @@ details[open] > summary .summary-detail {
   margin-bottom: 0.5rem;
 }
 
+/* The Goal report section is wrapped into a <details> by collapseGoalSection;
+   its <summary> stands in for the original <h2>Goal</h2>, so it carries the
+   same size/underline #results h2 has. */
+.goal-group {
+  margin: 0 0 1rem;
+}
+
+.goal-group > summary {
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.goal-group > summary .summary-detail {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .report-section table {
   width: 100%;
   border-collapse: collapse;

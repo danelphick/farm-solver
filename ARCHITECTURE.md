@@ -718,7 +718,13 @@ that imports it without going through `manage.py`.
   individually collapsible `<details class="plan-group">`, closed by default
   the first time a group is seen; the "Expand all"/"Collapse all" buttons
   next to the "Selected plan" heading (`setAllPlanGroupsOpen`) toggle every
-  currently-shown one at once. `#plan-section`'s whole DOM is torn down and
+  currently-shown one at once. `collapseGoalSection` (called after
+  `solution_html` is set) does the same for `markdown_solution`'s Goal heading
+  and its table -- one collapsible `<details class="goal-group">` whose summary,
+  when collapsed, adds a `.summary-detail` stat of the goal-row count plus the
+  highest tower level named (the Purpose column's `T<level>` cells), defaulting
+  open (session-only state in `goalSectionOpen`); the later "Materials with no
+  known source" `<h2>` is deliberately left outside so that warning never hides. `#plan-section`'s whole DOM is torn down and
   rebuilt on every re-solve (a plan switch, any param edit), so each group's
   open/closed state is persisted separately, in the module-level
   `planGroupOpenState` map keyed by the group's label -- a `"toggle"`
