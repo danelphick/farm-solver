@@ -383,6 +383,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        metavar="FILE",
+        help=(
+            "config file to load instead of the bundled config.toml (e.g. "
+            "web_default_config.toml, the web app's defaults). --override still "
+            "applies on top"
+        ),
+    )
+    parser.add_argument(
         "--override-inventory",
         metavar="ITEM:AMOUNT[,...]",
         help=(
@@ -1023,10 +1033,10 @@ def cookie_sets_available(
     return min((inventory.get(item, 0.0) for item in COOKIE_ITEMS), default=0.0)
 
 
-def load_config() -> dict:
-    """Read the config file, or an empty config if there is none."""
+def load_config(path: Path | None = None) -> dict:
+    """Read the config file (``path``, else the bundled default), or ``{}`` if none."""
     try:
-        return config.load_config()
+        return config.load_config(path)
     except FileNotFoundError:
         return {}
 
@@ -1440,7 +1450,7 @@ def run(args: argparse.Namespace) -> int:
     # All output goes through this: text prints immediately (today's behaviour),
     # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
     reporter = report.build_reporter(args.format, pager=args.pager)
-    cfg = load_config()
+    cfg = load_config(args.config)
     apply_overrides(cfg, args.override)
     # In the calendar 'ignore' mode seasonal pets contribute nothing: drop them
     # from the config before anything reads [pets] (build_inputs separately

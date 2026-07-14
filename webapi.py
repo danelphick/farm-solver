@@ -152,12 +152,13 @@ def args_to_command(args: argparse.Namespace) -> str:
     (``args.override``), so this never re-derives that mapping. Only settings
     whose value differs from the CLI default are emitted, to keep it short.
 
-    The mastery/inventory the browser pasted are *not* on the command -- the CLI
-    reads them from files, so the command relies on the configured data
-    directory (point ``--mastery-file``/``--inventory-file`` at your own files if
-    they differ), and uses ``config.toml`` rather than ``web_default_config.toml``.
+    The command loads the same ``web_default_config.toml`` the web app uses
+    (via ``--config``), so only the mastery/inventory differ: the CLI reads
+    those from files rather than the browser's paste, so it relies on the
+    configured data directory (point ``--mastery-file``/``--inventory-file`` at
+    your own files if they differ).
     """
-    tokens: list[str] = ["python", "main.py"]
+    tokens: list[str] = ["python", "main.py", "--config", WEB_CONFIG_PATH.name]
 
     def add(flag: str, value: object) -> None:
         tokens.append(flag)

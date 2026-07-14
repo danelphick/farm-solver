@@ -248,7 +248,7 @@ def test_args_to_command_reconstructs_the_cli_invocation():
         "price_arnold_palmer": 55,
     })
     command = webapi.args_to_command(args)
-    assert command.startswith("python main.py")
+    assert command.startswith("python main.py --config web_default_config.toml")
     assert "--target 150" in command
     assert "-m 'Gold Bar:1000000'" in command  # shell-quoted
     assert "--max-gold 500" in command
@@ -260,9 +260,9 @@ def test_args_to_command_reconstructs_the_cli_invocation():
 
 
 def test_args_to_command_omits_defaults():
-    # A bare request produces just the program and its ever-present target.
+    # A bare request is just the program, the web config, and the target.
     command = webapi.args_to_command(webapi.params_to_args({"target": "tower"}))
-    assert command == "python main.py --target tower"
+    assert command == "python main.py --config web_default_config.toml --target tower"
 
 
 def test_config_defaults_exposes_game_sections_without_solver():
