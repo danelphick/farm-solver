@@ -115,6 +115,18 @@ const BUILDING_SECTIONS = [
     { key: "farmhouse.have_apple_pie_enthusiast", label: "Apple Pie Enthusiast", type: "bool",
       help: "Apple Pie Enthusiast perk: daily stamina gain is capped at 1M instead of 500k." },
   ] },
+  { title: "Sawmill", fields: [
+    { key: "sawmill.wood", label: "Wood / hr", type: "int",
+      help: "Wood the sawmill produces per hour." },
+    { key: "sawmill.board", label: "Board / hr", type: "int",
+      help: "Board the sawmill produces per hour." },
+    { key: "sawmill.oak", label: "Oak / hr", type: "int",
+      help: "Oak the sawmill produces per hour (only with the Sturdy Saw)." },
+    { key: "sawmill.have_pine_boost", label: "Pine Boost", type: "bool",
+      help: "Pine Boost: the sawmill makes 2 pine board per minute instead of 1." },
+    { key: "sawmill.have_sturdy_saw", label: "Sturdy Saw", type: "bool",
+      help: "Sturdy Saw: enables the sawmill's Oak output. (The Hickory Omelette boost is set under Resources.)" },
+  ] },
   { title: "Chicken coop", fields: [
     { key: "chicken_coop.produces", label: "Produces / day", type: "int",
       help: "Eggs the coop produces per day." },
