@@ -184,7 +184,8 @@ function createConfigField(field) {
   } else if (field.type === "date") {
     input = document.createElement("input");
     input.type = "date";
-    input.classList.add("narrow");
+    // Not `.narrow`: a date field needs room for dd/mm/yyyy + the picker button.
+    input.classList.add("date-field");
   } else {
     input = document.createElement("input");
     input.type = field.type === "text" ? "text" : "number";

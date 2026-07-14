@@ -286,6 +286,12 @@ details[open] > summary .summary-detail {
   flex: 0 0 9rem;
 }
 
+/* Date config fields (storehouse "Updated on", farmhouse "Registered on") need
+   room for the full dd/mm/yyyy plus the picker button. */
+.field-row input.date-field {
+  flex: 0 0 10rem;
+}
+
 /* Generated preference panels (Exploring effectiveness / Farming / Pets /
    Buildings): the Buildings pane groups its controls under <h4> sub-sections. */
 .config-section + .config-section {
