@@ -192,16 +192,32 @@ details[open] > summary .summary-detail {
     order: 2;
   }
 
-  #limits-details {
+  #effectiveness-details {
     order: 3;
   }
 
-  #trading-details {
+  #limits-details {
     order: 4;
   }
 
-  #advanced-details {
+  #farming-details {
     order: 5;
+  }
+
+  #pets-details {
+    order: 6;
+  }
+
+  #buildings-details {
+    order: 7;
+  }
+
+  #trading-details {
+    order: 8;
+  }
+
+  #advanced-details {
+    order: 9;
   }
 }
 
@@ -262,6 +278,59 @@ details[open] > summary .summary-detail {
 
 .field-row input.narrow {
   flex: 0 0 6rem;
+}
+
+/* Tri-state config bool selects ("Default (off)" / On / Off) need room for the
+   longest label but shouldn't stretch full width like a plain field-row select. */
+.field-row select.narrow {
+  flex: 0 0 9rem;
+}
+
+/* Generated preference panels (Exploring effectiveness / Farming / Pets /
+   Buildings): the Buildings pane groups its controls under <h4> sub-sections. */
+.config-section + .config-section {
+  margin-top: 0.9rem;
+}
+
+.config-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.2rem;
+}
+
+/* Pet levels: a compact 2-column grid rather than 28 full-width rows. */
+.pet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.field-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.field-compact label {
+  flex: 1 1 auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.field-compact input {
+  flex: 0 0 4rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 0;
 }
 
 /* The start date always displays a date, but until the user picks one it

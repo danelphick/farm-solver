@@ -31,6 +31,240 @@ const PRICE_FIELDS = {
   price_hickory_omelette: "#price-hickory-omelette",
 };
 
+// --- Config preference panels -----------------------------------------------
+//
+// The Exploring effectiveness / Farming / Pets / Buildings panes are generated
+// from these declarative schemas rather than hand-written markup: each field
+// maps to one config `section.flag` override, and they all funnel through the
+// single `config` request param (a {dotted key: value} object -- see
+// webapi.params_to_args / _config_override_line), the structured sibling of the
+// free-text overrides box. A blank/"Default" control sends nothing, so the
+// server falls back to config.toml; the field's placeholder shows that default
+// (window-injected via the #config-defaults <script>, read by configDefault).
+//
+// `type` drives both the control and how its value is (de)serialised:
+//   int/float -> <input type=number>, sent as a JSON number
+//   text/date -> <input type=text|date>, sent as a JSON string
+//   bool      -> tri-state <select> (Default / On / Off); "Default" omits the
+//                key, On/Off send a JSON boolean. Auto-detected perks
+//                (Scythe of Dewstar, Dewstar's Journal) rely on "Default".
+
+const EXPLORING_ZONES = [
+  "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
+  "Misty Forest", "Black Rock Canyon", "Mount Banon", "Ember Lagoon",
+  "Whispering Creek", "Jundland Desert", "Gary's Crushroom", "Sinking Swamp",
+];
+
+const PET_NAMES = [
+  "Cat", "Wolf", "Owl", "Dog", "Squirrel", "Swine", "Snake", "Lemur", "Baboon",
+  "Frog", "Hedgehog", "Fox", "Armadillo", "Spider", "Pet Rock", "Bird",
+  "Penguin", "Green Dragon", "Red Dragon", "Blue Dragon", "Bear", "Capybara",
+  "Strange Onion", "Seal", "Skunk", "Polar Bear", "Hummingbird", "Shark",
+];
+
+// Flat field lists (one control each), keyed by the container's data-config
+// attribute in the template.
+const CONFIG_FIELDS = {
+  effectiveness: EXPLORING_ZONES.map((zone) => ({
+    key: `exploring.effectiveness.${zone}`, label: zone, type: "int",
+  })),
+  farming: [
+    { key: "farming.rows", label: "Rows", type: "int" },
+    { key: "farming.double_crop_chance", label: "Double crop chance (%)", type: "int" },
+    { key: "farming.speed_reduction", label: "Speed reduction (%)", type: "int" },
+    { key: "farming.corn_speed_reduction", label: "Corn speed reduction (%)", type: "int" },
+    { key: "farming.grape_juices_per_day", label: "Grape Juices / day", type: "int" },
+    { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text" },
+    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "bool" },
+    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "bool" },
+  ],
+};
+
+// The Buildings pane groups its fields into <h4> sub-sections; the mills share
+// one section (few parameters each) per the spec.
+const BUILDING_SECTIONS = [
+  { title: "Storehouse", fields: [
+    { key: "storehouse.inventory", label: "Inventory", type: "int" },
+    { key: "storehouse.growth", label: "Growth / day", type: "int" },
+    { key: "storehouse.updated_on", label: "Updated on", type: "date" },
+  ] },
+  { title: "Farmhouse", fields: [
+    { key: "farmhouse.stamina_cap", label: "Stamina cap", type: "int" },
+    { key: "farmhouse.registered_on", label: "Registered on", type: "date" },
+    { key: "farmhouse.have_mattress_pad", label: "Mattress Pad", type: "bool" },
+    { key: "farmhouse.have_apple_pie_enthusiast", label: "Apple Pie Enthusiast", type: "bool" },
+  ] },
+  { title: "Chicken coop", fields: [
+    { key: "chicken_coop.produces", label: "Produces / day", type: "int" },
+    { key: "chicken_coop.completed_starmap", label: "Completed starmap", type: "bool" },
+  ] },
+  { title: "Cow pasture", fields: [
+    { key: "cow_pasture.milk", label: "Milk / day", type: "int" },
+  ] },
+  { title: "Worm habitat", fields: [
+    { key: "worm_habitat.worms", label: "Worms / hr", type: "int" },
+    { key: "worm_habitat.gummy_worms", label: "Gummy Worms / hr", type: "int" },
+    { key: "worm_habitat.mealworms", label: "Mealworms / hr", type: "int" },
+  ] },
+  { title: "Orchard", fields: [
+    { key: "orchard.apple_trees", label: "Apple trees", type: "int" },
+    { key: "orchard.orange_trees", label: "Orange trees", type: "int" },
+    { key: "orchard.lemon_trees", label: "Lemon trees", type: "int" },
+    { key: "orchard.bonus", label: "Bonus multiplier", type: "float" },
+    { key: "orchard.have_tree_shaker", label: "Tree Shaker", type: "bool" },
+  ] },
+  { title: "Raptor pen", fields: [
+    { key: "raptor_pen.antlers", label: "Antlers / day", type: "int" },
+    { key: "raptor_pen.have_antler_snare", label: "Antler Snare", type: "bool" },
+  ] },
+  { title: "Trout bait farm", fields: [
+    { key: "trout_bait_farm.trout", label: "Trout / day", type: "int" },
+    { key: "trout_bait_farm.grubs", label: "Grubs / hr", type: "int" },
+    { key: "trout_bait_farm.minnows", label: "Minnows / hr", type: "int" },
+  ] },
+  { title: "Vineyard", fields: [
+    { key: "vineyard.grapes", label: "Grapes / day", type: "int" },
+  ] },
+  { title: "Steelworks", fields: [
+    { key: "steelworks.steel", label: "Steel / hr", type: "int" },
+  ] },
+  { title: "Hayfield", fields: [
+    { key: "hay_field.hay", label: "Straw / 10 min", type: "int" },
+  ] },
+  { title: "Quarry", fields: [
+    { key: "quarry.stone", label: "Stone / 10 min", type: "int" },
+    { key: "quarry.coal", label: "Coal / hr", type: "int" },
+  ] },
+  { title: "Mills", fields: [
+    { key: "flour_mill.have_flour_power", label: "Flour Power", type: "bool" },
+    { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool" },
+    { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool" },
+    { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool" },
+  ] },
+];
+
+// Bundled config.toml values injected by the index view (see views.index).
+let CONFIG_DEFAULTS = {};
+
+function readConfigDefaults() {
+  const el = document.getElementById("config-defaults");
+  if (!el) return;
+  try {
+    CONFIG_DEFAULTS = JSON.parse(el.textContent) || {};
+  } catch (err) {
+    CONFIG_DEFAULTS = {};
+  }
+}
+
+// Walk a dotted config key ("exploring.effectiveness.Forest") into the injected
+// defaults; undefined if the section/flag isn't in the bundled config.
+function configDefault(key) {
+  return key.split(".").reduce(
+    (node, part) => (node == null ? undefined : node[part]), CONFIG_DEFAULTS
+  );
+}
+
+// One config control: a `.field-row` (or `.field-compact` in a grid) whose
+// input/select carries data-config-key/-type for readConfigParams/applyConfigParams.
+function createConfigField(field) {
+  const row = document.createElement("div");
+  row.className = field.compact ? "field-compact" : "field-row";
+  const label = document.createElement("label");
+  label.textContent = field.label;
+  row.appendChild(label);
+
+  const def = configDefault(field.key);
+  let input;
+  if (field.type === "bool") {
+    input = document.createElement("select");
+    input.add(new Option(`Default (${def ? "on" : "off"})`, ""));
+    input.add(new Option("On", "true"));
+    input.add(new Option("Off", "false"));
+    input.classList.add("narrow");
+  } else if (field.type === "date") {
+    input = document.createElement("input");
+    input.type = "date";
+    input.classList.add("narrow");
+  } else {
+    input = document.createElement("input");
+    input.type = field.type === "text" ? "text" : "number";
+    if (field.type === "float") input.step = "any";
+    if (field.type === "int") input.min = "0";
+    if (def !== undefined && def !== null) input.placeholder = String(def);
+    input.classList.add("narrow");
+  }
+  input.dataset.configKey = field.key;
+  input.dataset.configType = field.type;
+  row.appendChild(input);
+  return row;
+}
+
+// Fill the pane content divs (data-config="...") from the schemas above. Called
+// from init() before the blanket input wiring, so each generated control gets
+// its onAnyChange listener like a hand-written one.
+function buildConfigPanels() {
+  ["effectiveness", "farming"].forEach((name) => {
+    const container = document.querySelector(`.config-fields[data-config="${name}"]`);
+    if (container) CONFIG_FIELDS[name].forEach((f) => container.appendChild(createConfigField(f)));
+  });
+
+  const pets = document.querySelector('.config-fields[data-config="pets"]');
+  if (pets) {
+    pets.appendChild(createConfigField({
+      key: "pets.use_crunchy_omelette", label: "Crunchy Omelette (1.5x)", type: "bool",
+    }));
+    const grid = document.createElement("div");
+    grid.className = "pet-grid";
+    PET_NAMES.forEach((name) => grid.appendChild(createConfigField({
+      key: `pets.${name}`, label: name, type: "int", compact: true,
+    })));
+    pets.appendChild(grid);
+  }
+
+  const buildings = document.querySelector('.config-fields[data-config="buildings"]');
+  if (buildings) {
+    BUILDING_SECTIONS.forEach((section) => {
+      const wrap = document.createElement("div");
+      wrap.className = "config-section";
+      const heading = document.createElement("h4");
+      heading.textContent = section.title;
+      wrap.appendChild(heading);
+      section.fields.forEach((f) => wrap.appendChild(createConfigField(f)));
+      buildings.appendChild(wrap);
+    });
+  }
+}
+
+// Read every generated config control into a {dotted key: value} object, sent
+// as the `config` param. A blank input / "Default" select is omitted, so the
+// server uses config.toml.
+function readConfigParams() {
+  const config = {};
+  document.querySelectorAll("[data-config-key]").forEach((el) => {
+    const raw = el.value;
+    if (raw === "" || raw == null) return;
+    const key = el.dataset.configKey;
+    const type = el.dataset.configType;
+    if (type === "bool") config[key] = raw === "true";
+    else if (type === "int") config[key] = parseInt(raw, 10);
+    else if (type === "float") config[key] = parseFloat(raw);
+    else config[key] = raw; // text / date -> string
+  });
+  return config;
+}
+
+function applyConfigParams(config) {
+  config = config || {};
+  document.querySelectorAll("[data-config-key]").forEach((el) => {
+    const key = el.dataset.configKey;
+    if (key in config) {
+      el.value = el.dataset.configType === "bool" ? String(config[key]) : config[key];
+    } else {
+      el.value = "";
+    }
+  });
+}
+
 // The two goal lists: each maps its row-container id to the <datalist> id
 // backing its item picker. Mastery goals only ever suggest from the user's
 // own masterable-item catalogue (mastery_items.txt); item goals suggest from
@@ -279,6 +513,9 @@ function readParams() {
     .filter(Boolean);
   if (overrides.length) params.overrides = overrides;
 
+  const config = readConfigParams();
+  if (Object.keys(config).length) params.config = config;
+
   if (planSelect) params.plan_select = planSelect;
 
   return params;
@@ -337,6 +574,7 @@ function applyParams(params) {
   }
   $("#instant-grow-time").value = params.instant_grow_time || "";
   $("#overrides").value = (params.overrides || []).join("\n");
+  applyConfigParams(params.config);
   updateGoalSummary();
 }
 
@@ -826,6 +1064,12 @@ function onAnyChange() {
 }
 
 function init() {
+  // Build the generated preference panels (Exploring effectiveness / Farming /
+  // Pets / Buildings) first, so their controls exist before the blanket input
+  // wiring below attaches onAnyChange and before restoreState/applyParams runs.
+  readConfigDefaults();
+  buildConfigPanels();
+
   $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
   $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));
   $("#target").addEventListener("change", () => {

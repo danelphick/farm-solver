@@ -28,7 +28,12 @@ _SEMAPHORE_TIMEOUT_SECONDS = 20
 
 
 def index(request: HttpRequest) -> HttpResponse:
-    return render(request, "solverapp/index.html")
+    # Bundled config.toml values, so the preference panels can show each as a
+    # placeholder ("blank = use default"). Rendered into a <script> tag via
+    # Django's json_script (DjangoJSONEncoder serialises any date to ISO).
+    return render(
+        request, "solverapp/index.html", {"config_defaults": webapi.config_defaults()}
+    )
 
 
 def _section_html(text: str) -> str:

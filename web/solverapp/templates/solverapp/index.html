@@ -89,12 +89,34 @@
       </div>
     </details>
 
-    <details id="advanced-details" class="pane">
-      <summary>Advanced</summary>
+    <details id="farming-details" class="pane">
+      <summary>Farming</summary>
+      <div class="config-fields" data-config="farming"></div>
       <div class="field-row">
         <label for="instant-grow-time">Instant grow time</label>
         <input id="instant-grow-time" type="text" placeholder="3s" class="narrow">
       </div>
+    </details>
+
+    <details id="pets-details" class="pane">
+      <summary>Pets</summary>
+      <p class="pane-hint">
+        Each pet's current level (tier items come from the game data). Blank uses
+        the bundled default.
+      </p>
+      <div class="config-fields" data-config="pets"></div>
+    </details>
+
+    <details id="buildings-details" class="pane">
+      <summary>Buildings</summary>
+      <p class="pane-hint">
+        Passive-production buildings. Blank uses the bundled default.
+      </p>
+      <div class="config-fields" data-config="buildings"></div>
+    </details>
+
+    <details id="advanced-details" class="pane">
+      <summary>Advanced</summary>
       <div class="field">
         <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)</label>
         <textarea id="overrides" rows="3" spellcheck="false"
@@ -138,6 +160,15 @@
         <label for="start-date">Start date</label>
         <input id="start-date" type="date" disabled>
       </div>
+    </details>
+
+    <details id="effectiveness-details" class="pane">
+      <summary>Exploring effectiveness</summary>
+      <p class="pane-hint">
+        Per-zone Exploring Effectiveness driving how many explores one Apple
+        Cider does. Blank uses the bundled default.
+      </p>
+      <div class="config-fields" data-config="effectiveness"></div>
     </details>
 
     <details id="trading-details" class="pane">
@@ -208,6 +239,7 @@
 
 <div id="status" class="status" role="status" aria-live="polite">Paste your data to begin.</div>
 
+{{ config_defaults|json_script:"config-defaults" }}
 <script type="module" src="{% static 'solverapp/app.js' %}"></script>
 </body>
 </html>

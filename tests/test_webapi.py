@@ -186,6 +186,58 @@ def test_params_to_args_rejects_bad_hickory_omelette_setting():
         webapi.params_to_args({"hickory_omelette": "sometimes"})
 
 
+def test_params_to_args_config_panel_becomes_typed_overrides():
+    args = webapi.params_to_args(
+        {
+            "config": {
+                "farming.rows": 15,
+                "orchard.bonus": 1.4,
+                "raptor_pen.have_antler_snare": False,
+                "exploring.effectiveness.Small Cave": 110,
+                "storehouse.updated_on": "2026-07-14",
+            }
+        }
+    )
+    assert args.override == [
+        "farming.rows=15",
+        "orchard.bonus=1.4",
+        "raptor_pen.have_antler_snare=false",
+        "exploring.effectiveness.Small Cave=110",
+        'storehouse.updated_on="2026-07-14"',
+    ]
+
+
+def test_params_to_args_config_panel_follows_free_text_overrides():
+    # A panel control (explicit) wins over a conflicting free-text line: both
+    # land in args.override, the panel last, and apply_overrides is last-wins.
+    args = webapi.params_to_args(
+        {
+            "overrides": ["farming.rows=1"],
+            "config": {"farming.rows": 13},
+        }
+    )
+    assert args.override == ["farming.rows=1", "farming.rows=13"]
+
+
+def test_params_to_args_rejects_non_object_config():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"config": [1, 2, 3]})
+
+
+def test_params_to_args_rejects_config_key_that_is_not_dotted():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"config": {"rows": 15}})
+
+
+def test_config_defaults_exposes_game_sections_without_solver():
+    defaults = webapi.config_defaults()
+    assert "solver" not in defaults  # withheld: holds server file paths
+    # A representative value from each panel is present for placeholders.
+    assert defaults["farming"]["rows"] == 13
+    assert defaults["exploring"]["effectiveness"]["Forest"] == 136
+    assert defaults["pets"]["Cat"] == 8
+
+
 def test_params_to_args_config_knobs_follow_free_text_overrides():
     # An explicit control wins over a conflicting free-text line: both land in
     # args.override, the dedicated knob last, and apply_overrides is last-wins.

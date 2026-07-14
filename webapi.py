@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from dataclasses import dataclass, replace
 from datetime import date
 
@@ -68,6 +69,12 @@ _KNOWN_PARAM_KEYS = frozenset({
     "price_large_net", "price_cookie_set", "price_pumpkin_juice",
     "price_hickory_omelette",
     "instant_grow_time", "hickory_omelette",
+    # The preference panels (exploring effectiveness, farming, pets, buildings)
+    # send every control they touch as one {section.flag: value} object under
+    # this key; params_to_args turns each entry into an args.override line (see
+    # _config_override_line), the structured counterpart to the free-text
+    # ``overrides`` box.
+    "config",
 })
 
 # Web params that map straight onto a single ``section.flag`` config override.
@@ -88,6 +95,42 @@ _CONFIG_PARAM_FLAGS = {
     "price_pumpkin_juice": "mastery.pumpkin_juice_price",
     "price_hickory_omelette": "trading.hickory_omelette",
 }
+
+
+def _config_override_line(key: str, value: object) -> str:
+    """Format one preference-panel entry as a ``section.flag=<toml>`` override.
+
+    The value arrives already typed from the request JSON (bool / number /
+    string); render it as the TOML literal :func:`main.apply_overrides` parses
+    back, so a panel control funnels through the exact same machinery as a
+    hand-typed override line. ``bool`` is checked before ``int`` because Python
+    booleans are an ``int`` subclass.
+    """
+    if isinstance(value, bool):
+        literal = "true" if value else "false"
+    elif isinstance(value, (int, float)):
+        literal = repr(value)
+    elif isinstance(value, str):
+        literal = json.dumps(value)  # a TOML basic (double-quoted) string
+    else:
+        raise ValueError(
+            f"config value for {key!r} must be a bool, number or string, "
+            f"not {type(value).__name__}"
+        )
+    return f"{key}={literal}"
+
+
+def config_defaults() -> dict:
+    """The config sections the web UI's preference panels read for their defaults.
+
+    Each panel control shows the bundled ``config.toml`` value as its
+    placeholder (and drives the tri-state "Default (on/off)" bool labels), so a
+    blank control means "use the default". The ``[solver]`` section is withheld
+    -- it holds server-side file paths, nothing a control maps to.
+    """
+    cfg = main.load_config()
+    cfg.pop("solver", None)
+    return cfg
 
 
 def _wrap_argument_error(fn, value):
@@ -215,6 +258,15 @@ def params_to_args(params: dict) -> argparse.Namespace:
         overrides = list(params["overrides"])
         main.apply_overrides({}, overrides)  # validate syntax only; cfg discarded
         config_overrides.extend(overrides)
+    # The preference panels' {section.flag: value} object -- same override
+    # channel as the free-text box, so it follows it (explicit control wins).
+    if "config" in params and params["config"] is not None:
+        panel_config = params["config"]
+        if not isinstance(panel_config, dict):
+            raise ValueError("config must be a JSON object of section.flag -> value")
+        panel_lines = [_config_override_line(k, v) for k, v in panel_config.items()]
+        main.apply_overrides({}, panel_lines)  # validate keys/values before solving
+        config_overrides.extend(panel_lines)
     for key, flag in _CONFIG_PARAM_FLAGS.items():
         if key in params and params[key] is not None:
             config_overrides.append(f"{flag}={float(params[key])}")
