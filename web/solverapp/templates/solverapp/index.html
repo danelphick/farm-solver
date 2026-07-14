@@ -48,14 +48,18 @@
         </select>
         <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
       </div>
-      <div class="field-row">
-        <label for="mastery">Mastery goal(s)</label>
-        <input id="mastery" type="text" placeholder="Item:Amount,Item:Amount">
+      <div class="field goal-field">
+        <label>Mastery goal(s)</label>
+        <div id="mastery-rows" class="goal-rows"></div>
+        <button type="button" class="btn-add" data-goal="mastery-rows">+ Add</button>
       </div>
-      <div class="field-row">
-        <label for="items">Item goal(s)</label>
-        <input id="items" type="text" placeholder="Item:Amount,Item:Amount">
+      <div class="field goal-field">
+        <label>Item goal(s)</label>
+        <div id="items-rows" class="goal-rows"></div>
+        <button type="button" class="btn-add" data-goal="items-rows">+ Add</button>
       </div>
+      <datalist id="mastery-catalogue"></datalist>
+      <datalist id="item-catalogue"></datalist>
     </details>
 
     <details id="limits-details" class="pane">
@@ -197,6 +201,6 @@
   </details>
 </section>
 
-<script src="{% static 'solverapp/app.js' %}"></script>
+<script type="module" src="{% static 'solverapp/app.js' %}"></script>
 </body>
 </html>

@@ -31,6 +31,20 @@ const PRICE_FIELDS = {
   price_hickory_omelette: "#price-hickory-omelette",
 };
 
+// The two goal lists: each maps its row-container id to the <datalist> id
+// backing its item picker. Mastery goals only ever suggest from the user's
+// own masterable-item catalogue (mastery_items.txt); item goals suggest from
+// the broad catalogue (items.txt, every known item across all data files).
+// Both still accept a typed value absent from the list -- see GOAL_CATALOGUES.
+const GOAL_LISTS = {
+  "mastery-rows": "mastery-catalogue",
+  "items-rows": "item-catalogue",
+};
+const GOAL_CATALOGUES = {
+  "mastery-catalogue": "/static/solverapp/mastery_items.txt",
+  "item-catalogue": "/static/solverapp/items.txt",
+};
+
 function $(selector) {
   return document.querySelector(selector);
 }
@@ -53,6 +67,135 @@ function todayISO() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+// --- Goal lists: "Item:Amount,Item:Amount" <-> row entries -----------------
+//
+// These two are pure (no DOM), so they're unit-testable directly (see
+// app.test.js) -- everything else in this section is DOM wiring around them.
+// The wire format matches parsing.parse_item_amounts exactly (see
+// parsing.py:247-265); amounts stay free text (not <input type="number">) so
+// FarmRPG shorthands like "1M"/"100k"/"GM" survive to the server unparsed.
+
+// Parses a "item:amount,item:amount" spec into `{item, amount}` entries. A
+// chunk with no ":" (a partial/malformed entry, e.g. mid-edit) becomes an
+// entry with an empty amount rather than being dropped, so restoring it into
+// rows never silently loses what the user typed.
+export function parseGoalSpec(spec) {
+  if (!spec) return [];
+  return spec
+    .split(",")
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const colon = chunk.lastIndexOf(":");
+      if (colon === -1) return { item: chunk, amount: "" };
+      return {
+        item: chunk.slice(0, colon).trim(),
+        amount: chunk.slice(colon + 1).trim(),
+      };
+    });
+}
+
+// The inverse: entries -> a spec string, dropping any row missing an item or
+// an amount (an in-progress row the user hasn't finished filling in).
+export function serializeGoalEntries(entries) {
+  return entries
+    .filter((e) => e.item.trim() && e.amount.trim())
+    .map((e) => `${e.item.trim()}:${e.amount.trim()}`)
+    .join(",");
+}
+
+// --- Goal lists: DOM (row render/read/wire) ---------------------------------
+
+function createGoalRow(entry, datalistId) {
+  const row = document.createElement("div");
+  row.className = "goal-row";
+
+  const itemInput = document.createElement("input");
+  itemInput.type = "text";
+  itemInput.className = "goal-item";
+  itemInput.placeholder = "Item name";
+  itemInput.setAttribute("list", datalistId);
+  itemInput.value = entry.item;
+
+  const amountInput = document.createElement("input");
+  amountInput.type = "text";
+  amountInput.className = "goal-amount narrow";
+  amountInput.placeholder = "Amount";
+  amountInput.value = entry.amount;
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "btn-delete";
+  deleteBtn.setAttribute("aria-label", "Remove goal");
+  deleteBtn.title = "Remove";
+  deleteBtn.textContent = "×";
+
+  row.append(itemInput, amountInput, deleteBtn);
+  return row;
+}
+
+// Rebuilds a goal list's rows from `entries`; an empty list still shows one
+// blank row so there's always something visible to type into besides the
+// "+ Add" button.
+function renderGoalRows(containerId, entries, datalistId) {
+  const container = $(`#${containerId}`);
+  container.innerHTML = "";
+  const rows = entries.length ? entries : [{ item: "", amount: "" }];
+  rows.forEach((entry) => container.appendChild(createGoalRow(entry, datalistId)));
+}
+
+function readGoalRows(containerId) {
+  const rows = document.querySelectorAll(`#${containerId} .goal-row`);
+  return Array.from(rows, (row) => ({
+    item: row.querySelector(".goal-item").value,
+    amount: row.querySelector(".goal-amount").value,
+  }));
+}
+
+function appendGoalRow(containerId, datalistId) {
+  $(`#${containerId}`).appendChild(createGoalRow({ item: "", amount: "" }, datalistId));
+}
+
+// Event delegation on the (stable) container -- rows come and go, but the
+// container itself never gets recreated, so wiring it once in init() covers
+// every row it ever holds.
+function wireGoalList(containerId) {
+  const container = $(`#${containerId}`);
+  container.addEventListener("input", onAnyChange);
+  container.addEventListener("click", (event) => {
+    const btn = event.target.closest(".btn-delete");
+    if (!btn) return;
+    btn.closest(".goal-row").remove();
+    if (!container.querySelector(".goal-row")) {
+      appendGoalRow(containerId, GOAL_LISTS[containerId]);
+    }
+    onAnyChange();
+  });
+}
+
+async function loadCatalogue(url, datalistId) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const text = await response.text();
+    const datalist = $(`#${datalistId}`);
+    const fragment = document.createDocumentFragment();
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        fragment.appendChild(option);
+      });
+    datalist.appendChild(fragment);
+  } catch (err) {
+    // No network / no static file yet -- free-typing still works, just
+    // without suggestions, same as any other best-effort enhancement here.
+  }
 }
 
 // The start date defaults to "today" without being a real setting: the input
@@ -84,9 +227,9 @@ function readParams() {
   } else {
     params.target = "tower";
   }
-  const mastery = $("#mastery").value.trim();
+  const mastery = serializeGoalEntries(readGoalRows("mastery-rows"));
   if (mastery) params.mastery = mastery;
-  const items = $("#items").value.trim();
+  const items = serializeGoalEntries(readGoalRows("items-rows"));
   if (items) params.items = items;
 
   if ($("#current-stamina").value) {
@@ -162,8 +305,8 @@ function applyParams(params) {
     $("#level").hidden = false;
     $("#level").value = target;
   }
-  $("#mastery").value = params.mastery || "";
-  $("#items").value = params.items || "";
+  renderGoalRows("mastery-rows", parseGoalSpec(params.mastery || ""), GOAL_LISTS["mastery-rows"]);
+  renderGoalRows("items-rows", parseGoalSpec(params.items || ""), GOAL_LISTS["items-rows"]);
   $("#current-stamina").value = params.current_stamina ?? 0;
   $("#cookie-sets").value = params.cookie_sets ?? "";
   $("#hickory-omelette").value = params.hickory_omelette ?? "none";
@@ -226,8 +369,8 @@ let towerTargetLevel = null;
 
 function updateGoalSummary() {
   const parts = [];
-  const mastery = $("#mastery").value.trim();
-  const items = $("#items").value.trim();
+  const mastery = serializeGoalEntries(readGoalRows("mastery-rows"));
+  const items = serializeGoalEntries(readGoalRows("items-rows"));
   const targetSel = $("#target").value;
   const level = targetSel === "level" ? $("#level").value : "";
   // Mirrors the server: the tower is a goal unless "No Tower" is picked; a
@@ -462,6 +605,26 @@ function init() {
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
+  });
+
+  // Goal lists (Mastery/Item goals): rows are built dynamically, so they're
+  // wired via event delegation on their (stable) container -- see
+  // wireGoalList -- rather than the blanket per-input wiring above. Render
+  // the default single blank row first; restoreState() below replaces it
+  // with saved entries, if any.
+  Object.entries(GOAL_LISTS).forEach(([containerId, datalistId]) => {
+    renderGoalRows(containerId, [], datalistId);
+    wireGoalList(containerId);
+  });
+  document.querySelectorAll(".btn-add").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const containerId = btn.dataset.goal;
+      appendGoalRow(containerId, GOAL_LISTS[containerId]);
+      onAnyChange();
+    });
+  });
+  Object.entries(GOAL_CATALOGUES).forEach(([datalistId, url]) => {
+    loadCatalogue(url, datalistId);
   });
 
   // Collapsing a pane is a UI preference, not solver state: persist each

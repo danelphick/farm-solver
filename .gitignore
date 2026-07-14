@@ -15,3 +15,9 @@ wheels/
 # Django staticfiles collectstatic output (web/manage.py collectstatic)
 web/staticfiles/*
 !web/staticfiles/.gitkeep
+
+# Node deps for web/'s Vitest suite (web/package.json)
+web/node_modules/
+
+# Playwright MCP session artifacts (screenshots/snapshots from manual verification)
+.playwright-mcp/
