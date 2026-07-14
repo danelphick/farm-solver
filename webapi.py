@@ -512,10 +512,11 @@ def render(
         )
     warnings = []
     if not within:
+        # Surfaced as a warning only (the client renders notes and warnings into
+        # the same area, so adding it to both showed it twice).
         message = main.limit_shortfall(
             fr.plans, time_limit, args.max_ap, args.max_ln, args.max_gold, args.max_ac
         )
-        reporter.note(message)
         warnings.append(message)
 
     reporter.frontier(shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds)
