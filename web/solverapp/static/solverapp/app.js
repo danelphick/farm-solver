@@ -310,6 +310,47 @@ function initHelpTooltips() {
   });
 }
 
+// --- Debug: equivalent CLI command ------------------------------------------
+//
+// DEBUG builds render a `[</>]` button just left of the status box; it toggles a
+// popup with the `python main.py ...` command equivalent to the current web
+// config (built server-side in webapi.args_to_command, returned as
+// `debug_command` on each solve). Absent entirely in production -- the template
+// only emits the button/popup when Django's DEBUG is on.
+
+let latestDebugCommand = "";
+
+function setDebugCommand(command) {
+  latestDebugCommand = command || "";
+  const box = document.getElementById("debug-command-text");
+  if (box) box.value = latestDebugCommand;
+}
+
+function initDebugCommand() {
+  const button = document.getElementById("debug-command-btn");
+  const popup = document.getElementById("debug-popup");
+  if (!button || !popup) return; // not a DEBUG build
+
+  button.addEventListener("click", () => {
+    popup.hidden = !popup.hidden;
+    if (!popup.hidden) {
+      const box = document.getElementById("debug-command-text");
+      box.value = latestDebugCommand;
+      box.focus();
+      box.select();
+    }
+  });
+  document.getElementById("debug-popup-close").addEventListener("click", () => {
+    popup.hidden = true;
+  });
+  document.getElementById("debug-command-copy").addEventListener("click", () => {
+    const box = document.getElementById("debug-command-text");
+    box.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(box.value).catch(() => {});
+    else document.execCommand("copy");
+  });
+}
+
 // One config control: a `.field-row` (or `.field-compact` in a grid) whose
 // input/select carries data-config-key/-type for readConfigParams/applyConfigParams.
 function createConfigField(field) {
@@ -906,6 +947,9 @@ function renderResult(data) {
     "ok"
   );
 
+  // DEBUG builds return the equivalent CLI command for the debug popup.
+  if (data.debug_command != null) setDebugCommand(data.debug_command);
+
   if (data.target_level) {
     towerTargetLevel = data.target_level;
     updateTowerOptionLabel();
@@ -1232,6 +1276,7 @@ function init() {
   readConfigDefaults();
   buildConfigPanels();
   initHelpTooltips();
+  initDebugCommand();
 
   $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
   $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));

@@ -67,11 +67,19 @@ h1 {
   font-size: 0.9rem;
 }
 
-.status {
+/* The status box and the debug-only CLI-command button share a fixed bar
+   pinned to the bottom-right; the button sits just to the left of the status. */
+#bottom-bar {
   position: fixed;
   right: 1rem;
   bottom: 1rem;
   z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status {
   max-width: min(22rem, calc(100vw - 2rem));
   padding: 0.35rem 0.7rem;
   border-radius: 0.4rem;
@@ -79,6 +87,90 @@ h1 {
   border: 1px solid var(--border);
   font-size: 0.85rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+#debug-command-btn {
+  flex: none;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+#debug-command-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The CLI-command popup, floating above the bottom bar. */
+#debug-popup {
+  position: fixed;
+  right: 1rem;
+  bottom: 3.75rem;
+  z-index: 101;
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+#debug-popup[hidden] {
+  display: none;
+}
+
+.debug-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+#debug-popup-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+#debug-popup-close:hover {
+  color: var(--error);
+}
+
+#debug-command-text {
+  width: 100%;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.78rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  resize: vertical;
+}
+
+.debug-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.debug-popup-actions .pane-hint {
+  margin: 0;
 }
 
 .status-pending {

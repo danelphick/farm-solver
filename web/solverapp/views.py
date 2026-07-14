@@ -12,6 +12,7 @@ import json
 import time
 
 import markdown
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
@@ -31,8 +32,11 @@ def index(request: HttpRequest) -> HttpResponse:
     # Bundled config.toml values, so the preference panels can show each as a
     # placeholder ("blank = use default"). Rendered into a <script> tag via
     # Django's json_script (DjangoJSONEncoder serialises any date to ISO).
+    # `debug` gates the CLI-command debug button (see api_solve's debug_command).
     return render(
-        request, "solverapp/index.html", {"config_defaults": webapi.config_defaults()}
+        request,
+        "solverapp/index.html",
+        {"config_defaults": webapi.config_defaults(), "debug": settings.DEBUG},
     )
 
 
@@ -113,4 +117,7 @@ def api_solve(request: HttpRequest) -> JsonResponse:
                 else ""
             ),
         },
+        # DEBUG only: the equivalent `python main.py` command, for the debug
+        # button's popup. None in production so the button never has content.
+        "debug_command": webapi.args_to_command(args) if settings.DEBUG else None,
     })

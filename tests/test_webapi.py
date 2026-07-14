@@ -237,6 +237,34 @@ def test_load_web_config_reads_the_web_default_file():
     assert cfg["farming"]["rows"] == 13
 
 
+def test_args_to_command_reconstructs_the_cli_invocation():
+    args = webapi.params_to_args({
+        "target": "150",
+        "mastery": "Gold Bar:1000000",
+        "max_gold": "500",
+        "current_stamina": 2000,
+        "calendar": "average",
+        "config": {"farming.rows": 15, "orchard.have_tree_shaker": False},
+        "price_arnold_palmer": 55,
+    })
+    command = webapi.args_to_command(args)
+    assert command.startswith("python main.py")
+    assert "--target 150" in command
+    assert "-m 'Gold Bar:1000000'" in command  # shell-quoted
+    assert "--max-gold 500" in command
+    assert "--current-stamina 2000" in command
+    assert "--average-calendar" in command
+    assert "--override farming.rows=15" in command
+    assert "--override orchard.have_tree_shaker=false" in command
+    assert "--override trading.arnold_palmer=55.0" in command
+
+
+def test_args_to_command_omits_defaults():
+    # A bare request produces just the program and its ever-present target.
+    command = webapi.args_to_command(webapi.params_to_args({"target": "tower"}))
+    assert command == "python main.py --target tower"
+
+
 def test_config_defaults_exposes_game_sections_without_solver():
     defaults = webapi.config_defaults()
     assert "solver" not in defaults  # withheld: holds server file paths

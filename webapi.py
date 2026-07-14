@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shlex
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
@@ -140,6 +141,75 @@ def load_web_config() -> dict:
         return config.load_config(WEB_CONFIG_PATH)
     except FileNotFoundError:
         return {}
+
+
+def args_to_command(args: argparse.Namespace) -> str:
+    """Reconstruct the equivalent ``python main.py`` command line from ``args``.
+
+    A debug aid (the web app's "CLI command" popup): reproduces the same solve
+    from the terminal. The config-panel/price/instant-grow/hickory knobs come
+    through verbatim as the same ``--override`` lines the request built
+    (``args.override``), so this never re-derives that mapping. Only settings
+    whose value differs from the CLI default are emitted, to keep it short.
+
+    The mastery/inventory the browser pasted are *not* on the command -- the CLI
+    reads them from files, so the command relies on the configured data
+    directory (point ``--mastery-file``/``--inventory-file`` at your own files if
+    they differ), and uses ``config.toml`` rather than ``web_default_config.toml``.
+    """
+    tokens: list[str] = ["python", "main.py"]
+
+    def add(flag: str, value: object) -> None:
+        tokens.append(flag)
+        tokens.append(str(value))
+
+    if args.target is not None:
+        add("--target", args.target)
+    if args.mastery:
+        add("-m", args.mastery)
+    if args.items:
+        add("-i", args.items)
+    if args.override_inventory:
+        add("--override-inventory", args.override_inventory)
+    if args.max_gold is not None:
+        add("--max-gold", args.max_gold)
+    if args.max_ap is not None:
+        add("--max-ap", args.max_ap)
+    if args.max_ln is not None:
+        add("--max-ln", args.max_ln)
+    if args.max_ac is not None:
+        add("--max-ac", args.max_ac)
+    if args.passive_limit:
+        add("--passive-limit", args.passive_limit)
+    if args.plans != 5:  # build_parser's default
+        add("--plans", args.plans)
+    if args.current_stamina:  # default 0
+        add("--current-stamina", args.current_stamina)
+    if args.cookie_sets is not None:
+        add("--cookie-sets", args.cookie_sets)
+    if args.use_pumpkin_juice is not None:
+        if args.use_pumpkin_juice < 0:  # bare flag (const=-1): any amount
+            tokens.append("--use-pumpkin-juice")
+        else:
+            tokens.append(f"--use-pumpkin-juice={args.use_pumpkin_juice}")
+    if args.start_date is not None:
+        add("--start-date", args.start_date.isoformat())
+    if args.model_calendar:
+        tokens.append("--model-calendar")
+    elif args.average_calendar:
+        tokens.append("--average-calendar")
+    elif args.ignore_calendar:
+        tokens.append("--ignore-calendar")
+    if args.cheapest_plan:
+        tokens.append("--cheapest-plan")
+    elif args.fastest_plan:
+        tokens.append("--fastest-plan")
+    elif args.plan is not None:
+        add("--plan", args.plan)
+    for override in args.override or []:
+        add("--override", override)
+
+    return " ".join(shlex.quote(token) for token in tokens)
 
 
 def config_defaults() -> dict:

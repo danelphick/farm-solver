@@ -238,7 +238,27 @@
   </details>
 </section>
 
-<div id="status" class="status" role="status" aria-live="polite">Paste your data to begin.</div>
+<div id="bottom-bar">
+  {% if debug %}
+  <button type="button" id="debug-command-btn" title="Show the equivalent python main.py command">&lt;/&gt;</button>
+  {% endif %}
+  <div id="status" class="status" role="status" aria-live="polite">Paste your data to begin.</div>
+</div>
+
+{% if debug %}
+<div id="debug-popup" hidden>
+  <div class="debug-popup-head">
+    <span>Equivalent CLI command</span>
+    <button type="button" id="debug-popup-close" aria-label="Close">&times;</button>
+  </div>
+  <textarea id="debug-command-text" readonly rows="4" spellcheck="false"
+    placeholder="Solve first to generate a command."></textarea>
+  <div class="debug-popup-actions">
+    <button type="button" id="debug-command-copy" class="btn-add">Copy</button>
+    <span class="pane-hint">Reads mastery/inventory from your data directory.</span>
+  </div>
+</div>
+{% endif %}
 
 {{ config_defaults|json_script:"config-defaults" }}
 <script type="module" src="{% static 'solverapp/app.js' %}"></script>
