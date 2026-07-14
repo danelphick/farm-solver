@@ -72,7 +72,6 @@ const PET_NAMES = [
 const CONFIG_FIELDS = {
   effectiveness: EXPLORING_ZONES.map((zone) => ({
     key: `exploring.effectiveness.${zone}`, label: zone, type: "int",
-    help: `Exploring Effectiveness for ${zone} — higher means more explores per Apple Cider spent in this zone.`,
   })),
   farming: [
     { key: "farming.rows", label: "Rows", type: "int",
@@ -372,7 +371,6 @@ function buildConfigPanels() {
     grid.className = "pet-grid";
     PET_NAMES.forEach((name) => grid.appendChild(createConfigField({
       key: `pets.${name}`, label: name, type: "int", compact: true,
-      help: `${name}'s current level — higher levels retrieve more of its tier items.`,
     })));
     pets.appendChild(grid);
   }
