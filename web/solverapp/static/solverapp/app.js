@@ -72,16 +72,25 @@ const PET_NAMES = [
 const CONFIG_FIELDS = {
   effectiveness: EXPLORING_ZONES.map((zone) => ({
     key: `exploring.effectiveness.${zone}`, label: zone, type: "int",
+    help: `Exploring Effectiveness for ${zone} — higher means more explores per Apple Cider spent in this zone.`,
   })),
   farming: [
-    { key: "farming.rows", label: "Rows", type: "int" },
-    { key: "farming.double_crop_chance", label: "Double crop chance (%)", type: "int" },
-    { key: "farming.speed_reduction", label: "Speed reduction (%)", type: "int" },
-    { key: "farming.corn_speed_reduction", label: "Corn speed reduction (%)", type: "int" },
-    { key: "farming.grape_juices_per_day", label: "Grape Juices / day", type: "int" },
-    { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text" },
-    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "autobool" },
-    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool" },
+    { key: "farming.rows", label: "Rows", type: "int",
+      help: "How many crop rows you farm. More rows means more plots harvested per crop cycle." },
+    { key: "farming.double_crop_chance", label: "Double crop chance (%)", type: "int",
+      help: "Percent chance a harvested seed drops a second crop." },
+    { key: "farming.speed_reduction", label: "Speed reduction (%)", type: "int",
+      help: "Percent faster every crop grows — your total grow-speed reduction from perks." },
+    { key: "farming.corn_speed_reduction", label: "Corn speed reduction (%)", type: "int",
+      help: "Extra percent grow-speed reduction that applies to Corn on top of the general one." },
+    { key: "farming.grape_juices_per_day", label: "Grape Juices / day", type: "int",
+      help: "How many Grape Juices you can press per day; bounds GJ-boosted growing." },
+    { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text",
+      help: "Minimum base grow time a crop needs before a Cookie set is worth spending on it (e.g. 18m)." },
+    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "autobool",
+      help: "Scythe of Dewstar perk: +4 bonus crops per row each harvest. Auto-detect infers it from your tower progress (level 250)." },
+    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool",
+      help: "Dewstar's Journal: extends the Cookie boost to the Scythe's bonus crops. Auto-detect reads it from your inventory." },
   ],
 };
 
@@ -89,62 +98,94 @@ const CONFIG_FIELDS = {
 // one section (few parameters each) per the spec.
 const BUILDING_SECTIONS = [
   { title: "Storehouse", fields: [
-    { key: "storehouse.inventory", label: "Inventory", type: "int" },
-    { key: "storehouse.growth", label: "Growth / day", type: "int" },
-    { key: "storehouse.updated_on", label: "Updated on", type: "date" },
+    { key: "storehouse.inventory", label: "Inventory", type: "int",
+      help: "Storehouse capacity on the 'Updated on' date; it caps how much passive production banks at once." },
+    { key: "storehouse.growth", label: "Growth / day", type: "int",
+      help: "How much larger the storehouse gets each day since the 'Updated on' date." },
+    { key: "storehouse.updated_on", label: "Updated on", type: "date",
+      help: "The date the Inventory figure was accurate; capacity is projected forward from here." },
   ] },
   { title: "Farmhouse", fields: [
-    { key: "farmhouse.stamina_cap", label: "Stamina cap", type: "int" },
-    { key: "farmhouse.registered_on", label: "Registered on", type: "date" },
-    { key: "farmhouse.have_mattress_pad", label: "Mattress Pad", type: "bool" },
-    { key: "farmhouse.have_apple_pie_enthusiast", label: "Apple Pie Enthusiast", type: "bool" },
+    { key: "farmhouse.stamina_cap", label: "Stamina cap", type: "int",
+      help: "Your natural maximum stamina on the 'Registered on' date (the Farmhouse raises it over time)." },
+    { key: "farmhouse.registered_on", label: "Registered on", type: "date",
+      help: "The date the Stamina cap figure was accurate; the cap grows daily from here." },
+    { key: "farmhouse.have_mattress_pad", label: "Mattress Pad", type: "bool",
+      help: "Mattress Pad perk: the stamina cap grows +2/day instead of +1." },
+    { key: "farmhouse.have_apple_pie_enthusiast", label: "Apple Pie Enthusiast", type: "bool",
+      help: "Apple Pie Enthusiast perk: daily stamina gain is capped at 1M instead of 500k." },
   ] },
   { title: "Chicken coop", fields: [
-    { key: "chicken_coop.produces", label: "Produces / day", type: "int" },
-    { key: "chicken_coop.completed_starmap", label: "Completed starmap", type: "bool" },
+    { key: "chicken_coop.produces", label: "Produces / day", type: "int",
+      help: "Eggs the coop produces per day." },
+    { key: "chicken_coop.completed_starmap", label: "Completed starmap", type: "bool",
+      help: "Completed Starmap: the coop also yields feathers alongside eggs." },
   ] },
   { title: "Cow pasture", fields: [
-    { key: "cow_pasture.milk", label: "Milk / day", type: "int" },
+    { key: "cow_pasture.milk", label: "Milk / day", type: "int",
+      help: "Milk the pasture produces per day." },
   ] },
   { title: "Worm habitat", fields: [
-    { key: "worm_habitat.worms", label: "Worms / hr", type: "int" },
-    { key: "worm_habitat.gummy_worms", label: "Gummy Worms / hr", type: "int" },
-    { key: "worm_habitat.mealworms", label: "Mealworms / hr", type: "int" },
+    { key: "worm_habitat.worms", label: "Worms / hr", type: "int",
+      help: "Worms the habitat produces per hour." },
+    { key: "worm_habitat.gummy_worms", label: "Gummy Worms / hr", type: "int",
+      help: "Gummy Worms produced per hour." },
+    { key: "worm_habitat.mealworms", label: "Mealworms / hr", type: "int",
+      help: "Mealworms produced per hour." },
   ] },
   { title: "Orchard", fields: [
-    { key: "orchard.apple_trees", label: "Apple trees", type: "int" },
-    { key: "orchard.orange_trees", label: "Orange trees", type: "int" },
-    { key: "orchard.lemon_trees", label: "Lemon trees", type: "int" },
-    { key: "orchard.bonus", label: "Bonus multiplier", type: "float" },
-    { key: "orchard.have_tree_shaker", label: "Tree Shaker", type: "bool" },
+    { key: "orchard.apple_trees", label: "Apple trees", type: "int",
+      help: "Number of apple trees; each yields apples daily." },
+    { key: "orchard.orange_trees", label: "Orange trees", type: "int",
+      help: "Number of orange trees; each yields oranges daily." },
+    { key: "orchard.lemon_trees", label: "Lemon trees", type: "int",
+      help: "Number of lemon trees; each yields lemons daily." },
+    { key: "orchard.bonus", label: "Bonus multiplier", type: "float",
+      help: "Orchard yield multiplier from perks (e.g. 1.3 = +30% fruit)." },
+    { key: "orchard.have_tree_shaker", label: "Tree Shaker", type: "bool",
+      help: "Tree Shaker perk: an extra daily harvest with its own storehouse-cap window." },
   ] },
   { title: "Raptor pen", fields: [
-    { key: "raptor_pen.antlers", label: "Antlers / day", type: "int" },
-    { key: "raptor_pen.have_antler_snare", label: "Antler Snare", type: "bool" },
+    { key: "raptor_pen.antlers", label: "Antlers / day", type: "int",
+      help: "Antlers the raptor pen produces per day." },
+    { key: "raptor_pen.have_antler_snare", label: "Antler Snare", type: "bool",
+      help: "Antler Snare: a second daily antler deposit with its own cap window." },
   ] },
   { title: "Trout bait farm", fields: [
-    { key: "trout_bait_farm.trout", label: "Trout / day", type: "int" },
-    { key: "trout_bait_farm.grubs", label: "Grubs / hr", type: "int" },
-    { key: "trout_bait_farm.minnows", label: "Minnows / hr", type: "int" },
+    { key: "trout_bait_farm.trout", label: "Trout / day", type: "int",
+      help: "Trout produced per day." },
+    { key: "trout_bait_farm.grubs", label: "Grubs / hr", type: "int",
+      help: "Grubs produced per hour." },
+    { key: "trout_bait_farm.minnows", label: "Minnows / hr", type: "int",
+      help: "Minnows produced per hour." },
   ] },
   { title: "Vineyard", fields: [
-    { key: "vineyard.grapes", label: "Grapes / day", type: "int" },
+    { key: "vineyard.grapes", label: "Grapes / day", type: "int",
+      help: "Grapes the vineyard produces per day (pressed into Grape Juice)." },
   ] },
   { title: "Steelworks", fields: [
-    { key: "steelworks.steel", label: "Steel / hr", type: "int" },
+    { key: "steelworks.steel", label: "Steel / hr", type: "int",
+      help: "Steel produced per hour; also yields steel wire at a third of this rate." },
   ] },
   { title: "Hayfield", fields: [
-    { key: "hay_field.hay", label: "Straw / 10 min", type: "int" },
+    { key: "hay_field.hay", label: "Straw / 10 min", type: "int",
+      help: "Straw produced every ten minutes." },
   ] },
   { title: "Quarry", fields: [
-    { key: "quarry.stone", label: "Stone / 10 min", type: "int" },
-    { key: "quarry.coal", label: "Coal / hr", type: "int" },
+    { key: "quarry.stone", label: "Stone / 10 min", type: "int",
+      help: "Stone produced every ten minutes." },
+    { key: "quarry.coal", label: "Coal / hr", type: "int",
+      help: "Coal produced per hour." },
   ] },
   { title: "Mills", fields: [
-    { key: "flour_mill.have_flour_power", label: "Flour Power", type: "bool" },
-    { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool" },
-    { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool" },
-    { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool" },
+    { key: "flour_mill.have_flour_power", label: "Flour Power", type: "bool",
+      help: "Flour Power: the flour mill makes 2 flour/min instead of 1." },
+    { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool",
+      help: "Feed Boost: the feed mill makes 2 feed/min instead of 1." },
+    { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool",
+      help: "Sugar Boost I: doubles the sugar cane mill's output." },
+    { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool",
+      help: "Sugar Boost II: doubles the sugar cane mill's output again (needs Sugar Boost I)." },
   ] },
 ];
 
@@ -176,6 +217,88 @@ function autoboolDefaultValue(key) {
   return def == null ? "" : String(!!def);
 }
 
+// --- Help tooltips ----------------------------------------------------------
+//
+// Each parameter carries a `[?]` button (`.help-icon`) with its description in
+// `data-help`; hovering or keyboard-focusing one shows a single shared floating
+// tooltip, positioned above the icon (flipped below near the top edge, clamped
+// horizontally to the viewport). One delegated set of listeners on `document`
+// covers every icon, generated or hand-written in the template.
+
+let helpTooltipEl = null;
+
+function createHelpIcon(text) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "help-icon";
+  btn.textContent = "?";
+  btn.dataset.help = text;
+  btn.setAttribute("aria-label", text);  // read out for screen readers too
+  return btn;
+}
+
+function ensureHelpTooltip() {
+  if (!helpTooltipEl) {
+    helpTooltipEl = document.createElement("div");
+    helpTooltipEl.className = "help-tooltip";
+    helpTooltipEl.setAttribute("role", "tooltip");
+    helpTooltipEl.hidden = true;
+    document.body.appendChild(helpTooltipEl);
+  }
+  return helpTooltipEl;
+}
+
+function positionHelpTooltip(icon, tip) {
+  const r = icon.getBoundingClientRect();
+  const margin = 8;
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let top = r.top - th - margin;             // above the icon by default
+  if (top < margin) top = r.bottom + margin; // not enough room -> below
+  let left = r.left + r.width / 2 - tw / 2;   // centred on the icon
+  left = Math.max(margin, Math.min(left, window.innerWidth - tw - margin));
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+function showHelpTooltip(icon) {
+  const text = icon.dataset.help;
+  if (!text) return;
+  const tip = ensureHelpTooltip();
+  tip.textContent = text;
+  tip.hidden = false;
+  positionHelpTooltip(icon, tip);
+}
+
+function hideHelpTooltip() {
+  if (helpTooltipEl) helpTooltipEl.hidden = true;
+}
+
+function initHelpTooltips() {
+  const iconOf = (event) =>
+    event.target.closest && event.target.closest(".help-icon");
+  document.addEventListener("pointerover", (e) => {
+    const icon = iconOf(e);
+    if (icon) showHelpTooltip(icon);
+  });
+  document.addEventListener("pointerout", (e) => {
+    if (iconOf(e)) hideHelpTooltip();
+  });
+  document.addEventListener("focusin", (e) => {
+    const icon = iconOf(e);
+    if (icon) showHelpTooltip(icon);
+  });
+  document.addEventListener("focusout", (e) => {
+    if (iconOf(e)) hideHelpTooltip();
+  });
+  // The tooltip is viewport-positioned, so a scroll would strand it -- hide it
+  // (any capture-phase scroll, since panes/textarea can scroll). Escape too.
+  window.addEventListener("scroll", hideHelpTooltip, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideHelpTooltip();
+  });
+}
+
 // One config control: a `.field-row` (or `.field-compact` in a grid) whose
 // input/select carries data-config-key/-type for readConfigParams/applyConfigParams.
 function createConfigField(field) {
@@ -183,6 +306,7 @@ function createConfigField(field) {
   row.className = field.compact ? "field-compact" : "field-row";
   const label = document.createElement("label");
   label.textContent = field.label;
+  if (field.help) label.appendChild(createHelpIcon(field.help));
   row.appendChild(label);
 
   const def = configDefault(field.key);
@@ -230,11 +354,13 @@ function buildConfigPanels() {
   if (pets) {
     pets.appendChild(createConfigField({
       key: "pets.use_crunchy_omelette", label: "Crunchy Omelette (1.5x)", type: "bool",
+      help: "Crunchy Omelette: a 1.5x multiplier on every pet's item retrieval.",
     }));
     const grid = document.createElement("div");
     grid.className = "pet-grid";
     PET_NAMES.forEach((name) => grid.appendChild(createConfigField({
       key: `pets.${name}`, label: name, type: "int", compact: true,
+      help: `${name}'s current level — higher levels retrieve more of its tier items.`,
     })));
     pets.appendChild(grid);
   }
@@ -1095,6 +1221,7 @@ function init() {
   // wiring below attaches onAnyChange and before restoreState/applyParams runs.
   readConfigDefaults();
   buildConfigPanels();
+  initHelpTooltips();
 
   $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
   $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));

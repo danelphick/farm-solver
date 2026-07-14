@@ -350,6 +350,54 @@ details[open] > summary .summary-detail {
   min-width: 0;
 }
 
+/* Per-parameter [?] help icon, sitting just after a control's label; on
+   hover/focus it shows the shared floating .help-tooltip (positioned in JS). */
+.help-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: 0.3rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.help-icon:hover,
+.help-icon:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.help-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: min(20rem, calc(100vw - 1rem));
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.help-tooltip[hidden] {
+  display: none;
+}
+
 /* The start date always displays a date, but until the user picks one it
    shows today muted, placeholder-style -- the value is not sent (the solver
    defaults to today server-side). */
