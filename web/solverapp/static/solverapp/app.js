@@ -807,8 +807,9 @@ function goalSpecSummary(spec, kindLabel) {
   return `custom ${kindLabel.toLowerCase()}`;
 }
 
-// What the server said "highest reachable" resolves to (response
-// target_level); labels the dropdown option and the Goal pane's summary.
+// The tower's top level (response tower_max_level) -- what "highest reachable"
+// means; labels the dropdown option and the Goal pane's summary. Constant, so a
+// specific-level solve never changes it.
 let towerTargetLevel = null;
 
 function updateGoalSummary() {
@@ -953,8 +954,8 @@ function renderResult(data) {
   // DEBUG builds return the equivalent CLI command for the debug popup.
   if (data.debug_command != null) setDebugCommand(data.debug_command);
 
-  if (data.target_level) {
-    towerTargetLevel = data.target_level;
+  if (data.tower_max_level) {
+    towerTargetLevel = data.tower_max_level;
     updateTowerOptionLabel();
     updateGoalSummary();
   }

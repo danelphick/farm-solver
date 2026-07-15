@@ -94,9 +94,9 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         "session": key,
         "cached": cached and not result.resolved,
         "solved_ms": solved_ms,
-        # What the tower goal resolved to (null for pure -m/-i goals): the UI
-        # labels "highest reachable" with it.
-        "target_level": result.target_level,
+        # The tower's top level, for the UI's "Tower (highest reachable)" label
+        # (constant -- not the level a specific --level solve targeted).
+        "tower_max_level": result.tower_max_level,
         "solution_html": _section_html(result.sections["solution"]),
         "notes": result.notes,
         "warnings": result.warnings,
