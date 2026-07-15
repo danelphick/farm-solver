@@ -259,8 +259,13 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
 - **Gold prices** (`config.trading_prices`, the `[trading]` section): per-unit gold
   for each buyable consumable (AP/LN/cider/OJ/hickory-omelette per-1000 → ÷1000;
   cookie sets per unit; Grape Juice at its production cost, kept for `plan_gold`'s
-  market value but never bought). Absent, nothing is buyable and every plan is fully
-  self-sourced.
+  market value but never bought). Absent whole section → `None`, nothing is buyable
+  and every plan is fully self-sourced. **Buyability is by key *presence*, not
+  value** (`item in prices`, both the `_build_base` obtainability seed and the `buy`
+  var gate): a buyable's key present in `[trading]` makes it buyable, **including an
+  explicit `0` = free to buy**; an *absent* key means "not traded / self-source
+  only". So zeroing a price makes an item free, not unbuyable. (Grape Juice is the
+  lone always-present key — never in `BUYABLE`, so never gets a buy var regardless.)
   `plan_gold(plan, prices)` is the market value of **all** consumables spent;
   **`plan_gold_breakdown`** splits it exactly into `(to_buy, self_sourced)` =
   `(plan.gold, plan_gold − plan.gold)` — to-buy is what the LP actually bought.

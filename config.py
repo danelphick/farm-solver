@@ -608,27 +608,43 @@ def trading_prices(
     Palmers (``grapes`` is in "apk" -- AP per 1000, since grapes trade for AP, not
     gold), each worth the Arnold Palmer's own per-unit gold. Absent ``grapes`` it
     stays free (``0``). Keys are the lower-cased item names the solver uses, so a
-    plan's gold is a direct dot product with its consumable tally. Returns ``None``
-    when the section is absent, leaving the solver on its unweighted (gold-agnostic)
-    behaviour.
+    plan's gold is a direct dot product with its consumable tally.
+
+    **Presence, not value, decides buyability.** A buyable consumable's key is
+    included only when it is *present* in ``[trading]``: an absent key means "not
+    traded / self-source only" (no buy variable downstream), while an explicit
+    ``0`` means "buyable for free" -- so zeroing a price makes an item free, not
+    unbuyable. (Grape Juice is the exception -- never bought, always present for
+    its market value.) Returns ``None`` when the whole section is absent, leaving
+    the solver on its unweighted (gold-agnostic) behaviour.
     """
     section = config.get("trading")
     if not section:
         return None
 
-    def per_unit(key: str) -> float:
-        return float(section.get(key, 0.0)) / GK_UNITS
-
-    arnold_palmer = per_unit("arnold_palmer")
+    arnold_palmer = float(section.get("arnold_palmer", 0.0)) / GK_UNITS  # gold/unit
     grape = float(section.get("grapes", 0.0)) / GK_UNITS * arnold_palmer  # gold/grape
-    return {
-        "arnold palmer": arnold_palmer,
-        "large net": per_unit("large_net"),
-        "apple cider": per_unit("apple_cider"),
-        "orange juice": per_unit("orange_juice"),
+    # Grape Juice is never bought (not in optimizer.BUYABLE); its price is a
+    # production cost kept for plan_gold's market value, so it is always present.
+    prices = {
         # Production cost: grapes per juice (recipe / crafting bonus) at grape gold.
         "grape juice": GRAPES_PER_JUICE / crafting_bonus * grape,
-        "cookie set": float(section.get("cookie_set", 0.0)),  # priced per unit
-        # Hickory Omelette: a held/bought sawmill-boost meal, priced per 1000.
-        "hickory omelette": per_unit("hickory_omelette"),
     }
+    # Only a buyable whose key is *present* in [trading] gets a price, and hence a
+    # buy variable downstream (the optimizer keys buyability off ``item in prices``,
+    # not price > 0): an absent key means "not traded / self-source only", while an
+    # explicit ``0`` means "buyable for free". ``cookie_set`` is gold each; the rest
+    # are per 1000 units (gk).
+    if "cookie_set" in section:
+        prices["cookie set"] = float(section["cookie_set"])
+    for item, cfg_key in (
+        ("arnold palmer", "arnold_palmer"),
+        ("large net", "large_net"),
+        ("apple cider", "apple_cider"),
+        ("orange juice", "orange_juice"),
+        # Hickory Omelette: a held/bought sawmill-boost meal, priced per 1000.
+        ("hickory omelette", "hickory_omelette"),
+    ):
+        if cfg_key in section:
+            prices[item] = float(section[cfg_key]) / GK_UNITS
+    return prices

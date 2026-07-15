@@ -415,7 +415,9 @@ def _build_base(
 
     # A buyable consumable can always be bought, so it is obtainable even where
     # nothing crafts or gathers it (a channel grounded in one is then still usable).
-    buyable = {item for item in BUYABLE if prices.get(item, 0.0) > 0}
+    # A *present* price (even 0 -- free) makes it buyable; an absent one does not
+    # (see config.trading_prices for the presence-not-value convention).
+    buyable = {item for item in BUYABLE if item in prices}
     # A held, non-demanded item an offer consumes (e.g. an Acorn Pie the exploring
     # channel burns) grounds that offer even when nothing crafts or gathers it. It
     # is bounded by the held stock in each item's balance, and excluding demanded
@@ -500,14 +502,17 @@ def _build_base(
 
     # Buy variables: a buyable consumable can be bought (free, instant supply) for
     # gold instead of self-sourced (which costs makespan). Only reachable, priced
-    # ones get a variable; cookie sets are bought by lifting their cap below.
+    # ones get a variable (a *present* price, even 0 -- free); cookie sets are
+    # bought by lifting their cap below.
     buy = {
         item: pulp.LpVariable(f"b{i}", lowBound=0)
         for i, item in enumerate(sorted(items & BUYABLE))
-        if prices.get(item, 0.0) > 0
+        if item in prices
     }
     price_cookie = prices.get("cookie set", 0.0)
-    buy_cookie = pulp.LpVariable("bcookie", lowBound=0) if price_cookie > 0 else None
+    buy_cookie = (
+        pulp.LpVariable("bcookie", lowBound=0) if "cookie set" in prices else None
+    )
     # Held cookie sets are free; beyond them a purchase lifts the cap at gold cost.
     problem += cookies <= cookie_sets + (buy_cookie if buy_cookie is not None else 0)
     gold = pulp.lpSum(prices[item] * var for item, var in buy.items())
@@ -980,8 +985,9 @@ def minimize(
     the plan leans as hard as possible on free passive production and basic farming,
     spending the fewest tools and banking the over-production; ``time_cap`` then
     bounds how far it runs (see :func:`frontier`, the slow regime). ``prices`` are the
-    per-unit gold from :func:`config.trading_prices`; absent, nothing is buyable and
-    the plan is fully self-sourced.
+    per-unit gold from :func:`config.trading_prices`; a buyable is buyable iff its key
+    is **present** (``item in prices``, even at ``0`` = free), so an item missing from
+    ``prices`` -- or an empty/``None`` dict -- is not buyable and is fully self-sourced.
 
     **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
     covers, ``0.1 * mastery_threshold / mastery_bonus``) turns on the mastery-boost
