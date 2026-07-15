@@ -1208,20 +1208,28 @@ function collapsePlanGroups() {
       );
       if (totalLine) statText = totalLine.textContent;
     }
+    // The critical path is the plan's headline, so it stays pinned open as a
+    // static panel: no disclosure marker, no collapsed-state stat, and left out
+    // of the collapse/expand-all wiring below (.plan-group-static).
+    const isStatic = label === "Critical path";
     const details = document.createElement("details");
-    details.className = "plan-group";
+    details.className = isStatic ? "plan-group plan-group-static" : "plan-group";
     details.dataset.groupLabel = label;
-    details.open = planGroupOpenState[label] || false;
-    // Real clicks toggle synchronously enough for this to stay in sync, but
-    // setAllPlanGroupsOpen below writes planGroupOpenState directly rather
-    // than relying on this for its batch of programmatic changes -- browsers
-    // (and jsdom) don't guarantee "toggle" fires synchronously for those.
-    details.addEventListener("toggle", () => {
-      planGroupOpenState[label] = details.open;
-    });
+    if (isStatic) {
+      details.open = true;
+    } else {
+      details.open = planGroupOpenState[label] || false;
+      // Real clicks toggle synchronously enough for this to stay in sync, but
+      // setAllPlanGroupsOpen below writes planGroupOpenState directly rather
+      // than relying on this for its batch of programmatic changes -- browsers
+      // (and jsdom) don't guarantee "toggle" fires synchronously for those.
+      details.addEventListener("toggle", () => {
+        planGroupOpenState[label] = details.open;
+      });
+    }
     const summary = document.createElement("summary");
     summary.textContent = label;
-    if (statText) {
+    if (statText && !isStatic) {
       const stat = document.createElement("span");
       stat.className = "summary-detail";
       stat.textContent = ` — ${statText}`;
@@ -1235,10 +1243,12 @@ function collapsePlanGroups() {
 
 // Wired to the "Expand all"/"Collapse all" buttons next to "Selected plan".
 function setAllPlanGroupsOpen(open) {
-  document.querySelectorAll("#plan-section > details.plan-group").forEach((details) => {
-    details.open = open;
-    planGroupOpenState[details.dataset.groupLabel] = open;
-  });
+  document
+    .querySelectorAll("#plan-section > details.plan-group:not(.plan-group-static)")
+    .forEach((details) => {
+      details.open = open;
+      planGroupOpenState[details.dataset.groupLabel] = open;
+    });
 }
 
 function wireFrontierRows(plans) {
