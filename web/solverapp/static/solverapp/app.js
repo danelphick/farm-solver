@@ -343,6 +343,9 @@ function initDebugCommand() {
   document.getElementById("debug-popup-close").addEventListener("click", () => {
     popup.hidden = true;
   });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !popup.hidden) popup.hidden = true;
+  });
   document.getElementById("debug-command-copy").addEventListener("click", () => {
     const box = document.getElementById("debug-command-text");
     box.select();
