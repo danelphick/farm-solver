@@ -140,7 +140,12 @@ rows = 13
 double_crop_chance = 25    # percent chance a seed drops a second item
 speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
-grape_juices_per_day = 14
+# The UNDOUBLED per-day Grape Juice count (was 14 before this became undoubled --
+# if you had 14 here, you now want 7). The level-150 tower reward doubles it, so
+# the solver automatically uses 2x this value when [tower] level below is absent
+# or >= 150, and 1x otherwise. A previously-saved value here meant the *doubled*
+# figure -- halve it when upgrading from before tower-level gating.
+grape_juices_per_day = 7
 cookies_grow_time_threshold = "18m"  # min grow time a cookie set may boost
 instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
 # The Scythe of Dewstar gives 4 bonus crops per row every harvest. It is an
@@ -170,6 +175,21 @@ hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
 # `true` lets the solver use any number, an integer caps the total, `false` is off.
 use_pumpkin_juice = false
 pumpkin_juice_price = 230   # nominal gold cost of one Pumpkin Juice
+
+[workshop]    # Resource Saver perk: how many items an average craft yields
+# 1 -> 1.10, 2 -> 1.25, 3 -> 1.45 crafting bonus. The level-90 tower reward
+# upgrades a configured 2 to 3 automatically once [tower] level below reaches 90
+# (below it 3 isn't ownable yet, so a configured 3 is capped back to 2).
+resource_saver = 3
+
+# Current tower level -- gates which level-tied rewards (Resource Saver 3 at 90,
+# doubled Grape Juice at 150, ...) the solver assumes are actually owned. Leave
+# commented / absent to assume every level-gated reward is owned (today's
+# behaviour, unchanged). A later "ascension" mode will climb this mid-solve; for
+# now it is a fixed starting point. `ascension_knowledge` will live in this
+# section too (not yet a recognised key).
+# [tower]
+# level = 250
 
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true

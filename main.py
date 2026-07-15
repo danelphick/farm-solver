@@ -242,6 +242,25 @@ def resolve_monthly_grants(
     return farm_solver.has_tower_level(state, requirements, MONTHLY_GRANT_TOWER_LEVEL)
 
 
+def resolve_crafting_bonus(args: argparse.Namespace, cfg: dict) -> None:
+    """Resolve ``args.crafting_bonus`` from ``[workshop]``/``[tower]`` when unset.
+
+    ``--crafting-bonus`` defaults to ``None`` (see :func:`build_parser`); an
+    explicit flag value always wins and is left untouched. Otherwise the
+    bonus comes from the player's current tower level and Resource Saver
+    setting (:func:`config.crafting_bonus_for`/:func:`config.current_tower_level`)
+    -- for a config with no ``[workshop]``/``[tower]`` section this resolves to
+    the same 1.45 every solve used before tower-level gating existed. Mutates
+    ``args`` in place, so every downstream reader of ``args.crafting_bonus``
+    (``build_inputs``, ``trading_prices``, the reporters) sees a plain float
+    either way; call this before any of them run.
+    """
+    if args.crafting_bonus is None:
+        args.crafting_bonus = config.crafting_bonus_for(
+            cfg, config.current_tower_level(cfg)
+        )
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     state: farm_solver.GameState,
@@ -504,11 +523,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--crafting-bonus",
         type=float,
-        default=crafting.DEFAULT_CRAFTING_BONUS,
+        default=None,
         metavar="NUM",
         help=(
             "average items produced per craft, reducing the materials needed "
-            f"(default: {crafting.DEFAULT_CRAFTING_BONUS})"
+            "(default: from [workshop] resource_saver (else 1.45))"
         ),
     )
     parser.add_argument(
@@ -1098,8 +1117,16 @@ def build_inputs(
     # T250 auto-detects the Scythe of Dewstar (see resolve_scythe_of_dewstar),
     # regardless of which goal this run solves.
     requirements = farm_solver.load_tower_requirements(args.tower)
+    # [farming] grape_juices_per_day is the undoubled base value; the level-150
+    # tower reward doubles it (see config.effective_grape_juices). tower_level
+    # (config.current_tower_level) is None -- assume every level-gated reward
+    # owned -- unless a [tower] level says otherwise.
+    tower_level = config.current_tower_level(cfg)
     farm = crops.farm_from_config(
-        cfg.get("farming", {}),
+        {
+            **cfg.get("farming", {}),
+            "grape_juices_per_day": config.effective_grape_juices(cfg, tower_level),
+        },
         have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg, state, requirements),
         have_dewstars_journal=resolve_dewstars_journal(cfg, state.inventory),
     )
@@ -1461,6 +1488,10 @@ def run(args: argparse.Namespace) -> int:
     # gates the tower-derived monthly grants off in this mode).
     if resolve_calendar_mode(args, cfg) == "ignore":
         cfg = strip_dated_sources(cfg)
+    # An explicit --crafting-bonus wins; otherwise resolve it from [workshop]/
+    # [tower] before anything downstream (trading_prices, build_inputs, the
+    # reporters) reads args.crafting_bonus.
+    resolve_crafting_bonus(args, cfg)
     # Select the LP backend before anything solves; the flag beats the config.
     backend = args.solver or cfg.get("solver", {}).get("backend")
     if backend:

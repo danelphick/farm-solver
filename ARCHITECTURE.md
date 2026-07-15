@@ -143,7 +143,7 @@ frontier as before.
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
 | `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
-| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices` |
+| `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices`, `current_tower_level`/`crafting_bonus_for`/`effective_grape_juices` (level-gated reward helpers, pure functions of `(cfg, level)` -- see "Tower-level gating" below) |
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config`, `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
@@ -515,6 +515,34 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   `dewstar_cookie_bonus` reuses
   `_cookie_boosted_harvests` so the bonus gets the same 9× windowed boost as the
   crop's own `cookie_day_yield`.
+- **Tower-level gating** (`config.current_tower_level`/`crafting_bonus_for`/
+  `effective_grape_juices`): three pure `(cfg, level)` functions, distinct from the
+  Scythe/Monthly-grants pattern above (those auto-detect an *owned* perk from
+  mastery progress; these instead read an explicit, optional `[tower] level`
+  the player sets — a later "ascension" mode will climb it mid-solve).
+  `current_tower_level` reads it; absent section/key → `None`, meaning "assume
+  every level-gated reward owned" (today's behaviour, so a config predating
+  this feature is unaffected). `crafting_bonus_for` maps `[workshop]
+  resource_saver` (1/2/3) through `RESOURCE_SAVER_BONUSES` (1.10/1.25/1.45) to
+  the crafting bonus, clamped by level: below level 90 a configured 3 is capped
+  to 2's bonus (the level-90 reward *is* Resource Saver 3), at/above 90 it is
+  always 3's; `level is None` applies the configured value with no clamp. No
+  `[workshop]` section/key → `crafting.DEFAULT_CRAFTING_BONUS` (1.45), same as
+  before this existed. `effective_grape_juices` doubles `[farming]
+  grape_juices_per_day` — now the **undoubled** base value — when `level is
+  None` or ≥ 150 (the level-150 reward), else leaves it at 1x; `crops.py`
+  itself learns nothing about tower levels, `main.build_inputs` just substitutes
+  the effective value into the `farming` section dict it hands
+  `crops.farm_from_config`. Wiring: `--crafting-bonus` defaults to `None`
+  (`main.build_parser`); `main.resolve_crafting_bonus(args, cfg)` fills it from
+  the two functions above when unset, called early in both `main.run` (right
+  after config load/overrides) and `webapi.solve` (the mirrored point) so every
+  downstream reader sees a plain float. `webapi.render` calls it too — a
+  cache-hit request builds a fresh, never-resolved `args`, so without this it
+  would still read `None` there even though `crafting_bonus` is a
+  `RESOLVE_FIELDS` member (a cache hit implies the same *unresolved* value, so
+  resolving again against the cached `session.cfg` reproduces exactly what
+  `solve()` used).
 - **Monthly grants** (tower level 300 artifact): `main.resolve_monthly_grants`
   auto-detects it like the Scythe (via `has_tower_level`, config override
   `exploring.have_mechanical_heart`), and `config.passive_production(monthly_grants=…)`

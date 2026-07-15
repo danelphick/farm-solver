@@ -4,8 +4,12 @@ from datetime import date, timedelta
 import pytest
 
 import config
+import crafting
 from config import (
     MONTHLY_GRANT_PRODUCER,
+    crafting_bonus_for,
+    current_tower_level,
+    effective_grape_juices,
     is_smeared_producer,
     load_config,
     passive_production,
@@ -635,6 +639,79 @@ def test_is_smeared_producer_flags_pets_and_grants():
     assert is_smeared_producer("pet Dog")
     assert is_smeared_producer(MONTHLY_GRANT_PRODUCER)
     assert not is_smeared_producer("sawmill")
+
+
+def test_current_tower_level_absent_is_none():
+    assert current_tower_level({}) is None
+    assert current_tower_level({"tower": {}}) is None
+
+
+def test_current_tower_level_reads_valid_value():
+    assert current_tower_level({"tower": {"level": 250}}) == 250
+    assert current_tower_level({"tower": {"level": 0}}) == 0
+
+
+def test_current_tower_level_rejects_negative_or_non_int():
+    with pytest.raises(ValueError, match="non-negative integer"):
+        current_tower_level({"tower": {"level": -1}})
+    with pytest.raises(ValueError, match="non-negative integer"):
+        current_tower_level({"tower": {"level": 12.5}})
+    with pytest.raises(ValueError, match="non-negative integer"):
+        current_tower_level({"tower": {"level": "250"}})
+
+
+def test_crafting_bonus_for_absent_workshop_is_the_crafting_default():
+    assert crafting_bonus_for({}, None) == crafting.DEFAULT_CRAFTING_BONUS
+    assert crafting_bonus_for({}, 42) == crafting.DEFAULT_CRAFTING_BONUS
+
+
+def test_crafting_bonus_for_each_resource_saver_level():
+    assert crafting_bonus_for({"workshop": {"resource_saver": 1}}, None) == 1.10
+    assert crafting_bonus_for({"workshop": {"resource_saver": 2}}, None) == 1.25
+    assert crafting_bonus_for({"workshop": {"resource_saver": 3}}, None) == 1.45
+
+
+def test_crafting_bonus_for_clamps_resource_saver_3_below_level_90():
+    # Resource Saver 3 IS the level-90 tower reward, so a configured 3 below
+    # that level is capped back to 2's bonus.
+    cfg = {"workshop": {"resource_saver": 3}}
+    assert crafting_bonus_for(cfg, 89) == 1.25
+
+
+def test_crafting_bonus_for_forces_3_at_level_90():
+    # The level-90 reward grants Resource Saver 3 regardless of what is configured.
+    cfg = {"workshop": {"resource_saver": 2}}
+    assert crafting_bonus_for(cfg, 90) == 1.45
+
+
+def test_crafting_bonus_for_none_level_uses_configured_value_as_is():
+    # None means "assume every level-gated reward owned" -- no clamp at all.
+    assert crafting_bonus_for({"workshop": {"resource_saver": 3}}, None) == 1.45
+    assert crafting_bonus_for({"workshop": {"resource_saver": 1}}, None) == 1.10
+
+
+def test_crafting_bonus_for_rejects_invalid_resource_saver():
+    with pytest.raises(ValueError, match="resource_saver"):
+        crafting_bonus_for({"workshop": {"resource_saver": 4}}, None)
+    with pytest.raises(ValueError, match="resource_saver"):
+        crafting_bonus_for({"workshop": {"resource_saver": "3"}}, None)
+
+
+def test_effective_grape_juices_doubles_when_level_absent():
+    assert effective_grape_juices({"farming": {"grape_juices_per_day": 7}}, None) == 14
+
+
+def test_effective_grape_juices_level_150_boundary():
+    cfg = {"farming": {"grape_juices_per_day": 7}}
+    assert effective_grape_juices(cfg, 149) == 7
+    assert effective_grape_juices(cfg, 150) == 14
+
+
+def test_effective_grape_juices_absent_key_default_preserves_todays_behaviour():
+    # crops.farm_from_config's own missing-key default is 0, unaffected by
+    # doubling either way.
+    assert effective_grape_juices({}, None) == 0
+    assert effective_grape_juices({}, 10) == 0
 
 
 def test_passive_quantizer_wires_the_smeared_predicate_through():

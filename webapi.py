@@ -473,6 +473,9 @@ def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> S
     # config before anything reads [pets].
     if main.resolve_calendar_mode(args, cfg) == "ignore":
         cfg = main.strip_dated_sources(cfg)
+    # Mirror main.run: resolve an unset --crafting-bonus from [workshop]/[tower]
+    # before anything downstream reads args.crafting_bonus.
+    main.resolve_crafting_bonus(args, cfg)
     state = farm_solver.GameState(
         masteries=parsing.parse_masteries(mastery_text),
         inventory=parsing.parse_inventory(inventory_text),
@@ -507,6 +510,14 @@ def render(
     """
     inputs = session.inputs
     fr = session.frontier
+
+    # A cache-hit request builds its own fresh `args` (params_to_args), never
+    # passed through solve()'s resolution -- so an unset --crafting-bonus would
+    # otherwise still read None here (crafting_bonus is a RESOLVE_FIELD, so a
+    # cache hit means this request agrees with the one that solved, including
+    # on this field's *unresolved* value; resolving against the cached cfg
+    # reproduces the exact float solve() used).
+    main.resolve_crafting_bonus(args, session.cfg)
 
     if not fr.plans:
         return _nothing_to_source_result(inputs, resolved=False), session

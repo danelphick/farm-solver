@@ -31,6 +31,7 @@ from main import (
     parse_target,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
+    resolve_crafting_bonus,
     resolve_dewstars_journal,
     resolve_fungus_processing,
     resolve_monthly_grants,
@@ -1559,6 +1560,38 @@ def test_resolve_pumpkin_juice_from_config():
     assert resolve_pumpkin_juice(
         None, {"mastery": {"use_pumpkin_juice": 7, "pumpkin_juice_price": 200}}
     ) == (True, 7, 200.0)
+
+
+# --- Crafting bonus (Resource Saver / tower-level gating) ---
+
+
+def test_crafting_bonus_flag_defaults_to_none():
+    # Resolved from [workshop]/[tower] by resolve_crafting_bonus, not baked
+    # into the parser default -- see build_parser's --crafting-bonus help text.
+    parser = build_parser()
+    assert parser.parse_args([]).crafting_bonus is None
+    assert parser.parse_args(["--crafting-bonus", "1.25"]).crafting_bonus == 1.25
+
+
+def test_resolve_crafting_bonus_explicit_flag_wins():
+    args = argparse.Namespace(crafting_bonus=1.25)
+    resolve_crafting_bonus(args, {"workshop": {"resource_saver": 1}})
+    assert args.crafting_bonus == 1.25
+
+
+def test_resolve_crafting_bonus_none_resolves_from_config():
+    args = argparse.Namespace(crafting_bonus=None)
+    resolve_crafting_bonus(args, {"workshop": {"resource_saver": 1}})
+    assert args.crafting_bonus == 1.10
+
+
+def test_resolve_crafting_bonus_regression_no_workshop_or_tower_is_1_45():
+    # A config with neither [workshop] nor [tower] must resolve to exactly
+    # today's crafting.DEFAULT_CRAFTING_BONUS (1.45) -- byte-identical
+    # behaviour to before tower-level gating existed.
+    args = argparse.Namespace(crafting_bonus=None)
+    resolve_crafting_bonus(args, {})
+    assert args.crafting_bonus == 1.45
 
 
 def test_resolve_fungus_processing_checks_inventory_by_default():

@@ -52,6 +52,94 @@ FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
 
+# The Resource Saver workshop perk's crafting bonus by level -- see
+# crafting_bonus_for. Level 3 is crafting.DEFAULT_CRAFTING_BONUS, the value
+# every solve used before tower-level gating existed.
+RESOURCE_SAVER_BONUSES: dict[int, float] = {1: 1.10, 2: 1.25, 3: 1.45}
+
+# The tower level whose reward upgrades Resource Saver 2 to 3 -- see
+# crafting_bonus_for. Below it a player can hold at most level 2.
+RESOURCE_SAVER_3_TOWER_LEVEL = 90
+
+# The tower level whose reward doubles the Grape Juice daily count -- see
+# effective_grape_juices.
+GRAPE_JUICE_DOUBLING_TOWER_LEVEL = 150
+
+
+def current_tower_level(cfg: dict[str, Any]) -> int | None:
+    """The player's current tower level, from an optional ``[tower] level`` key.
+
+    ``None`` (an absent section or key) means "assume every level-gated reward
+    is owned" -- today's behaviour, unchanged by adding this section. A later
+    ascension mode will climb this value mid-solve; for now it is a plain,
+    static read. Raises ``ValueError`` for anything but a non-negative integer.
+    """
+    tower = cfg.get("tower") or {}
+    level = tower.get("level")
+    if level is None:
+        return None
+    if isinstance(level, bool) or not isinstance(level, int) or level < 0:
+        raise ValueError(f"[tower] level must be a non-negative integer, not {level!r}")
+    return level
+
+
+def crafting_bonus_for(cfg: dict[str, Any], tower_level: int | None) -> float:
+    """The crafting bonus (items per craft) from ``[workshop] resource_saver`` and level.
+
+    ``resource_saver`` (1, 2 or 3) maps through :data:`RESOURCE_SAVER_BONUSES`
+    to a crafting bonus of 1.10/1.25/1.45. An absent ``[workshop]`` section or
+    ``resource_saver`` key falls back to ``crafting.DEFAULT_CRAFTING_BONUS``
+    (1.45) -- today's assumed-owned behaviour, unchanged by adding this
+    section.
+
+    ``tower_level`` (see :func:`current_tower_level`) gates how much of the
+    *configured* level the player can actually hold: below
+    :data:`RESOURCE_SAVER_3_TOWER_LEVEL` (90) the level-90 tower reward
+    (Resource Saver 3) isn't owned yet, so the configured level is clamped to
+    at most 2; at or beyond it, level 3 always applies (the reward is owned,
+    whatever is configured). ``tower_level is None`` means "assume every
+    level-gated reward owned" (see :func:`current_tower_level`), so the
+    configured level applies as-is, with no clamp.
+    """
+    workshop = cfg.get("workshop") or {}
+    if "resource_saver" not in workshop:
+        return crafting.DEFAULT_CRAFTING_BONUS
+    configured = workshop["resource_saver"]
+    if (
+        isinstance(configured, bool)
+        or not isinstance(configured, int)
+        or configured not in RESOURCE_SAVER_BONUSES
+    ):
+        raise ValueError(
+            "[workshop] resource_saver must be one of "
+            f"{sorted(RESOURCE_SAVER_BONUSES)}, not {configured!r}"
+        )
+    if tower_level is None:
+        level = configured
+    elif tower_level < RESOURCE_SAVER_3_TOWER_LEVEL:
+        level = min(configured, 2)
+    else:
+        level = 3
+    return RESOURCE_SAVER_BONUSES[level]
+
+
+def effective_grape_juices(cfg: dict[str, Any], tower_level: int | None) -> float:
+    """The effective (post-doubling) daily Grape Juice count.
+
+    ``[farming] grape_juices_per_day`` is the **undoubled** base value; the
+    level-150 tower reward doubles it (see
+    :data:`GRAPE_JUICE_DOUBLING_TOWER_LEVEL`). The effective count is 2x the
+    configured value when ``tower_level`` is ``None`` (assume every
+    level-gated reward owned, see :func:`current_tower_level`) or at least
+    150, else 1x (the reward isn't owned yet). The key's own default (0, when
+    absent -- see ``crops.farm_from_config``) is unaffected by the doubling
+    either way.
+    """
+    farming = cfg.get("farming") or {}
+    base = float(farming.get("grape_juices_per_day", 0))
+    doubled = tower_level is None or tower_level >= GRAPE_JUICE_DOUBLING_TOWER_LEVEL
+    return base * 2 if doubled else base
+
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
     """Load the config file, or the bundled one if ``path`` is None."""
