@@ -55,6 +55,13 @@ from typing import NamedTuple
 
 import pulp
 
+from ascension import (
+    AK_PER_GRANDMASTER,
+    AK_PER_MASTER,
+    AscensionOutcome,
+    AscensionSpec,
+    StepCandidate,
+)
 from crops import Farm
 from exploring import Exploring
 from fishing import Fishing
@@ -75,6 +82,10 @@ from sources import (
 
 # Usage below this many units is treated as zero (CBC leaves tiny residuals).
 UNIT_EPSILON = 1e-6
+
+# Minutes in a day, for converting the makespan (minutes, like every other track
+# quantity) into days for the ascension chore-AK term (see :func:`_build_base`).
+_MINUTES_PER_DAY = 1440.0
 
 # Consumables that can be bought for gold instead of self-sourced (the items with
 # a player-to-player gold price). Cookie sets are buyable too, but handled apart
@@ -226,6 +237,10 @@ class SourcingPlan:
     # of :func:`minimize` leaves it 0 (its net is just what it bought).
     surplus_gold: float = 0.0
     remainder: dict[str, int] = field(default_factory=dict)
+    # This stage's ascension outcome (which items were mastered/grandmastered/
+    # mega'd, AK earned from steps vs. chores, gross mastery supply) -- set only
+    # when :func:`minimize`/:func:`_build_base` was given an :class:`AscensionSpec`.
+    ascension: AscensionOutcome | None = None
 
     def track_times(self) -> dict[str, timedelta]:
         """Total time each track spends, summed across this plan's draws.
@@ -385,6 +400,16 @@ class _Base:
     # skip straight to the trivial remainder-only plan without touching ``problem``.
     remainder_only: bool = False
     ephemeral: list[str] = field(default_factory=list)
+    # Ascension extension (see _build_base's docstring section): the spec this
+    # base was built for (None outside ascension mode), each surviving candidate
+    # item's step variables (item -> step name -> 0/1-bounded LpVariable, step
+    # name one of "master"/"grandmaster"/"mega"), each surviving candidate's gross
+    # mastery-supply expression, and the candidates dropped for having no channel/
+    # recipe/open at all (never obtainable, so never selectable).
+    ascension: AscensionSpec | None = None
+    ascend_y: dict[str, dict[str, pulp.LpVariable]] = field(default_factory=dict)
+    ascend_S: dict[str, pulp.LpAffineExpression] = field(default_factory=dict)
+    unmasterable: list[str] = field(default_factory=list)
 
 
 def _build_base(
@@ -399,12 +424,22 @@ def _build_base(
     pj_gain: dict[str, float] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
+    *,
+    ascension: AscensionSpec | None = None,
 ) -> _Base:
     """Build the part of :func:`minimize`'s LP that is identical across every
     call in a sweep sharing these inputs -- variables, the balance/track
     constraints, ``gold``/``spend_value`` -- everything except the per-call
     objective and time cap, which :func:`_solve_configured` adds. See
     ``plans/MODEL_REUSE_PLAN.md`` for why this split exists.
+
+    ``ascension`` (optional) turns on the ascension extension: per surviving
+    candidate item (see :data:`ascension.AscensionSpec`), continuous ``y`` step
+    variables in ``[0, 1]`` for each remaining mastery step (master/grandmaster/
+    mega) it has, a gross mastery-supply expression, an AK constraint (step AK
+    plus smeared chore AK over the makespan) and, when required, a mega-count
+    constraint. See the "Ascension extension" note near :func:`_solve_configured`
+    for the full picture (round-and-fix, the plan-time rule, the outcome readout).
     """
     recipes = recipes or {}
     openables = openables or []
@@ -451,17 +486,29 @@ def _build_base(
             continue
         for out in offer.yields:
             offer_inputs.setdefault(out, []).append(offer.consumes)
-    items = _reachable(
-        {k for k in wanted if k in obtainable}, recipes, craftable, openers,
-        offer_inputs,
-    )
+
+    # Ascension candidates: an obtainable one joins the reachable seed set (its
+    # channels/crafts/opens must enter the model too, same as a wanted item); one
+    # that is not obtainable can never be selected, so it is dropped and recorded
+    # on the base instead. Sorted for determinism (see the sorted(items) comment
+    # in the per-item loop below).
+    cand_by_item: dict[str, StepCandidate] = {}
+    ascend_survivors: list[str] = []
+    unmasterable: list[str] = []
+    if ascension is not None:
+        cand_by_item = {c.item.lower(): c for c in ascension.candidates}
+        for item in sorted(cand_by_item):
+            (ascend_survivors if item in obtainable else unmasterable).append(item)
+
+    seeds = {k for k in wanted if k in obtainable} | set(ascend_survivors)
+    items = _reachable(seeds, recipes, craftable, openers, offer_inputs)
 
     remainder = {
         display: round(qty)
         for key, (display, qty) in wanted.items()
         if key not in obtainable
     }
-    if not items:
+    if not items and ascension is None:
         return _Base(
             problem=pulp.LpProblem("sourcing", pulp.LpMinimize),
             usage=[], craft={}, opens=[], makespan=pulp.LpVariable("T", lowBound=0),
@@ -494,6 +541,29 @@ def _build_base(
     craft = {item: pulp.LpVariable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
     opens = [pulp.LpVariable(f"o{i}", lowBound=0) for i in range(len(opened))]
     makespan = pulp.LpVariable("T", lowBound=0)
+
+    # Ascension step variables: one continuous var in [0, 1] per remaining step
+    # (master/grandmaster/mega) a surviving candidate has (see
+    # :data:`ascension.StepCandidate`). Ordering links a step to the one below it
+    # -- grandmaster needs master, mega needs grandmaster -- among whichever of
+    # the two exist (the deltas ``ascension.candidates`` builds are contiguous, so
+    # a higher step is never present without the one below it). Sorted-item order
+    # for determinism, matching every other per-item loop in this function.
+    ascend_y: dict[str, dict[str, pulp.LpVariable]] = {}
+    for i, item in enumerate(ascend_survivors):
+        c = cand_by_item[item]
+        steps: dict[str, pulp.LpVariable] = {}
+        if c.delta_master is not None:
+            steps["master"] = pulp.LpVariable(f"ym{i}", lowBound=0, upBound=1)
+        if c.delta_grandmaster is not None:
+            steps["grandmaster"] = pulp.LpVariable(f"ygm{i}", lowBound=0, upBound=1)
+        if c.delta_mega is not None:
+            steps["mega"] = pulp.LpVariable(f"ymega{i}", lowBound=0, upBound=1)
+        ascend_y[item] = steps
+        if "master" in steps and "grandmaster" in steps:
+            problem += steps["grandmaster"] <= steps["master"]
+        if "grandmaster" in steps and "mega" in steps:
+            problem += steps["mega"] <= steps["grandmaster"]
 
     # Cookie-boosted farming days used, capped below at held + bought sets. The
     # other consumable tallies (Arnold Palmers, Large Nets, ...) are read off the
@@ -580,6 +650,7 @@ def _build_base(
     # which equivalent draws fill the same time/activity (grow crop A vs crop B);
     # constraint order is what CBC breaks those ties by, so a fixed order keeps
     # the printed plan reproducible run to run.
+    ascend_S: dict[str, pulp.LpAffineExpression] = {}
     for item in sorted(items):
         gathered = pulp.lpSum(yield_terms.get(item, []))
         # What offers use up as inputs (Arnold Palmers an explore burns, the
@@ -621,6 +692,26 @@ def _build_base(
         if item in buy:
             problem += buy[item] <= consumed + used_up + emptied
 
+        # Ascension mastery supply: GROSS production only (gathered + crafted +
+        # unpacked, the same terms the balance above uses before ``consumed``/
+        # ``used_up``/``emptied`` net anything off) -- deliberately not the net
+        # balance, since mastery progress accrues even on production this plan
+        # goes on to consume as a craft material (mastery-chaining).
+        if item in ascend_y:
+            S_i = ascension.mastery_bonus * (gathered + made + unpacked)
+            ascend_S[item] = S_i
+            steps = ascend_y[item]
+            c = cand_by_item[item]
+            terms = []
+            if "master" in steps:
+                terms.append(c.delta_master * steps["master"])
+            if "grandmaster" in steps:
+                terms.append(c.delta_grandmaster * steps["grandmaster"])
+            if "mega" in steps:
+                terms.append(c.delta_mega * steps["mega"])
+            floor = ascension.mega_supply_floors.get(item, 0.0)
+            problem += S_i >= pulp.lpSum(terms) + floor
+
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
     for offer, x in zip(used, usage):
@@ -628,11 +719,38 @@ def _build_base(
     for terms in tracks.values():
         problem += pulp.lpSum(terms) <= makespan
 
+    # Ascension AK constraint: step AK (10/master, 100/grandmaster) plus smeared
+    # chore AK over the makespan (in days) must clear the stage's requirement.
+    # Chore AK grows with the makespan itself, so a stage whose candidates are all
+    # too dear can still be met by simply running longer -- the LP's call, traded
+    # off against every other cost like any other makespan decision.
+    if ascension is not None:
+        ak_terms = []
+        for steps in ascend_y.values():
+            if "master" in steps:
+                ak_terms.append(AK_PER_MASTER * steps["master"])
+            if "grandmaster" in steps:
+                ak_terms.append(AK_PER_GRANDMASTER * steps["grandmaster"])
+        ak_expr = pulp.lpSum(ak_terms)
+        if ascension.chore_rate_per_day:
+            ak_expr = ak_expr + ascension.chore_rate_per_day * (makespan / _MINUTES_PER_DAY)
+        problem += ak_expr >= ascension.ak_required
+
+        # Mega requirement: at least this many candidates reach megamastery. Left
+        # unconditional-on-existence: a requirement with no mega steps in the
+        # model at all is infeasible, surfaced by _assert_optimal like any other
+        # over-demanded LP (a clearer pre-check is milestone 4's job).
+        if ascension.megas_required > 0:
+            mega_terms = [steps["mega"] for steps in ascend_y.values() if "mega" in steps]
+            problem += pulp.lpSum(mega_terms) >= ascension.megas_required
+
     return _Base(
         problem=problem, usage=usage, craft=craft, opens=opens, makespan=makespan,
         buy=buy, buy_cookie=buy_cookie, pj=pj, gold=gold, spend_value=spend_value,
         used=used, crafted=crafted, opened=opened, remainder=remainder,
         pj_gain=pj_gain, pj_price=pj_price,
+        ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
+        unmasterable=unmasterable,
     )
 
 
@@ -677,6 +795,183 @@ def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
             "(e.g. held Mega/Spring seeds) can ever supply"
         )
     return fallback
+
+
+# Which lower steps a step needs pinned alongside it (mega needs grandmaster
+# needs master, among whichever exist for that item) -- see
+# :func:`_round_and_fix_ascension`.
+_ASCEND_PREREQS: dict[str, tuple[str, ...]] = {
+    "master": (),
+    "grandmaster": ("master",),
+    "mega": ("master", "grandmaster"),
+}
+
+
+def _round_and_fix_ascension(base: _Base, solver: pulp.LpSolver) -> None:
+    """Round the primary solve's fractional ascension step selections to 0/1.
+
+    The relaxed LP is free to split a step across several items -- e.g. select
+    1.5 masters' worth fractionally -- which is a valid relaxation optimum but
+    not a real plan (you cannot half-master an item). This snaps every ``y`` in
+    ``base.ascend_y`` to exactly 0 or 1 by a greedy **cover**: fractional steps
+    (``0.001 < y < 0.999``) are rounded *up*, cheapest incremental mastery
+    supply per unit of still-needed coverage first, until two targets are met:
+
+    - step AK (10/master + 100/grandmaster, selected steps only) reaches
+      ``target_ak`` -- the primary solve's own **fractional** step-AK total, so
+      rounding up never grows the chore/makespan need past what the relaxation
+      already implied.
+    - the selected mega count reaches ``base.ascension.megas_required``.
+
+    The cover metric matters. The relaxation loves *fractional grandmaster
+    slices* (100 AK per 90k of delta beats a master's 10 per 10k), so picking by
+    descending ``y`` -- or by AK-per-delta -- rounds a whole grandmaster up for
+    a gap a lone master covers, pinning 100k of supply where 10k would do (10x
+    the production). Instead each pick is the *package* -- an unselected
+    fractional master or grandmaster step plus its not-yet-selected
+    prerequisites -- minimising ``incremental_supply / min(incremental_ak,
+    ak_still_needed)``: the mastery progress newly pinned per unit of AK it
+    *usefully* contributes, the ``min`` denying a big package credit for
+    overshooting the gap. On a fresh 10-AK gap a 10k master alone (10000/10 =
+    1000) beats the master+grandmaster package (100000/10 = 10000); on a 110-AK
+    gap the package (100000/110 ~= 909) wins -- both the cheap top-up and the
+    genuine need pick right. Ties break to the smaller supply, then item name.
+    **Megas are selected first** (smallest incremental supply, then item name):
+    a mega carries no AK of its own but drags AK-earning prerequisites along,
+    which then count toward the AK target before it is topped up.
+
+    Selecting a step auto-selects its prerequisites (mega needs grandmaster
+    needs master, per :data:`_ASCEND_PREREQS`) among whichever exist for that
+    item, since the base's own ``grandmaster <= master``/``mega <= grandmaster``
+    constraints require it. Every step not selected is pinned to 0, so the
+    result is fully integral. Both pins are ephemeral, like the rest of
+    :func:`_solve_configured`'s per-call machinery -- popped at the top of the
+    next call on this base -- and the problem is left solved against them (a
+    fresh ``problem.solve(solver)`` at the end), ready for the refinement tower
+    that follows.
+    """
+    spec = base.ascension
+    assert spec is not None
+    cand_by_item = {c.item.lower(): c for c in spec.candidates}
+    y_values = {
+        item: {step: var.value() or 0.0 for step, var in steps.items()}
+        for item, steps in base.ascend_y.items()
+    }
+    target_ak = sum(
+        AK_PER_MASTER * v.get("master", 0.0) + AK_PER_GRANDMASTER * v.get("grandmaster", 0.0)
+        for v in y_values.values()
+    )
+    target_megas = spec.megas_required
+
+    selected: dict[str, set[str]] = {}
+
+    def is_selected(item: str, step: str) -> bool:
+        return step in selected.get(item, ())
+
+    def select(item: str, step: str) -> None:
+        if is_selected(item, step):
+            return
+        for prereq in _ASCEND_PREREQS[step]:
+            if prereq in base.ascend_y[item]:
+                select(item, prereq)
+        selected.setdefault(item, set()).add(step)
+
+    def current_ak() -> float:
+        total = 0.0
+        for steps in selected.values():
+            if "master" in steps:
+                total += AK_PER_MASTER
+            if "grandmaster" in steps:
+                total += AK_PER_GRANDMASTER
+        return total
+
+    def current_megas() -> int:
+        return sum(1 for steps in selected.values() if "mega" in steps)
+
+    def package_steps(item: str, step: str) -> list[str]:
+        """``step`` plus its not-yet-selected prerequisites that exist -- what
+        selecting it would newly pin to 1."""
+        return [
+            s
+            for s in (*_ASCEND_PREREQS[step], step)
+            if s in base.ascend_y[item] and not is_selected(item, s)
+        ]
+
+    def step_delta(item: str, step: str) -> float:
+        c = cand_by_item[item]
+        return {
+            "master": c.delta_master,
+            "grandmaster": c.delta_grandmaster,
+            "mega": c.delta_mega,
+        }[step] or 0.0
+
+    _STEP_AK = {"master": AK_PER_MASTER, "grandmaster": AK_PER_GRANDMASTER, "mega": 0}
+
+    def incremental_supply(item: str, step: str) -> float:
+        return sum(step_delta(item, s) for s in package_steps(item, step))
+
+    def incremental_ak(item: str, step: str) -> float:
+        return sum(_STEP_AK[s] for s in package_steps(item, step))
+
+    def fractional(item: str, step: str) -> bool:
+        y = y_values[item].get(step)
+        return y is not None and 0.001 < y < 0.999 and not is_selected(item, step)
+
+    # Outright selections (the relaxation already committed to these).
+    for item, steps in y_values.items():
+        for step, y in steps.items():
+            if y >= 0.999:
+                select(item, step)
+
+    # Megas first: they carry no AK themselves but drag AK-earning prerequisites
+    # along, which then count toward the AK target below. Cheapest incremental
+    # supply (the whole not-yet-selected chain's deltas) first. Terminates: each
+    # pick selects a previously-unselected mega, a finite pool.
+    while current_megas() < target_megas:
+        mega_candidates = [
+            item for item in y_values if fractional(item, "mega")
+        ]
+        if not mega_candidates:
+            break
+        best = min(
+            mega_candidates, key=lambda it: (incremental_supply(it, "mega"), it)
+        )
+        select(best, "mega")
+
+    # AK top-up: greedy cover by incremental supply per unit of still-needed AK
+    # (see the docstring for why not descending-y / AK-per-delta). Terminates:
+    # each pick selects at least one previously-unselected step, and selecting
+    # every fractional step covers at least the fractional totals that set
+    # ``target_ak`` in the first place.
+    while current_ak() + 1e-9 < target_ak:
+        remaining = target_ak - current_ak()
+        packages = [
+            (item, step)
+            for item in y_values
+            for step in ("master", "grandmaster")
+            if fractional(item, step)
+        ]
+        if not packages:
+            break
+
+        def cover_cost(pkg: tuple[str, str]) -> tuple[float, float, str, str]:
+            item, step = pkg
+            supply = incremental_supply(item, step)
+            ak = incremental_ak(item, step)
+            return (supply / min(ak, remaining), supply, item, step)
+
+        select(*min(packages, key=cover_cost))
+
+    problem = base.problem
+    for item, steps in base.ascend_y.items():
+        for step, var in steps.items():
+            constraint = (var == 1) if is_selected(item, step) else (var == 0)
+            # See the pj_off gotcha above: read the name back after assignment,
+            # since an item like "fancy violin" gets sanitised on the way in.
+            constraint.name = f"ascend_pin_{item}_{step}"
+            problem.addConstraint(constraint)
+            base.ephemeral.append(constraint.name)
+    problem.solve(solver)
 
 
 def _solve_configured(
@@ -741,6 +1036,12 @@ def _solve_configured(
     problem.solve(solver)
     if time_cap is None:
         solver = _assert_optimal(problem, solver)
+
+    # Ascension round-and-fix: snap the primary solve's fractional step
+    # selections to 0/1 and re-solve, before the refinement tower below runs on
+    # top of that (now-integral) solution. See _round_and_fix_ascension.
+    if base.ascension is not None:
+        _round_and_fix_ascension(base, solver)
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
     # optima CBC picks between at random across processes. Refine it in a
@@ -836,6 +1137,14 @@ def _solve_configured(
         if (units := var.value() or 0.0) > UNIT_EPSILON
     }
     time, ap, ln = aggregate(draws)
+    # Ascension: the chore term can make the optimal makespan exceed every
+    # track's own time (the plan idles, waiting on daily chores, to close the
+    # AK gap) -- draws alone would then under-report it, so take the makespan
+    # variable's own value too. Never lowers it: the LP never sets makespan
+    # below what the tracks need (see the track constraints above).
+    if base.ascension is not None:
+        time = max(time, timedelta(minutes=base.makespan.value() or 0.0))
+    ascension_outcome = _ascension_outcome(base) if base.ascension is not None else None
     return SourcingPlan(
         draws=sorted(draws, key=lambda d: d.offer.name),
         crafts=crafts,
@@ -862,6 +1171,48 @@ def _solve_configured(
             item: base.pj_gain[item] * units for item, units in pumpkin_juices.items()
         },
         remainder=base.remainder,
+        ascension=ascension_outcome,
+    )
+
+
+def _ascension_outcome(base: _Base) -> AscensionOutcome:
+    """Read the solved, round-and-fixed ``base`` into an :class:`AscensionOutcome`.
+
+    Every step var is exactly 0 or 1 by this point (see
+    :func:`_round_and_fix_ascension`), so a step counts as selected past 0.5.
+    ``mastery_supply`` reports every surviving candidate's gross supply
+    expression, including incidental production of one nothing pinned it to
+    (a candidate produced only as a side effect of another item's crafting
+    still earns real mastery progress -- deliberate, per the module docstring).
+    """
+    spec = base.ascension
+    assert spec is not None
+
+    def chosen(step: str) -> list[str]:
+        return sorted(
+            item
+            for item, steps in base.ascend_y.items()
+            if step in steps and (steps[step].value() or 0.0) > 0.5
+        )
+
+    masters = chosen("master")
+    grandmasters = chosen("grandmaster")
+    megas = chosen("mega")
+    ak_from_steps = AK_PER_MASTER * len(masters) + AK_PER_GRANDMASTER * len(grandmasters)
+    makespan_minutes = base.makespan.value() or 0.0
+    ak_from_chores = spec.chore_rate_per_day * makespan_minutes / _MINUTES_PER_DAY
+    mastery_supply = {
+        item: value
+        for item, expr in base.ascend_S.items()
+        if (value := pulp.value(expr) or 0.0) > UNIT_EPSILON
+    }
+    return AscensionOutcome(
+        masters=masters,
+        grandmasters=grandmasters,
+        megas=megas,
+        ak_from_steps=ak_from_steps,
+        ak_from_chores=ak_from_chores,
+        mastery_supply=mastery_supply,
     )
 
 
@@ -948,6 +1299,7 @@ def minimize(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
+    ascension: AscensionSpec | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -1004,6 +1356,13 @@ def minimize(
     constraint the LP optimised against. ``None`` (the default) leaves ``plan.time``
     at the continuous estimate, as before.
 
+    **Ascension.** ``ascension`` (optional) turns on the ascension extension (see
+    :data:`ascension.AscensionSpec`/:func:`_build_base`): the LP additionally
+    chooses which candidate items to master/grandmaster/mega-master to clear the
+    stage's AK requirement (steps plus chore AK over the makespan), attaching an
+    :class:`ascension.AscensionOutcome` to the returned plan (``plan.ascension``).
+    ``None`` (the default) leaves every code path identical to today.
+
     A single-shot call: builds one :func:`_build_base` and solves it once via
     :func:`_solve_configured`. :func:`frontier` instead builds a base per
     ``favour_passive`` regime and drives every sweep call through
@@ -1013,6 +1372,7 @@ def minimize(
     base = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
+        ascension=ascension,
     )
     plan = _solve_configured(
         base, gold_weight=gold_weight, time_cap=time_cap, favour_passive=favour_passive,

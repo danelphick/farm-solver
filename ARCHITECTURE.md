@@ -135,7 +135,7 @@ frontier as before.
 | `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`) |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards` |
@@ -317,6 +317,93 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     passive residuals inject no full-completion breakpoint there.
 - `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, net gold)`; dedup key
   rounds both.
+
+### Ascension extension (`_build_base`/`_solve_configured`, milestone 3)
+
+An optional `ascension: ascension.AscensionSpec | None` param on `_build_base`
+(and pass-through on `minimize`; **not** on `frontier`, which milestone 4's staged
+loop drives directly) turns on a second thing the LP chooses, alongside how to
+source `demand`: which candidate items to master/grandmaster/mega-master to clear
+the stage's AK requirement. `None` (the default everywhere) leaves every existing
+code path byte-identical — everything below is gated on the spec.
+
+- **Reachability**: each `spec.candidates` item (`ascension.StepCandidate`) that is
+  `_obtainable` joins the `_reachable` seed set alongside wanted demand keys, so
+  its channels/crafts/opens enter the model like any other item; one that isn't
+  obtainable is dropped and recorded on `_Base.unmasterable` (never selectable).
+  This is also why the old "no items → trivial `remainder_only` plan" early return
+  is skipped whenever a spec is given: a stage with no direct demand at all (an
+  ascension-only call) still needs the makespan variable and the AK constraint
+  below built, even with zero surviving candidates (the chore-only case).
+- **Step variables** (`_Base.ascend_y`, item → step name → `LpVariable` in
+  `[0, 1]`): one continuous `y` per remaining step (`"master"`/`"grandmaster"`/
+  `"mega"`, whichever of `delta_master`/`delta_grandmaster`/`delta_mega` is not
+  `None`) a surviving candidate has, in sorted-item order for determinism.
+  Ordering links a step to the one below it among whichever exist for that item:
+  `y_grandmaster <= y_master`, `y_mega <= y_grandmaster` (an item already past a
+  lower step has no variable for it, so the link is simply skipped, not asserted
+  — `ascension.candidates()`'s deltas are contiguous, so a step is never present
+  without every step below it that isn't already done).
+- **Gross mastery supply** (`_Base.ascend_S`, item → `LpAffineExpression`): built
+  from the *same* indexed terms the balance loop already computes for that item —
+  `gathered` (offer yields), `made` (`crafting_bonus * craft[item]`, when
+  craftable) and `unpacked` (open-flow yields) — **not** the net balance, since
+  mastery must count gross production even when this plan goes on to consume all
+  of it as a craft material (mastery-chaining is deliberate, see the module
+  docstring). `S_i = spec.mastery_bonus * (gathered + made + unpacked)`, excluding
+  `held`/`bought`/`boosted` so buying or holding an item never earns its mastery.
+  Constraint: `S_i >= Σ(delta_step * y_step) + spec.mega_supply_floors.get(item, 0)`
+  over whichever steps exist.
+- **AK constraint**: step AK (`AK_PER_MASTER * y_master + AK_PER_GRANDMASTER *
+  y_grandmaster`, summed over surviving candidates) plus smeared chore AK
+  (`spec.chore_rate_per_day * (makespan / 1440)`, the makespan variable itself, in
+  days) must be at least `spec.ak_required` — so a stage whose candidates are all
+  too dear can simply run longer instead; the chore term is skipped when
+  `chore_rate_per_day == 0`. **Mega constraint** (only when `megas_required > 0`):
+  the selected mega count (`Σ y_mega`) must be at least `spec.megas_required` — a
+  requirement with no mega steps in the model at all makes this infeasible,
+  surfaced by `_assert_optimal` like any other over-demanded LP (a clearer
+  pre-check is milestone 4's job).
+- **Round-and-fix** (`_round_and_fix_ascension`, called from `_solve_configured`
+  right after the primary solve, before the refinement tower): the relaxed LP can
+  split a step fractionally across several items (a valid relaxation optimum, not
+  a real plan — you cannot half-master an item). It snaps every `y` to exactly 0
+  or 1 by a greedy **cover**: fractional steps (`0.001 < y < 0.999`) are rounded
+  up until step AK reaches the *primary solve's own fractional total* (so
+  rounding up never grows the chore/makespan need past what the relaxation
+  already implied) and the selected mega count reaches `spec.megas_required`,
+  auto-including any prerequisite step of a selection (mega needs grandmaster
+  needs master, among whichever vars exist — required by the ordering
+  constraints above). The cover metric matters: the relaxation loves fractional
+  *grandmaster* slices (100 AK per 90k of delta beats a master's 10 per 10k), so
+  a descending-`y` or AK-per-delta pick would round a whole grandmaster up for a
+  gap a lone master covers, pinning 10x the mastery supply (and production).
+  Instead, megas are picked first by smallest incremental supply (the whole
+  not-yet-selected prerequisite chain's deltas; they carry no AK themselves but
+  drag AK-earning prerequisites along that count toward the AK target), then
+  each AK pick is the *package* — an unselected fractional master/grandmaster
+  step plus its unselected prerequisites — minimising `incremental_supply /
+  min(incremental_ak, ak_still_needed)` (the `min` denies a big package credit
+  for overshooting the gap; ties break to smaller supply, then item name). Every
+  other step is pinned to 0. Both pins are ephemeral (`ascend_pin_<item>_<step>`,
+  read back off the constraint per the pj_off name-sanitisation gotcha) and the
+  problem is re-solved once against them before the refinement tower runs on top,
+  so the tower's stage-1 pin (makespan or `spend_value`) captures the *integral*
+  plan's real cost, not the relaxation's.
+- **`plan.time`**: when the base carries a spec, it is the max of the draws'
+  aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
+  the draws' time — the chore term can legitimately make the optimal makespan
+  exceed every track's own time (the plan idles, waiting on daily chores, to
+  close the AK gap), which the draws alone would under-report. Non-ascension
+  plans are unaffected -- this path is gated on `base.ascension is not None`.
+- **Outcome readout** (`_ascension_outcome`, attached as `SourcingPlan.ascension`):
+  reads the solved, round-and-fixed base into an `ascension.AscensionOutcome` --
+  `masters`/`grandmasters`/`megas` (sorted item lists, `y > 0.5` past rounding),
+  `ak_from_steps` (10/master + 100/grandmaster, selected only), `ak_from_chores`
+  (`spec.chore_rate_per_day * final_makespan_minutes / 1440`, may overshoot the
+  requirement), `mastery_supply` (`{item: S_i.value()}` for every surviving
+  candidate with positive value — incidental production of a candidate item
+  counts as real mastery progress even when nothing pinned it, deliberate).
 
 ### Passive-resource breakpoints — the frontier's spine
 
@@ -521,7 +608,9 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   Scythe/Monthly-grants pattern above (those auto-detect an *owned* perk from
   mastery progress; these instead read an explicit, optional `[tower] level`
   the player sets — the "ascension" mode (`ascension.py`, pure AK/chore/mega
-  arithmetic and reward deltas; not yet wired into the optimiser) climbs it
+  arithmetic and reward deltas; the optimiser side is the ascension extension
+  under "The LP and frontier" above -- staging the climb into rounds and driving
+  `ascension.apply_rewards` per stage is milestone 4, not yet landed) climbs it
   mid-solve, calling `ascension.apply_rewards` per stage to bump `[tower]
   level` and apply each reward's own config delta -- these two functions are
   how levels 90/150 take effect from that).

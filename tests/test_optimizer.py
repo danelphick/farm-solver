@@ -2,11 +2,13 @@ from datetime import timedelta
 
 import pytest
 
+import ascension
 from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
 from optimizer import (
     SourcingPlan,
+    _build_base,
     _passive_completion_caps,
     _thin,
     all_offers,
@@ -1052,3 +1054,287 @@ def test_plan_gold_includes_pumpkin_juice():
     # Pumpkin Juice has no self-sourced form, so its whole gold adds to the total.
     plan = SourcingPlan(large_nets=100, pumpkin_gold=50)
     assert plan_gold(plan, GOLD) == pytest.approx(100 * 0.01 + 50)
+
+
+# --- Ascension: the LP chooses which candidates to master/grandmaster/mega ---
+
+
+def test_minimize_ascension_selects_the_cheaper_candidate_to_cover_ak():
+    # Two candidates each need 10 mastery progress (delta_master) for a plain
+    # master; "cheap" gathers in 1 min/unit, "expensive" in 100 min/unit. AK 10
+    # is exactly one master, so the LP -- minimising time -- masters "cheap" and
+    # leaves "expensive" untouched.
+    cheap = Offer("gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1))
+    expensive = Offer(
+        "gather expensive", "farming", {"expensive": 1}, time_per_unit=timedelta(minutes=100)
+    )
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("cheap", 10, None, None),
+            ascension.StepCandidate("expensive", 10, None, None),
+        ],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([cheap, expensive], {}, ascension=spec)
+    assert plan.ascension.masters == ["cheap"]
+    assert plan.ascension.grandmasters == []
+    assert plan.ascension.ak_from_steps == pytest.approx(10)
+    # S_i (gross gathered * mastery_bonus) covers the delta with no spare needed.
+    assert plan.ascension.mastery_supply["cheap"] == pytest.approx(10)
+    assert "expensive" not in plan.ascension.mastery_supply
+
+
+def test_minimize_ascension_orders_grandmaster_after_master():
+    # One candidate, AK 110 = one master (10) + one grandmaster (100): the
+    # ordering link (y_gm <= y_m) forces both selected, and S covers both deltas.
+    item = Offer("gather x", "farming", {"x": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("x", delta_master=10, delta_grandmaster=90, delta_mega=None)],
+        ak_required=110,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([item], {}, ascension=spec)
+    assert plan.ascension.masters == ["x"]
+    assert plan.ascension.grandmasters == ["x"]
+    assert plan.ascension.ak_from_steps == pytest.approx(110)
+    assert plan.ascension.mastery_supply["x"] >= 100 - 1e-6
+
+
+def test_minimize_ascension_mastery_supply_counts_gross_chained_production():
+    # "a" is gathered then fully consumed as a material of crafted "b" (demand on
+    # b) -- mastery-chaining means a's gross production still counts toward its
+    # own mastery, even though none of it survives to a balance.
+    gather_a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
+    recipes = {"b": {"a": 1.0}}
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("a", 10, None, None)],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([gather_a], {"b": 5}, recipes=recipes, ascension=spec)
+    assert plan.crafts.get("b") == pytest.approx(5)
+    assert plan.ascension.masters == ["a"]
+    # S_a >= delta_master with no "a" left over (5 of the ~9.09 gathered go into b).
+    assert plan.ascension.mastery_supply["a"] == pytest.approx(10)
+
+
+def test_minimize_ascension_excludes_bought_units_from_mastery_supply():
+    # A buyable, cheaply-priced candidate that is also (slowly) gatherable: even
+    # buying freely (a tiny gold weight), mastery must come from gathering --
+    # bought units never enter S_i.
+    gather_ap = Offer(
+        "gather ap", "farming", {"arnold palmer": 1}, time_per_unit=timedelta(minutes=10)
+    )
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("arnold palmer", 10, None, None)],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize(
+        [gather_ap], {}, prices={"arnold palmer": 0.01}, ascension=spec, gold_weight=BUY_FREELY,
+    )
+    assert plan.ascension.masters == ["arnold palmer"]
+    assert plan.bought == {}
+    assert sum(d.units for d in plan.draws) == pytest.approx(10 / 1.1)
+
+
+def test_minimize_ascension_mastery_supply_counts_opens():
+    # "gem" is only obtainable by opening a chest -- mastery must still be
+    # satisfiable through the open flow's yield.
+    gather_key = Offer("gather key", "farming", {"key": 1}, time_per_unit=timedelta(minutes=1))
+    flow = OpenFlow("chest", consumes={"key": 1}, yields={"gem": 2})
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("gem", 10, None, None)],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([gather_key], {}, openables=[flow], ascension=spec)
+    assert plan.ascension.masters == ["gem"]
+    assert plan.opens.get("chest", 0) > 0
+    assert plan.ascension.mastery_supply["gem"] == pytest.approx(10)
+
+
+def test_minimize_ascension_waits_on_chores_when_production_is_dear():
+    # Production is 1000 min/unit (dear); a large chore rate makes waiting for
+    # chore AK cheaper than gathering -- the plan idles past every track's own
+    # time, and plan.time reflects the makespan (not any draw).
+    expensive = Offer("gather x", "farming", {"x": 1}, time_per_unit=timedelta(minutes=1000))
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("x", 10000, None, None)],
+        ak_required=10,
+        chore_rate_per_day=100,
+        megas_required=0,
+    )
+    plan = minimize([expensive], {}, ascension=spec)
+    assert plan.ascension.masters == []
+    assert plan.ascension.ak_from_chores >= 10 - 1e-6
+    assert plan.time > timedelta(0)
+    # No draws at all -- the whole 10 AK comes from chores, not any track.
+    assert plan.draws == []
+
+
+def test_minimize_ascension_masters_instead_of_waiting_with_no_chore_rate():
+    # Same dear production, but chore_rate_per_day=0 -- no free lunch, so the LP
+    # has to master the item after all.
+    expensive = Offer("gather x", "farming", {"x": 1}, time_per_unit=timedelta(minutes=1000))
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("x", 10000, None, None)],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([expensive], {}, ascension=spec)
+    assert plan.ascension.masters == ["x"]
+    assert plan.ascension.ak_from_chores == 0
+
+
+def test_minimize_ascension_selects_the_cheaper_candidate_for_a_mega():
+    # Both candidates are already grandmastered (delta_master/grandmaster None),
+    # each needing 1000 more progress to mega; one is far cheaper to produce.
+    cheap = Offer("gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1))
+    expensive = Offer(
+        "gather expensive", "farming", {"expensive": 1}, time_per_unit=timedelta(minutes=100)
+    )
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("cheap", None, None, 1000),
+            ascension.StepCandidate("expensive", None, None, 1000),
+        ],
+        ak_required=0,
+        chore_rate_per_day=0,
+        megas_required=1,
+    )
+    plan = minimize([cheap, expensive], {}, ascension=spec)
+    assert plan.ascension.megas == ["cheap"]
+
+
+def test_minimize_ascension_rounds_fractional_relaxation_to_integral_selection():
+    # Two equal-cost candidates each need delta_master=10; ak_required=15 means
+    # the LP relaxation can satisfy it with 1.5 masters' worth split across both
+    # (fractional y). Round-and-fix must snap to a real, integral plan: since
+    # neither single master alone reaches AK 15, both get selected (target_ak=15,
+    # covered by 10+10=20).
+    a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
+    b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("a", 10, None, None),
+            ascension.StepCandidate("b", 10, None, None),
+        ],
+        ak_required=15,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([a, b], {}, ascension=spec)
+    assert sorted(plan.ascension.masters) == ["a", "b"]
+    assert plan.ascension.ak_from_steps == pytest.approx(20)
+    assert plan.ascension.mastery_supply["a"] == pytest.approx(10)
+    assert plan.ascension.mastery_supply["b"] == pytest.approx(10)
+
+
+def test_minimize_ascension_rounds_to_a_master_not_a_grandmaster_for_a_small_gap():
+    # Regression: the relaxation covers a 10-AK requirement with fractional
+    # *grandmaster* slices (100 AK per 90k of delta is more AK-efficient than a
+    # master's 10 per 10k), landing at y_m = y_gm = 1/11 on the cheap item. A
+    # rounder picking by descending y (or AK-per-delta) then rounds the whole
+    # grandmaster up -- pinning 100k of mastery supply (~15h of farming) where a
+    # lone master's 10k (~91min) covers the gap. The greedy cover must pick the
+    # master alone: 10000/min(10, 10) = 1000 beats the master+grandmaster
+    # package's 100000/min(110, 10) = 10000.
+    cheap = Offer("grow corn", "farming", {"corn": 100}, time_per_unit=timedelta(minutes=1))
+    dear = Offer(
+        "grow gold rose", "farming", {"gold rose": 1}, time_per_unit=timedelta(minutes=100)
+    )
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("corn", 10000, 90000, 900000),
+            ascension.StepCandidate("gold rose", 10000, 90000, 900000),
+        ],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([cheap, dear], {}, ascension=spec, gold_weight=1e-9)
+    assert plan.ascension.masters == ["corn"]
+    assert plan.ascension.grandmasters == []
+    assert plan.ascension.ak_from_steps == pytest.approx(10)
+    assert plan.ascension.mastery_supply["corn"] == pytest.approx(10000)
+    assert plan.time < timedelta(hours=2)
+
+
+def test_minimize_ascension_is_deterministic():
+    a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
+    b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("a", 10, None, None),
+            ascension.StepCandidate("b", 10, None, None),
+        ],
+        ak_required=15,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan1 = minimize([a, b], {}, ascension=spec)
+    plan2 = minimize([a, b], {}, ascension=spec)
+    assert plan1.ascension == plan2.ascension
+    assert plan1.time == plan2.time
+    assert [d.offer.name for d in plan1.draws] == [d.offer.name for d in plan2.draws]
+
+
+def test_minimize_ascension_none_matches_plain_minimize():
+    # A plain, non-ascension scenario run both ways must agree byte-for-byte.
+    plan_default = minimize([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD,
+                            gold_weight=SELF_SOURCE)
+    plan_explicit = minimize([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD,
+                             gold_weight=SELF_SOURCE, ascension=None)
+    assert plan_default.ascension is None
+    assert plan_explicit.ascension is None
+    assert plan_default.time == plan_explicit.time
+    assert plan_default.gold == plan_explicit.gold
+    assert plan_default.draws == plan_explicit.draws
+    assert plan_default.bought == plan_explicit.bought
+
+
+def test_minimize_ascension_with_empty_demand_does_not_early_exit():
+    # demand={} with a spec whose candidate is obtainable must still build and
+    # solve the LP (the old "no items -> trivial remainder-only plan" early
+    # return must not fire just because nothing is directly demanded).
+    cheap = Offer("gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("cheap", 10, None, None)],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([cheap], {}, ascension=spec)
+    assert plan.remainder == {}
+    assert plan.ascension.masters == ["cheap"]
+
+
+def test_build_base_drops_unmasterable_candidates():
+    # "ghost" has no channel/recipe/open at all -- it lands in unmasterable and
+    # is never selectable, but the LP still solves via the other candidate.
+    cheap = Offer("gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("cheap", 10, None, None),
+            ascension.StepCandidate("ghost", 10, None, None),
+        ],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    base = _build_base([cheap], {}, ascension=spec)
+    assert base.unmasterable == ["ghost"]
+    assert "ghost" not in base.ascend_y
+
+    plan = minimize([cheap], {}, ascension=spec)
+    assert plan.ascension.masters == ["cheap"]
+    assert "ghost" not in plan.ascension.masters
+    assert "ghost" not in plan.ascension.mastery_supply
