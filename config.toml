@@ -27,8 +27,9 @@ board = 46000
 oak = 6000
 have_pine_boost = true
 have_sturdy_saw = true
-# Hickory Omelette: a held/bought meal (priced in [trading]) that boosts the
-# sawmill by 20% for the hour it lasts. One of:
+# Hickory Omelette: a held/bought meal (priced in [trading]) that, for the hour it
+# lasts, makes the sawmill deposit +20% of its hourly output every 10 minutes -- six
+# deposits, i.e. +120% over the hour (each storehouse-capped). One of:
 #   "none"     don't use it.
 #   "all"      boost every output (oak, board, wood) for as long as the plan
 #              runs -- one omelette per boosted hour.

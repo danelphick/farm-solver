@@ -31,8 +31,10 @@ from passive import (
 PET_PRODUCER_PREFIX = "pet "
 
 # The Hickory Omelette is a held/bought meal (see :data:`sources.HICKORY_OMELETTE`)
-# that boosts the sawmill by :data:`sources.HICKORY_OMELETTE_FRACTION` for the hour
-# it lasts. The ``[sawmill] hickory_omelette`` setting picks how it is used; the
+# that, for the hour it lasts, makes the sawmill deposit
+# :data:`sources.HICKORY_OMELETTE_FRACTION` of its hourly output every 10 minutes
+# (six deposits, i.e. +120% over the hour, each storehouse-capped -- see
+# :func:`sources.sawmill_boost_offers`). The ``[sawmill] hickory_omelette`` setting picks how it is used; the
 # boost itself is modelled as a grounded, omelette-consuming offer built by
 # :func:`sources.sawmill_boost_offers` (not baked into passive production here).
 HICKORY_NONE = "none"

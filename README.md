@@ -275,10 +275,12 @@ board = 60000
 oak = 6000
 have_sturdy_saw = true    # oak is only produced with the sturdy saw
 have_pine_boost = true    # two pine board a minute instead of one
-# Hickory Omelette: a held/bought meal (priced in [trading]) that boosts the
-# sawmill +20% for the hour it lasts. "none", "all" (boost oak/board/wood, one
-# omelette per boosted hour), or "only_oak" (only ever spend omelettes to speed
-# the scarce Oak; Board and Wood are not boosted). See Trading below.
+# Hickory Omelette: a held/bought meal (priced in [trading]) that, for the hour
+# it lasts, makes the sawmill deposit +20% of its hourly output every 10 minutes
+# -- six deposits, i.e. +120% over the hour (each storehouse-capped). "none",
+# "all" (boost oak/board/wood, one omelette per boosted hour), or "only_oak"
+# (only ever spend omelettes to speed the scarce Oak; Board and Wood are not
+# boosted). See Trading below.
 hickory_omelette = "all"
 
 [chicken_coop]              # eggs and feathers daily
@@ -375,7 +377,7 @@ cookie_set    = 20    # priced individually, in gold each (not gk)
 hickory_omelette = 350  # gk; a sawmill-boost meal (see [sawmill] hickory_omelette)
 ```
 
-The `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. These are the **buyable** consumables. The Hickory Omelette is one of them: with a price set (default 350 gk = 0.35 gold each) and `[sawmill] hickory_omelette` set to `all` or `only_oak`, the solver eats one per boosted sawmill-hour — from your held stock first, then bought — and trades that gold against the faster completion the +20% boost gives (a **Sawmill boost** section in the plan shows how many it eats and the extra output). Grape Juice is not traded directly — it is priced at its **production cost** in grapes only so it can be valued (grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk", Arnold Palmers per 1000); it is never bought, always pressed from grapes. With this section present the solver can buy consumables (and the frontier trades makespan against real gold); without it nothing is buyable and every plan is fully self-sourced.
+The `gk` prices are gold per 1000 units (divided by 1000 for the per-unit gold); cookie sets are gold each. These are the **buyable** consumables. The Hickory Omelette is one of them: with a price set (default 350 gk = 0.35 gold each) and `[sawmill] hickory_omelette` set to `all` or `only_oak`, the solver eats one per boosted sawmill-hour — from your held stock first, then bought — and trades that gold against the faster completion the boost gives (+20% of the hourly output every 10 minutes, so +120% over the boosted hour, each deposit storehouse-capped; a **Sawmill boost** section in the plan shows how many it eats and the extra output). Grape Juice is not traded directly — it is priced at its **production cost** in grapes only so it can be valued (grapes trade for **Arnold Palmers** rather than gold, so `grapes` is quoted in "apk", Arnold Palmers per 1000); it is never bought, always pressed from grapes. With this section present the solver can buy consumables (and the frontier trades makespan against real gold); without it nothing is buyable and every plan is fully self-sourced.
 
 Each plan's gold is shown as **`buy + self-sourced = total`**, and a plan that banks surplus adds **`(bank B, net N)`**. The *total* is the market value of every consumable the plan spends; **buy** is the gold the solver actually spends buying them (exactly `plan.gold` — what `--max-gold` caps), and **self-sourced** is the market value of everything it made or gathered instead. The two are exact — the LP decides which consumables to buy — and always sum to the total. **Bank** is the sale value of the surplus the plan produces past everything it consumes (the same figure as the **Surplus** section below), and **net** is `buy − bank`: the gold you are really out of pocket once those banked materials are sold or spent on other tasks. Net is the axis the frontier trades against time — and what `--cheapest-plan` ranks by — so a slow, passive-leaning plan that banks more than it buys sits at *negative* gold, extending the frontier past the "buy nothing" line.
 

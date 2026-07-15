@@ -60,11 +60,16 @@ CIDER_DROP_RATE = 0.40
 ACORN_PIE = "acorn pie"
 ACORN_PIE_PER_EXPLORE = 1.0 / ACORN_PIE_EXPLORES
 
-# The Hickory Omelette: a held/bought meal that lasts one hour and boosts the
-# sawmill's output by HICKORY_OMELETTE_FRACTION while active. The boost is a
-# grounded activity on its own concurrent track (see :func:`sawmill_boost_offers`
-# and :data:`config.HICKORY_MODES`): one unit is one boosted hour, yielding that
-# fraction of the sawmill's hourly output and eating one omelette.
+# The Hickory Omelette: a held/bought meal that lasts one hour and, while active,
+# makes the sawmill deposit an extra HICKORY_OMELETTE_FRACTION of its hourly output
+# **every ten minutes** (not once). Over the boosted hour that is six such deposits
+# -- the top-of-the-hour one merges with the sawmill's normal run into a single
+# ``(1 + fraction)x`` deposit and the other five land on their own -- so the omelette
+# adds ``6 * fraction`` (= +120% at 0.2) of the hourly output, **each deposit
+# storehouse-capped independently** (see :func:`sawmill_boost_offers`). The boost is
+# a grounded activity on its own concurrent track (see :data:`config.HICKORY_MODES`):
+# one unit is one boosted hour, yielding that whole capped bonus and eating one
+# omelette.
 HICKORY_OMELETTE = "hickory omelette"
 HICKORY_OMELETTE_FRACTION = 0.2
 # The boost runs concurrently with the base sawmill (same wall clock), so it gets
@@ -373,23 +378,45 @@ def passive_offers(production: PassiveProduction) -> list[Offer]:
     ]
 
 
+def _omelette_bonus(base: float, storehouse_size: float | None) -> float:
+    """Oak/board/wood one omelette adds over a boosted hour, storehouse-capped.
+
+    While active, the sawmill deposits :data:`HICKORY_OMELETTE_FRACTION` of its
+    hourly output ``base`` every ten minutes. The top-of-the-hour deposit merges
+    with the normal run into one ``(1 + fraction)x`` deposit; the other five land
+    on their own -- and **every deposit is clamped to the storehouse size**, just
+    like the base run (see :meth:`passive.PassiveProduction.per_cycle`). The offer
+    carries the *bonus over the unboosted hour*, so the base deposit (already in
+    the passive rate) is netted out. Uncapped this is exactly ``6 * fraction * base``
+    (= +120% at 0.2); capped, the fat top-of-hour deposit spills over first (a big
+    output like Wood whose plain run already fills the storehouse gets no top-of-hour
+    gain), while the five small off-hour deposits usually fit under the cap.
+    """
+    f = HICKORY_OMELETTE_FRACTION
+    if storehouse_size is None:
+        return base * 6 * f
+    cap = storehouse_size
+    return min(cap, base * (1 + f)) + 5 * min(cap, base * f) - min(cap, base)
+
+
 def sawmill_boost_offers(
-    outputs: dict[str, float], mode: str
+    outputs: dict[str, float], mode: str, storehouse_size: float | None = None
 ) -> list[Offer]:
     """The Hickory Omelette sawmill boost, as a grounded offer (or none).
 
     ``outputs`` are the sawmill's base hourly outputs (see
-    :func:`config.sawmill_outputs`); ``mode`` is one of :data:`config.HICKORY_MODES`.
+    :func:`config.sawmill_outputs`); ``mode`` is one of :data:`config.HICKORY_MODES`;
+    ``storehouse_size`` (see :func:`config.storehouse_size`) caps each deposit.
 
-    One unit is a single boosted **hour**: it yields :data:`HICKORY_OMELETTE_FRACTION`
-    of the boosted outputs and eats one :data:`HICKORY_OMELETTE` (which the plan
-    must hold or buy). It lives on its own :data:`SAWMILL_BOOST_TRACK`, so it runs
-    concurrently with the base sawmill yet still costs an hour of makespan per
+    One unit is a single boosted **hour**: it yields the whole every-ten-minutes
+    bonus (:func:`_omelette_bonus`: ``6 * HICKORY_OMELETTE_FRACTION`` of each output,
+    storehouse-capped per deposit) and eats one :data:`HICKORY_OMELETTE` (which the
+    plan must hold or buy). It lives on its own :data:`SAWMILL_BOOST_TRACK`, so it
+    runs concurrently with the base sawmill yet still costs an hour of makespan per
     omelette -- which stops the LP boosting for more hours than the plan actually
     spans (past that the boost track becomes the binding one, only lengthening the
-    plan). At the fast end that recovers the same +20% throughput as baking the
-    boost into the sawmill's rate; nearer the cheap end the LP can boost fewer
-    hours, trading omelette gold against makespan like any other consumable.
+    plan). Nearer the cheap end the LP can boost fewer hours, trading omelette gold
+    against makespan like any other consumable.
 
     * ``"all"``      boosts every output (oak, board, wood).
     * ``"only_oak"`` boosts oak alone -- board and wood are left out entirely, so
@@ -404,11 +431,12 @@ def sawmill_boost_offers(
         boosted = {"oak": outputs["oak"]} if "oak" in outputs else {}
     if not boosted:
         return []
+    yields = {item: _omelette_bonus(qty, storehouse_size) for item, qty in boosted.items()}
     return [
         Offer(
             name="hickory omelette boost",
             track=SAWMILL_BOOST_TRACK,
-            yields={item: HICKORY_OMELETTE_FRACTION * qty for item, qty in boosted.items()},
+            yields={item: y for item, y in yields.items() if y > 0},
             consumes={HICKORY_OMELETTE: 1.0},
             time_per_unit=timedelta(hours=1),
         )

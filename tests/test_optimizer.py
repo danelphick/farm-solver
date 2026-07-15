@@ -67,18 +67,25 @@ def test_all_offers_gathers_every_channel():
 
 
 def test_sawmill_boost_is_grounded_and_speeds_oak_for_omelette_gold():
-    # Sawmill makes 6000 oak/hour (100/min). To make 60000 oak, base passive alone
-    # takes 600 min; the +20% boost cuts that to 500 min but eats 8.33 omelettes.
+    # Sawmill makes 6000 oak/hour (100/min). The omelette deposits 20% of the hourly
+    # output every ten minutes, i.e. 6 * 20% = +120% (7200/hour, 120/min) over a
+    # boosted hour -- not +20%. So the boost track runs at 120/min alongside the
+    # 100/min base: 220/min combined. To make 60000 oak, base passive alone takes
+    # 600 min; the boost cuts that to 60000/220 min, eating that many omelette-hours.
     passive = PassiveProduction([PassiveProducer("sawmill", HOURLY, {"oak": 6000})])
     offers = passive_offers(passive) + sawmill_boost_offers({"oak": 6000}, "all")
     prices = {"hickory omelette": 0.35}
+    boosted_min = 60000 / 220  # 272.7 min: base 100/min + boost 120/min
+    omelettes = boosted_min / 60  # one omelette per boosted hour
 
     # Buy freely: takes the boost, buying every omelette it needs.
     fast = minimize(offers, {"oak": 60000}, prices=prices, gold_weight=BUY_FREELY)
-    assert fast.time == pytest.approx(timedelta(minutes=500), abs=timedelta(seconds=1))
-    assert fast.hickory_omelettes == pytest.approx(500 / 60, rel=1e-3)
-    assert fast.bought["hickory omelette"] == pytest.approx(500 / 60, rel=1e-3)
-    assert fast.gold == pytest.approx(500 / 60 * 0.35, rel=1e-3)
+    assert fast.time == pytest.approx(
+        timedelta(minutes=boosted_min), abs=timedelta(seconds=1)
+    )
+    assert fast.hickory_omelettes == pytest.approx(omelettes, rel=1e-3)
+    assert fast.bought["hickory omelette"] == pytest.approx(omelettes, rel=1e-3)
+    assert fast.gold == pytest.approx(omelettes * 0.35, rel=1e-3)
 
     # Buy nothing: the omelette has no self-sourced form, so the boost is dropped
     # and oak comes entirely from the slower base passive run.

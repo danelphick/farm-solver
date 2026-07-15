@@ -136,7 +136,7 @@ frontier as before.
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
-| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers` (Hickory Omelette boost, `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
+| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
@@ -595,17 +595,31 @@ this process's own stdout to a pager externally makes stdout a non-tty before
 - **Hickory Omelette** (a held/bought sawmill-boost meal): the `[sawmill]
   hickory_omelette` setting (`config.hickory_omelette_mode`, enum
   none/all/only_oak; the old `use_hickory_omelette` boolean is rejected) picks how
-  the sawmill's +20% (`sources.HICKORY_OMELETTE_FRACTION`) boost is used. It is
-  **not** baked into passive rates any more; `sources.sawmill_boost_offers` builds
-  it as a grounded offer on its own concurrent `SAWMILL_BOOST_TRACK`: one unit is a
-  boosted **hour**, yielding that fraction of the boosted outputs and consuming one
-  `hickory omelette` (a `BUYABLE`, priced in `[trading]` at 350 gk = 0.35/unit, or
-  drawn from held stock). Its own track costs an hour of makespan per omelette, so
-  the LP can't boost for more hours than the plan spans (past that the boost track
-  becomes binding) — at the fast end this recovers the same +20% throughput as
-  baking it into the rate, nearer the cheap end it boosts fewer hours (trading
-  omelette gold for makespan) and `favour_passive` drops it entirely (omelettes are
-  in `spend_value`). `all` boosts oak+board+wood; `only_oak` boosts oak alone (board
+  the sawmill boost is used. **The mechanic (load-bearing — get this right):** while
+  an omelette is active (one hour) the sawmill deposits an extra
+  `HICKORY_OMELETTE_FRACTION` (0.2) of its **hourly** output **every ten minutes**,
+  *not* once. Over the boosted hour that is **six** deposits: the top-of-the-hour one
+  coincides with the sawmill's normal run and merges into a single `(1+0.2)x`
+  deposit, and the other five land on their own — so one omelette adds
+  `6 * 0.2` = **+120%** of the hourly output, **each deposit storehouse-capped
+  independently** (`config.storehouse_size`, exactly as
+  `passive.PassiveProduction.per_cycle` caps the base run). `sources._omelette_bonus`
+  computes that per-item bonus: `min(cap, base*1.2) + 5*min(cap, base*0.2) −
+  min(cap, base)` (uncapped → `1.2*base`). A fat output whose plain run already fills
+  the storehouse (Wood: 60k/h vs a ~50k cap) gets **no** top-of-hour gain — only its
+  five small off-hour deposits get through — while the scarce output (Oak, 6k/h) sits
+  far under the cap and gets the full +120%. **Regression watch:** commit 54c5a61 once
+  collapsed this to a flat `0.2*base` offer (+20% per hour, six times too little);
+  the every-ten-minutes-with-per-deposit-cap model above is the correct one — do not
+  simplify it back. It is **not** baked into passive rates;
+  `sources.sawmill_boost_offers` builds it as a grounded offer on its own concurrent
+  `SAWMILL_BOOST_TRACK`: one unit is a boosted **hour**, yielding that whole capped
+  bonus and consuming one `hickory omelette` (a `BUYABLE`, priced in `[trading]` at
+  350 gk = 0.35/unit, or drawn from held stock). Its own track costs an hour of
+  makespan per omelette, so the LP can't boost for more hours than the plan spans
+  (past that the boost track becomes binding); nearer the cheap end it boosts fewer
+  hours (trading omelette gold for makespan) and `favour_passive` drops it entirely
+  (omelettes are in `spend_value`). `all` boosts oak+board+wood; `only_oak` boosts oak alone (board
   and wood are so much more plentiful per hour that oak is the only real value, and
   this guarantees an omelette is never spent to source them). `main.build_inputs`
   builds the offers once (static across the fixed point) onto `SolveInputs.boost_offers`,

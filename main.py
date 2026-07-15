@@ -1171,10 +1171,14 @@ def build_inputs(
     prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
 
     # Hickory Omelette sawmill boost: a grounded, omelette-consuming channel (see
-    # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs and
-    # the [sawmill] hickory_omelette setting. Static across the seasonal fixed point.
+    # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs, the
+    # [sawmill] hickory_omelette setting and the storehouse size (which caps each of
+    # the boost's ten-minute deposits, as it caps the base run). Static across the
+    # seasonal fixed point.
     boost_offers = sources.sawmill_boost_offers(
-        config.sawmill_outputs(cfg), config.hickory_omelette_mode(cfg)
+        config.sawmill_outputs(cfg),
+        config.hickory_omelette_mode(cfg),
+        config.storehouse_size(cfg, today=start),
     )
 
     # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
