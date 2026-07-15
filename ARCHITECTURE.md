@@ -298,7 +298,17 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     would chase the pet tail — centuries — but whose non-pet breakpoints are the real
     completions). `maxpassive` is the `t_bound` endpoint; the extension breakpoints
     join the `_thin` anchors. Bounding at `t_bound` is what stops the slow end
-    offloading demand onto a pet trickle.
+    offloading demand onto a pet trickle. **The `t_bound > t_cheap` gate uses the
+    cheap endpoint's *continuous* makespan (`t_cheap_raw`), not its quantized time**
+    — a self-sourced cheap plan can lean on a *daily* deposit (orchard fruit for
+    cider stamina) and quantize up past `t_bound` (a goal item's own *hourly*
+    passive completion) even though its real sourcing finishes well before it.
+    Comparing the quantized times then wrongly skips the whole slow regime, so a
+    fully-passive goal (e.g. Board straight from the sawmill) never gets its
+    zero-tool `maxpassive` plan and a `--max-ac 0` / `--max-ln 0` run wrongly
+    reports the goal impossible. The fast-regime epsilon sweep does not rescue it:
+    it is geometric and sparse near `t_cheap`, and the cheap plan's *partial*
+    passive residuals inject no full-completion breakpoint there.
 - `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, net gold)`; dedup key
   rounds both.
 

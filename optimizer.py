@@ -1622,10 +1622,19 @@ def frontier(
     )
     fast = _solve_configured(base_active, gold_weight=_FAST_PRICE)
     cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE)
+    # The cheap endpoint's *continuous* makespan -- where its actual sourcing
+    # finishes, before quantisation lifts the reported time to a deposit
+    # boundary. The slow-regime gate below needs this, not the quantized time:
+    # a self-sourced cheap plan can lean on a *daily* deposit (orchard fruit for
+    # cider stamina) and quantize up past ``t_bound`` -- board's own *hourly*
+    # passive completion -- even though its real sourcing finishes well before
+    # it. Comparing the quantized times would then wrongly skip the passive
+    # extension and miss the maximally-passive plan that dominates it (faster on
+    # the hourly board *and* spends fewer tools).
+    t_cheap_raw = cheap.time.total_seconds()
     # Quantize the two endpoints before anything downstream reads their time --
-    # the epsilon-sweep range, the _CAP_MARGIN lo/hi filter and (in the slow
-    # regime) t_cheap should all sit on real deposit boundaries, not the
-    # continuous estimate.
+    # the epsilon-sweep range and the _CAP_MARGIN lo/hi filter should sit on
+    # real deposit boundaries, not the continuous estimate.
     _quantize_plan_time(
         fast, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
     )
@@ -1674,12 +1683,12 @@ def frontier(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, passive_pet_items, quantize,
         )
-        t_bound = max(nonpet, default=t_cheap)
-        if t_bound > t_cheap * (1 + _CAP_MARGIN):
-            ext_lo, ext_hi = t_cheap * (1 + _CAP_MARGIN), t_bound * (1 - _CAP_MARGIN)
+        t_bound = max(nonpet, default=t_cheap_raw)
+        if t_bound > t_cheap_raw * (1 + _CAP_MARGIN):
+            ext_lo, ext_hi = t_cheap_raw * (1 + _CAP_MARGIN), t_bound * (1 - _CAP_MARGIN)
             ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
             anchors += ext_breaks
-            ext_caps = _time_caps(t_cheap, t_bound, samples) + ext_breaks + [t_bound]
+            ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
             plans += [
                 _solve_configured(
                     base_passive, favour_passive=True, time_cap=timedelta(seconds=cap),

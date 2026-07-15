@@ -921,6 +921,50 @@ def test_frontier_credits_banked_surplus_below_zero_gold():
     assert slow.cost[1] == pytest.approx(slow.gold - slow.surplus_gold)
 
 
+def test_frontier_finds_max_passive_plan_when_cheap_endpoint_quantizes_past_it():
+    # Regression: the buy-nothing "cheap" endpoint self-sources nets from a
+    # fast-accruing material (wire, 10/min) to fish the goal in ~10 min
+    # continuously -- far faster than sourcing the goal straight from passive
+    # (0.1/min, ~16 h 40 m). But wire deposits only in whole *days*, so
+    # quantisation lifts the cheap plan's reported time to a full day, *past*
+    # the goal's own ~16 h 40 m passive completion. That inversion is the trap:
+    #   * the fast-regime epsilon sweep is geometric over [t_fast, ~1 day] and
+    #     sparse near the top, so it never samples a cap in the 14-24 h band
+    #     where the pure-passive plan lives (and the cider-ish cheap plan injects
+    #     no full-completion breakpoint there either); and
+    #   * the slow regime only runs when t_bound exceeds t_cheap -- so comparing
+    #     against the *quantized* cheap day (24 h > 16 h 40 m) wrongly skips it.
+    # The gate must use the cheap endpoint's *continuous* makespan, or the
+    # maximally-passive plan (goal from passive, zero nets) is never generated
+    # and a `--max-ln 0` run wrongly reports no zero-net plan exists.
+    passive = Offer(
+        "passive", "passive", {"goal": 0.1, "wire": 10.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    fish = Offer("fish goal", "fishing", {"goal": 1},
+                 consumes={"large net": 1}, ln=1)
+    recipes = {"large net": {"wire": 1.0}}
+
+    def quantize(item, residual):
+        if item == "wire":  # lumpy: any positive residual waits a whole day
+            return timedelta(days=1) if residual > 1e-6 else timedelta(0)
+        if item == "goal":  # fine-grained: the continuous 0.1/min wait
+            return timedelta(minutes=residual / 0.1)
+        return None
+
+    plans = frontier([passive, fish], {"goal": 100}, recipes, prices=GOLD,
+                     quantize=quantize)
+    cheap = minimize([passive, fish], {"goal": 100}, recipes, 1.0,
+                     prices=GOLD, gold_weight=SELF_SOURCE, quantize=quantize)
+    assert round(cheap.large_nets) > 0          # cheap self-sources nets to go fast
+    assert cheap.time >= timedelta(days=1)       # but quantizes past the goal's wait
+    # The frontier must include the maximally-passive plan: no nets, goal sourced
+    # straight from passive, finishing well before the cheap plan's quantized day.
+    passive_plan = min(plans, key=lambda p: p.large_nets)
+    assert round(passive_plan.large_nets) == 0
+    assert passive_plan.time < cheap.time
+
+
 def test_frontier_prices_pick_the_cheaper_gold_channel():
     # The same item is obtainable by fishing (a bought Large Net) or exploring (a
     # bought Arnold Palmer), both instant. Large Nets are far cheaper in gold, so
