@@ -17,13 +17,15 @@ import math
 import re
 import sys
 from collections.abc import Iterable
-from datetime import timedelta
+from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.markdown import Markdown as RichMarkdown
 from rich.segment import Segment, Segments
 from rich.style import Style
 
+import ascension
 import config
 import crafting
 import crops
@@ -32,6 +34,12 @@ import optimizer
 import passive
 import pets
 import sources
+
+if TYPE_CHECKING:
+    # main.py imports report.py, so this is TYPE_CHECKING-only (never evaluated
+    # at runtime, see `from __future__ import annotations`) to avoid a cycle --
+    # only used to type-hint the ascension orchestration dataclasses below.
+    import main
 
 
 # How close to the makespan the farming track may fall and still count as the
@@ -1274,12 +1282,17 @@ def print_plan(
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
     pumpkin_schedule: dict[str, list[int]] | None = None,
+    skip_critical_path: bool = False,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials.
 
     ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
     item, the mastery levels at which to drink its Pumpkin Juices so each lands its
-    intended tier boost; the Pumpkin Juice section names them.
+    intended tier boost; the Pumpkin Juice section names them. ``skip_critical_path``
+    (ascension mode only, see :func:`print_ascension_plan`) omits the usual
+    :func:`print_critical_path` call -- a stage waiting on daily chores prints its
+    own override line instead, ahead of this call; :func:`print_critical_path`'s
+    own precedence logic is untouched either way.
     """
     inventory = inventory or {}
     ctx = _build_plan_context(
@@ -1290,10 +1303,11 @@ def print_plan(
     need, elsewhere = ctx.need, ctx.elsewhere
     spent_consumables = ctx.spent_consumables
 
-    print_critical_path(
-        plan, need, elsewhere, display, production, sourceable_elsewhere,
-        max_passive_residuals,
-    )
+    if not skip_critical_path:
+        print_critical_path(
+            plan, need, elsewhere, display, production, sourceable_elsewhere,
+            max_passive_residuals,
+        )
 
     fishing_draws = _sourced(ctx, _draws_on(plan, sources.FISHING_TRACK))
     if fishing_draws:
@@ -1630,12 +1644,14 @@ def markdown_plan(
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
     pumpkin_schedule: dict[str, list[int]] | None = None,
+    skip_critical_path: bool = False,
 ) -> None:
     """Markdown counterpart to :func:`print_plan`: the same sections, as tables.
 
     Shares :func:`_build_plan_context` and every decision helper (critical path,
     farming-drives, passive sourcing) with :func:`print_plan`, so the two renderers
     always agree on content -- only the layout (table vs. aligned text) differs.
+    ``skip_critical_path`` mirrors :func:`print_plan`'s own parameter.
     """
     inventory = inventory or {}
     ctx = _build_plan_context(
@@ -1644,14 +1660,15 @@ def markdown_plan(
     display = ctx.display
     need, elsewhere = ctx.need, ctx.elsewhere
 
-    summary = _critical_path_summary(
-        plan, need, elsewhere, display, production, sourceable_elsewhere,
-        max_passive_residuals,
-    )
-    if summary is not None:
-        makespan, line = summary
-        doc.heading(f"Critical path (sets the {passive.format_duration(makespan)} total)")
-        doc.para(line)
+    if not skip_critical_path:
+        summary = _critical_path_summary(
+            plan, need, elsewhere, display, production, sourceable_elsewhere,
+            max_passive_residuals,
+        )
+        if summary is not None:
+            makespan, line = summary
+            doc.heading(f"Critical path (sets the {passive.format_duration(makespan)} total)")
+            doc.para(line)
 
     fishing_draws = _sourced(ctx, _draws_on(plan, sources.FISHING_TRACK))
     if fishing_draws:
@@ -2044,6 +2061,334 @@ def markdown_crafts(
             doc.table(["Material", "Qty"], rows)
 
 
+# --- Ascension mode (--ascend) report sections (milestone 5) ----------------
+#
+# Renders main.AscensionFrontierResult/StagedPlan/StageResult (see ARCHITECTURE.md's
+# "Ascension orchestration"). Type-hinted loosely via the TYPE_CHECKING-only `main`
+# import above; every function here is otherwise a plain duck-typed reader of those
+# dataclasses' fields, exactly like optimizer.SourcingPlan elsewhere in this module.
+
+
+def _ascension_ak_summary(current: int, target: int, starting_ak: int) -> tuple[int, int]:
+    """``(total AK needed, net AK still needed)`` for climbing ``current`` -> ``target``."""
+    total = ascension.AK_PER_LEVEL * (target - current)
+    net = max(0, total - starting_ak)
+    return total, net
+
+
+def _ascension_goal_line(current: int, target: int, starting_ak: int) -> str:
+    total, net = _ascension_ak_summary(current, target, starting_ak)
+    return (
+        f"Goal: Climb tower from {current} to {target} "
+        f"(needs {total:,} AK total, {starting_ak:,} AK already banked, "
+        f"{net:,} AK net)"
+    )
+
+
+def _ascension_chore_rate_line() -> str:
+    rate = ascension.chore_rate_per_day()
+    return f"Daily chores alone earn ≈{rate:.2f} AK/day (smeared across the climb)."
+
+
+def print_ascension_goal(
+    current: int, target: int, starting_ak: int, unmasterable: list[str],
+) -> None:
+    """The ascension Goal header: the AK arithmetic, plus any unmasterable warning.
+
+    ``unmasterable`` (see :attr:`main.AscensionFrontierResult.unmasterable`,
+    already display-cased) renders as one comma-joined paragraph right below
+    the arithmetic -- there can be dozens on a real save (seasonal/unobtainable
+    items), so a per-line list would drown the header.
+    """
+    print(_ascension_goal_line(current, target, starting_ak))
+    print(_ascension_chore_rate_line())
+    if unmasterable:
+        print()
+        print(
+            "Not masterable (no known source), skipped as candidates: "
+            + ", ".join(unmasterable)
+        )
+
+
+def markdown_ascension_goal(
+    doc: MarkdownDoc, current: int, target: int, starting_ak: int, unmasterable: list[str],
+) -> None:
+    """Markdown counterpart to :func:`print_ascension_goal`."""
+    doc.heading("Goal")
+    doc.para(_ascension_goal_line(current, target, starting_ak))
+    doc.para(_ascension_chore_rate_line())
+    if unmasterable:
+        doc.para(
+            "Not masterable (no known source), skipped as candidates: "
+            + ", ".join(unmasterable)
+        )
+
+
+def _ascension_plan_totals(plan: main.StagedPlan) -> tuple[int, int, int, float]:
+    """``(masters, grandmasters, megas, chore AK)`` summed across a staged plan's
+    stages -- raw per-stage counts (not deduped the way the to-do list is; see
+    :func:`_ascension_todo`), matching the old milestone-4 report's summary line.
+    """
+    masters = sum(len(s.plan.ascension.masters) for s in plan.stages)
+    grandmasters = sum(len(s.plan.ascension.grandmasters) for s in plan.stages)
+    megas = sum(len(s.plan.ascension.megas) for s in plan.stages)
+    chore_ak = sum(s.plan.ascension.ak_from_chores for s in plan.stages)
+    return masters, grandmasters, megas, chore_ak
+
+
+def _ascension_tags(i: int, selected: int, cheapest: int, include_selected: bool) -> list[str]:
+    tags = []
+    if i == 0:
+        tags.append("fastest")
+    if i == cheapest:
+        tags.append("cheapest")
+    if include_selected and i == selected:
+        tags.append("selected")
+    return tags
+
+
+def print_ascension_frontier(
+    result: main.AscensionFrontierResult, selected: int, cheapest: int,
+) -> None:
+    """The ascension frontier: each staged plan's time, gold and AK mix.
+
+    Mirrors :func:`print_frontier`'s row shape and tagging (`[fastest]`/
+    `[cheapest]`, the ``>`` marker for the selected row, no textual "selected"
+    tag -- see :func:`markdown_ascension_frontier`'s ``include_selected_tag``
+    for why the two differ there) over :class:`main.StagedPlan` instead of
+    :class:`optimizer.SourcingPlan` -- duck-typed the same way
+    ``optimizer._non_dominated``/``_thin`` already treat the two interchangeably.
+    """
+    print("\nAscension plans (time -> gold, masteries, chore AK):")
+    for i, plan in enumerate(result.plans):
+        marker = ">" if i == selected else " "
+        masters, grandmasters, megas, chore_ak = _ascension_plan_totals(plan)
+        net_gold = plan.gold - plan.surplus_gold
+        tags = _ascension_tags(i, selected, cheapest, include_selected=False)
+        note = "  " + f"[{', '.join(tags)}]" if tags else ""
+        print(
+            f" {marker} {i + 1}. {passive.format_duration(plan.time)}"
+            f" -> {round(plan.gold):,} g (net {round(net_gold):,} g),"
+            f" masters {masters}, GMs {grandmasters}, megas {megas},"
+            f" chore AK {chore_ak:,.1f}{note}"
+        )
+
+
+def markdown_ascension_frontier(
+    doc: MarkdownDoc,
+    result: main.AscensionFrontierResult,
+    selected: int,
+    cheapest: int,
+    include_selected_tag: bool = True,
+) -> None:
+    """Markdown counterpart to :func:`print_ascension_frontier`: the same rows,
+    as a table with columns ``# | Time | Gold | Net gold | Masters | GMs | Megas
+    | Chore AK | Notes``. ``include_selected_tag`` mirrors
+    :func:`markdown_frontier`'s (off for :class:`SectionedReporter`, whose own
+    row highlight already shows the selection)."""
+    headers = ["#", "Time", "Gold", "Net gold", "Masters", "GMs", "Megas", "Chore AK", "Notes"]
+    rows = []
+    for i, plan in enumerate(result.plans):
+        masters, grandmasters, megas, chore_ak = _ascension_plan_totals(plan)
+        net_gold = plan.gold - plan.surplus_gold
+        tags = _ascension_tags(i, selected, cheapest, include_selected_tag)
+        notes = f"[{', '.join(tags)}]" if tags else ""
+        rows.append([
+            str(i + 1),
+            passive.format_duration(plan.time),
+            f"{round(plan.gold):,} g",
+            f"{round(net_gold):,} g",
+            str(masters),
+            str(grandmasters),
+            str(megas),
+            f"{chore_ak:,.1f}",
+            notes,
+        ])
+    doc.heading("Ascension plans")
+    doc.table(headers, rows)
+
+
+def _ascension_ledger(
+    chosen: main.StagedPlan, current: int, target: int,
+) -> tuple[float, float, int]:
+    """``(AK from steps, AK from chores, AK required)`` for the selected staged plan.
+
+    Ledger identity (see :func:`print_ascension_plan`'s "Ascension summary" and
+    :attr:`main.StagedPlan.carry_out`, the balancing term computed alongside the
+    plan itself): ``starting_ak + steps + chores == required + chosen.carry_out``.
+    """
+    steps = sum(s.plan.ascension.ak_from_steps for s in chosen.stages)
+    chores = sum(s.plan.ascension.ak_from_chores for s in chosen.stages)
+    required = ascension.AK_PER_LEVEL * (target - current)
+    return steps, chores, required
+
+
+def _ascension_timeline(chosen: main.StagedPlan, start: date) -> list[tuple[int, date]]:
+    """Each stage boundary's approximate calendar date: ``start`` plus the
+    cumulative stage times up to and including that stage (see
+    :class:`main.StageResult`). Approximate -- levels crossed *within* a stage
+    are not interpolated, only the stage's own end level gets a date (v1, see
+    ARCHITECTURE.md's "Ascension orchestration" v1-approximations note)."""
+    cumulative = timedelta(0)
+    rows = []
+    for stage in chosen.stages:
+        cumulative += stage.plan.time
+        rows.append((stage.to_level, start + cumulative))
+    return rows
+
+
+def _ascension_todo(stage: main.StageResult) -> tuple[list[str], list[str], list[str]]:
+    """A stage's mastery to-do lists, deduped so an item is named once, at the
+    highest step it reaches this stage: ``masters - grandmasters`` (a master
+    step that is merely a prerequisite of a listed grandmaster needs no separate
+    mention) and ``grandmasters - megas`` likewise.
+    """
+    outcome = stage.plan.ascension
+    masters = sorted(set(outcome.masters) - set(outcome.grandmasters))
+    grandmasters = sorted(set(outcome.grandmasters) - set(outcome.megas))
+    megas = sorted(outcome.megas)
+    return masters, grandmasters, megas
+
+
+def _ascension_chore_wait(plan: optimizer.SourcingPlan) -> bool:
+    """Whether ``plan.time`` is set by waiting on daily chores, not any track.
+
+    See :attr:`optimizer.SourcingPlan.time`'s ascension note: the chore-AK
+    constraint can push the optimal makespan past every draw track's own time
+    (the plan idles, waiting on daily chores, to close the AK gap). A one-second
+    tolerance absorbs LP/quantisation float noise -- mirrors
+    :func:`_farming_drives`'s own margin handling elsewhere in this module.
+    Called once per stage by both :func:`print_ascension_plan` and
+    :func:`markdown_ascension_plan`, so they always agree on which stages get the
+    chore-wait override instead of the normal :func:`_critical_path_summary`
+    (whose own precedence logic this never touches).
+    """
+    others = max([*plan.track_times().values()], default=timedelta(0))
+    return plan.time > others + timedelta(seconds=1)
+
+
+def _ascension_stage_heading(index: int, stage: main.StageResult) -> str:
+    heading = f"Stage {index} — level {stage.from_level} → {stage.to_level}"
+    reward = ascension.REWARD_LEVELS.get(stage.to_level)
+    if reward:
+        heading += f" (reward at {stage.to_level}: {reward})"
+    return heading
+
+
+def print_ascension_plan(
+    result: main.AscensionFrontierResult,
+    selected: int,
+    current: int,
+    target: int,
+    starting_ak: int,
+    start: date,
+) -> None:
+    """The selected staged plan: the AK ledger, a level-up timeline, the mastery
+    to-do list, then each stage's own critical path and full per-channel plan
+    (reusing :func:`print_plan`, see that function's ``skip_critical_path``).
+    """
+    chosen = result.plans[selected]
+    steps, chores, required = _ascension_ledger(chosen, current, target)
+    print(f"\nSelected plan (#{selected + 1}):")
+
+    print("\nAscension summary:")
+    print(f"  Starting AK: {starting_ak:,}")
+    print(f"  AK from mastery/grandmastery steps: {round(steps):,}")
+    print(f"  AK from chores: {round(chores):,}")
+    print(f"  AK required (100 AK x levels climbed): {required:,}")
+    print(f"  Carry-out AK: {round(chosen.carry_out):,}")
+
+    print("\nLevel-up timeline (approximate):")
+    for level, eta in _ascension_timeline(chosen, start):
+        print(f"  reach level {level} ~ {eta:%d %b %Y}")
+
+    print("\nMastery to-do list:")
+    for i, stage in enumerate(chosen.stages, start=1):
+        masters, grandmasters, megas = _ascension_todo(stage)
+        print(f"  Stage {i} (L{stage.from_level}->L{stage.to_level}):")
+        if masters:
+            print(f"    Master: {', '.join(m.title() for m in masters)}")
+        if grandmasters:
+            print(f"    Grandmaster: {', '.join(m.title() for m in grandmasters)}")
+        if megas:
+            print(f"    Mega: {', '.join(m.title() for m in megas)}")
+        if not (masters or grandmasters or megas):
+            print("    (none)")
+
+    for i, stage in enumerate(chosen.stages, start=1):
+        print(f"\n{_ascension_stage_heading(i, stage)}:")
+        chore_wait = _ascension_chore_wait(stage.plan)
+        if chore_wait:
+            print(
+                f"\nCritical path (waiting on daily chores, "
+                f"+{stage.plan.ascension.ak_from_chores:,.1f} AK over the stage)"
+            )
+        print_plan(
+            stage.plan, {}, stage.farm, stage.workshop, stage.crafting_bonus,
+            stage.production, stage.open_flows, stage.openable_names,
+            stage.inventory, None, None, stage.prices, None,
+            skip_critical_path=chore_wait,
+        )
+
+
+def markdown_ascension_plan(
+    doc: MarkdownDoc,
+    result: main.AscensionFrontierResult,
+    selected: int,
+    current: int,
+    target: int,
+    starting_ak: int,
+    start: date,
+) -> None:
+    """Markdown counterpart to :func:`print_ascension_plan`."""
+    chosen = result.plans[selected]
+    steps, chores, required = _ascension_ledger(chosen, current, target)
+    doc.heading(f"Selected plan (#{selected + 1})")
+
+    doc.heading("Ascension summary")
+    doc.bullets([
+        f"Starting AK: {starting_ak:,}",
+        f"AK from mastery/grandmastery steps: {round(steps):,}",
+        f"AK from chores: {round(chores):,}",
+        f"AK required (100 AK x levels climbed): {required:,}",
+        f"Carry-out AK: {round(chosen.carry_out):,}",
+    ])
+
+    doc.heading("Level-up timeline (approximate)")
+    doc.bullets(
+        f"reach level {level} ~ {eta:%d %b %Y}"
+        for level, eta in _ascension_timeline(chosen, start)
+    )
+
+    doc.heading("Mastery to-do list")
+    rows = []
+    for i, stage in enumerate(chosen.stages, start=1):
+        masters, grandmasters, megas = _ascension_todo(stage)
+        rows.append([
+            f"{i} (L{stage.from_level}→L{stage.to_level})",
+            ", ".join(m.title() for m in masters),
+            ", ".join(m.title() for m in grandmasters),
+            ", ".join(m.title() for m in megas),
+        ])
+    doc.table(["Stage", "Master", "Grandmaster", "Mega"], rows)
+
+    for i, stage in enumerate(chosen.stages, start=1):
+        doc.heading(_ascension_stage_heading(i, stage))
+        chore_wait = _ascension_chore_wait(stage.plan)
+        if chore_wait:
+            doc.heading("Critical path")
+            doc.para(
+                "Waiting on daily chores "
+                f"(+{stage.plan.ascension.ak_from_chores:,.1f} AK over the stage)"
+            )
+        markdown_plan(
+            doc, stage.plan, {}, stage.farm, stage.workshop, stage.crafting_bonus,
+            stage.production, stage.open_flows, stage.openable_names,
+            stage.inventory, None, None, stage.prices, None,
+            skip_critical_path=chore_wait,
+        )
+
+
 class Reporter:
     """Uniform interface over the two output formats ``main.run`` drives.
 
@@ -2062,6 +2407,27 @@ class Reporter:
         raise NotImplementedError
 
     def note(self, text: str) -> None:
+        raise NotImplementedError
+
+    def ascension_goal(
+        self, current: int, target: int, starting_ak: int, unmasterable: list[str],
+    ) -> None:
+        raise NotImplementedError
+
+    def ascension_frontier(
+        self, result: main.AscensionFrontierResult, selected: int, cheapest: int,
+    ) -> None:
+        raise NotImplementedError
+
+    def ascension_plan(
+        self,
+        result: main.AscensionFrontierResult,
+        selected: int,
+        current: int,
+        target: int,
+        starting_ak: int,
+        start: date,
+    ) -> None:
         raise NotImplementedError
 
     def frontier(
@@ -2090,6 +2456,7 @@ class Reporter:
         max_passive_residuals: dict[str, float] | None = None,
         prices: dict[str, float] | None = None,
         pumpkin_schedule: dict[str, list[int]] | None = None,
+        skip_critical_path: bool = False,
     ) -> None:
         raise NotImplementedError
 
@@ -2119,6 +2486,15 @@ class TextReporter(Reporter):
 
     def note(self, text: str) -> None:
         print(f"\n{text}")
+
+    def ascension_goal(self, *args, **kwargs) -> None:
+        print_ascension_goal(*args, **kwargs)
+
+    def ascension_frontier(self, *args, **kwargs) -> None:
+        print_ascension_frontier(*args, **kwargs)
+
+    def ascension_plan(self, *args, **kwargs) -> None:
+        print_ascension_plan(*args, **kwargs)
 
     def frontier(self, *args, **kwargs) -> None:
         print_frontier(*args, **kwargs)
@@ -2181,6 +2557,15 @@ class MarkdownReporter(Reporter):
 
     def note(self, text: str) -> None:
         self.doc.para(text)
+
+    def ascension_goal(self, *args, **kwargs) -> None:
+        markdown_ascension_goal(self.doc, *args, **kwargs)
+
+    def ascension_frontier(self, *args, **kwargs) -> None:
+        markdown_ascension_frontier(self.doc, *args, **kwargs)
+
+    def ascension_plan(self, *args, **kwargs) -> None:
+        markdown_ascension_plan(self.doc, *args, **kwargs)
 
     def frontier(self, *args, **kwargs) -> None:
         markdown_frontier(self.doc, *args, **kwargs)
@@ -2248,6 +2633,19 @@ class SectionedReporter(Reporter):
     def note(self, text: str) -> None:
         self.notes.append(text)
         self.docs["notes"].para(text)
+
+    def ascension_goal(self, *args, **kwargs) -> None:
+        markdown_ascension_goal(self.docs["solution"], *args, **kwargs)
+
+    def ascension_frontier(self, *args, **kwargs) -> None:
+        # Same reasoning as frontier(): the web app's own row highlight already
+        # shows the selection.
+        markdown_ascension_frontier(
+            self.docs["frontier"], *args, include_selected_tag=False, **kwargs
+        )
+
+    def ascension_plan(self, *args, **kwargs) -> None:
+        markdown_ascension_plan(self.docs["plan"], *args, **kwargs)
 
     def frontier(self, *args, **kwargs) -> None:
         # The web app's own row highlight already shows selection; see

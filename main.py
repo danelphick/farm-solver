@@ -1590,15 +1590,33 @@ def derive_report_inputs(
 class StageResult:
     """One stage's solved plan, from :func:`solve_ascension_frontier`.
 
-    Minimal on purpose -- ``plan.ascension`` (an
-    :class:`ascension.AscensionOutcome`) already carries the masters/
-    grandmasters/AK breakdown the milestone-5 report will want; ``plan`` itself
-    carries the draws/crafts/gold like any other :class:`optimizer.SourcingPlan`.
+    ``plan.ascension`` (an :class:`ascension.AscensionOutcome`) carries the
+    masters/grandmasters/AK breakdown; ``plan`` itself carries the draws/crafts/
+    gold like any other :class:`optimizer.SourcingPlan`. The fields below are
+    this stage's own copy of everything :func:`report.print_plan`/
+    :func:`report.markdown_plan` need to render ``plan``'s full per-channel
+    breakdown (milestone 5) -- one snapshot per stage, since each stage's
+    config/production/inventory differs (see :func:`solve_ascension_frontier`'s
+    "static setup" note and :func:`_run_ascend_pass`'s evolution).
     """
 
     from_level: int
     to_level: int
     plan: optimizer.SourcingPlan
+    farm: crops.Farm
+    workshop: crafting.Workshop
+    crafting_bonus: float
+    # None only when config.passive_production ever legitimately returns one
+    # with no producers; report.py treats that the same as "no production".
+    production: passive.PassiveProduction | None
+    open_flows: list[sources.OpenFlow]
+    openable_names: dict[str, str]
+    # This stage's STARTING inventory (before its own solve) -- what the base
+    # LP was built against, and what report.print_plan's "From inventory"
+    # section should read (not the evolved, post-solve inventory the next
+    # stage starts from).
+    inventory: dict[str, float]
+    prices: dict[str, float] | None
 
 
 @dataclass
@@ -1609,6 +1627,11 @@ class StagedPlan:
     time: timedelta  # sum of stage plan times
     gold: float  # sum of stage plan.gold
     surplus_gold: float  # sum of stage surplus credits
+    # The AK carry left over after the final stage (see _run_ascend_pass's
+    # per-stage carry threading) -- the balancing term in the report's AK
+    # ledger: starting_ak + steps_ak + chores_ak == 100*(target-current) +
+    # carry_out (see report._ascension_ledger).
+    carry_out: float = 0.0
 
     @property
     def cost(self) -> tuple[float, float]:
@@ -1733,6 +1756,7 @@ def _run_ascend_pass(
     stage_setups: list[_ChannelSetup],
     stage_offers: list[list[sources.Offer]],
     stage_quantize: list,
+    stage_production: list[passive.PassiveProduction | None],
     bounds: list[tuple[int, int]],
     state: farm_solver.GameState,
     args: argparse.Namespace,
@@ -1805,6 +1829,11 @@ def _run_ascend_pass(
 
         outcome = plan.ascension
         assert outcome is not None  # an AscensionSpec was always given above
+        # This stage's starting inventory -- what the base LP above was built
+        # against, and what the report's per-stage "From inventory" section
+        # should read (captured before it's overwritten below by the evolved,
+        # post-solve inventory the *next* stage starts from).
+        stage_inventory = inventory
         next_inventory = optimizer.plan_leftovers(
             plan, {}, setup.recipes, crafting_bonus_k, setup.open_flows, inventory,
         )
@@ -1812,13 +1841,20 @@ def _run_ascend_pass(
         masteries = ascension.advance(masteries, outcome)
         inventory = next_inventory
 
-        stage_results.append(StageResult(from_level=a, to_level=b, plan=plan))
+        stage_results.append(StageResult(
+            from_level=a, to_level=b, plan=plan, farm=setup.farm, workshop=setup.workshop,
+            crafting_bonus=crafting_bonus_k, production=stage_production[k],
+            open_flows=setup.open_flows,
+            openable_names=setup.smith.names if setup.smith is not None else {},
+            inventory=stage_inventory, prices=setup.prices,
+        ))
         total_time += plan.time
         total_gold += plan.gold
         total_surplus += plan.surplus_gold
 
     staged = StagedPlan(
         stages=stage_results, time=total_time, gold=total_gold, surplus_gold=total_surplus,
+        carry_out=carry,
     )
     return staged, unmasterable
 
@@ -1873,6 +1909,11 @@ def solve_ascension_frontier(
     stage_setups: list[_ChannelSetup] = []
     stage_offers: list[list[sources.Offer]] = []
     stage_quantize: list = []
+    # One passive.PassiveProduction per stage, kept alongside stage_offers
+    # (which is built from it) so the report can name passive producers in a
+    # stage's own "Passive production" section (report.print_plan/markdown_plan
+    # take a `production` argument for exactly that).
+    stage_production: list[passive.PassiveProduction | None] = []
     for cfg_k in stage_cfgs:
         crafting_bonus_k = _crafting_bonus_for_cfg(args.crafting_bonus, cfg_k)
         setup = _build_channel_setup(args, cfg_k, state, start, crafting_bonus_k)
@@ -1889,13 +1930,15 @@ def solve_ascension_frontier(
         stage_setups.append(setup)
         stage_offers.append(offers)
         stage_quantize.append(config.passive_quantizer(production))
+        stage_production.append(production)
 
     unmasterable: set[str] = set()
     staged_plans: list[StagedPlan] = []
     for gold_weight in _ascend_gold_weights():
         staged, pass_unmasterable = _run_ascend_pass(
             stage_crafting_bonus, stage_setups, stage_offers,
-            stage_quantize, bounds, state, args, starting_ak, gold_weight,
+            stage_quantize, stage_production, bounds, state, args, starting_ak,
+            gold_weight,
         )
         unmasterable.update(pass_unmasterable)
         staged_plans.append(staged)
@@ -1925,65 +1968,15 @@ def solve_ascension_frontier(
     # SourcingPlan -- reused as-is rather than duplicating the pruning logic.
     shown = optimizer._thin(optimizer._non_dominated(staged_plans), args.plans)
 
+    # The LP works on lower-cased keys; report the original display names the
+    # mastery paste used (see GameState's keying convention).
+    display_names = sorted(
+        m.item if (m := state.mastery(item)) is not None else item
+        for item in unmasterable
+    )
     return AscensionFrontierResult(
-        plans=shown, stage_bounds=bounds, unmasterable=sorted(unmasterable),
+        plans=shown, stage_bounds=bounds, unmasterable=display_names,
     )
-
-
-def _print_ascension_report(
-    result: AscensionFrontierResult,
-    current: int,
-    target: int,
-    starting_ak: int,
-    args: argparse.Namespace,
-) -> None:
-    # TEMPORARY until milestone 5 lands: a plain-text report that bypasses the
-    # Reporter entirely (ascension mode's own display, see the milestone 4
-    # plan's "New orchestration" note -- replaced wholesale by milestone 5).
-    needed = ascension.AK_PER_LEVEL * (target - current)
-    print(
-        f"Goal: Climb tower from {current} to {target} "
-        f"(needs {needed:,} AK, {starting_ak:,} already banked)"
-    )
-    if result.unmasterable:
-        print(
-            "Warning: not masterable (no known source): "
-            + ", ".join(result.unmasterable)
-        )
-    if not result.plans:
-        print("No plan found.")
-        return
-
-    print()
-    for i, plan in enumerate(result.plans, start=1):
-        masters = sum(len(s.plan.ascension.masters) for s in plan.stages)
-        grandmasters = sum(len(s.plan.ascension.grandmasters) for s in plan.stages)
-        chore_ak = sum(s.plan.ascension.ak_from_chores for s in plan.stages)
-        net_gold = plan.gold - plan.surplus_gold
-        print(
-            f"{i}. {passive.format_duration(plan.time)} -- gold {plan.gold:,.0f}, "
-            f"net {net_gold:,.0f}, masters {masters}, grandmasters {grandmasters}, "
-            f"chore AK {chore_ak:,.1f}"
-        )
-
-    index = selected_plan(result.plans, args.plan, args.cheapest_plan)
-    chosen = result.plans[index]
-    print()
-    print(f"Selected plan (#{index + 1}):")
-    for stage in chosen.stages:
-        outcome = stage.plan.ascension
-        assert outcome is not None
-        masters = ", ".join(outcome.masters) if outcome.masters else "(none)"
-        gm_note = (
-            f"; grandmastered: {', '.join(outcome.grandmasters)}"
-            if outcome.grandmasters
-            else ""
-        )
-        print(
-            f"  L{stage.from_level}->L{stage.to_level}: "
-            f"{passive.format_duration(stage.plan.time)}, mastered: {masters}"
-            f"{gm_note}, chore AK {outcome.ak_from_chores:,.1f}"
-        )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -2017,7 +2010,18 @@ def run(args: argparse.Namespace) -> int:
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
         result = solve_ascension_frontier(args, cfg, state)
-        _print_ascension_report(result, current, target, starting_ak, args)
+        reporter.ascension_goal(current, target, starting_ak, result.unmasterable)
+        if not result.plans:
+            reporter.note("No plan found.")
+            reporter.finish()
+            return 0
+        selected = selected_plan(result.plans, args.plan, args.cheapest_plan)
+        cheapest = cheapest_plan(result.plans)
+        reporter.ascension_frontier(result, selected, cheapest)
+        reporter.ascension_plan(
+            result, selected, current, target, starting_ak, args.start_date or date.today()
+        )
+        reporter.finish()
         return 0
 
     # An explicit --crafting-bonus wins; otherwise resolve it from [workshop]/

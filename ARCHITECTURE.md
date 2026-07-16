@@ -134,7 +134,7 @@ frontier as before.
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -429,19 +429,27 @@ code path byte-identical — everything below is gated on the spec.
 `main.solve_ascension_frontier(args, cfg, state) -> AscensionFrontierResult`
 is `--ascend N`'s entry point: climb from a current level to `N`, producing a
 Pareto frontier of `StagedPlan`s (`stages`, `time`, `gold`, `surplus_gold`,
-`.cost` mirroring `SourcingPlan.cost`) instead of a single plan, since a climb
-is many stages back to back. `main.run` dispatches to it before any of the
-goal-solving setup (`resolve_crafting_bonus`, `build_inputs`, ...) runs —
-`_validate_ascend` checks the mode conflicts (`--target`/`-m`/`-i`/
-`--use-pumpkin-juice`) and the level range (`current < target <=
-ascension.MAX_ASCEND_LEVEL`, targets past 100 refused until milestone 6) and
-resolves `(current, target, starting_ak)` via `resolve_ascend_params`
-(`--tower-level`/`--starting-ak`, else config, else — **ascension-only** —
-`current` defaults to 0 rather than `config.current_tower_level`'s usual
-"assume every reward owned"). The report itself
-(`_print_ascension_report`) is a TEMPORARY plain-`print` text dump — masters/
-grandmasters/gold/chore-AK per plan, then a per-stage breakdown of the
-selected one — replaced wholesale by milestone 5's real Reporter integration.
+`carry_out` — the AK left over after the final stage, the balancing term in the
+report's AK ledger, see "Ascension report sections" below — `.cost` mirroring
+`SourcingPlan.cost`) instead of a single plan, since a climb is many stages back
+to back. `main.run` dispatches to it before any of the goal-solving setup
+(`resolve_crafting_bonus`, `build_inputs`, ...) runs — `_validate_ascend` checks
+the mode conflicts (`--target`/`-m`/`-i`/`--use-pumpkin-juice`) and the level
+range (`current < target <= ascension.MAX_ASCEND_LEVEL`, targets past 100
+refused until milestone 6) and resolves `(current, target, starting_ak)` via
+`resolve_ascend_params` (`--tower-level`/`--starting-ak`, else config, else —
+**ascension-only** — `current` defaults to 0 rather than
+`config.current_tower_level`'s usual "assume every reward owned"). The report
+(milestone 5) drives `report.Reporter.ascension_goal`/`ascension_frontier`/
+`ascension_plan` the same way `run`'s normal-mode branch drives
+`solution`/`frontier`/`plan` — see "Ascension report sections" below;
+`_print_ascension_report`, milestone 4's TEMPORARY plain-`print` dump, is gone.
+`StageResult` (`from_level`, `to_level`, `plan`) also carries a per-stage
+snapshot of everything the report needs to render `plan`'s full per-channel
+breakdown: `farm`, `workshop`, `crafting_bonus`, `production`, `open_flows`,
+`openable_names`, `inventory` (this stage's **starting** inventory, before its
+own solve — what the base LP was built against), `prices`. One snapshot per
+stage, since each stage's config/production/inventory differs.
 
 - **Stage configs** (`_ascend_stage_cfgs`): `ascension.stage_bounds(current,
   target)` splits the climb at every reward threshold crossed. Stage 0 is a
@@ -523,6 +531,92 @@ selected one — replaced wholesale by milestone 5's real Reporter integration.
   state passed into `solve_ascension_frontier`, not re-evaluated against each
   pass's evolved masteries — they gate on tower levels (250/300) far past the
   101-200 range this milestone even allows.
+
+### Ascension report sections (`report.py`, milestone 5)
+
+`--ascend` output is real `Reporter` output, not a bypass: `main.run`'s ascend
+branch calls `reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` —
+paired `print_ascension_*`/`markdown_ascension_*` functions in `report.py`,
+following the same convention as the normal-mode sections (see "Two renderers,
+one set of decisions" above); `TextReporter`/`MarkdownReporter` dispatch to
+them, `SectionedReporter` routes them into its `"solution"`/`"frontier"`/`"plan"`
+docs alongside the normal-mode methods, so the web app gets them for free
+whenever it wires up ascension mode. These functions type-hint `main`'s
+ascension dataclasses (`AscensionFrontierResult`/`StagedPlan`/`StageResult`)
+under a `TYPE_CHECKING`-only import (`main.py` imports `report.py`, so a real
+import would cycle) but otherwise read them the same duck-typed way this module
+already reads `optimizer.SourcingPlan`.
+
+- **`ascension_goal`**: the AK arithmetic (`100 * (target - current)` total,
+  starting AK banked, net) plus the smeared chore rate
+  (`ascension.chore_rate_per_day()`, ≈2.61 AK/day); an "unmasterable" list
+  (`AscensionFrontierResult.unmasterable`) prints/tables the same way
+  `print_solution`/`markdown_solution` handle the remainder warning.
+- **`ascension_frontier`**: one row per `StagedPlan` — `# | Time | Gold | Net
+  gold | Masters | GMs | Megas | Chore AK | Notes` (Markdown) — with
+  `[fastest]`/`[cheapest]`/`[selected]` tags exactly like `print_frontier`/
+  `markdown_frontier` (the `>` marker replaces a textual "selected" tag in
+  text; `include_selected_tag` is off for `SectionedReporter`, same reasoning
+  as `markdown_frontier`'s). Masters/GMs/Megas are raw per-stage counts summed
+  across the plan (`_ascension_plan_totals`), not deduped — a frontier-row
+  summary, unlike the to-do list below. The cheapest index is computed by the
+  caller (`main.cheapest_plan(result.plans)`, duck-typed against `StagedPlan`
+  exactly as `optimizer._non_dominated`/`_thin` already are) and passed in, so
+  `report.py` never needs to import `main` for real.
+- **`ascension_plan`**: the selected `StagedPlan`, in order:
+  - **Ascension summary** — an AK ledger (`_ascension_ledger`): AK from
+    mastery/grandmastery steps, AK from chores, and the AK required
+    (`100 * (target - current)`), plus `chosen.carry_out`. Reconciles exactly:
+    `starting_ak + steps + chores == required + carry_out` (`carry_out` is the
+    balancing term `_run_ascend_pass`'s own carry-threading already computes,
+    not recomputed here — see "Ascension orchestration" above).
+  - **Level-up timeline** (`_ascension_timeline`) — `start + cumulative stage
+    time` per stage boundary ("reach level B ~ *date*"), approximate: v1 does
+    not interpolate levels crossed *within* a stage, only each stage's own end
+    level gets a date.
+  - **Mastery to-do list** (`_ascension_todo`) — per stage, `masters -
+    grandmasters` and `grandmasters - megas`: an item that reached grandmaster
+    this stage also has its (required-by-the-ordering-constraint) master step
+    selected, so it would otherwise show under both; deduped to show once, at
+    its highest reached step.
+  - **Per-stage sections** — heading `Stage k — level A → B`, with `(reward at
+    B: <description>)` appended when `ascension.REWARD_LEVELS` has an entry for
+    B, then that stage's full per-channel breakdown via `print_plan`/
+    `markdown_plan` reused as-is against the stage's own `StageResult` fields
+    (`demand={}` — see below). **Chore-wait critical path**
+    (`_ascension_chore_wait`): when `stage.plan.time` exceeds every one of
+    `stage.plan.track_times()`'s values (the chore-AK LP constraint can push
+    the optimal makespan past every draw track's own time — see
+    `SourcingPlan.time`'s ascension note under "The LP and frontier" above),
+    the ascension renderer prints its own `"Critical path: waiting on daily
+    chores (+X AK over the stage)"` line (`X` = that stage's
+    `ak_from_chores`) **instead of** letting `print_plan`/`markdown_plan` call
+    their usual `print_critical_path`/`_critical_path_summary` — a pre-check
+    the ascension renderer makes itself, via a new `skip_critical_path: bool =
+    False` parameter on `print_plan`/`markdown_plan` (default off, so every
+    normal-mode call is untouched) that just omits their one internal call;
+    `print_critical_path`/`_critical_path_summary`'s own precedence logic
+    (see "Critical-path naming" above) is never modified. In practice the two
+    never collide: a genuinely chore-bound stage has no draws at all past what
+    the cheap steps already gathered, so the internal call finds nothing to
+    say anyway (empty `need`/`elsewhere`, no passive draw) — the override
+    exists for the (common) case where `need` would otherwise stay silent
+    despite real waiting happening.
+  - **Demand is always `{}`**: ascension stages have no goal item, only
+    mastery candidates (see "Ascension extension" above), so every per-stage
+    `print_plan`/`markdown_plan` call passes `demand={}`. `optimizer.plan_balance`
+    then only populates `need` from craft-material consumption (an item
+    mastered via crafting pulls its materials into `need`, so that gathering
+    *does* show under Fishing/Exploring/Farming); an item mastered by *direct*
+    gathering (no recipe) is never in `need` or `crafted`, so it doesn't count
+    as `interesting` and its gathering draws don't get their own line — the
+    quantity produced instead surfaces in the **Surplus** section (when
+    `prices` are set) as accumulated leftover, since nothing "demanded" it in
+    the classic sense. This is expected, not a bug: the dedicated **Mastery
+    to-do list** above already names which items get mastered each stage; the
+    per-channel sections show *how*, and for a directly-gathered mastery item
+    that's simply "gathered until banked", which the Surplus section already
+    expresses.
 
 ### Passive-resource breakpoints — the frontier's spine
 
@@ -698,6 +792,13 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   capacity (naturally zero when the binding materials are used up, or when every
   leftover was already held — then the section is omitted). A directly-demanded item
   contributes nothing (its stock already nets out of `demand` in `plan_balance`).
+- **Ascension mode** (`--ascend`, milestone 5) reuses this exact function
+  (`print_plan`/`markdown_plan`) per stage, unmodified apart from one new
+  `skip_critical_path` parameter (default off) that lets the ascension-only
+  chore-wait override replace the usual critical-path call without duplicating
+  it — see "Ascension report sections" above for the full write-up (the AK
+  ledger, level-up timeline, mastery to-do list, and why a stage's `demand` is
+  always `{}`).
 
 ## Invariants & gotchas
 
