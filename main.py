@@ -13,12 +13,15 @@ The mastery and inventory files default to the ``[solver]`` config section.
 from __future__ import annotations
 
 import argparse
+import copy
+import math
 import sys
 import tomllib
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
+import ascension
 import config
 import crafting
 import crops
@@ -242,6 +245,21 @@ def resolve_monthly_grants(
     return farm_solver.has_tower_level(state, requirements, MONTHLY_GRANT_TOWER_LEVEL)
 
 
+def _crafting_bonus_for_cfg(explicit: float | None, cfg: dict) -> float:
+    """The crafting bonus for ``cfg``: ``explicit`` wins when given, else it is
+    resolved from ``[workshop]``/``[tower]`` (see :func:`resolve_crafting_bonus`).
+
+    Factored out as a pure function so a caller solving several configs at
+    once -- ascension mode's per-stage cfgs, each with its own ``[tower]
+    level`` once a reward is crossed -- can resolve each stage's own bonus
+    without mutating ``args`` (which stays at the single value the rest of a
+    non-ascension run uses).
+    """
+    if explicit is not None:
+        return explicit
+    return config.crafting_bonus_for(cfg, config.current_tower_level(cfg))
+
+
 def resolve_crafting_bonus(args: argparse.Namespace, cfg: dict) -> None:
     """Resolve ``args.crafting_bonus`` from ``[workshop]``/``[tower]`` when unset.
 
@@ -255,10 +273,7 @@ def resolve_crafting_bonus(args: argparse.Namespace, cfg: dict) -> None:
     (``build_inputs``, ``trading_prices``, the reporters) sees a plain float
     either way; call this before any of them run.
     """
-    if args.crafting_bonus is None:
-        args.crafting_bonus = config.crafting_bonus_for(
-            cfg, config.current_tower_level(cfg)
-        )
+    args.crafting_bonus = _crafting_bonus_for_cfg(args.crafting_bonus, cfg)
 
 
 def pumpkin_juice_gains(
@@ -470,6 +485,42 @@ def build_parser() -> argparse.ArgumentParser:
             "solver crafts extra to leave that many spare. 'none' drops the "
             "tower and solves only the -m/-i goals; omitting --target does the "
             "same implicitly when -m/-i are set (the previous behaviour)"
+        ),
+    )
+    parser.add_argument(
+        "--ascend",
+        type=int,
+        default=None,
+        metavar="LEVEL",
+        help=(
+            "ascension mode: climb the tower from the current level to LEVEL by "
+            "choosing masteries and waiting on chores (rather than solving a fixed "
+            "goal), producing a frontier of (time, net gold) plans. Conflicts with "
+            "--target/-m/-i/--use-pumpkin-juice. LEVEL must be above the current "
+            "level and at most 200 (101-200, the megamastery range, is not yet "
+            "supported)"
+        ),
+    )
+    parser.add_argument(
+        "--starting-ak",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Ascension Knowledge already banked, for --ascend (default: [tower] "
+            "ascension_knowledge, else 0)"
+        ),
+    )
+    parser.add_argument(
+        "--tower-level",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "override the current tower level ([tower] level in the config); "
+            "with --ascend and neither this nor the config set, defaults to 0 "
+            "(a fresh account) rather than [tower] level's usual \"assume every "
+            "reward owned\" meaning"
         ),
     )
     parser.add_argument(
@@ -1093,29 +1144,56 @@ class SolveInputs:
     target_level: int | None = None
 
 
-def build_inputs(
-    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
-) -> SolveInputs:
-    """Build a :class:`SolveInputs` from parsed args/config and a loaded state.
+@dataclass
+class _ChannelSetup:
+    """Channel/price/inventory/recipe/openable setup independent of any goal.
 
-    ``state`` is expected already loaded, with ``--override-inventory``
-    applied (the CLI does file loading + the override in :func:`run`; a web
-    caller instead builds a state directly from pasted request text).
+    Everything :func:`build_inputs` builds before it ever looks at ``-m``/``-i``/
+    the tower goal -- factored out so :func:`solve_ascension_frontier` (which
+    has no goal at all, just an empty ``demand``) can build the same channels
+    per stage without duplicating this. ``model_calendar`` mirrors
+    :class:`SolveInputs`' field; ascension mode ignores it (see that function's
+    steady-state note) but it costs nothing extra to compute here.
     """
-    start = args.start_date or date.today()
+
+    requirements: farm_solver.TowerRequirements
+    farm: crops.Farm
+    explore: exploring.Exploring
+    fish: fishing.Fishing
+    workshop: crafting.Workshop
+    monthly_grants: bool
+    recipes: dict
+    smith: locksmith.Locksmith
+    open_flows: list[sources.OpenFlow]
+    inventory: dict[str, float]
+    cookie_sets: float | None
+    prices: dict[str, float] | None
+    boost_offers: list[sources.Offer]
+    model_calendar: bool
+
+
+def _build_channel_setup(
+    args: argparse.Namespace,
+    cfg: dict,
+    state: farm_solver.GameState,
+    start: date,
+    crafting_bonus: float,
+) -> _ChannelSetup:
+    """Build the goal-independent half of :func:`build_inputs`.
+
+    ``crafting_bonus`` is a plain, already-resolved float rather than read off
+    ``args`` -- a caller solving several configs at once (ascension mode's
+    per-stage cfgs, whose crafting bonus changes once the level-90 reward is
+    crossed) passes its own per-stage value; :func:`build_inputs` passes
+    ``args.crafting_bonus`` (resolved once, for the whole run, by
+    :func:`resolve_crafting_bonus` before any of this runs).
+    """
     workshop = crafting.load_workshop()
     fish = fishing.fishing_from_config(cfg.get("fishing", {}))
 
-    # Parse the time limit first so a bad duration fails before any output.
-    time_limit = (
-        passive.parse_duration(args.passive_limit)
-        if args.passive_limit is not None
-        else None
-    )
-
-    # Loaded unconditionally (not just for the tower goal below): reaching
-    # T250 auto-detects the Scythe of Dewstar (see resolve_scythe_of_dewstar),
-    # regardless of which goal this run solves.
+    # Loaded unconditionally (not just for a tower goal): reaching T250 auto-
+    # detects the Scythe of Dewstar (see resolve_scythe_of_dewstar) regardless
+    # of which goal (if any) this run solves.
     requirements = farm_solver.load_tower_requirements(args.tower)
     # [farming] grape_juices_per_day is the undoubled base value; the level-150
     # tower reward doubles it (see config.effective_grape_juices). tower_level
@@ -1144,6 +1222,81 @@ def build_inputs(
     monthly_grants = (
         resolve_monthly_grants(cfg, state, requirements) and calendar_mode != "ignore"
     )
+    model_calendar = _should_model_calendar(cfg.get("pets", {}), calendar_mode, monthly_grants)
+
+    # Every recipe is a craft flow; the optimiser sources the top-level demand,
+    # choosing craft-vs-gather for itself. Openables are free multi-output flows
+    # (open a chest or bag for its contents), so the solver can gather a chest and
+    # open it when that beats gathering the contents directly. (The channel Offers
+    # are rebuilt by the caller, since the passive ones depend on the plan span.)
+    recipes = crafting.recipe_flows(workshop)
+    smith = locksmith.load_openables()
+    open_flows = sources.open_flows(smith)
+    # Items already in stock are free supply for the intermediates a plan would
+    # otherwise gather, craft or open (the optimiser skips crediting the directly
+    # demanded items, whose shortfall is already net of what is held).
+    inventory = {
+        key: float(entry.quantity) for key, entry in state.inventory.items.items()
+    }
+    # Stamina already banked seeds the inventory so Apple Cider explores can spend
+    # it; the drink-Orange-Juice flow tops it up over time.
+    if args.current_stamina:
+        inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
+    cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
+    # Per-unit gold prices for the buyable consumables (the [trading] config): what
+    # makes each buyable, so the frontier can trade makespan against real gold.
+    # Absent, nothing is buyable and every plan is fully self-sourced.
+    prices = config.trading_prices(cfg, crafting_bonus=crafting_bonus)
+
+    # Hickory Omelette sawmill boost: a grounded, omelette-consuming channel (see
+    # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs, the
+    # [sawmill] hickory_omelette setting and the storehouse size (which caps each of
+    # the boost's ten-minute deposits, as it caps the base run). Static across the
+    # seasonal fixed point.
+    boost_offers = sources.sawmill_boost_offers(
+        config.sawmill_outputs(cfg),
+        config.hickory_omelette_mode(cfg),
+        config.storehouse_size(cfg, today=start),
+    )
+
+    return _ChannelSetup(
+        requirements=requirements,
+        farm=farm,
+        explore=explore,
+        fish=fish,
+        workshop=workshop,
+        monthly_grants=monthly_grants,
+        recipes=recipes,
+        smith=smith,
+        open_flows=open_flows,
+        inventory=inventory,
+        cookie_sets=cookie_sets,
+        prices=prices,
+        boost_offers=boost_offers,
+        model_calendar=model_calendar,
+    )
+
+
+def build_inputs(
+    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+) -> SolveInputs:
+    """Build a :class:`SolveInputs` from parsed args/config and a loaded state.
+
+    ``state`` is expected already loaded, with ``--override-inventory``
+    applied (the CLI does file loading + the override in :func:`run`; a web
+    caller instead builds a state directly from pasted request text).
+    """
+    start = args.start_date or date.today()
+
+    # Parse the time limit first so a bad duration fails before any output.
+    time_limit = (
+        passive.parse_duration(args.passive_limit)
+        if args.passive_limit is not None
+        else None
+    )
+
+    setup = _build_channel_setup(args, cfg, state, start, args.crafting_bonus)
+    requirements = setup.requirements
 
     # Goal selection (see farm_solver.solve_goals/solve_target and the --target
     # help text). --target none drops the tower explicitly; omitting --target
@@ -1172,41 +1325,7 @@ def build_inputs(
             # caller can display the level actually targeted.
             target_level = requirements.max_level
 
-    # Every recipe is a craft flow; the optimiser sources the top-level demand,
-    # choosing craft-vs-gather for itself. Openables are free multi-output flows
-    # (open a chest or bag for its contents), so the solver can gather a chest and
-    # open it when that beats gathering the contents directly. (The channel Offers
-    # are rebuilt below, since the passive ones depend on the plan span.)
-    recipes = crafting.recipe_flows(workshop)
-    smith = locksmith.load_openables()
-    open_flows = sources.open_flows(smith)
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
-    # Items already in stock are free supply for the intermediates a plan would
-    # otherwise gather, craft or open (the optimiser skips crediting the directly
-    # demanded items, whose shortfall is already net of what is held).
-    inventory = {
-        key: float(entry.quantity) for key, entry in state.inventory.items.items()
-    }
-    # Stamina already banked seeds the inventory so Apple Cider explores can spend
-    # it; the drink-Orange-Juice flow tops it up over time.
-    if args.current_stamina:
-        inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
-    cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
-    # Per-unit gold prices for the buyable consumables (the [trading] config): what
-    # makes each buyable, so the frontier can trade makespan against real gold.
-    # Absent, nothing is buyable and every plan is fully self-sourced.
-    prices = config.trading_prices(cfg, crafting_bonus=args.crafting_bonus)
-
-    # Hickory Omelette sawmill boost: a grounded, omelette-consuming channel (see
-    # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs, the
-    # [sawmill] hickory_omelette setting and the storehouse size (which caps each of
-    # the boost's ten-minute deposits, as it caps the base run). Static across the
-    # seasonal fixed point.
-    boost_offers = sources.sawmill_boost_offers(
-        config.sawmill_outputs(cfg),
-        config.hickory_omelette_mode(cfg),
-        config.storehouse_size(cfg, today=start),
-    )
 
     # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
     # mastery goal's shortfall directly, trading gold for a faster (or cheaper) plan;
@@ -1221,41 +1340,28 @@ def build_inputs(
     if args.plans < 1:
         raise ValueError("--plans must be at least 1")
 
-    # A date-dependent source -- a seasonal pet in season for part of the year, or
-    # the Mechanical Heart's monthly grants -- contributes an amount that depends on
-    # how long the plan runs, which is itself an output of the solve. When modelling
-    # the calendar (mode 'full', see _should_model_calendar) iterate to a fixed
-    # point: solve, take the expanded plan's makespan as the plan span, rebuild
-    # those rates for it, and solve again until the makespan settles. Otherwise
-    # ('average'/'ignore') a single steady-state pass (horizon None) is enough.
-    model_calendar = _should_model_calendar(
-        cfg.get("pets", {}),
-        calendar_mode,
-        monthly_grants,
-    )
-
     return SolveInputs(
         time_limit=time_limit,
         state=state,
         requirements=requirements,
-        farm=farm,
-        explore=explore,
-        fish=fish,
-        workshop=workshop,
-        monthly_grants=monthly_grants,
+        farm=setup.farm,
+        explore=setup.explore,
+        fish=setup.fish,
+        workshop=setup.workshop,
+        monthly_grants=setup.monthly_grants,
         solution=solution,
-        recipes=recipes,
-        smith=smith,
-        open_flows=open_flows,
+        recipes=setup.recipes,
+        smith=setup.smith,
+        open_flows=setup.open_flows,
         demand=demand,
-        inventory=inventory,
-        cookie_sets=cookie_sets,
-        prices=prices,
-        boost_offers=boost_offers,
+        inventory=setup.inventory,
+        cookie_sets=setup.cookie_sets,
+        prices=setup.prices,
+        boost_offers=setup.boost_offers,
         pj_gain=pj_gain,
         pj_price=pj_price,
         pj_limit=pj_limit,
-        model_calendar=model_calendar,
+        model_calendar=setup.model_calendar,
         start=start,
         target_level=target_level,
     )
@@ -1475,6 +1581,411 @@ def derive_report_inputs(
     )
 
 
+# --- Ascension mode (--ascend): climb the tower via masteries/chores rather ---
+# --- than solving a fixed goal. See ascension.py for the AK/chore/mega maths ---
+# --- and optimizer.py's "Ascension extension" for the per-stage LP.          ---
+
+
+@dataclass
+class StageResult:
+    """One stage's solved plan, from :func:`solve_ascension_frontier`.
+
+    Minimal on purpose -- ``plan.ascension`` (an
+    :class:`ascension.AscensionOutcome`) already carries the masters/
+    grandmasters/AK breakdown the milestone-5 report will want; ``plan`` itself
+    carries the draws/crafts/gold like any other :class:`optimizer.SourcingPlan`.
+    """
+
+    from_level: int
+    to_level: int
+    plan: optimizer.SourcingPlan
+
+
+@dataclass
+class StagedPlan:
+    """One whole climb (every stage back to back) at one point on the sweep."""
+
+    stages: list[StageResult]
+    time: timedelta  # sum of stage plan times
+    gold: float  # sum of stage plan.gold
+    surplus_gold: float  # sum of stage surplus credits
+
+    @property
+    def cost(self) -> tuple[float, float]:
+        """The ``(time, net gold)`` pair the frontier prunes/sorts on -- mirrors
+        :attr:`optimizer.SourcingPlan.cost`."""
+        return (self.time.total_seconds(), round(self.gold - self.surplus_gold, 2))
+
+
+@dataclass
+class AscensionFrontierResult:
+    plans: list[StagedPlan]  # non-dominated, fastest first
+    stage_bounds: list[tuple[int, int]]
+    unmasterable: list[str]  # union across stages/passes (from the LP bases)
+
+
+def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:
+    """``(current, target, starting_ak)`` for ``--ascend`` mode.
+
+    ``current`` is ``--tower-level``, else ``[tower] level``, else ``0`` --
+    ascension mode's own default: elsewhere an absent level means "assume
+    every reward owned" (see :func:`config.current_tower_level`), but here it
+    means a fresh account with none owned yet, since the climb is *from*
+    that level. ``target`` is ``--ascend``'s value, unvalidated (see
+    :func:`_validate_ascend`). ``starting_ak`` is ``--starting-ak``, else
+    ``[tower] ascension_knowledge``, else 0.
+    """
+    current = (
+        args.tower_level if args.tower_level is not None
+        else config.current_tower_level(cfg)
+    )
+    if current is None:
+        current = 0
+    starting_ak = (
+        args.starting_ak if args.starting_ak is not None
+        else config.starting_ascension_knowledge(cfg)
+    )
+    return current, args.ascend, starting_ak
+
+
+def _validate_ascend(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:
+    """Validate ``--ascend``'s mode and return its resolved ``(current, target,
+    starting_ak)`` (see :func:`resolve_ascend_params`).
+
+    ``--ascend`` picks a different mode entirely -- climb by AK rather than
+    solve a fixed goal -- so it conflicts with every goal-only flag
+    (``--target``/``-m``/``-i``/``--use-pumpkin-juice``). The level range is
+    checked against :data:`ascension.MAX_ASCEND_LEVEL`; targets past 100 are
+    refused for now (megamastery support, levels 101-200, is milestone 6 --
+    this guard is removed then).
+    """
+    if args.target is not None:
+        raise ValueError("--ascend conflicts with --target")
+    if args.mastery is not None:
+        raise ValueError("--ascend conflicts with -m/--mastery")
+    if args.items is not None:
+        raise ValueError("--ascend conflicts with -i/--items")
+    if args.use_pumpkin_juice is not None:
+        raise ValueError("--ascend conflicts with --use-pumpkin-juice")
+    current, target, starting_ak = resolve_ascend_params(args, cfg)
+    if not (current < target <= ascension.MAX_ASCEND_LEVEL):
+        raise ValueError(
+            f"--ascend requires the current level ({current}) < target "
+            f"({target}) <= {ascension.MAX_ASCEND_LEVEL}"
+        )
+    if target > 100:
+        raise ValueError(
+            "--ascend: megamastery support (levels 101-200) lands in a later "
+            "milestone"
+        )
+    if starting_ak < 0:
+        raise ValueError("--starting-ak must be non-negative")
+    return current, target, starting_ak
+
+
+# The two frontier endpoints (buy freely / buy nothing) plus this many
+# log-spaced weights between them -- mirrors optimizer._time_caps' geometric
+# spacing, but swept over gold_weight rather than a makespan cap. No
+# favour_passive slow-regime extension in v1: the chore-AK tradeoff already
+# stretches the slow end of this sweep on its own (a pricier gold weight
+# masters fewer candidates and waits longer on chores instead of buying), so a
+# separate buy-nothing-and-bank-surplus regime would mostly duplicate that
+# shape rather than reveal a genuinely different plan.
+_ASCEND_SWEEP_INTERIOR = 14
+
+
+def _ascend_gold_weights() -> list[float]:
+    """The gold weights the ascension sweep solves at, fast endpoint first."""
+    lo = math.log(optimizer._FAST_PRICE)
+    hi = math.log(optimizer._FREE_PRICE)
+    interior = [
+        math.exp(lo + (hi - lo) * (i + 1) / (_ASCEND_SWEEP_INTERIOR + 1))
+        for i in range(_ASCEND_SWEEP_INTERIOR)
+    ]
+    return [optimizer._FAST_PRICE, *interior, optimizer._FREE_PRICE]
+
+
+def _ascend_stage_cfgs(current: int, target: int, cfg: dict) -> list[dict]:
+    """One config per :func:`ascension.stage_bounds` stage.
+
+    Stage 0 is a deep copy of ``cfg`` with ``[tower] level`` set to ``current``
+    directly (so a player's own ``[tower] level`` -- which may be stale, or
+    absent -- doesn't leak in; ``--tower-level``/the config's own resolution
+    already folded into ``current``, see :func:`resolve_ascend_params`). Stage
+    ``k >= 1`` applies whatever reward completing stage ``k - 1`` granted
+    (``ascension.apply_rewards(stage_cfgs[k - 1], bounds[k - 1][0],
+    bounds[k][0])`` -- the two bounds are the same level, a stage never
+    straddles a reward, see :func:`ascension.stage_bounds`).
+    """
+    bounds = ascension.stage_bounds(current, target)
+    stage_cfgs: list[dict] = []
+    base_cfg = copy.deepcopy(cfg)
+    base_cfg.setdefault("tower", {})["level"] = current
+    stage_cfgs.append(base_cfg)
+    for k in range(1, len(bounds)):
+        prev_start, prev_end = bounds[k - 1]
+        stage_cfgs.append(ascension.apply_rewards(stage_cfgs[k - 1], prev_start, prev_end))
+    return stage_cfgs
+
+
+def _run_ascend_pass(
+    stage_crafting_bonus: list[float],
+    stage_setups: list[_ChannelSetup],
+    stage_offers: list[list[sources.Offer]],
+    stage_quantize: list,
+    bounds: list[tuple[int, int]],
+    state: farm_solver.GameState,
+    args: argparse.Namespace,
+    starting_ak: int,
+    gold_weight: float,
+) -> tuple[StagedPlan, set[str]]:
+    """Solve every stage once, in order, at one ``gold_weight``.
+
+    Rebuilds each stage's LP base fresh for this pass -- the safe, correct
+    default (see :func:`solve_ascension_frontier`'s PERFORMANCE note): a
+    stage's :class:`ascension.AscensionSpec` (its candidates and remaining AK
+    requirement) depends on *this pass's own* evolved masteries and AK carry,
+    which differ from every other pass past stage 0 (whose inputs are the same
+    on every pass, since nothing has evolved yet) -- so only stage 0's base is
+    actually shareable across passes, not worth special-casing at the
+    benchmarked sizes (see the milestone report).
+
+    Evolves three things stage to stage: the AK carry (steps + chores earned,
+    less what the level cost, floored at 0), the masteries
+    (:func:`ascension.advance`), and the inventory. Inventory evolution uses
+    :func:`optimizer.plan_leftovers` with an *empty* demand: with nothing
+    directly demanded, every held item lands in ``plan_balance``'s
+    ``elsewhere`` (see ``plan_balance``'s "demand is already net of stock"
+    exception -- moot here, nothing is ever directly demanded), so
+    ``plan_leftovers``' "supply - used" is exactly each item's ending stock
+    (held + produced - consumed by crafts/opens/offer inputs), the next
+    stage's starting inventory -- not an approximation, a genuine per-item
+    balance.
+    """
+    masteries = state.masteries
+    inventory = dict(stage_setups[0].inventory)
+    carry = float(starting_ak)
+    unmasterable: set[str] = set()
+    stage_results: list[StageResult] = []
+    total_time = timedelta(0)
+    total_gold = 0.0
+    total_surplus = 0.0
+
+    for k, (a, b) in enumerate(bounds):
+        setup = stage_setups[k]
+        crafting_bonus_k = stage_crafting_bonus[k]
+        offers = stage_offers[k]
+        level_ak = ascension.AK_PER_LEVEL * (b - a)
+        # cookie_sets depends on held cookies, which evolve pass to pass (see
+        # the inventory note above), so it is recomputed here rather than
+        # taken from the (pass-invariant) stage setup.
+        cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
+        spec = ascension.AscensionSpec(
+            candidates=ascension.candidates(farm_solver.GameState(masteries=masteries)),
+            ak_required=max(0.0, level_ak - carry),
+            chore_rate_per_day=ascension.chore_rate_per_day(),
+            megas_required=0,  # milestone 6 (levels 101-200)
+            mastery_bonus=args.mastery_bonus,
+        )
+        base = optimizer._build_base(
+            offers, {}, recipes=setup.recipes, crafting_bonus=crafting_bonus_k,
+            openables=setup.open_flows, inventory=inventory, cookie_sets=cookie_sets,
+            prices=setup.prices, ascension=spec,
+        )
+        plan = optimizer._solve_configured(base, gold_weight=gold_weight)
+        optimizer._quantize_plan_time(
+            plan, stage_quantize[k], {}, setup.recipes, crafting_bonus_k,
+            setup.open_flows, inventory,
+        )
+        plan.surplus_gold = optimizer.plan_surplus_gold(
+            plan, {}, setup.recipes, crafting_bonus_k, setup.open_flows, inventory,
+            setup.prices or {},
+        )
+        unmasterable.update(base.unmasterable)
+
+        outcome = plan.ascension
+        assert outcome is not None  # an AscensionSpec was always given above
+        next_inventory = optimizer.plan_leftovers(
+            plan, {}, setup.recipes, crafting_bonus_k, setup.open_flows, inventory,
+        )
+        carry = max(0.0, carry + outcome.ak_from_steps + outcome.ak_from_chores - level_ak)
+        masteries = ascension.advance(masteries, outcome)
+        inventory = next_inventory
+
+        stage_results.append(StageResult(from_level=a, to_level=b, plan=plan))
+        total_time += plan.time
+        total_gold += plan.gold
+        total_surplus += plan.surplus_gold
+
+    staged = StagedPlan(
+        stages=stage_results, time=total_time, gold=total_gold, surplus_gold=total_surplus,
+    )
+    return staged, unmasterable
+
+
+def solve_ascension_frontier(
+    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+) -> AscensionFrontierResult:
+    """Climb the tower from a current level to ``--ascend``'s target.
+
+    Splits the climb into stages at every reward threshold crossed
+    (:func:`ascension.stage_bounds`; see :func:`_ascend_stage_cfgs`), then
+    sweeps a range of gold weights (buy freely through buy nothing, mirroring
+    :func:`optimizer.frontier`'s fast regime -- see :func:`_ascend_gold_weights`)
+    driving one LP per stage per weight through the milestone-3 ascension
+    extension (:data:`ascension.AscensionSpec`/``optimizer._build_base``'s
+    ``ascension`` param), which chooses which candidates to master/
+    grandmaster to clear each stage's AK gap.
+
+    **v1 approximations**, all documented further at their own site:
+
+    - **Steady-state calendar** (see the ``config.passive_production`` call
+      below): every stage's passive production -- seasonal pets, the
+      Mechanical Heart's monthly grants -- is the yearly/monthly average,
+      never the calendar-exact model. A stage's real span is only known after
+      solving it, and there is no natural fixed point to iterate here the way
+      :func:`solve_frontier` does for a single goal (each of many stages would
+      need its own fixed point, nested inside the gold-weight sweep) -- a
+      later milestone's job if it matters in practice.
+    - **No favour_passive slow regime** -- see :data:`_ASCEND_SWEEP_INTERIOR`'s
+      comment.
+    - **Perk auto-detection uses the pre-climb state** -- see
+      :func:`_build_channel_setup`'s callers here: Scythe of Dewstar/Dewstar's
+      Journal/Fungus Processing/the Mechanical Heart are detected once per
+      stage from ``state`` as passed in, not re-evaluated against each pass's
+      evolved masteries. They gate on tower levels (250/300) far past the
+      101-200 range this milestone even allows, so this cannot yet matter in
+      practice.
+    - **Inventory evolution** -- see :func:`_run_ascend_pass`'s docstring.
+    """
+    current, target, starting_ak = resolve_ascend_params(args, cfg)
+    bounds = ascension.stage_bounds(current, target)
+    stage_cfgs = _ascend_stage_cfgs(current, target, cfg)
+    start = args.start_date or date.today()
+
+    # Per-stage static setup (channels, recipes, prices, offers, the quantize
+    # callable): built once per stage and shared across every gold-weight pass
+    # below, since none of it depends on the sweep or on how a pass's earlier
+    # stages evolved (see this function's docstring's "static setup" note and
+    # _run_ascend_pass's inventory/masteries evolution, which is the part that
+    # does vary pass to pass).
+    stage_crafting_bonus: list[float] = []
+    stage_setups: list[_ChannelSetup] = []
+    stage_offers: list[list[sources.Offer]] = []
+    stage_quantize: list = []
+    for cfg_k in stage_cfgs:
+        crafting_bonus_k = _crafting_bonus_for_cfg(args.crafting_bonus, cfg_k)
+        setup = _build_channel_setup(args, cfg_k, state, start, crafting_bonus_k)
+        # Steady state: no start/horizon span (see the docstring's calendar
+        # note) -- mirrors solve_frontier's non-seasonal (average/ignore) path.
+        production = config.passive_production(
+            cfg_k, today=start, start=start, horizon=None,
+            monthly_grants=setup.monthly_grants,
+        )
+        offers = optimizer.all_offers(
+            production, setup.fish, setup.explore, setup.farm, setup.boost_offers
+        )
+        stage_crafting_bonus.append(crafting_bonus_k)
+        stage_setups.append(setup)
+        stage_offers.append(offers)
+        stage_quantize.append(config.passive_quantizer(production))
+
+    unmasterable: set[str] = set()
+    staged_plans: list[StagedPlan] = []
+    for gold_weight in _ascend_gold_weights():
+        staged, pass_unmasterable = _run_ascend_pass(
+            stage_crafting_bonus, stage_setups, stage_offers,
+            stage_quantize, bounds, state, args, starting_ak, gold_weight,
+        )
+        unmasterable.update(pass_unmasterable)
+        staged_plans.append(staged)
+
+    # Bound the slow end at the chore-only time: every AK earned from chores
+    # alone, with not one item mastered, takes ak_cost/rate days -- no plan
+    # needs to run longer. Without this the slowest passes survive pruning on
+    # their banked-surplus credit alone (net gold falls without bound as the
+    # span grows -- passive production accumulates forever), exactly the
+    # unbounded tail optimizer.frontier bounds with t_bound in the normal
+    # mode; 52-year "plans" were observed before this cut. Generous on
+    # purpose: starting AK is ignored (it only shortens the true need) and
+    # the fastest plan always survives.
+    # The margin keeps the chore-only endpoint itself alive: its makespan is
+    # exactly ak/rate days, which deposit quantisation or float rounding can
+    # push a hair past the raw bound.
+    chore_only = timedelta(
+        days=ascension.ak_cost(current, target) / ascension.chore_rate_per_day()
+    ) * 1.05 + timedelta(days=1)
+    fastest = min(plan.time for plan in staged_plans)
+    staged_plans = [
+        plan for plan in staged_plans if plan.time <= max(chore_only, fastest)
+    ]
+
+    # optimizer._non_dominated/_thin both work purely off .time/.gold/
+    # .surplus_gold/.cost, which StagedPlan carries under the same names as
+    # SourcingPlan -- reused as-is rather than duplicating the pruning logic.
+    shown = optimizer._thin(optimizer._non_dominated(staged_plans), args.plans)
+
+    return AscensionFrontierResult(
+        plans=shown, stage_bounds=bounds, unmasterable=sorted(unmasterable),
+    )
+
+
+def _print_ascension_report(
+    result: AscensionFrontierResult,
+    current: int,
+    target: int,
+    starting_ak: int,
+    args: argparse.Namespace,
+) -> None:
+    # TEMPORARY until milestone 5 lands: a plain-text report that bypasses the
+    # Reporter entirely (ascension mode's own display, see the milestone 4
+    # plan's "New orchestration" note -- replaced wholesale by milestone 5).
+    needed = ascension.AK_PER_LEVEL * (target - current)
+    print(
+        f"Goal: Climb tower from {current} to {target} "
+        f"(needs {needed:,} AK, {starting_ak:,} already banked)"
+    )
+    if result.unmasterable:
+        print(
+            "Warning: not masterable (no known source): "
+            + ", ".join(result.unmasterable)
+        )
+    if not result.plans:
+        print("No plan found.")
+        return
+
+    print()
+    for i, plan in enumerate(result.plans, start=1):
+        masters = sum(len(s.plan.ascension.masters) for s in plan.stages)
+        grandmasters = sum(len(s.plan.ascension.grandmasters) for s in plan.stages)
+        chore_ak = sum(s.plan.ascension.ak_from_chores for s in plan.stages)
+        net_gold = plan.gold - plan.surplus_gold
+        print(
+            f"{i}. {passive.format_duration(plan.time)} -- gold {plan.gold:,.0f}, "
+            f"net {net_gold:,.0f}, masters {masters}, grandmasters {grandmasters}, "
+            f"chore AK {chore_ak:,.1f}"
+        )
+
+    index = selected_plan(result.plans, args.plan, args.cheapest_plan)
+    chosen = result.plans[index]
+    print()
+    print(f"Selected plan (#{index + 1}):")
+    for stage in chosen.stages:
+        outcome = stage.plan.ascension
+        assert outcome is not None
+        masters = ", ".join(outcome.masters) if outcome.masters else "(none)"
+        gm_note = (
+            f"; grandmastered: {', '.join(outcome.grandmasters)}"
+            if outcome.grandmasters
+            else ""
+        )
+        print(
+            f"  L{stage.from_level}->L{stage.to_level}: "
+            f"{passive.format_duration(stage.plan.time)}, mastered: {masters}"
+            f"{gm_note}, chore AK {outcome.ak_from_chores:,.1f}"
+        )
+
+
 def run(args: argparse.Namespace) -> int:
     if args.pager and args.format != "markdown":
         raise ValueError("--pager requires --format markdown")
@@ -1488,6 +1999,27 @@ def run(args: argparse.Namespace) -> int:
     # gates the tower-derived monthly grants off in this mode).
     if resolve_calendar_mode(args, cfg) == "ignore":
         cfg = strip_dated_sources(cfg)
+
+    if args.ascend is not None:
+        # Ascension mode: a different mode entirely (climb by AK, not solve a
+        # fixed goal), validated and dispatched before any of the goal-solving
+        # setup below runs. Its own crafting bonus is resolved per stage (see
+        # solve_ascension_frontier), not globally like resolve_crafting_bonus
+        # does for the rest of run() -- args.crafting_bonus is left untouched.
+        current, target, starting_ak = _validate_ascend(args, cfg)
+        backend = args.solver or cfg.get("solver", {}).get("backend")
+        if backend:
+            optimizer.set_solver_backend(backend)
+        mastery_file, inventory_file = resolve_files(args, cfg)
+        state = load_state(mastery_file, inventory_file)
+        if args.override_inventory is not None:
+            apply_inventory_overrides(
+                state.inventory, parsing.parse_item_amounts(args.override_inventory)
+            )
+        result = solve_ascension_frontier(args, cfg, state)
+        _print_ascension_report(result, current, target, starting_ak, args)
+        return 0
+
     # An explicit --crafting-bonus wins; otherwise resolve it from [workshop]/
     # [tower] before anything downstream (trading_prices, build_inputs, the
     # reporters) reads args.crafting_bonus.

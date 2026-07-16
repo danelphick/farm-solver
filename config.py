@@ -83,6 +83,26 @@ def current_tower_level(cfg: dict[str, Any]) -> int | None:
     return level
 
 
+def starting_ascension_knowledge(cfg: dict[str, Any]) -> int:
+    """Ascension Knowledge already banked, from an optional ``[tower]
+    ascension_knowledge`` key.
+
+    Mirrors :func:`current_tower_level`: an absent section or key means "none
+    banked yet" -- ``0`` -- rather than the "assume everything owned" meaning
+    an absent ``[tower] level`` carries. Raises ``ValueError`` for anything but
+    a non-negative integer.
+    """
+    tower = cfg.get("tower") or {}
+    ak = tower.get("ascension_knowledge")
+    if ak is None:
+        return 0
+    if isinstance(ak, bool) or not isinstance(ak, int) or ak < 0:
+        raise ValueError(
+            f"[tower] ascension_knowledge must be a non-negative integer, not {ak!r}"
+        )
+    return ak
+
+
 def crafting_bonus_for(cfg: dict[str, Any], tower_level: int | None) -> float:
     """The crafting bonus (items per craft) from ``[workshop] resource_saver`` and level.
 

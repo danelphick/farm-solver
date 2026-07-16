@@ -807,171 +807,157 @@ _ASCEND_PREREQS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _round_and_fix_ascension(base: _Base, solver: pulp.LpSolver) -> None:
+def _round_and_fix_ascension(
+    base: _Base, solver: pulp.LpSolver, *, check: bool = True
+) -> pulp.LpSolver:
     """Round the primary solve's fractional ascension step selections to 0/1.
 
     The relaxed LP is free to split a step across several items -- e.g. select
     1.5 masters' worth fractionally -- which is a valid relaxation optimum but
-    not a real plan (you cannot half-master an item). This snaps every ``y`` in
-    ``base.ascend_y`` to exactly 0 or 1 by a greedy **cover**: fractional steps
-    (``0.001 < y < 0.999``) are rounded *up*, cheapest incremental mastery
-    supply per unit of still-needed coverage first, until two targets are met:
+    not a real plan (you cannot half-master an item). This drives every ``y``
+    in ``base.ascend_y`` to exactly 0 or 1 by **two-sided iterative
+    rounding**: each round takes ONE step -- the largest fractional ``y``,
+    the relaxation's most-wanted (ties prefer the lower step, then the item
+    name) -- and tries it BOTH WAYS, re-solving under "pin up to 1 (with
+    prerequisites)" and under "pin down to 0", keeping whichever solves to
+    the better objective. The re-solve lets the LP re-decide every remaining
+    fraction against that decision -- whether the AK the step carried is now
+    cheaper from another item, from more chore-waiting (the makespan term),
+    or not needed at all. Repeats until nothing is fractional, then pins
+    every remaining step at its (now integral) value and solves once more,
+    leaving the problem solved against a fully integral selection for the
+    refinement tower that follows.
 
-    - step AK (10/master + 100/grandmaster, selected steps only) reaches
-      ``target_ak`` -- the primary solve's own **fractional** step-AK total, so
-      rounding up never grows the chore/makespan need past what the relaxation
-      already implied.
-    - the selected mega count reaches ``base.ascension.megas_required``.
+    Every cheaper scheme tried here first got a real case badly wrong,
+    because nothing but the LP can price a step's *completion*: rounding by
+    descending ``y`` (or AK-per-delta) turned a 10-AK gap into a whole
+    grandmaster -- the relaxation loves fractional grandmaster slices, 100 AK
+    per 90k of delta beating a master's 10 per 10k (see the corn regression
+    test); a supply-per-needed-AK cover fixed that but pinned items the
+    relaxation had merely *trickle-fed*, turning the buy-nothing endpoint
+    into a 7-year plan on real data; up-only iterative rounding fixed the
+    single-stage cases but had no way back from committing a trickle-fed
+    step whose fractional supply was free while chore-waiting (a passive
+    source sipped at 10% costs 10x the makespan completed), locking a 3-year
+    multi-stage climb into 7+ years; and batch-committing every ``y >= 0.5``
+    over-selects in the other direction (the moment the first commitments
+    land, the LP would have re-sourced the rest cheaper -- observed turning a
+    4-day fast endpoint into 41 days). Trying each side costs one extra solve
+    per fractional step and settles all of it. Termination: every round pins
+    one previously-fractional step, either way. The AK/mega constraints stay
+    in the model throughout, so coverage is never a bookkeeping target: a
+    pin-down that would break the requirement simply solves worse (or not at
+    all, with a zero chore rate) and loses to the pin-up.
 
-    The cover metric matters. The relaxation loves *fractional grandmaster
-    slices* (100 AK per 90k of delta beats a master's 10 per 10k), so picking by
-    descending ``y`` -- or by AK-per-delta -- rounds a whole grandmaster up for
-    a gap a lone master covers, pinning 100k of supply where 10k would do (10x
-    the production). Instead each pick is the *package* -- an unselected
-    fractional master or grandmaster step plus its not-yet-selected
-    prerequisites -- minimising ``incremental_supply / min(incremental_ak,
-    ak_still_needed)``: the mastery progress newly pinned per unit of AK it
-    *usefully* contributes, the ``min`` denying a big package credit for
-    overshooting the gap. On a fresh 10-AK gap a 10k master alone (10000/10 =
-    1000) beats the master+grandmaster package (100000/10 = 10000); on a 110-AK
-    gap the package (100000/110 ~= 909) wins -- both the cheap top-up and the
-    genuine need pick right. Ties break to the smaller supply, then item name.
-    **Megas are selected first** (smallest incremental supply, then item name):
-    a mega carries no AK of its own but drags AK-earning prerequisites along,
-    which then count toward the AK target before it is topped up.
+    Pins are ephemeral, like the rest of :func:`_solve_configured`'s per-call
+    machinery -- popped at the top of the next call on this base.
 
-    Selecting a step auto-selects its prerequisites (mega needs grandmaster
-    needs master, per :data:`_ASCEND_PREREQS`) among whichever exist for that
-    item, since the base's own ``grandmaster <= master``/``mega <= grandmaster``
-    constraints require it. Every step not selected is pinned to 0, so the
-    result is fully integral. Both pins are ephemeral, like the rest of
-    :func:`_solve_configured`'s per-call machinery -- popped at the top of the
-    next call on this base -- and the problem is left solved against them (a
-    fresh ``problem.solve(solver)`` at the end), ready for the refinement tower
-    that follows.
+    Each solve is passed through :func:`_assert_optimal` like every other
+    uncapped first solve in the file (skipped when ``check`` is False -- a
+    capped call, matching the primary solve's own exemption): on real, dense
+    candidate sets (hundreds of items) hard 0/1 pins can land HiGHS on the
+    same falsely-"Unbounded" degenerate vertex the module docstring documents
+    elsewhere, which -- unlike a plain non-optimal status -- leaves every
+    variable's ``.value()`` reading back nonsense (a negative makespan, every
+    step un-selected) rather than simply stale. Returns the solver the caller
+    should keep using (CBC, if a rescue happened) for the refinement tower.
     """
-    spec = base.ascension
-    assert spec is not None
-    cand_by_item = {c.item.lower(): c for c in spec.candidates}
-    y_values = {
-        item: {step: var.value() or 0.0 for step, var in steps.items()}
-        for item, steps in base.ascend_y.items()
-    }
-    target_ak = sum(
-        AK_PER_MASTER * v.get("master", 0.0) + AK_PER_GRANDMASTER * v.get("grandmaster", 0.0)
-        for v in y_values.values()
-    )
-    target_megas = spec.megas_required
-
-    selected: dict[str, set[str]] = {}
-
-    def is_selected(item: str, step: str) -> bool:
-        return step in selected.get(item, ())
-
-    def select(item: str, step: str) -> None:
-        if is_selected(item, step):
-            return
-        for prereq in _ASCEND_PREREQS[step]:
-            if prereq in base.ascend_y[item]:
-                select(item, prereq)
-        selected.setdefault(item, set()).add(step)
-
-    def current_ak() -> float:
-        total = 0.0
-        for steps in selected.values():
-            if "master" in steps:
-                total += AK_PER_MASTER
-            if "grandmaster" in steps:
-                total += AK_PER_GRANDMASTER
-        return total
-
-    def current_megas() -> int:
-        return sum(1 for steps in selected.values() if "mega" in steps)
-
-    def package_steps(item: str, step: str) -> list[str]:
-        """``step`` plus its not-yet-selected prerequisites that exist -- what
-        selecting it would newly pin to 1."""
-        return [
-            s
-            for s in (*_ASCEND_PREREQS[step], step)
-            if s in base.ascend_y[item] and not is_selected(item, s)
-        ]
-
-    def step_delta(item: str, step: str) -> float:
-        c = cand_by_item[item]
-        return {
-            "master": c.delta_master,
-            "grandmaster": c.delta_grandmaster,
-            "mega": c.delta_mega,
-        }[step] or 0.0
-
-    _STEP_AK = {"master": AK_PER_MASTER, "grandmaster": AK_PER_GRANDMASTER, "mega": 0}
-
-    def incremental_supply(item: str, step: str) -> float:
-        return sum(step_delta(item, s) for s in package_steps(item, step))
-
-    def incremental_ak(item: str, step: str) -> float:
-        return sum(_STEP_AK[s] for s in package_steps(item, step))
-
-    def fractional(item: str, step: str) -> bool:
-        y = y_values[item].get(step)
-        return y is not None and 0.001 < y < 0.999 and not is_selected(item, step)
-
-    # Outright selections (the relaxation already committed to these).
-    for item, steps in y_values.items():
-        for step, y in steps.items():
-            if y >= 0.999:
-                select(item, step)
-
-    # Megas first: they carry no AK themselves but drag AK-earning prerequisites
-    # along, which then count toward the AK target below. Cheapest incremental
-    # supply (the whole not-yet-selected chain's deltas) first. Terminates: each
-    # pick selects a previously-unselected mega, a finite pool.
-    while current_megas() < target_megas:
-        mega_candidates = [
-            item for item in y_values if fractional(item, "mega")
-        ]
-        if not mega_candidates:
-            break
-        best = min(
-            mega_candidates, key=lambda it: (incremental_supply(it, "mega"), it)
-        )
-        select(best, "mega")
-
-    # AK top-up: greedy cover by incremental supply per unit of still-needed AK
-    # (see the docstring for why not descending-y / AK-per-delta). Terminates:
-    # each pick selects at least one previously-unselected step, and selecting
-    # every fractional step covers at least the fractional totals that set
-    # ``target_ak`` in the first place.
-    while current_ak() + 1e-9 < target_ak:
-        remaining = target_ak - current_ak()
-        packages = [
-            (item, step)
-            for item in y_values
-            for step in ("master", "grandmaster")
-            if fractional(item, step)
-        ]
-        if not packages:
-            break
-
-        def cover_cost(pkg: tuple[str, str]) -> tuple[float, float, str, str]:
-            item, step = pkg
-            supply = incremental_supply(item, step)
-            ak = incremental_ak(item, step)
-            return (supply / min(ak, remaining), supply, item, step)
-
-        select(*min(packages, key=cover_cost))
-
+    assert base.ascension is not None
+    # Below this, a step is dust, not a commitment: the relaxation will shave
+    # micro-slivers of y (e.g. 1.6e-5 of a master, gathered concurrently, to
+    # save a fraction of a minute of chore wait) that must never be forced up
+    # -- the final integral pinning rounds them to 0 and the re-solve absorbs
+    # the AK sliver through the chore term or another step.
+    eps = 1e-3
+    step_order = {"master": 0, "grandmaster": 1, "mega": 2}
     problem = base.problem
-    for item, steps in base.ascend_y.items():
+    pinned: set[tuple[str, str]] = set()
+
+    Trial = list[tuple[str, tuple[str, str]]]  # (constraint name, (item, step))
+
+    def pin(item: str, step: str, value: int) -> Trial:
+        constraint = base.ascend_y[item][step] == value
+        # See the pj_off gotcha above: read the name back after assignment,
+        # since an item like "fancy violin" gets sanitised on the way in.
+        constraint.name = f"ascend_pin_{item}_{step}"
+        problem.addConstraint(constraint)
+        base.ephemeral.append(constraint.name)
+        pinned.add((item, step))
+        return [(constraint.name, (item, step))]
+
+    def pin_up_with_prereqs(item: str, step: str) -> Trial:
+        trial: Trial = []
+        for s in (*_ASCEND_PREREQS[step], step):
+            if s in base.ascend_y[item] and (item, s) not in pinned:
+                trial += pin(item, s, 1)
+        return trial
+
+    def unpin(trial: Trial) -> None:
+        for name, key in trial:
+            problem.constraints.pop(name, None)
+            base.ephemeral.remove(name)
+            pinned.discard(key)
+
+    def solved_objective() -> float | None:
+        """This trial's objective value, or None when the solve is unusable."""
+        problem.solve(solver)
+        if pulp.LpStatus[problem.status] != "Optimal":
+            return None
+        return pulp.value(problem.objective)
+
+    while True:
+        fractional = sorted(
+            (
+                (item, step, var.value() or 0.0)
+                for item, steps in base.ascend_y.items()
+                for step, var in steps.items()
+                if (item, step) not in pinned
+                and eps < (var.value() or 0.0) < 1 - eps
+            ),
+            key=lambda t: (-t[2], step_order[t[1]], t[0]),
+        )
+        if not fractional:
+            break
+        # Decide ONE step per round -- the largest fraction, the relaxation's
+        # most-wanted -- and decide it BOTH WAYS: completing it (pin up, with
+        # prerequisites) versus dropping it (pin down; the chore term or other
+        # steps re-cover its AK), keeping whichever re-solves better. Rounding
+        # up only was observed adopting a passive-trickle item the relaxation
+        # merely sipped (its fractional supply is free while chore-waiting),
+        # locking a 3-year climb into 7+ years with no way back -- only the
+        # LP itself can price completion against more waiting. Batch pinning
+        # over-selects the other way (the moment the first commitments land,
+        # the LP would have re-sourced the rest cheaper).
+        item, step, _ = fractional[0]
+        up_trial = pin_up_with_prereqs(item, step)
+        obj_up = solved_objective()
+        unpin(up_trial)
+
+        down_trial = pin(item, step, 0)
+        obj_down = solved_objective()
+        if obj_up is not None and (obj_down is None or obj_up <= obj_down):
+            unpin(down_trial)
+            pin_up_with_prereqs(item, step)
+            problem.solve(solver)
+            if check:
+                solver = _assert_optimal(problem, solver)
+        elif obj_down is None:
+            # Neither direction solved cleanly -- surface it like any other
+            # uncapped non-optimal solve rather than looping forever.
+            solver = _assert_optimal(problem, solver)
+
+    # Everything left is integral; pin it there so the refinement tower cannot
+    # drift a selection while trading gold/activity, and so the next call's
+    # ephemeral pop finds every step var pinned, fractional or not.
+    for item, steps in sorted(base.ascend_y.items()):
         for step, var in steps.items():
-            constraint = (var == 1) if is_selected(item, step) else (var == 0)
-            # See the pj_off gotcha above: read the name back after assignment,
-            # since an item like "fancy violin" gets sanitised on the way in.
-            constraint.name = f"ascend_pin_{item}_{step}"
-            problem.addConstraint(constraint)
-            base.ephemeral.append(constraint.name)
+            if (item, step) not in pinned:
+                pin(item, step, 1 if (var.value() or 0.0) > 0.5 else 0)
     problem.solve(solver)
+    # A capped solve is exempt from the optimality checks, exactly like the
+    # primary solve above it (see _assert_optimal's docstring: HiGHS mis-flags
+    # tiny-RHS pins under a cap, where keeping the loaded solution is right).
+    return _assert_optimal(problem, solver) if check else solver
 
 
 def _solve_configured(
@@ -1041,7 +1027,7 @@ def _solve_configured(
     # selections to 0/1 and re-solve, before the refinement tower below runs on
     # top of that (now-integral) solution. See _round_and_fix_ascension.
     if base.ascension is not None:
-        _round_and_fix_ascension(base, solver)
+        solver = _round_and_fix_ascension(base, solver, check=time_cap is None)
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
     # optima CBC picks between at random across processes. Refine it in a

@@ -549,7 +549,18 @@ def farm_from_config(
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
-    speed = 1 - float(config_section.get("speed_reduction", 0)) / PERCENT
+    reduction = float(config_section.get("speed_reduction", 0))
+    if reduction >= PERCENT:
+        # 100% would make every crop instant and divide grow-rate maths by
+        # zero. Reachable by accident: the level-10 tower reward adds +10 in
+        # ascension mode, so a config whose speed_reduction already bakes that
+        # reward in (e.g. 90) overflows when climbing from below level 10.
+        raise ValueError(
+            f"[farming] speed_reduction must be below 100, not {reduction:g} "
+            "(if climbing with --ascend from below level 10, the config value "
+            "must exclude the level-10 reward's +10)"
+        )
+    speed = 1 - reduction / PERCENT
     corn_speed = 1 - float(config_section.get("corn_speed_reduction", 0)) / PERCENT
     grape_juices = float(config_section.get("grape_juices_per_day", 0))
     threshold_text = config_section.get("cookies_grow_time_threshold")

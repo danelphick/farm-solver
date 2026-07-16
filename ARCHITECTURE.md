@@ -132,7 +132,7 @@ frontier as before.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below), `build_inputs` → `SolveInputs`, `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`) |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits) |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
@@ -367,29 +367,36 @@ code path byte-identical — everything below is gated on the spec.
 - **Round-and-fix** (`_round_and_fix_ascension`, called from `_solve_configured`
   right after the primary solve, before the refinement tower): the relaxed LP can
   split a step fractionally across several items (a valid relaxation optimum, not
-  a real plan — you cannot half-master an item). It snaps every `y` to exactly 0
-  or 1 by a greedy **cover**: fractional steps (`0.001 < y < 0.999`) are rounded
-  up until step AK reaches the *primary solve's own fractional total* (so
-  rounding up never grows the chore/makespan need past what the relaxation
-  already implied) and the selected mega count reaches `spec.megas_required`,
-  auto-including any prerequisite step of a selection (mega needs grandmaster
-  needs master, among whichever vars exist — required by the ordering
-  constraints above). The cover metric matters: the relaxation loves fractional
-  *grandmaster* slices (100 AK per 90k of delta beats a master's 10 per 10k), so
-  a descending-`y` or AK-per-delta pick would round a whole grandmaster up for a
-  gap a lone master covers, pinning 10x the mastery supply (and production).
-  Instead, megas are picked first by smallest incremental supply (the whole
-  not-yet-selected prerequisite chain's deltas; they carry no AK themselves but
-  drag AK-earning prerequisites along that count toward the AK target), then
-  each AK pick is the *package* — an unselected fractional master/grandmaster
-  step plus its unselected prerequisites — minimising `incremental_supply /
-  min(incremental_ak, ak_still_needed)` (the `min` denies a big package credit
-  for overshooting the gap; ties break to smaller supply, then item name). Every
-  other step is pinned to 0. Both pins are ephemeral (`ascend_pin_<item>_<step>`,
-  read back off the constraint per the pj_off name-sanitisation gotcha) and the
-  problem is re-solved once against them before the refinement tower runs on top,
-  so the tower's stage-1 pin (makespan or `spend_value`) captures the *integral*
-  plan's real cost, not the relaxation's.
+  a real plan — you cannot half-master an item). It drives every `y` to exactly
+  0 or 1 by **two-sided iterative rounding**: each round takes the largest
+  fractional `y` (band `0.001 < y < 0.999`; below it a step is solver *dust* —
+  micro-slivers shaved to save fractions of a minute — never force-committed;
+  ties prefer the lower step then the item name) and tries it **both ways** —
+  re-solving under "pin up to 1, with prerequisites" (mega needs grandmaster
+  needs master, per the ordering constraints) and under "pin down to 0" — and
+  keeps whichever solves to the better objective, repeating until nothing is
+  fractional, then pinning the (now integral) remainder in place. The AK/mega
+  constraints stay in the model throughout, so coverage is the LP's own job:
+  a pin-down that breaks the requirement just solves worse (or not at all,
+  with a zero chore rate) and loses to the pin-up. **Every cheaper scheme got
+  a real case badly wrong** — this history is load-bearing, don't regress it:
+  descending-`y` one-shot rounding turned a 10-AK gap into a whole grandmaster
+  (the relaxation loves fractional grandmaster slices — 100 AK per 90k of
+  delta beats a master's 10 per 10k; the corn regression test); a
+  supply-per-needed-AK cover fixed that but pinned items the relaxation had
+  merely *trickle-fed*, turning a 4-day fast plan into 43 days and the
+  buy-nothing endpoint into 7 *years* (a passive source sipped at 10% costs
+  10x the makespan completed); up-only iterative rounding had no way back
+  from one such commitment (a 3-year multi-stage climb locked into 7+ years);
+  batch-committing every `y >= 0.5` over-selects the other way (4-day fast
+  endpoint → 41 days). Only a re-solve can price completing a step against
+  more chore-waiting or switching items; two-sided trials cost one extra
+  solve per fractional step and settle all of it. Pins are ephemeral
+  (`ascend_pin_<item>_<step>`, read back off the constraint per the pj_off
+  name-sanitisation gotcha), popped at the next call's top; the problem is
+  left solved against the full integral pin set before the refinement tower
+  runs on top, so the tower's stage-1 pin (makespan or `spend_value`)
+  captures the *integral* plan's real cost, not the relaxation's.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -404,6 +411,118 @@ code path byte-identical — everything below is gated on the spec.
   requirement), `mastery_supply` (`{item: S_i.value()}` for every surviving
   candidate with positive value — incidental production of a candidate item
   counts as real mastery progress even when nothing pinned it, deliberate).
+- **Round-and-fix's own re-solve is rescued too** (`_round_and_fix_ascension`
+  returns the solver `_solve_configured` should keep using): its final
+  `problem.solve(solver)` — after every step var is pinned to a hard 0/1 — goes
+  through `_assert_optimal` like every other uncapped first solve in this file.
+  On real, dense candidate sets (hundreds of items, only reachable on live
+  player data, past this module's tiny unit tests) that pinned re-solve can
+  land HiGHS on the same falsely-"Unbounded" degenerate vertex documented under
+  "Infeasible ≠ unobtainable" below — but unlike a plain non-optimal status,
+  it leaves every variable's `.value()` reading back nonsense (a negative
+  makespan, every step un-selected) rather than simply stale, so an unchecked
+  call here silently produces a plan that violates its own AK requirement.
+  Found via milestone 4's real-data acceptance run, fixed in the same commit.
+
+### Ascension orchestration (`main.py`, milestone 4)
+
+`main.solve_ascension_frontier(args, cfg, state) -> AscensionFrontierResult`
+is `--ascend N`'s entry point: climb from a current level to `N`, producing a
+Pareto frontier of `StagedPlan`s (`stages`, `time`, `gold`, `surplus_gold`,
+`.cost` mirroring `SourcingPlan.cost`) instead of a single plan, since a climb
+is many stages back to back. `main.run` dispatches to it before any of the
+goal-solving setup (`resolve_crafting_bonus`, `build_inputs`, ...) runs —
+`_validate_ascend` checks the mode conflicts (`--target`/`-m`/`-i`/
+`--use-pumpkin-juice`) and the level range (`current < target <=
+ascension.MAX_ASCEND_LEVEL`, targets past 100 refused until milestone 6) and
+resolves `(current, target, starting_ak)` via `resolve_ascend_params`
+(`--tower-level`/`--starting-ak`, else config, else — **ascension-only** —
+`current` defaults to 0 rather than `config.current_tower_level`'s usual
+"assume every reward owned"). The report itself
+(`_print_ascension_report`) is a TEMPORARY plain-`print` text dump — masters/
+grandmasters/gold/chore-AK per plan, then a per-stage breakdown of the
+selected one — replaced wholesale by milestone 5's real Reporter integration.
+
+- **Stage configs** (`_ascend_stage_cfgs`): `ascension.stage_bounds(current,
+  target)` splits the climb at every reward threshold crossed. Stage 0 is a
+  deep copy of `cfg` with `[tower] level` set to `current` directly (so a
+  stale/absent `[tower] level` in the base config can't leak in — the
+  CLI-resolved `current` always wins). Stage `k >= 1` applies
+  `ascension.apply_rewards(stage_cfgs[k-1], bounds[k-1][0], bounds[k][0])` —
+  the reward completing the *previous* stage earns.
+- **`_build_channel_setup`** (`_ChannelSetup`: requirements/farm/explore/fish/
+  workshop/monthly_grants/recipes/smith/open_flows/inventory/cookie_sets/
+  prices/boost_offers/model_calendar) is `build_inputs` split in two: this is
+  everything goal-independent (channels, prices, recipes, openables), taking
+  an explicit `crafting_bonus` float rather than reading `args.crafting_bonus`
+  so a caller solving several configs at once — ascension's per-stage cfgs,
+  whose bonus changes once level 90 is crossed — resolves each stage's own
+  value (`_crafting_bonus_for_cfg`, the pure half of `resolve_crafting_bonus`)
+  without mutating `args`. `build_inputs` itself now just layers goal-solving
+  (`solve_target`/`solve_goals`, `demand`, `pj_gain`) on top of one call to
+  this — byte-identical behaviour to before the split. Built **once per
+  stage**, shared across the whole gold-weight sweep below (it depends only
+  on that stage's cfg, never on how a sweep pass's earlier stages evolved).
+- **The staged pass** (`_run_ascend_pass`, one call per gold weight): solves
+  every stage in order, threading three things forward: the **AK carry**
+  (`max(0, carry + ak_from_steps + ak_from_chores - level_ak)`, so a stage's
+  own `ak_required` is only what's left after whatever surplus the previous
+  stage earned), the **masteries** (`ascension.advance`, so an item mastered
+  in stage `k` is a different — or absent — `StepCandidate` in stage `k+1`),
+  and the **inventory**. Rebuilds `optimizer._build_base`/`_solve_configured`
+  fresh per stage per pass — the safe default: a stage's `AscensionSpec`
+  (candidates, `ak_required`) depends on *that pass's own* evolved state past
+  stage 0, so only stage 0's base is actually pass-invariant, not worth
+  special-casing at the benchmarked sizes (`--ascend 60 --tower-level 40` on
+  real data: ~8s; a 4-stage `--ascend 100 --tower-level 40`: ~21s with the
+  two-sided rounding trials — both well under the 60s target, so no caching
+  was added).
+  - **Inventory evolution**: `optimizer.plan_leftovers(plan, {}, ...)` with an
+    *empty* demand — with nothing directly demanded, every held item lands in
+    `plan_balance`'s `elsewhere` (its "net of demand" exception never applies),
+    so `plan_leftovers`'s "supply − used" is exactly each item's ending stock
+    (held + produced − consumed by crafts/opens/offer inputs): a genuine
+    per-item balance, not an approximation, and it becomes the next stage's
+    starting inventory directly.
+  - `cookie_sets` is recomputed per stage per pass from the (evolving)
+    inventory (`cookie_sets_available`), not taken from the pass-invariant
+    `_ChannelSetup` — the one piece of "static setup" that still has to track
+    evolution, since held cookies change pass to pass like everything else in
+    inventory.
+  - **AK is checked at stage ends only**: the LP's AK constraint
+    (`step AK + chore_rate * makespan/1440 >= ak_required`) is per-stage, so a
+    stage can only ever clear *that stage's own* requirement — there is no
+    mid-stage AK check, matching how `stage_bounds` splits the climb (a reward
+    is available for every stage after it, never mid-stage).
+- **The sweep** (`_ascend_gold_weights`): the two frontier endpoints
+  (`optimizer._FAST_PRICE`/`_FREE_PRICE`) plus 14 log-spaced weights between
+  (mirrors `optimizer._time_caps`' geometric spacing, over `gold_weight`
+  rather than a makespan cap). No `favour_passive` slow-regime extension in
+  v1: the chore-AK tradeoff already stretches the slow end on its own (a
+  pricier gold weight masters fewer candidates and waits longer on chores
+  instead of buying), so a separate buy-nothing-and-bank-surplus regime would
+  mostly duplicate that shape. Before pruning, the slow end is bounded at the
+  **chore-only time** (`ak_cost / chore_rate_per_day`, ×1.05 + 1d margin so
+  quantisation can't evict the chore-only endpoint itself): no plan needs to
+  run longer than earning every AK from chores alone, and without the cut the
+  slowest passes survive on their banked-surplus credit alone (net gold falls
+  without bound as the span grows — passive accumulates forever; 52-year
+  "plans" were observed). It is the ascension analogue of the normal
+  frontier's `t_bound` pet-tail cut. `optimizer._non_dominated`/`_thin` —
+  which work purely off `.time`/`.gold`/`.surplus_gold`/`.cost` — then
+  prune/thin the resulting `StagedPlan`s exactly as they do `SourcingPlan`s,
+  reused as-is (duck-typed) rather than a parallel copy of the pruning logic.
+- **v1 approximations** (all called out again at their own site in the
+  docstrings): **steady-state calendar** — every stage's passive production
+  (seasonal pets, the Mechanical Heart's grants) is the yearly/monthly
+  average, never calendar-exact; a stage's real span is only known after
+  solving it, and nesting a per-stage fixed point inside the gold-weight sweep
+  is a later milestone's job if it matters in practice. **Perk auto-detection
+  uses the pre-climb state**: Scythe of Dewstar/Dewstar's Journal/Fungus
+  Processing/the Mechanical Heart are detected once per stage from the
+  state passed into `solve_ascension_frontier`, not re-evaluated against each
+  pass's evolved masteries — they gate on tower levels (250/300) far past the
+  101-200 range this milestone even allows.
 
 ### Passive-resource breakpoints — the frontier's spine
 
@@ -609,8 +728,8 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   mastery progress; these instead read an explicit, optional `[tower] level`
   the player sets — the "ascension" mode (`ascension.py`, pure AK/chore/mega
   arithmetic and reward deltas; the optimiser side is the ascension extension
-  under "The LP and frontier" above -- staging the climb into rounds and driving
-  `ascension.apply_rewards` per stage is milestone 4, not yet landed) climbs it
+  under "The LP and frontier" above; `main.solve_ascension_frontier`'s staged
+  loop, "Ascension orchestration" above, is milestone 4) climbs it
   mid-solve, calling `ascension.apply_rewards` per stage to bump `[tower]
   level` and apply each reward's own config delta -- these two functions are
   how levels 90/150 take effect from that).

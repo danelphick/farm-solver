@@ -269,6 +269,16 @@ def test_farm_from_config_converts_percentages_to_factors(tmp_path):
     assert farm.grow_time("Carrot") == timedelta(seconds=12)
 
 
+def test_farm_from_config_rejects_full_speed_reduction(tmp_path):
+    crops_path = tmp_path / "crops.csv"
+    crops_path.write_text("Crop,Growth\nCorn,4h\n")
+    # 100% would make every crop instant (and the grow-rate maths divide by
+    # zero) -- reachable when the level-10 tower reward's +10 stacks onto a
+    # config whose speed_reduction already includes it.
+    with pytest.raises(ValueError, match="speed_reduction must be below 100"):
+        farm_from_config({"speed_reduction": 100}, crops_path, tmp_path / "absent.csv")
+
+
 def test_farm_from_config_reads_grape_juices_per_day(tmp_path):
     crops_path = tmp_path / "crops.csv"
     crops_path.write_text("Crop,Growth\nCorn,4h\n")
