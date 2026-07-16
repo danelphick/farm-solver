@@ -132,13 +132,13 @@ frontier as before.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult` |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
-| `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards` |
+| `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `IGNORED_MATERIALS` |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
@@ -352,8 +352,23 @@ code path byte-identical — everything below is gated on the spec.
   of it as a craft material (mastery-chaining is deliberate, see the module
   docstring). `S_i = spec.mastery_bonus * (gathered + made + unpacked)`, excluding
   `held`/`bought`/`boosted` so buying or holding an item never earns its mastery.
-  Constraint: `S_i >= Σ(delta_step * y_step) + spec.mega_supply_floors.get(item, 0)`
-  over whichever steps exist.
+  Constraints: `S_i >= Σ(delta_step * y_step)` over whichever steps exist,
+  plus — when a milestone-6 mega supply floor is set — a **separate**
+  `S_i >= spec.mega_supply_floors[item]`. The pair expresses
+  `S_i >= max(step terms, floor)`, NEVER their sum: the same produced supply
+  counts toward the floor and the step thresholds at once, so at an item's
+  due stage (floor == its own `delta_mega`, both from the same "remaining to
+  mega" reading) selecting `y_mega` rides the floor's production for free
+  rather than doubling it, and harvesting the +10/+100 AK steps on a floored
+  item is likewise free once the floor covers their deltas. (An additive
+  `S >= steps + floor` was the original milestone-6 formulation — it
+  double-charged a mega's due stage its whole remaining supply.) The floor
+  guarantees the item's real in-game mastery crosses the threshold regardless
+  of `y_mega`, but the LP's own mega-COUNT tally (below) only credits a
+  selected `y_mega`, so pinning it down at the due stage would leave
+  `megas_required` unmet with no other item to cover it (infeasible, or a
+  worse-scoring fallback) — see the round-and-fix note below for how
+  two-sided rounding resolves this in the item's favour.
 - **AK constraint**: step AK (`AK_PER_MASTER * y_master + AK_PER_GRANDMASTER *
   y_grandmaster`, summed over surviving candidates) plus smeared chore AK
   (`spec.chore_rate_per_day * (makespan / 1440)`, the makespan variable itself, in
@@ -433,12 +448,15 @@ Pareto frontier of `StagedPlan`s (`stages`, `time`, `gold`, `surplus_gold`,
 report's AK ledger, see "Ascension report sections" below — `.cost` mirroring
 `SourcingPlan.cost`) instead of a single plan, since a climb is many stages back
 to back. `main.run` dispatches to it before any of the goal-solving setup
-(`resolve_crafting_bonus`, `build_inputs`, ...) runs — `_validate_ascend` checks
-the mode conflicts (`--target`/`-m`/`-i`/`--use-pumpkin-juice`) and the level
-range (`current < target <= ascension.MAX_ASCEND_LEVEL`, targets past 100
-refused until milestone 6) and resolves `(current, target, starting_ak)` via
-`resolve_ascend_params` (`--tower-level`/`--starting-ak`, else config, else —
-**ascension-only** — `current` defaults to 0 rather than
+(`resolve_crafting_bonus`, `build_inputs`, ...) runs — `_validate_ascend(args,
+cfg, state)` checks the mode conflicts (`--target`/`-m`/`-i`/
+`--use-pumpkin-juice`) and the level range (`current < target <=
+ascension.MAX_ASCEND_LEVEL`; levels 101-200, milestone 6, need `state` too —
+see "Global mega selection" below for why it takes a `state` param, unlike
+every other mode's validation, and `main.run`'s ascend branch loads state
+*before* calling it for exactly that reason) and resolves `(current, target,
+starting_ak)` via `resolve_ascend_params` (`--tower-level`/`--starting-ak`,
+else config, else — **ascension-only** — `current` defaults to 0 rather than
 `config.current_tower_level`'s usual "assume every reward owned"). The report
 (milestone 5) drives `report.Reporter.ascension_goal`/`ascension_frontier`/
 `ascension_plan` the same way `run`'s normal-mode branch drives
@@ -471,20 +489,66 @@ stage, since each stage's config/production/inventory differs.
   this — byte-identical behaviour to before the split. Built **once per
   stage**, shared across the whole gold-weight sweep below (it depends only
   on that stage's cfg, never on how a sweep pass's earlier stages evolved).
+- **Global mega selection** (milestone 6, levels 101-200: `main._select_megas`,
+  `ascension.schedule_megas`/`mega_stage_floors`): a megamastery is ~900k+ of
+  mastery production — realistically spanning many stages — so it is decided
+  in TWO phases, both computed ONCE in `solve_ascension_frontier`, before the
+  gold-weight sweep, not per pass:
+  1. **Which items** (`_select_megas`): one aggregate `AscensionSpec` over the
+     *whole remaining climb* — full remaining AK (`ascension.ak_cost(current,
+     target) - starting_ak`, floored at 0), full net mega requirement
+     (`ascension.megas_required_by(target) - ascension.mega_count(state)`),
+     candidates from the **pre-climb** `state` — solved once via
+     `optimizer._build_base`/`_solve_configured` against the **last stage's**
+     channel setup/offers (a representative stand-in: by the time most of a
+     mega's production happens, most rewards are already owned) at the fast
+     endpoint (`optimizer._FAST_PRICE`, buy freely — a supply decision this
+     large is dominated by production cost, not the gold budget, so it barely
+     moves across the sweep; one solve keeps the chosen set identical at every
+     frontier point instead of a different climb per point). `chosen =
+     sorted(plan.ascension.megas)`, trimmed to exactly the net requirement if
+     the LP's `>=` mega-count constraint over-selects (a free byproduct);
+     an infeasible selection solve is caught and re-raised as "not enough
+     megamasterable items: need N more".
+  2. **When** (`ascension.schedule_megas(chosen, bounds, already, per_item_remaining)`,
+     pure): assigns each chosen item a DUE STAGE index — the first stage whose
+     end level's `megas_required_by(b) - already` reaches that item's rank —
+     cheapest-remaining-supply first, so the cheapest megas land on the
+     earliest deadlines. Raises if `chosen`'s count doesn't exactly match the
+     requirement (shouldn't happen; the selection solve's mega-count
+     constraint saw to that).
+  The schedule feeds every pass's `_run_ascend_pass` call unchanged (below).
 - **The staged pass** (`_run_ascend_pass`, one call per gold weight): solves
-  every stage in order, threading three things forward: the **AK carry**
+  every stage in order, threading four things forward: the **AK carry**
   (`max(0, carry + ak_from_steps + ak_from_chores - level_ak)`, so a stage's
   own `ak_required` is only what's left after whatever surplus the previous
   stage earned), the **masteries** (`ascension.advance`, so an item mastered
   in stage `k` is a different — or absent — `StepCandidate` in stage `k+1`),
-  and the **inventory**. Rebuilds `optimizer._build_base`/`_solve_configured`
+  the **inventory**, and (milestone 6) each chosen mega item's **per-stage
+  floor**: `ascension.mega_stage_floors(masteries, mega_schedule, k)` —
+  recomputed every stage from *this pass's own* evolved `masteries`, so an
+  earlier stage's overshoot shrinks a later stage's floor — split evenly
+  across the stages from `k` to the item's due stage inclusive (the due
+  stage's own span is 1, so its floor is exactly the full remaining amount:
+  the mega completes there). Goes into `AscensionSpec.mega_supply_floors`
+  (mastery points — the LP holds `S_i >= max(step terms, floor)` via two
+  separate constraints, see "Ascension extension" below for the y_mega/floor
+  interplay at the due stage). `AscensionSpec.megas_required` is
+  set per stage too (`max(0, ascension.megas_required_by(b) -
+  ascension.mega_count(gs))` off the pass's current masteries, not threaded
+  like the AK carry — `mega_count` already reflects every item that crossed
+  the threshold so far this pass, scheduled or incidental) as a belt-and-braces
+  safety net; the floors guarantee coverage by construction, so in practice
+  this constraint is slack. Rebuilds `optimizer._build_base`/`_solve_configured`
   fresh per stage per pass — the safe default: a stage's `AscensionSpec`
   (candidates, `ak_required`) depends on *that pass's own* evolved state past
   stage 0, so only stage 0's base is actually pass-invariant, not worth
   special-casing at the benchmarked sizes (`--ascend 60 --tower-level 40` on
   real data: ~8s; a 4-stage `--ascend 100 --tower-level 40`: ~21s with the
-  two-sided rounding trials — both well under the 60s target, so no caching
-  was added).
+  two-sided rounding trials; `--ascend 101 --tower-level 40` and `--ascend 200
+  --tower-level 100`, milestone 6: ~21-23s each on a save with 250+ pre-existing
+  megas (so `megas_required` nets to 0 and `_select_megas` short-circuits) —
+  both well under the 60s target, so no caching was added).
   - **Inventory evolution**: `optimizer.plan_leftovers(plan, {}, ...)` with an
     *empty* demand — with nothing directly demanded, every held item lands in
     `plan_balance`'s `elsewhere` (its "net of demand" exception never applies),
@@ -530,7 +594,10 @@ stage, since each stage's config/production/inventory differs.
   Processing/the Mechanical Heart are detected once per stage from the
   state passed into `solve_ascension_frontier`, not re-evaluated against each
   pass's evolved masteries — they gate on tower levels (250/300) far past the
-  101-200 range this milestone even allows.
+  101-200 range this milestone even allows. **Global mega selection against
+  the last stage only, at one gold weight** (milestone 6) — see the "Global
+  mega selection" bullet above for the full reasoning; not revisited per stage
+  or per pass.
 
 ### Ascension report sections (`report.py`, milestone 5)
 

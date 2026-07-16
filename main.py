@@ -1671,16 +1671,26 @@ def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int
     return current, args.ascend, starting_ak
 
 
-def _validate_ascend(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:
+def _validate_ascend(
+    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+) -> tuple[int, int, int]:
     """Validate ``--ascend``'s mode and return its resolved ``(current, target,
     starting_ak)`` (see :func:`resolve_ascend_params`).
 
     ``--ascend`` picks a different mode entirely -- climb by AK rather than
     solve a fixed goal -- so it conflicts with every goal-only flag
     (``--target``/``-m``/``-i``/``--use-pumpkin-juice``). The level range is
-    checked against :data:`ascension.MAX_ASCEND_LEVEL`; targets past 100 are
-    refused for now (megamastery support, levels 101-200, is milestone 6 --
-    this guard is removed then).
+    checked against :data:`ascension.MAX_ASCEND_LEVEL`.
+
+    Levels 101-200 additionally need megamasteries (milestone 6, see
+    :func:`ascension.megas_required_by`). This validates only a SIMPLE bound
+    here -- candidates with *any* mega step at all, against the net
+    requirement (``megas_required_by(target) - ascension.mega_count(state)``)
+    -- since real obtainability needs the LP (channels/crafts/opens), not
+    known yet at validate-time. A shortfall this bound misses (every
+    mega-step candidate turns out unreachable) surfaces later from the
+    aggregate mega-selection solve in :func:`solve_ascension_frontier` (see
+    ``_select_megas``), as the same "not enough megamasterable items" message.
     """
     if args.target is not None:
         raise ValueError("--ascend conflicts with --target")
@@ -1696,11 +1706,16 @@ def _validate_ascend(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int
             f"--ascend requires the current level ({current}) < target "
             f"({target}) <= {ascension.MAX_ASCEND_LEVEL}"
         )
-    if target > 100:
-        raise ValueError(
-            "--ascend: megamastery support (levels 101-200) lands in a later "
-            "milestone"
+    megas_needed = ascension.megas_required_by(target) - ascension.mega_count(state)
+    if megas_needed > 0:
+        mega_candidates = sum(
+            1 for c in ascension.candidates(state) if c.delta_mega is not None
         )
+        if mega_candidates < megas_needed:
+            raise ValueError(
+                f"--ascend: not enough megamasterable items: need {megas_needed} "
+                f"more (only {mega_candidates} candidate(s) have a mega step)"
+            )
     if starting_ak < 0:
         raise ValueError("--starting-ak must be non-negative")
     return current, target, starting_ak
@@ -1762,6 +1777,7 @@ def _run_ascend_pass(
     args: argparse.Namespace,
     starting_ak: int,
     gold_weight: float,
+    mega_schedule: dict[str, int],
 ) -> tuple[StagedPlan, set[str]]:
     """Solve every stage once, in order, at one ``gold_weight``.
 
@@ -1785,6 +1801,20 @@ def _run_ascend_pass(
     (held + produced - consumed by crafts/opens/offer inputs), the next
     stage's starting inventory -- not an approximation, a genuine per-item
     balance.
+
+    ``mega_schedule`` (milestone 6, ``{item: due stage index}``, from
+    :func:`solve_ascension_frontier`'s ONE global mega-selection solve --
+    fixed across every pass, see that function's docstring) drives each
+    stage's ``mega_supply_floors``, recomputed every stage from *this pass's*
+    evolved ``masteries`` (:func:`ascension.mega_stage_floors`) so an
+    earlier stage's overshoot shrinks a later stage's floor. ``megas_required``
+    is a belt-and-braces safety net alongside the floors (see
+    ``ascension.AscensionSpec``'s field and optimizer.py's "Ascension
+    extension"): recomputed each stage straight from the pass's current
+    :func:`ascension.mega_count` rather than threaded like the AK carry,
+    since (unlike AK) it needs no carry bookkeeping of its own -- mega_count
+    already reflects every item that crossed the threshold so far this pass,
+    scheduled or incidental alike.
     """
     masteries = state.masteries
     inventory = dict(stage_setups[0].inventory)
@@ -1804,12 +1834,14 @@ def _run_ascend_pass(
         # the inventory note above), so it is recomputed here rather than
         # taken from the (pass-invariant) stage setup.
         cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
+        gs = farm_solver.GameState(masteries=masteries)
         spec = ascension.AscensionSpec(
-            candidates=ascension.candidates(farm_solver.GameState(masteries=masteries)),
+            candidates=ascension.candidates(gs),
             ak_required=max(0.0, level_ak - carry),
             chore_rate_per_day=ascension.chore_rate_per_day(),
-            megas_required=0,  # milestone 6 (levels 101-200)
+            megas_required=max(0, ascension.megas_required_by(b) - ascension.mega_count(gs)),
             mastery_bonus=args.mastery_bonus,
+            mega_supply_floors=ascension.mega_stage_floors(masteries, mega_schedule, k),
         )
         base = optimizer._build_base(
             offers, {}, recipes=setup.recipes, crafting_bonus=crafting_bonus_k,
@@ -1859,6 +1891,88 @@ def _run_ascend_pass(
     return staged, unmasterable
 
 
+def _select_megas(
+    state: farm_solver.GameState,
+    current: int,
+    target: int,
+    starting_ak: int,
+    args: argparse.Namespace,
+    last_crafting_bonus: float,
+    last_setup: _ChannelSetup,
+    last_offers: list[sources.Offer],
+) -> tuple[list[str], set[str]]:
+    """Choose WHICH items go megamastery for the WHOLE climb, in one aggregate
+    solve (milestone 6) -- see :func:`solve_ascension_frontier`'s "global mega
+    selection" note for why this runs once, not per stage/pass.
+
+    Builds an :class:`ascension.AscensionSpec` covering the *entire* remaining
+    climb at once -- the full remaining AK (``ascension.ak_cost(current,
+    target) - starting_ak``, floored at 0) and the full net mega requirement
+    (``ascension.megas_required_by(target) - ascension.mega_count(state)``) --
+    against the pre-climb ``state``'s candidates, and solves it once at the
+    fast endpoint (``optimizer._FAST_PRICE``, buy freely: which items are
+    *cheapest to mass-produce* is what should drive this pick, not a gold
+    budget). The chosen mega set is ``plan.ascension.megas``.
+
+    **Approximations** (documented, not revisited per stage):
+
+    - **Solved against the LAST stage's channels/offers**, standing in for
+      the whole climb: a megamastery is ~900k+ mastery of production, which
+      realistically spans most of the climb, so by the time most of it is
+      produced most rewards are already owned -- the final stage's channels
+      are the closest single stand-in for "the climb as a whole" available
+      without solving every stage's combination up front (which is exactly
+      the per-stage sweep this selection is meant to avoid repeating).
+    - **One gold weight, not swept**: a ~900k-mastery-point supply decision
+      is dominated by which items are cheapest to mass-produce, not by the
+      buy/self-source tradeoff that moves with ``gold_weight`` -- it barely
+      shifts across the sweep. Solving it once keeps the chosen mega set
+      IDENTICAL at every point on the frontier, so "the frontier" stays one
+      climb priced differently, not a different climb at each point.
+
+    Returns ``(chosen, unmasterable)`` -- ``chosen`` trimmed/validated to
+    exactly the net requirement (see the trimming note below) and
+    ``unmasterable`` the candidates this solve's own base dropped as
+    unreachable (``optimizer._Base.unmasterable``), folded into the
+    frontier's result the same way each stage's own solve already is.
+    """
+    megas_required = max(0, ascension.megas_required_by(target) - ascension.mega_count(state))
+    if megas_required == 0:
+        return [], set()
+    ak_required = max(0.0, ascension.ak_cost(current, target) - starting_ak)
+    cookie_sets = cookie_sets_available(last_setup.inventory, args.cookie_sets)
+    spec = ascension.AscensionSpec(
+        candidates=ascension.candidates(state),
+        ak_required=ak_required,
+        chore_rate_per_day=ascension.chore_rate_per_day(),
+        megas_required=megas_required,
+        mastery_bonus=args.mastery_bonus,
+    )
+    base = optimizer._build_base(
+        last_offers, {}, recipes=last_setup.recipes, crafting_bonus=last_crafting_bonus,
+        openables=last_setup.open_flows, inventory=last_setup.inventory,
+        cookie_sets=cookie_sets, prices=last_setup.prices, ascension=spec,
+    )
+    try:
+        plan = optimizer._solve_configured(base, gold_weight=optimizer._FAST_PRICE)
+    except ValueError as exc:
+        raise ValueError(
+            f"--ascend: not enough megamasterable items: need {megas_required} more"
+        ) from exc
+    assert plan.ascension is not None
+    chosen = sorted(plan.ascension.megas)
+    # The LP's mega-count constraint is `>=`, so a free byproduct could in
+    # principle over-select; schedule_megas needs an exact match (see its
+    # docstring), so trim to the cheapest `megas_required` by remaining
+    # supply. Under-selection would mean the constraint itself failed to
+    # bind -- that can't happen (an infeasible solve above already raises).
+    if len(chosen) > megas_required:
+        chosen = sorted(
+            chosen, key=lambda item: (ascension.mega_remaining(state.masteries, item), item)
+        )[:megas_required]
+    return chosen, set(base.unmasterable)
+
+
 def solve_ascension_frontier(
     args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
 ) -> AscensionFrontierResult:
@@ -1893,6 +2007,10 @@ def solve_ascension_frontier(
       101-200 range this milestone even allows, so this cannot yet matter in
       practice.
     - **Inventory evolution** -- see :func:`_run_ascend_pass`'s docstring.
+    - **Global mega selection** (milestone 6, levels 101-200) -- see
+      :func:`_select_megas`'s docstring: which items go mega is chosen ONCE,
+      in one aggregate solve over the whole climb, before the sweep below --
+      not re-decided per stage or per gold-weight pass.
     """
     current, target, starting_ak = resolve_ascend_params(args, cfg)
     bounds = ascension.stage_bounds(current, target)
@@ -1932,13 +2050,32 @@ def solve_ascension_frontier(
         stage_quantize.append(config.passive_quantizer(production))
         stage_production.append(production)
 
-    unmasterable: set[str] = set()
+    # Global mega selection + schedule (milestone 6): computed ONCE here, before
+    # the gold-weight sweep, and passed unchanged into every _run_ascend_pass --
+    # see _select_megas' docstring for why one solve, against the last stage's
+    # channels, stands in for the whole climb. schedule_megas then assigns each
+    # chosen item a due stage (cheapest-remaining-supply first), which
+    # _run_ascend_pass turns into per-stage mega_supply_floors.
+    chosen_megas, mega_unmasterable = _select_megas(
+        state, current, target, starting_ak, args,
+        stage_crafting_bonus[-1], stage_setups[-1], stage_offers[-1],
+    )
+    mega_schedule: dict[str, int] = {}
+    if chosen_megas:
+        per_item_remaining = {
+            item: ascension.mega_remaining(state.masteries, item) for item in chosen_megas
+        }
+        mega_schedule = ascension.schedule_megas(
+            chosen_megas, bounds, ascension.mega_count(state), per_item_remaining
+        )
+
+    unmasterable: set[str] = set(mega_unmasterable)
     staged_plans: list[StagedPlan] = []
     for gold_weight in _ascend_gold_weights():
         staged, pass_unmasterable = _run_ascend_pass(
             stage_crafting_bonus, stage_setups, stage_offers,
             stage_quantize, stage_production, bounds, state, args, starting_ak,
-            gold_weight,
+            gold_weight, mega_schedule,
         )
         unmasterable.update(pass_unmasterable)
         staged_plans.append(staged)
@@ -1999,7 +2136,6 @@ def run(args: argparse.Namespace) -> int:
         # setup below runs. Its own crafting bonus is resolved per stage (see
         # solve_ascension_frontier), not globally like resolve_crafting_bonus
         # does for the rest of run() -- args.crafting_bonus is left untouched.
-        current, target, starting_ak = _validate_ascend(args, cfg)
         backend = args.solver or cfg.get("solver", {}).get("backend")
         if backend:
             optimizer.set_solver_backend(backend)
@@ -2009,6 +2145,10 @@ def run(args: argparse.Namespace) -> int:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
+        # Validated against `state` (megas_required_by/mega_count/candidates
+        # need it, see _validate_ascend's docstring) -- so this must come
+        # after the state load above, unlike every other mode's validation.
+        current, target, starting_ak = _validate_ascend(args, cfg, state)
         result = solve_ascension_frontier(args, cfg, state)
         reporter.ascension_goal(current, target, starting_ak, result.unmasterable)
         if not result.plans:

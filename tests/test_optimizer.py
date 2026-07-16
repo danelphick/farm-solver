@@ -1214,6 +1214,52 @@ def test_minimize_ascension_selects_the_cheaper_candidate_for_a_mega():
     assert plan.ascension.megas == ["cheap"]
 
 
+def test_minimize_ascension_mega_floor_lets_the_step_still_get_selected():
+    # Milestone 6's per-stage scheduling forces a chosen mega item's supply via
+    # mega_supply_floors, independent of whether its own y_mega is selected --
+    # but the mega COUNT constraint (megas_required) still needs y_mega=1 to
+    # count it. With only one mega-step candidate, pinning y_mega down to 0
+    # during round-and-fix's two-sided trial leaves megas_required unmet (no
+    # other item can cover it) -- infeasible -- so the pin-up trial wins and
+    # the step ends up selected despite the floor already covering its supply.
+    gather = Offer("gather x", "farming", {"x": 1}, time_per_unit=timedelta(seconds=1))
+    spec = ascension.AscensionSpec(
+        candidates=[ascension.StepCandidate("x", 10, 90, 900)],
+        ak_required=0,
+        chore_rate_per_day=0,
+        megas_required=1,
+        mega_supply_floors={"x": 900},
+    )
+    plan = minimize([gather], {}, ascension=spec)
+    assert plan.ascension.megas == ["x"]
+    # Selecting mega requires its prerequisites (see _ASCEND_PREREQS): master
+    # and grandmaster get pinned up alongside it.
+    assert plan.ascension.masters == ["x"]
+    assert plan.ascension.grandmasters == ["x"]
+
+
+def test_minimize_ascension_mega_floor_does_not_change_which_item_is_cheapest():
+    # A floor on the cheap item (forcing its supply regardless of selection)
+    # must not make it MORE expensive to select than the alternative -- the
+    # cheaper item should still win the mega pick.
+    cheap = Offer("gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1))
+    expensive = Offer(
+        "gather expensive", "farming", {"expensive": 1}, time_per_unit=timedelta(minutes=100)
+    )
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("cheap", None, None, 1000),
+            ascension.StepCandidate("expensive", None, None, 1000),
+        ],
+        ak_required=0,
+        chore_rate_per_day=0,
+        megas_required=1,
+        mega_supply_floors={"cheap": 1000},
+    )
+    plan = minimize([cheap, expensive], {}, ascension=spec)
+    assert plan.ascension.megas == ["cheap"]
+
+
 def test_minimize_ascension_rounds_fractional_relaxation_to_integral_selection():
     # Two equal-cost candidates each need delta_master=10; ak_required=15 means
     # the LP relaxation can satisfy it with 1.5 masters' worth split across both

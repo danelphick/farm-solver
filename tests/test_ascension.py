@@ -20,7 +20,10 @@ from ascension import (
     chore_ak,
     chore_rate_per_day,
     mega_count,
+    mega_remaining,
+    mega_stage_floors,
     megas_required_by,
+    schedule_megas,
     stage_bounds,
 )
 from farm_solver import GameState, Mastery
@@ -206,6 +209,138 @@ def test_mega_count():
         }
     )
     assert mega_count(state) == 2
+
+
+# --- mega_remaining (milestone 6) -------------------------------------------
+
+
+def test_mega_remaining_from_below_grandmaster():
+    # Below GRANDMASTER_THRESHOLD, the remaining amount is measured from the
+    # threshold itself (matches candidates()' delta_mega convention).
+    masteries = {"x": Mastery("x", progress=0, required=10_000)}
+    assert mega_remaining(masteries, "x") == pytest.approx(
+        MEGA_THRESHOLD - GRANDMASTER_THRESHOLD
+    )
+
+
+def test_mega_remaining_from_above_grandmaster():
+    masteries = {"x": Mastery("x", progress=150_000, required=1_000_000)}
+    assert mega_remaining(masteries, "x") == pytest.approx(MEGA_THRESHOLD - 150_000)
+
+
+def test_mega_remaining_zero_once_mega():
+    masteries = {"x": Mastery("x", progress=0, required=None)}
+    assert mega_remaining(masteries, "x") == 0.0
+
+
+def test_mega_remaining_unknown_item_defaults_to_full_threshold():
+    assert mega_remaining({}, "unseen") == float(MEGA_THRESHOLD)
+
+
+def test_mega_remaining_is_case_insensitive():
+    masteries = {"gold rose": Mastery("Gold Rose", progress=200_000, required=1_000_000)}
+    assert mega_remaining(masteries, "Gold Rose") == pytest.approx(MEGA_THRESHOLD - 200_000)
+
+
+# --- mega_stage_floors (milestone 6) ----------------------------------------
+
+
+def test_mega_stage_floors_splits_evenly_across_stages_to_the_due_stage():
+    schedule = {"corn": 2}  # due at stage index 2
+    masteries = {"corn": Mastery("corn", progress=100_000, required=1_000_000)}
+    floors = mega_stage_floors(masteries, schedule, 0)
+    # 3 stages remain (0, 1, 2) from stage 0 to the due stage inclusive.
+    assert floors == {"corn": pytest.approx((MEGA_THRESHOLD - 100_000) / 3)}
+
+
+def test_mega_stage_floors_due_stage_is_the_full_remaining_amount():
+    schedule = {"corn": 1}
+    masteries = {"corn": Mastery("corn", progress=850_000, required=1_000_000)}
+    floors = mega_stage_floors(masteries, schedule, 1)
+    assert floors == {"corn": pytest.approx(150_000)}
+
+
+def test_mega_stage_floors_shrinks_after_overproduction():
+    schedule = {"corn": 2}
+    floors0 = mega_stage_floors(
+        {"corn": Mastery("corn", progress=100_000, required=1_000_000)}, schedule, 0
+    )
+    assert floors0["corn"] == pytest.approx((MEGA_THRESHOLD - 100_000) / 3)
+
+    # Stage 0 overshoots the floor (produces well past what it alone forced) --
+    # stage 1's floor recomputes off the new, higher progress and shrinks, both
+    # because less remains and because fewer stages are left to spread it over.
+    floors1 = mega_stage_floors(
+        {"corn": Mastery("corn", progress=700_000, required=1_000_000)}, schedule, 1
+    )
+    assert floors1["corn"] == pytest.approx((MEGA_THRESHOLD - 700_000) / 2)
+    assert floors1["corn"] < floors0["corn"]
+
+
+def test_mega_stage_floors_omits_items_not_due_yet_or_already_mega():
+    schedule = {"corn": 3, "wheat": 1}
+    masteries = {
+        "corn": Mastery("corn", progress=100_000, required=1_000_000),
+        "wheat": Mastery("wheat", progress=0, required=None),  # already mega'd
+    }
+    floors = mega_stage_floors(masteries, schedule, 2)
+    assert "wheat" not in floors  # nothing left to force
+    assert "corn" in floors  # due=3 >= stage_index=2, still due
+
+
+def test_mega_stage_floors_drops_items_whose_due_stage_has_passed():
+    schedule = {"corn": 1}
+    masteries = {"corn": Mastery("corn", progress=500_000, required=1_000_000)}
+    assert mega_stage_floors(masteries, schedule, 2) == {}
+
+
+# --- schedule_megas (milestone 6) -------------------------------------------
+
+
+def test_schedule_megas_assigns_due_stages_by_cumulative_threshold():
+    # 100 -> 112, one stage per level (12 stages); 3 megas needed overall
+    # (megas_required_by(112) == 3). Cheapest item gets the earliest deadline.
+    bounds = [(100 + i, 101 + i) for i in range(12)]
+    chosen = ["c", "b", "a"]
+    per_item_remaining = {"a": 100.0, "b": 200.0, "c": 300.0}
+    due = schedule_megas(chosen, bounds, already=0, per_item_remaining=per_item_remaining)
+    # cumulative 1 -> first stage where megas_required_by(b) >= 1: level 101 (k=0).
+    # cumulative 2 -> level 105 (k=4). cumulative 3 -> level 109 (k=8).
+    assert due == {"a": 0, "b": 4, "c": 8}
+
+
+def test_schedule_megas_already_offsets_the_cumulative_threshold():
+    bounds = [(100 + i, 101 + i) for i in range(12)]
+    chosen = ["a", "b"]
+    per_item_remaining = {"a": 1.0, "b": 2.0}
+    due = schedule_megas(chosen, bounds, already=1, per_item_remaining=per_item_remaining)
+    # already=1 pre-owned mega: only 2 more needed by 112 (3 - 1).
+    # a (cumulative 1 new = absolute 2): first k where megas_required_by(b)-1>=1
+    #   -> level 105 (megas_required_by(105)=2), k=4.
+    # b (cumulative 2 new = absolute 3): level 109 (megas_required_by(109)=3), k=8.
+    assert due == {"a": 4, "b": 8}
+
+
+def test_schedule_megas_ties_break_by_item_name():
+    bounds = [(100, 105)]  # megas_required_by(105) == 2
+    due = schedule_megas(
+        ["b", "a"], bounds, already=0, per_item_remaining={"a": 5.0, "b": 5.0}
+    )
+    # Equal remaining supply: "a" sorts first alphabetically, gets the earlier
+    # (only, here) due stage tied with "b" -- both land on stage 0 regardless,
+    # so this mainly pins down determinism of the ordering itself.
+    assert due == {"a": 0, "b": 0}
+
+
+def test_schedule_megas_raises_when_chosen_count_does_not_match_required():
+    bounds = [(100, 112)]  # megas_required_by(112) == 3
+    with pytest.raises(ValueError, match="schedule_megas"):
+        schedule_megas(["a"], bounds, already=0, per_item_remaining={"a": 1.0})
+    with pytest.raises(ValueError):
+        schedule_megas(
+            ["a", "b", "c", "d"], bounds, already=0,
+            per_item_remaining={"a": 1.0, "b": 2.0, "c": 3.0, "d": 4.0},
+        )
 
 
 # --- advance ---------------------------------------------------------------

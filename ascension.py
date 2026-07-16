@@ -189,13 +189,112 @@ def mega_count(state: GameState) -> int:
     return sum(1 for m in state.masteries.values() if m.required is None)
 
 
+def mega_remaining(masteries: dict[str, Mastery], item: str) -> float:
+    """Remaining mastery points needed to reach :data:`MEGA_THRESHOLD` for
+    ``item``, from its current progress in ``masteries``.
+
+    Mirrors :func:`candidates`' ``delta_mega`` formula exactly (progress is
+    measured from ``max(progress, GRANDMASTER_THRESHOLD)``, so the result is
+    "how much more is needed once grandmaster's own gap is closed" whether or
+    not it actually is yet -- consistent with the deltas summing to the full
+    climb when every step is selected together), but as a standalone per-item
+    lookup rather than a full candidate scan, for milestone 6's scheduling/
+    floor helpers below.
+    ``0`` once the item is at or past mega (``required is None``); the full
+    threshold for an item with no entry at all (never interacted with, so
+    its progress is 0).
+    """
+    mastery = masteries.get(item.lower())
+    if mastery is None:
+        return float(MEGA_THRESHOLD)
+    if mastery.required is None:
+        return 0.0
+    return float(MEGA_THRESHOLD - max(mastery.progress, GRANDMASTER_THRESHOLD))
+
+
+def schedule_megas(
+    chosen: list[str],
+    bounds: list[tuple[int, int]],
+    already: int,
+    per_item_remaining: dict[str, float],
+) -> dict[str, int]:
+    """Assign each item in ``chosen`` a DUE STAGE INDEX (0-based, into
+    ``bounds``) -- the first stage whose end level requires it.
+
+    Stage ``k`` (ending at level ``bounds[k][1]``) requires
+    ``megas_required_by(bounds[k][1]) - already`` cumulative megas complete
+    by its end. Items are assigned to due stages in that increasing-
+    cumulative-requirement order, **cheapest-remaining-supply first**
+    (smallest ``per_item_remaining``, ties broken by item name for
+    determinism) -- so the cheapest megas land on the earliest deadlines and
+    the dearest get the most stages to spread their production across (see
+    :func:`mega_stage_floors`, which does the actual spreading).
+
+    ``chosen`` must have exactly ``megas_required_by(bounds[-1][1]) -
+    already`` items -- the LP's mega-count constraint guarantees this by
+    construction (the aggregate selection solve picks exactly enough
+    candidates to cover the target's requirement) -- raising ``ValueError``
+    otherwise rather than silently stranding a requirement or scheduling an
+    item nothing needs.
+    """
+    required_total = megas_required_by(bounds[-1][1]) - already
+    if len(chosen) != required_total:
+        raise ValueError(
+            f"schedule_megas: chosen has {len(chosen)} item(s) but "
+            f"{required_total} are required by the target"
+        )
+    ordered = sorted(chosen, key=lambda item: (per_item_remaining.get(item, 0.0), item))
+    due: dict[str, int] = {}
+    for j, item in enumerate(ordered):
+        needed_cumulative = j + 1
+        due_stage = len(bounds) - 1
+        for k, (_, b) in enumerate(bounds):
+            if megas_required_by(b) - already >= needed_cumulative:
+                due_stage = k
+                break
+        due[item] = due_stage
+    return due
+
+
+def mega_stage_floors(
+    masteries: dict[str, Mastery], schedule: dict[str, int], stage_index: int
+) -> dict[str, float]:
+    """This stage's mega supply floors (in MASTERY POINTS, matching
+    :attr:`AscensionSpec.mega_supply_floors`' units), one entry per
+    ``schedule`` item still due at or after ``stage_index``.
+
+    Each item's floor is its remaining mastery-points-to-mega -- recomputed
+    from ``masteries`` (so overshoot in an earlier stage shrinks a later
+    stage's floor, and undershoot correspondingly grows it) -- split evenly
+    across the stages from ``stage_index`` to its due stage inclusive
+    (``due - stage_index + 1`` stages). At the due stage itself that span is
+    1, so the floor is exactly the full remaining amount: the item's mega
+    must complete there. An item already at or past mega (remaining <= 0) is
+    omitted -- nothing left to force.
+    """
+    floors: dict[str, float] = {}
+    for item, due in schedule.items():
+        if due < stage_index:
+            continue
+        remaining = mega_remaining(masteries, item)
+        if remaining <= 0:
+            continue
+        span = due - stage_index + 1
+        floors[item] = remaining / span
+    return floors
+
+
 @dataclass
 class AscensionSpec:
     """One stage's ascension requirements, handed to the optimiser (milestone 3).
 
     ``ak_required`` and ``megas_required`` are net of whatever carries over
     from earlier stages, so a stage's own solve only has to clear what's left.
-    ``mega_supply_floors`` is filled in by milestone 6; empty means no floor.
+    ``mega_supply_floors`` (mastery points, milestone 6: :func:`mega_stage_floors`)
+    forces a chosen mega item's gross supply this stage even when its own
+    ``y_mega`` isn't selected yet -- see optimizer.py's "Ascension extension"
+    for how the LP constraint combines it with the step terms; empty means no
+    floor (every stage before milestone 6, and any stage with no mega due).
     """
 
     candidates: list[StepCandidate]

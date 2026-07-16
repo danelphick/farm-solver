@@ -174,36 +174,58 @@ def test_ascension_state_evolution_drops_a_mastered_item_from_the_next_stage(mon
 
 def test_validate_ascend_conflicts_with_goal_only_flags():
     parser = main.build_parser()
+    empty = GameState(masteries={})
     with pytest.raises(ValueError, match="--target"):
-        main._validate_ascend(parser.parse_args(["--ascend", "50", "--target", "40"]), {})
+        main._validate_ascend(
+            parser.parse_args(["--ascend", "50", "--target", "40"]), {}, empty
+        )
     with pytest.raises(ValueError, match="-m/--mastery"):
-        main._validate_ascend(parser.parse_args(["--ascend", "50", "-m", "Board:1"]), {})
+        main._validate_ascend(parser.parse_args(["--ascend", "50", "-m", "Board:1"]), {}, empty)
     with pytest.raises(ValueError, match="-i/--items"):
-        main._validate_ascend(parser.parse_args(["--ascend", "50", "-i", "Board:1"]), {})
+        main._validate_ascend(parser.parse_args(["--ascend", "50", "-i", "Board:1"]), {}, empty)
     with pytest.raises(ValueError, match="--use-pumpkin-juice"):
         main._validate_ascend(
-            parser.parse_args(["--ascend", "50", "--use-pumpkin-juice"]), {}
+            parser.parse_args(["--ascend", "50", "--use-pumpkin-juice"]), {}, empty
         )
 
 
 def test_validate_ascend_rejects_targets_out_of_range():
     parser = main.build_parser()
+    empty = GameState(masteries={})
     with pytest.raises(ValueError):
-        main._validate_ascend(parser.parse_args(["--ascend", "250"]), {})
-    with pytest.raises(ValueError, match="megamastery"):
-        main._validate_ascend(parser.parse_args(["--ascend", "101"]), {})
+        main._validate_ascend(parser.parse_args(["--ascend", "250"]), {}, empty)
     with pytest.raises(ValueError):
         main._validate_ascend(
-            parser.parse_args(["--ascend", "10", "--tower-level", "10"]), {}
+            parser.parse_args(["--ascend", "10", "--tower-level", "10"]), {}, empty
         )
 
 
 def test_validate_ascend_missing_tower_level_defaults_to_zero():
     parser = main.build_parser()
     current, target, starting_ak = main._validate_ascend(
-        parser.parse_args(["--ascend", "5"]), {}
+        parser.parse_args(["--ascend", "5"]), {}, GameState(masteries={})
     )
     assert (current, target, starting_ak) == (0, 5, 0)
+
+
+def test_validate_ascend_now_allows_targets_past_100_with_enough_mega_candidates():
+    # The old target>100 guard is gone (milestone 6): --ascend 101 now validates
+    # fine given a state with at least one item that has a mega step available
+    # (megas_required_by(101) == 1).
+    parser = main.build_parser()
+    state = GameState(masteries={"gizmo": Mastery("gizmo", progress=500_000, required=1_000_000)})
+    current, target, starting_ak = main._validate_ascend(
+        parser.parse_args(["--ascend", "101"]), {}, state
+    )
+    assert (current, target) == (0, 101)
+
+
+def test_validate_ascend_rejects_target_past_100_with_no_mega_candidates():
+    parser = main.build_parser()
+    with pytest.raises(ValueError, match="not enough megamasterable items"):
+        main._validate_ascend(
+            parser.parse_args(["--ascend", "102"]), {}, GameState(masteries={})
+        )
 
 
 def test_ascend_with_no_tower_level_works_from_a_fresh_account(monkeypatch):
@@ -259,3 +281,163 @@ def test_ascension_carryover_ledger_covers_every_level_crossed(monkeypatch):
             for stage in plan.stages
         )
         assert earned + starting_ak >= needed - 1e-6
+
+
+# --- 8. Megamastery scheduling (milestone 6, levels 101-200) -----------------
+
+
+def test_ascend_100_to_105_schedules_and_completes_one_new_mega(monkeypatch):
+    # megas_required_by(105) == 2; one item is already fully mega'd
+    # (mega_count == 1), leaving exactly one NEW mega needed -- "gizmo", parked
+    # just short of its own mega threshold so the synthetic offer only has to
+    # produce a small top-up.
+    gizmo_offer = sources.Offer(
+        "gather gizmo", "farming", {"gizmo": 1}, time_per_unit=timedelta(microseconds=1),
+    )
+    _patch_ascend_offers(monkeypatch, [gizmo_offer])
+    state = GameState(
+        masteries={
+            "gizmo": Mastery("gizmo", progress=999_000, required=1_000_000),
+            "owned": Mastery("owned", progress=0, required=None),  # already mega'd
+        }
+    )
+    args = main.build_parser().parse_args(
+        ["--ascend", "105", "--tower-level", "100", "--plans", "3"]
+    )
+    result = main.solve_ascension_frontier(args, {}, state)
+    assert result.stage_bounds == [(100, 105)]  # no reward threshold crossed
+    assert result.plans
+
+    for plan in result.plans:
+        # A single stage: due immediately, so the new mega completes right there.
+        stage = plan.stages[0]
+        assert stage.plan.ascension.megas == ["gizmo"]
+        assert stage.plan.ascension.mastery_supply["gizmo"] >= 1_000 - 1e-6
+
+        # Ledger reconciles: starting + steps + chores == required + carry_out.
+        steps = sum(s.plan.ascension.ak_from_steps for s in plan.stages)
+        chores = sum(s.plan.ascension.ak_from_chores for s in plan.stages)
+        required = ascension.AK_PER_LEVEL * (105 - 100)
+        assert 0 + steps + chores == pytest.approx(required + plan.carry_out, abs=1e-6)
+
+
+def test_ascend_past_100_with_no_megamasterable_items_raises_clearly(monkeypatch):
+    _patch_ascend_offers(monkeypatch, [])
+    state = GameState(masteries={})
+    args = main.build_parser().parse_args(["--ascend", "102", "--tower-level", "100"])
+    with pytest.raises(ValueError, match="not enough megamasterable items"):
+        main.solve_ascension_frontier(args, {}, state)
+
+
+def test_select_megas_returns_empty_when_no_mega_is_needed():
+    setup = _synthetic_setup()
+    state = GameState(masteries={})
+    chosen, unmasterable = main._select_megas(
+        state, current=0, target=50, starting_ak=0,
+        args=main.build_parser().parse_args(["--ascend", "50"]),
+        last_crafting_bonus=1.45, last_setup=setup, last_offers=[],
+    )
+    assert chosen == []
+    assert unmasterable == set()
+
+
+def test_select_megas_picks_the_cheapest_candidate(monkeypatch):
+    cheap = sources.Offer(
+        "gather cheap", "farming", {"cheap": 1}, time_per_unit=timedelta(minutes=1)
+    )
+    expensive = sources.Offer(
+        "gather expensive", "farming", {"expensive": 1}, time_per_unit=timedelta(minutes=100)
+    )
+    setup = _synthetic_setup()
+    state = GameState(
+        masteries={
+            "cheap": Mastery("cheap", progress=900_000, required=1_000_000),
+            "expensive": Mastery("expensive", progress=900_000, required=1_000_000),
+        }
+    )
+    chosen, unmasterable = main._select_megas(
+        state, current=100, target=104, starting_ak=0,
+        args=main.build_parser().parse_args(["--ascend", "104", "--tower-level", "100"]),
+        last_crafting_bonus=1.45, last_setup=setup, last_offers=[cheap, expensive],
+    )
+    assert chosen == ["cheap"]
+    assert unmasterable == set()
+
+
+# --- 9. AK ledger: a mega item's master/GM steps count exactly once ----------
+
+
+def test_mega_item_master_and_grandmaster_ak_is_counted_exactly_once_across_stages(
+    monkeypatch,
+):
+    """Drives _run_ascend_pass directly (not the full frontier) over two
+    synthetic stages, with a mega floor forcing "gizmo"'s production to spread
+    across both -- stage 0's own production alone crosses the master AND
+    grandmaster thresholds (so the LP has real incentive to select both,
+    cheaply, since the floor already dominates their deltas -- see
+    optimizer.py's "Ascension extension"/mega-floor interplay note), while the
+    mega itself is only due (and only completes) at stage 1. The AK ledger
+    must count the master/GM steps' 10+100 AK exactly once total, not once per
+    stage (structurally guaranteed by candidates() dropping a completed step
+    from later stages -- this test is the regression net for that guarantee).
+    """
+    import config
+    import passive as passive_mod
+
+    gizmo_offer = sources.Offer(
+        "gather gizmo", "farming", {"gizmo": 1000}, time_per_unit=timedelta(seconds=1),
+    )
+    setup = _synthetic_setup()
+    # Stage 0 ends AT 100 (megas_required_by(100) == 0 -- the per-stage
+    # megas_required safety net, computed straight off megas_required_by
+    # independent of the schedule, must NOT already force the mega at stage 0);
+    # stage 1 ends at 101 (megas_required_by(101) == 1, matching the schedule's
+    # due=1 below).
+    bounds = [(99, 100), (100, 101)]
+    stage_setups = [setup, setup]
+    stage_offers = [[gizmo_offer], [gizmo_offer]]
+    stage_crafting_bonus = [1.0, 1.0]
+    quantize = config.passive_quantizer(passive_mod.PassiveProduction(producers=[]))
+    stage_quantize = [quantize, quantize]
+    stage_production = [None, None]
+
+    state = GameState(masteries={"gizmo": Mastery("gizmo", progress=0, required=10_000)})
+    schedule = {"gizmo": 1}  # due at stage index 1 (the second/last stage)
+    args = main.build_parser().parse_args(["--ascend", "101", "--tower-level", "99"])
+
+    staged, _ = main._run_ascend_pass(
+        stage_crafting_bonus, stage_setups, stage_offers, stage_quantize,
+        stage_production, bounds, state, args, starting_ak=0, gold_weight=1e-6,
+        mega_schedule=schedule,
+    )
+    assert len(staged.stages) == 2
+    stage0, stage1 = staged.stages
+
+    # Master/grandmaster only ever appear as candidates before the item
+    # crosses those thresholds -- structurally, they can be selected in at
+    # most one stage each.
+    master_stages = [s for s in staged.stages if "gizmo" in s.plan.ascension.masters]
+    gm_stages = [s for s in staged.stages if "gizmo" in s.plan.ascension.grandmasters]
+    assert len(master_stages) <= 1
+    assert len(gm_stages) <= 1
+
+    # The mega itself completes at its due stage (index 1) only.
+    assert "gizmo" not in stage0.plan.ascension.megas
+    assert stage1.plan.ascension.megas == ["gizmo"]
+
+    total_step_ak = sum(s.plan.ascension.ak_from_steps for s in staged.stages)
+    # Whatever mix of stages earned the master (+10) and grandmaster (+100)
+    # steps, the total across the whole pass reflects each exactly once --
+    # never 0 (silently dropped) or 220 (double-counted).
+    if master_stages and gm_stages:
+        assert total_step_ak == pytest.approx(110)
+    elif master_stages or gm_stages:
+        assert total_step_ak in (pytest.approx(10), pytest.approx(100))
+    # (If neither ever got selected the AK came entirely from chores instead --
+    # still a single, non-duplicated source; the ledger check below covers it.)
+
+    # Ledger reconciles across the whole (2-level) pass.
+    steps = sum(s.plan.ascension.ak_from_steps for s in staged.stages)
+    chores = sum(s.plan.ascension.ak_from_chores for s in staged.stages)
+    required = ascension.AK_PER_LEVEL * (101 - 99)
+    assert 0 + steps + chores == pytest.approx(required + staged.carry_out, abs=1e-6)

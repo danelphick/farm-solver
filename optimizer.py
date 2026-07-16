@@ -709,8 +709,18 @@ def _build_base(
                 terms.append(c.delta_grandmaster * steps["grandmaster"])
             if "mega" in steps:
                 terms.append(c.delta_mega * steps["mega"])
+            # A mega supply floor is a SEPARATE lower bound, not an addend:
+            # the same produced supply counts toward the floor and the step
+            # thresholds at once (an item at 700k with a 300k floor and
+            # y_mega=1 needs 300k produced, not 600k), so the pair expresses
+            # S >= max(step terms, floor). Folding the floor into one additive
+            # constraint double-charged a mega's due stage its whole remaining
+            # supply, and made the +10/+100 AK steps on a floored item cost
+            # their full deltas on top of production the floor already forced.
+            problem += S_i >= pulp.lpSum(terms)
             floor = ascension.mega_supply_floors.get(item, 0.0)
-            problem += S_i >= pulp.lpSum(terms) + floor
+            if floor > 0:
+                problem += S_i >= floor
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
     tracks: dict[str, list] = {}
