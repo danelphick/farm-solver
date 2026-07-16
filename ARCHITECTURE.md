@@ -410,12 +410,24 @@ code path byte-identical — everything below is gated on the spec.
   batch-committing every `y >= 0.5` over-selects the other way (4-day fast
   endpoint → 41 days). Only a re-solve can price completing a step against
   more chore-waiting or switching items; two-sided trials cost one extra
-  solve per fractional step and settle all of it. Pins are ephemeral
-  (`ascend_pin_<item>_<step>`, read back off the constraint per the pj_off
-  name-sanitisation gotcha), popped at the next call's top; the problem is
+  solve per fractional step and settle all of it. **Trial mechanics**: a
+  trial pin is a *bound flip* (`y` fixed to 0 or 1), never a structural edit,
+  so trials skip pulp's full model rebuild (several times the cost of the
+  actual solve on real candidate sets) — on HiGHS they flip column bounds on
+  the still-loaded in-process `problem.solverModel` (`var.index` from pulp's
+  build) and re-solve warm-started; on any other backend (CBC fallback or a
+  mid-loop rescue) they flip the pulp variables' own bounds and re-solve
+  through pulp. Each round keeps the winning trial's `y` snapshot, so there
+  is no third solve to restore the winner. Only at the end are the decisions
+  materialised as ephemeral pin constraints (`ascend_pin_<item>_<step>`, read
+  back off the constraint per the pj_off name-sanitisation gotcha, `y` bounds
+  restored to `[0, 1]`), popped at the next call's top; the problem is
   left solved against the full integral pin set before the refinement tower
   runs on top, so the tower's stage-1 pin (makespan or `spend_value`)
-  captures the *integral* plan's real cost, not the relaxation's.
+  captures the *integral* plan's real cost, not the relaxation's. This
+  fast path plus the cross-pass base cache (see "Ascension orchestration")
+  took `--ascend 60 --tower-level 40` from ~8s to ~1.4s with byte-identical
+  output.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -556,16 +568,23 @@ stage, since each stage's config/production/inventory differs.
   like the AK carry — `mega_count` already reflects every item that crossed
   the threshold so far this pass, scheduled or incidental) as a belt-and-braces
   safety net; the floors guarantee coverage by construction, so in practice
-  this constraint is slack. Rebuilds `optimizer._build_base`/`_solve_configured`
-  fresh per stage per pass — the safe default: a stage's `AscensionSpec`
-  (candidates, `ak_required`) depends on *that pass's own* evolved state past
-  stage 0, so only stage 0's base is actually pass-invariant, not worth
-  special-casing at the benchmarked sizes (`--ascend 60 --tower-level 40` on
-  real data: ~8s; a 4-stage `--ascend 100 --tower-level 40`: ~21s with the
-  two-sided rounding trials; `--ascend 101 --tower-level 40` and `--ascend 200
-  --tower-level 100`, milestone 6: ~21-23s each on a save with 250+ pre-existing
-  megas (so `megas_required` nets to 0 and `_select_megas` short-circuits) —
-  both well under the 60s target, so no caching was added).
+  this constraint is slack. Stage LP bases are cached across passes
+  (`base_cache` in `solve_ascension_frontier`, threaded into
+  `_run_ascend_pass`): the key is every `_build_base` input that can vary
+  between passes — stage index (standing in for the pass-invariant
+  offers/recipes/prices), the `AscensionSpec` contents, the starting inventory,
+  the cookie sets — so a hit is *exact* reuse via `_solve_configured`'s
+  ephemeral mechanism, never an approximation. Stage 0 hits on every pass
+  (nothing has evolved yet); later stages hit whenever adjacent gold weights
+  chose the same plan prefix, which is most passes (a 16-point sweep yields a
+  handful of distinct plans — observed 65 builds → 24 on a 4-stage climb).
+  Benchmarks on real data after the base cache and the round-and-fix trial
+  fast path (see "Ascension extension"): `--ascend 60 --tower-level 40` ~1.4s
+  (was ~8s), 4-stage `--ascend 100 --tower-level 40` ~4s (was ~21s),
+  `--ascend 200 --tower-level 100` ~4.7s, byte-identical plans throughout.
+  Remaining cost splits between the rounding trial re-solves and the
+  primary/refinement-tower solves, which still rebuild through pulp because
+  they change objectives and constraints, not just bounds.
   - **Inventory evolution**: `optimizer.plan_leftovers(plan, {}, ...)` with an
     *empty* demand — with nothing directly demanded, every held item lands in
     `plan_balance`'s `elsewhere` (its "net of demand" exception never applies),

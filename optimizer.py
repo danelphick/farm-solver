@@ -859,18 +859,30 @@ def _round_and_fix_ascension(
     pin-down that would break the requirement simply solves worse (or not at
     all, with a zero chore rate) and loses to the pin-up.
 
-    Pins are ephemeral, like the rest of :func:`_solve_configured`'s per-call
-    machinery -- popped at the top of the next call on this base.
+    A trial pin is a *bound flip* (``y`` fixed to 0 or 1), never a structural
+    edit, so trials skip pulp's full model rebuild (which costs several times
+    the actual solve on real candidate sets): when the primary solve ran on
+    HiGHS, ``problem.solverModel`` is the still-loaded in-process highspy
+    model with every variable's column index on ``var.index``, and trials
+    flip column bounds there and re-solve warm-started from the previous
+    basis. On any other backend (CBC fallback, or after a mid-loop rescue)
+    trials flip the pulp variables' own bounds and re-solve through pulp.
+    Each round keeps the winning trial's solution snapshot -- no third solve
+    to restore the winner. The decisions are materialised at the end as
+    ordinary ephemeral pin constraints (with the y bounds restored to
+    ``[0, 1]``), so the refinement tower and the next call's ephemeral pop
+    see exactly the constraints the bound-free implementation left.
 
-    Each solve is passed through :func:`_assert_optimal` like every other
-    uncapped first solve in the file (skipped when ``check`` is False -- a
-    capped call, matching the primary solve's own exemption): on real, dense
-    candidate sets (hundreds of items) hard 0/1 pins can land HiGHS on the
-    same falsely-"Unbounded" degenerate vertex the module docstring documents
-    elsewhere, which -- unlike a plain non-optimal status -- leaves every
-    variable's ``.value()`` reading back nonsense (a negative makespan, every
-    step un-selected) rather than simply stale. Returns the solver the caller
-    should keep using (CBC, if a rescue happened) for the refinement tower.
+    The final solve is passed through :func:`_assert_optimal` like every
+    other uncapped first solve in the file (skipped when ``check`` is False
+    -- a capped call, matching the primary solve's own exemption): on real,
+    dense candidate sets (hundreds of items) hard 0/1 pins can land HiGHS on
+    the same falsely-"Unbounded" degenerate vertex the module docstring
+    documents elsewhere, which -- unlike a plain non-optimal status -- leaves
+    every variable's ``.value()`` reading back nonsense (a negative makespan,
+    every step un-selected) rather than simply stale; a trial that solves
+    that way simply reads as failed. Returns the solver the caller should
+    keep using (CBC, if a rescue happened) for the refinement tower.
     """
     assert base.ascension is not None
     # Below this, a step is dust, not a commitment: the relaxation will shave
@@ -881,48 +893,79 @@ def _round_and_fix_ascension(
     eps = 1e-3
     step_order = {"master": 0, "grandmaster": 1, "mega": 2}
     problem = base.problem
-    pinned: set[tuple[str, str]] = set()
 
-    Trial = list[tuple[str, tuple[str, str]]]  # (constraint name, (item, step))
+    all_steps = [
+        (item, step, var)
+        for item, steps in base.ascend_y.items()
+        for step, var in steps.items()
+    ]
+    highs = (
+        getattr(problem, "solverModel", None)
+        if isinstance(solver, pulp.HiGHS)
+        and all(hasattr(var, "index") for _, _, var in all_steps)
+        else None
+    )
+    if highs is not None:
+        from pulp.apis.highs_api import highspy
 
-    def pin(item: str, step: str, value: int) -> Trial:
-        constraint = base.ascend_y[item][step] == value
-        # See the pj_off gotcha above: read the name back after assignment,
-        # since an item like "fancy violin" gets sanitised on the way in.
-        constraint.name = f"ascend_pin_{item}_{step}"
-        problem.addConstraint(constraint)
-        base.ephemeral.append(constraint.name)
-        pinned.add((item, step))
-        return [(constraint.name, (item, step))]
+        _optimal_status = highspy.HighsModelStatus.kOptimal
 
-    def pin_up_with_prereqs(item: str, step: str) -> Trial:
-        trial: Trial = []
-        for s in (*_ASCEND_PREREQS[step], step):
-            if s in base.ascend_y[item] and (item, s) not in pinned:
-                trial += pin(item, s, 1)
-        return trial
+    yvals: dict[tuple[str, str], float] = {
+        (item, step): var.value() or 0.0 for item, step, var in all_steps
+    }
+    decided: dict[tuple[str, str], int] = {}
 
-    def unpin(trial: Trial) -> None:
-        for name, key in trial:
-            problem.constraints.pop(name, None)
-            base.ephemeral.remove(name)
-            pinned.discard(key)
+    def set_bounds(item: str, step: str, low: int, up: int) -> None:
+        var = base.ascend_y[item][step]
+        if highs is not None:
+            highs.changeColBounds(var.index, low, up)
+        else:
+            var.lowBound, var.upBound = low, up
 
-    def solved_objective() -> float | None:
-        """This trial's objective value, or None when the solve is unusable."""
-        problem.solve(solver)
-        if pulp.LpStatus[problem.status] != "Optimal":
-            return None
-        return pulp.value(problem.objective)
+    def trial(
+        pins: dict[tuple[str, str], int],
+    ) -> tuple[float, dict[tuple[str, str], float]] | None:
+        """Solve with ``pins`` on top of ``decided``; ``(objective, y snapshot)``
+        on an optimal solve, ``None`` when the solve is unusable. The trial
+        pins are released again either way (committed decisions stay put)."""
+        for (item, step), value in pins.items():
+            set_bounds(item, step, value, value)
+        if highs is not None:
+            highs.run()
+            ok = highs.getModelStatus() == _optimal_status
+            if ok:
+                col = highs.getSolution().col_value
+                snapshot = {
+                    (item, step): col[var.index] for item, step, var in all_steps
+                }
+                objective = highs.getObjectiveValue()
+        else:
+            problem.solve(solver)
+            ok = pulp.LpStatus[problem.status] == "Optimal"
+            if ok:
+                snapshot = {
+                    (item, step): var.value() or 0.0 for item, step, var in all_steps
+                }
+                objective = pulp.value(problem.objective)
+        for key in pins:
+            if key not in decided:
+                set_bounds(*key, 0, 1)
+        return (objective, snapshot) if ok else None
+
+    def commit(
+        pins: dict[tuple[str, str], int], snapshot: dict[tuple[str, str], float]
+    ) -> None:
+        decided.update(pins)
+        yvals.update(snapshot)
+        for (item, step), value in pins.items():
+            set_bounds(item, step, value, value)
 
     while True:
         fractional = sorted(
             (
-                (item, step, var.value() or 0.0)
-                for item, steps in base.ascend_y.items()
-                for step, var in steps.items()
-                if (item, step) not in pinned
-                and eps < (var.value() or 0.0) < 1 - eps
+                (item, step, y)
+                for (item, step), y in yvals.items()
+                if (item, step) not in decided and eps < y < 1 - eps
             ),
             key=lambda t: (-t[2], step_order[t[1]], t[0]),
         )
@@ -939,30 +982,54 @@ def _round_and_fix_ascension(
         # over-selects the other way (the moment the first commitments land,
         # the LP would have re-sourced the rest cheaper).
         item, step, _ = fractional[0]
-        up_trial = pin_up_with_prereqs(item, step)
-        obj_up = solved_objective()
-        unpin(up_trial)
-
-        down_trial = pin(item, step, 0)
-        obj_down = solved_objective()
-        if obj_up is not None and (obj_down is None or obj_up <= obj_down):
-            unpin(down_trial)
-            pin_up_with_prereqs(item, step)
+        up_pins = {
+            (item, s): 1
+            for s in (*_ASCEND_PREREQS[step], step)
+            if s in base.ascend_y[item] and (item, s) not in decided
+        }
+        up = trial(up_pins)
+        down = trial({(item, step): 0})
+        if up is not None and (down is None or up[0] <= down[0]):
+            commit(up_pins, up[1])
+        elif down is not None:
+            commit({(item, step): 0}, down[1])
+        else:
+            # Neither direction solved cleanly -- keep the down pin (as the
+            # constraint implementation did) and surface it like any other
+            # uncapped non-optimal solve rather than looping forever: re-solve
+            # through pulp with every decision moved onto the pulp variables'
+            # bounds and let _assert_optimal rescue via CBC or raise. After a
+            # rescue the loop continues on the pulp trial path.
+            decided[(item, step)] = 0
+            if highs is not None:
+                highs = None
+                for (d_item, d_step), value in decided.items():
+                    set_bounds(d_item, d_step, value, value)
+            else:
+                set_bounds(item, step, 0, 0)
             problem.solve(solver)
-            if check:
-                solver = _assert_optimal(problem, solver)
-        elif obj_down is None:
-            # Neither direction solved cleanly -- surface it like any other
-            # uncapped non-optimal solve rather than looping forever.
             solver = _assert_optimal(problem, solver)
+            yvals = {
+                (item, step): var.value() or 0.0 for item, step, var in all_steps
+            }
 
-    # Everything left is integral; pin it there so the refinement tower cannot
-    # drift a selection while trading gold/activity, and so the next call's
-    # ephemeral pop finds every step var pinned, fractional or not.
+    # Everything left is integral; materialise every decision (round commits
+    # and integral leftovers alike) as ephemeral pin constraints, restoring
+    # the y bounds the trials flipped, so the refinement tower cannot drift a
+    # selection while trading gold/activity and the next call's ephemeral pop
+    # finds every step var pinned, fractional or not.
     for item, steps in sorted(base.ascend_y.items()):
         for step, var in steps.items():
-            if (item, step) not in pinned:
-                pin(item, step, 1 if (var.value() or 0.0) > 0.5 else 0)
+            var.lowBound, var.upBound = 0, 1
+            value = decided.get((item, step))
+            if value is None:
+                value = 1 if yvals[(item, step)] > 0.5 else 0
+            constraint = var == value
+            # See the pj_off gotcha above: read the name back after assignment,
+            # since an item like "fancy violin" gets sanitised on the way in.
+            constraint.name = f"ascend_pin_{item}_{step}"
+            problem.addConstraint(constraint)
+            base.ephemeral.append(constraint.name)
     problem.solve(solver)
     # A capped solve is exempt from the optimality checks, exactly like the
     # primary solve above it (see _assert_optimal's docstring: HiGHS mis-flags

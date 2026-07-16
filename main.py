@@ -1813,6 +1813,7 @@ def _run_ascend_pass(
     gold_weight: float,
     mega_schedule: dict[str, int],
     catalogue: Iterable[str] = (),
+    base_cache: dict | None = None,
 ) -> tuple[StagedPlan, set[str]]:
     """Solve every stage once, in order, at one ``gold_weight``.
 
@@ -1820,14 +1821,19 @@ def _run_ascend_pass(
     :func:`load_mastery_catalogue`), handed to :func:`ascension.candidates`
     each stage so progress-0 items the paste never mentions stay candidates.
 
-    Rebuilds each stage's LP base fresh for this pass -- the safe, correct
-    default (see :func:`solve_ascension_frontier`'s PERFORMANCE note): a
-    stage's :class:`ascension.AscensionSpec` (its candidates and remaining AK
-    requirement) depends on *this pass's own* evolved masteries and AK carry,
-    which differ from every other pass past stage 0 (whose inputs are the same
-    on every pass, since nothing has evolved yet) -- so only stage 0's base is
-    actually shareable across passes, not worth special-casing at the
-    benchmarked sizes (see the milestone report).
+    ``base_cache`` (shared across every pass of one frontier sweep) reuses a
+    stage's LP base whenever its *actual solve inputs* recur: the key is
+    everything ``_build_base`` sees that can vary between passes -- the stage
+    index (standing in for the pass-invariant offers/recipes/prices setup),
+    the :class:`ascension.AscensionSpec` contents, the starting inventory and
+    the cookie sets -- so a hit is exact reuse, not an approximation. Stage
+    0's inputs are identical on every pass (nothing has evolved yet), and
+    later stages recur whenever adjacent gold weights chose the same plan
+    prefix -- which is most of them, since a 16-point sweep typically yields
+    only a handful of distinct plans. Rebuilding bases per pass used to be
+    roughly half the mode's wall time. Reuse across sequential solves is what
+    ``_solve_configured``'s ephemeral mechanism exists for; a miss just
+    builds fresh.
 
     Evolves three things stage to stage: the AK carry (steps + chores earned,
     less what the level cost, floored at 0), the masteries
@@ -1882,11 +1888,24 @@ def _run_ascend_pass(
             mastery_bonus=args.mastery_bonus,
             mega_supply_floors=ascension.mega_stage_floors(masteries, mega_schedule, k),
         )
-        base = optimizer._build_base(
-            offers, {}, recipes=setup.recipes, crafting_bonus=crafting_bonus_k,
-            openables=setup.open_flows, inventory=inventory, cookie_sets=cookie_sets,
-            prices=setup.prices, ascension=spec,
+        cache_key = (
+            k,
+            tuple(spec.candidates),
+            spec.ak_required,
+            spec.megas_required,
+            tuple(sorted(spec.mega_supply_floors.items())),
+            tuple(sorted(inventory.items())),
+            cookie_sets,
         )
+        base = base_cache.get(cache_key) if base_cache is not None else None
+        if base is None:
+            base = optimizer._build_base(
+                offers, {}, recipes=setup.recipes, crafting_bonus=crafting_bonus_k,
+                openables=setup.open_flows, inventory=inventory, cookie_sets=cookie_sets,
+                prices=setup.prices, ascension=spec,
+            )
+            if base_cache is not None:
+                base_cache[cache_key] = base
         plan = optimizer._solve_configured(base, gold_weight=gold_weight)
         optimizer._quantize_plan_time(
             plan, stage_quantize[k], {}, setup.recipes, crafting_bonus_k,
@@ -2124,11 +2143,13 @@ def solve_ascension_frontier(
 
     unmasterable: set[str] = set(mega_unmasterable)
     staged_plans: list[StagedPlan] = []
+    base_cache: dict = {}
     for gold_weight in _ascend_gold_weights():
         staged, pass_unmasterable = _run_ascend_pass(
             stage_crafting_bonus, stage_setups, stage_offers,
             stage_quantize, stage_production, bounds, state, args, starting_ak,
             gold_weight, mega_schedule, catalogue.values(),
+            base_cache=base_cache,
         )
         unmasterable.update(pass_unmasterable)
         staged_plans.append(staged)
