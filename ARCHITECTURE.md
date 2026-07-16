@@ -427,7 +427,13 @@ code path byte-identical — everything below is gated on the spec.
   captures the *integral* plan's real cost, not the relaxation's. This
   fast path plus the cross-pass base cache (see "Ascension orchestration")
   took `--ascend 60 --tower-level 40` from ~8s to ~1.4s with byte-identical
-  output.
+  output. One provable trial shortcut on top: the objective of the solve
+  that produced the current fractional values is the relaxation optimum of
+  the remaining pinned problem, and any pin-down solution is feasible in
+  that relaxation — so when pin-up already achieves that bound the down
+  trial is skipped (ties already prefer up). It fires rarely (a step is
+  fractional precisely when completing it costs something at the margin),
+  but it is free.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -436,8 +442,18 @@ code path byte-identical — everything below is gated on the spec.
   plans are unaffected -- this path is gated on `base.ascension is not None`.
 - **Outcome readout** (`_ascension_outcome`, attached as `SourcingPlan.ascension`):
   reads the solved, round-and-fixed base into an `ascension.AscensionOutcome` --
-  `masters`/`grandmasters`/`megas` (sorted item lists, `y > 0.5` past rounding),
-  `ak_from_steps` (10/master + 100/grandmaster, selected only), `ak_from_chores`
+  `masters`/`grandmasters` (sorted item lists, `y > 0.5` past rounding — the
+  *selected* steps, which is what the AK ledger charges, and selection tracks
+  reality for those two because a threshold the supply crosses anyway is
+  always worth selecting: its AK is free), `megas` (**threshold crossings**,
+  not selections: every candidate whose gross supply covers its full
+  remaining distance to 1M — the sum of its remaining step deltas, `round()`ed
+  to mirror `ascension.advance` — because the mega constraint/floors stop
+  pulling `y_mega` the moment enough megas exist, so on a fresh account the
+  many items that cross 1M purely as a side effect of mass production would
+  otherwise vanish from the report while `mega_count` still counts them;
+  a pinned `y_mega` always implies the crossing), `ak_from_steps`
+  (10/master + 100/grandmaster, selected only), `ak_from_chores`
   (`spec.chore_rate_per_day * final_makespan_minutes / 1440`, may overshoot the
   requirement), `mastery_supply` (`{item: S_i.value()}` for every surviving
   candidate with positive value — incidental production of a candidate item
@@ -605,7 +621,26 @@ stage, since each stage's config/production/inventory differs.
 - **The sweep** (`_ascend_gold_weights`): the two frontier endpoints
   (`optimizer._FAST_PRICE`/`_FREE_PRICE`) plus 14 log-spaced weights between
   (mirrors `optimizer._time_caps`' geometric spacing, over `gold_weight`
-  rather than a makespan cap). No `favour_passive` slow-regime extension in
+  rather than a makespan cap). `--sweep N` solves N weights instead (min 2 =
+  endpoints only) — every pass is a full staged solve, so the sweep count is
+  the wall-time knob for the heavy low-mastery climbs (a fresh-account
+  `--tower-level 0 --ascend 200 --empty-mastery`: ~92s at the default 16,
+  ~9s at `--sweep 2`, which still produces the exact fastest and cheapest
+  plans; interior weights only add frontier density between them, and
+  occasionally a cheaper alternate rounding of an endpoint). That fresh-account
+  case is trial-solve bound: ~10k warm HiGHS re-solves at ~2.4ms of genuine
+  simplex each (measured; per-trial cost is NOT rebuild overhead there —
+  presolve-off and warm-basis tweaks change nothing). Evaluated and rejected
+  as further levers: solving a stage as a true HiGHS MIP (times out at 30s on
+  the hard stages and its gap tolerances swamp the tiny fast-endpoint
+  objectives, hitting the same false-"Unbounded" numerics documented under
+  "Infeasible ≠ unobtainable"), and pre-pruning "too expensive" candidates
+  (the relaxation already prices bad candidates out for free, and the fresh
+  fastest plan *selects* ~360 of ~430 candidates — there is nothing to
+  prune in exactly the case that is slow; expensiveness is relative to
+  progress and channels, which only the LP evaluates — the real save's
+  ascend-100 plan grandmasters Grand Piano precisely because its remaining
+  delta is cheap there). No `favour_passive` slow-regime extension in
   v1: the chore-AK tradeoff already stretches the slow end on its own (a
   pricier gold weight masters fewer candidates and waits longer on chores
   instead of buying), so a separate buy-nothing-and-bank-surplus regime would

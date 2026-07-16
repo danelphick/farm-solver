@@ -498,8 +498,23 @@ def build_parser() -> argparse.ArgumentParser:
             "choosing masteries and waiting on chores (rather than solving a fixed "
             "goal), producing a frontier of (time, net gold) plans. Conflicts with "
             "--target/-m/-i/--use-pumpkin-juice. LEVEL must be above the current "
-            "level and at most 200 (101-200, the megamastery range, is not yet "
-            "supported)"
+            "level and at most 200 (101-200 additionally schedules the "
+            "megamasteries those levels require)"
+        ),
+    )
+    parser.add_argument(
+        "--sweep",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "how many gold-weight passes the --ascend frontier sweep solves "
+            "(default 16: the fast/cheap endpoints plus 14 log-spaced interior "
+            "weights; minimum 2). Every pass is a full staged solve, so the "
+            "sweep dominates --ascend's wall time and fewer passes are "
+            "proportionally faster -- at the cost of a sparser frontier "
+            "between the endpoints. 2 still finds the fastest and the "
+            "cheapest plans exactly"
         ),
     )
     parser.add_argument(
@@ -1732,6 +1747,8 @@ def _validate_ascend(
         raise ValueError("--ascend conflicts with -i/--items")
     if args.use_pumpkin_juice is not None:
         raise ValueError("--ascend conflicts with --use-pumpkin-juice")
+    if args.sweep is not None and args.sweep < 2:
+        raise ValueError("--sweep needs at least 2 passes (the fast and cheap endpoints)")
     current, target, starting_ak = resolve_ascend_params(args, cfg)
     if not (current < target <= ascension.MAX_ASCEND_LEVEL):
         raise ValueError(
@@ -1766,13 +1783,18 @@ def _validate_ascend(
 _ASCEND_SWEEP_INTERIOR = 14
 
 
-def _ascend_gold_weights() -> list[float]:
-    """The gold weights the ascension sweep solves at, fast endpoint first."""
+def _ascend_gold_weights(n_interior: int = _ASCEND_SWEEP_INTERIOR) -> list[float]:
+    """The gold weights the ascension sweep solves at, fast endpoint first.
+
+    ``n_interior`` (``--sweep`` minus the two endpoints) trades frontier
+    density between the endpoints for wall time -- every weight costs a full
+    staged solve, the dominant cost of the whole mode.
+    """
     lo = math.log(optimizer._FAST_PRICE)
     hi = math.log(optimizer._FREE_PRICE)
     interior = [
-        math.exp(lo + (hi - lo) * (i + 1) / (_ASCEND_SWEEP_INTERIOR + 1))
-        for i in range(_ASCEND_SWEEP_INTERIOR)
+        math.exp(lo + (hi - lo) * (i + 1) / (n_interior + 1))
+        for i in range(n_interior)
     ]
     return [optimizer._FAST_PRICE, *interior, optimizer._FREE_PRICE]
 
@@ -2144,7 +2166,10 @@ def solve_ascension_frontier(
     unmasterable: set[str] = set(mega_unmasterable)
     staged_plans: list[StagedPlan] = []
     base_cache: dict = {}
-    for gold_weight in _ascend_gold_weights():
+    n_interior = (
+        args.sweep - 2 if args.sweep is not None else _ASCEND_SWEEP_INTERIOR
+    )
+    for gold_weight in _ascend_gold_weights(n_interior):
         staged, pass_unmasterable = _run_ascend_pass(
             stage_crafting_bonus, stage_setups, stage_offers,
             stage_quantize, stage_production, bounds, state, args, starting_ak,

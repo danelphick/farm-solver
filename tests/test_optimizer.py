@@ -1260,6 +1260,30 @@ def test_minimize_ascension_mega_floor_does_not_change_which_item_is_cheapest():
     assert plan.ascension.megas == ["cheap"]
 
 
+def test_minimize_ascension_reports_incidental_mega_crossings():
+    # ``megas`` reports 1M-threshold CROSSINGS, not y selections (see
+    # _ascension_outcome): an item whose gross supply covers its whole
+    # remaining distance to 1M is a real megamastery the climb earns --
+    # ascension.advance will count it next stage -- even though nothing
+    # needed its y_mega (megas_required is 0 here). "ore" is only produced
+    # as the ingredient of the ring master the AK requirement forces:
+    # ~91 ring crafts consume ~909 ore, whose gross supply (~1000) covers
+    # ore's remaining 500 to mega.
+    gather = Offer("gather ore", "farming", {"ore": 1}, time_per_unit=timedelta(seconds=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("ring", 100, None, None),
+            ascension.StepCandidate("ore", None, None, 500),
+        ],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([gather], {}, recipes={"ring": {"ore": 10}}, ascension=spec)
+    assert plan.ascension.masters == ["ring"]
+    assert plan.ascension.megas == ["ore"]
+
+
 def test_minimize_ascension_rounds_fractional_relaxation_to_integral_selection():
     # Two equal-cost candidates each need delta_master=10; ak_required=15 means
     # the LP relaxation can satisfy it with 1.5 masters' worth split across both

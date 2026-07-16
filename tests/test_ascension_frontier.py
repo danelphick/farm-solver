@@ -249,6 +249,31 @@ def test_ascend_with_no_tower_level_works_from_a_fresh_account(monkeypatch):
     assert result.plans
 
 
+def test_ascend_sweep_flag_bounds_the_number_of_passes(monkeypatch):
+    # --sweep N solves exactly N gold weights; 2 is just the fast/cheap
+    # endpoints -- the knob that trades interior frontier density for wall
+    # time (every pass is a full staged solve).
+    _patch_ascend_offers(monkeypatch, [])
+    passes = 0
+    orig = main._run_ascend_pass
+    def counting(*a, **k):
+        nonlocal passes
+        passes += 1
+        return orig(*a, **k)
+    monkeypatch.setattr(main, "_run_ascend_pass", counting)
+    state = GameState(masteries={})
+    args = main.build_parser().parse_args(["--ascend", "1", "--sweep", "2"])
+    result = main.solve_ascension_frontier(args, {}, state)
+    assert passes == 2
+    assert result.plans
+
+
+def test_ascend_sweep_below_two_is_rejected():
+    args = main.build_parser().parse_args(["--ascend", "1", "--sweep", "1"])
+    with pytest.raises(ValueError, match="--sweep needs at least 2"):
+        main._validate_ascend(args, {}, GameState(masteries={}))
+
+
 # --- 6. Chore-only when candidates are absurdly expensive --------------------
 
 

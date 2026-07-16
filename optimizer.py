@@ -868,7 +868,9 @@ def _round_and_fix_ascension(
     basis. On any other backend (CBC fallback, or after a mid-loop rescue)
     trials flip the pulp variables' own bounds and re-solve through pulp.
     Each round keeps the winning trial's solution snapshot -- no third solve
-    to restore the winner. The decisions are materialised at the end as
+    to restore the winner -- and skips the pin-down trial entirely whenever
+    pin-up achieves the running relaxation bound (provably unbeatable, see
+    the loop comment). The decisions are materialised at the end as
     ordinary ephemeral pin constraints (with the y bounds restored to
     ``[0, 1]``), so the refinement tower and the next call's ephemeral pop
     see exactly the constraints the bound-free implementation left.
@@ -914,6 +916,16 @@ def _round_and_fix_ascension(
         (item, step): var.value() or 0.0 for item, step, var in all_steps
     }
     decided: dict[tuple[str, str], int] = {}
+    # The objective of the solve that produced ``yvals`` -- the relaxation
+    # optimum of the remaining (partially pinned) problem, hence a lower bound
+    # on every further-pinned solve. Lets the loop skip the pin-down trial
+    # when pin-up already achieves it (see the loop comment). Read from the
+    # same backend the trials use so the two are comparable (the highs model
+    # drops any constant term pulp's objective value would include).
+    if highs is not None:
+        bound = highs.getObjectiveValue()
+    else:
+        bound = pulp.value(problem.objective)
 
     def set_bounds(item: str, step: str, low: int, up: int) -> None:
         var = base.ascend_y[item][step]
@@ -988,11 +1000,25 @@ def _round_and_fix_ascension(
             if s in base.ascend_y[item] and (item, s) not in decided
         }
         up = trial(up_pins)
+        # Provable shortcut: ``bound`` is the relaxation optimum of the
+        # remaining problem, and any pin-down solution is feasible in that
+        # relaxation, so pin-down can never solve strictly below it. When
+        # pin-up already achieves the bound it cannot lose -- and a tie
+        # already prefers up (the `<=` below) -- so the down trial is
+        # skipped. On the fast endpoint of a low-mastery climb most steps
+        # free-ride on supply the plan produces anyway (pinning them up
+        # costs nothing), so this collapses most rounds to a single solve.
+        if up is not None and up[0] <= bound + 1e-6 + 1e-9 * abs(bound):
+            commit(up_pins, up[1])
+            bound = up[0]
+            continue
         down = trial({(item, step): 0})
         if up is not None and (down is None or up[0] <= down[0]):
             commit(up_pins, up[1])
+            bound = up[0]
         elif down is not None:
             commit({(item, step): 0}, down[1])
+            bound = down[0]
         else:
             # Neither direction solved cleanly -- keep the down pin (as the
             # constraint implementation did) and surface it like any other
@@ -1012,6 +1038,7 @@ def _round_and_fix_ascension(
             yvals = {
                 (item, step): var.value() or 0.0 for item, step, var in all_steps
             }
+            bound = pulp.value(problem.objective)
 
     # Everything left is integral; materialise every decision (round commits
     # and integral leftovers alike) as ephemeral pin constraints, restoring
@@ -1247,6 +1274,22 @@ def _ascension_outcome(base: _Base) -> AscensionOutcome:
     expression, including incidental production of one nothing pinned it to
     (a candidate produced only as a side effect of another item's crafting
     still earns real mastery progress -- deliberate, per the module docstring).
+
+    ``masters``/``grandmasters`` are the *selected* steps -- they are what
+    the AK ledger charges (``ak_from_steps``), and every threshold an item's
+    supply happens to cross is worth selecting anyway (its AK is free), so
+    selection tracks reality for those two. ``megas`` instead reports every
+    **threshold crossing** -- items whose gross supply covers their full
+    remaining distance to 1M (the sum of their remaining step deltas),
+    mirroring :func:`ascension.advance`'s state evolution. Selection would
+    badly under-report megas: the mega constraint/floors are satisfied the
+    moment *enough* megas exist, so an item that crosses 1M purely as a side
+    effect of the plan's mass production (ubiquitous on a fresh, low-mastery
+    account) never gets its ``y_mega`` selected, yet it *is* a megamastery
+    the climb earns and `mega_count` will count it next stage. A pinned
+    ``y_mega`` always implies the crossing (its supply constraint forces the
+    full remaining delta via the ordering links), so crossings are a
+    superset of selections.
     """
     spec = base.ascension
     assert spec is not None
@@ -1260,7 +1303,6 @@ def _ascension_outcome(base: _Base) -> AscensionOutcome:
 
     masters = chosen("master")
     grandmasters = chosen("grandmaster")
-    megas = chosen("mega")
     ak_from_steps = AK_PER_MASTER * len(masters) + AK_PER_GRANDMASTER * len(grandmasters)
     makespan_minutes = base.makespan.value() or 0.0
     ak_from_chores = spec.chore_rate_per_day * makespan_minutes / _MINUTES_PER_DAY
@@ -1269,6 +1311,16 @@ def _ascension_outcome(base: _Base) -> AscensionOutcome:
         for item, expr in base.ascend_S.items()
         if (value := pulp.value(expr) or 0.0) > UNIT_EPSILON
     }
+    megas = sorted(
+        cand.item
+        for cand in spec.candidates
+        if cand.delta_mega is not None
+        # round() to match ascension.advance, which advances progress by
+        # round(supply): report exactly the crossings the state evolution
+        # will count.
+        and round(mastery_supply.get(cand.item, 0.0))
+        >= (cand.delta_master or 0) + (cand.delta_grandmaster or 0) + cand.delta_mega
+    )
     return AscensionOutcome(
         masters=masters,
         grandmasters=grandmasters,
