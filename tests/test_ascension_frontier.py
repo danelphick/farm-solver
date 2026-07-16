@@ -52,16 +52,22 @@ def _synthetic_setup(
     )
 
 
-def _patch_ascend_offers(monkeypatch, offers, **setup_kwargs):
+def _patch_ascend_offers(monkeypatch, offers, catalogue=None, **setup_kwargs):
     """Replace the config/game-data-driven half of solve_ascension_frontier's
     per-stage setup with a fixed, tiny offer list and synthetic channel setup,
     so a test drives the real sweep/evolution logic against a deterministic LP
     instead of the real fishing/exploring/workshop/passive-production data
-    main._build_channel_setup would otherwise always pull in.
+    main._build_channel_setup would otherwise always pull in. The masterable
+    catalogue is pinned too (``catalogue`` -- a ``{key: display}`` dict,
+    default empty), so the shipped mastery_items.txt's ~500 items can't flood
+    a tiny synthetic LP with progress-0 candidates.
     """
     setup = _synthetic_setup(**setup_kwargs)
     monkeypatch.setattr(main, "_build_channel_setup", lambda *a, **kw: setup)
     monkeypatch.setattr(main.optimizer, "all_offers", lambda *a, **kw: list(offers))
+    monkeypatch.setattr(
+        main, "load_mastery_catalogue", lambda path=None: dict(catalogue or {})
+    )
     monkeypatch.setattr(
         main.config,
         "passive_production",
@@ -220,7 +226,13 @@ def test_validate_ascend_now_allows_targets_past_100_with_enough_mega_candidates
     assert (current, target) == (0, 101)
 
 
-def test_validate_ascend_rejects_target_past_100_with_no_mega_candidates():
+def test_validate_ascend_rejects_target_past_100_with_no_mega_candidates(
+    monkeypatch, tmp_path
+):
+    # No catalogue AND an empty paste: nothing can ever reach a mega. (With
+    # the shipped catalogue this state has ~500 progress-0 mega candidates,
+    # so the bound never trips -- that's the fresh-account feature.)
+    monkeypatch.setattr(main, "MASTERY_CATALOGUE_PATH", tmp_path / "absent.txt")
     parser = main.build_parser()
     with pytest.raises(ValueError, match="not enough megamasterable items"):
         main._validate_ascend(
@@ -441,3 +453,66 @@ def test_mega_item_master_and_grandmaster_ak_is_counted_exactly_once_across_stag
     chores = sum(s.plan.ascension.ak_from_chores for s in staged.stages)
     required = ascension.AK_PER_LEVEL * (101 - 99)
     assert 0 + steps + chores == pytest.approx(required + staged.carry_out, abs=1e-6)
+
+
+# --- The masterable catalogue is the candidate universe ----------------------
+
+
+def test_empty_mastery_paste_still_masters_catalogue_items(monkeypatch):
+    # An empty paste used to leave zero candidates -- the only "plan" was a
+    # pure chore wait (100 AK at ~2.61/day: over a month for one level). The
+    # catalogue supplies every masterable item at progress 0 instead.
+    grow = sources.Offer(
+        "grow gizmo", "farming", {"gizmo": 100.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    _patch_ascend_offers(monkeypatch, [grow], catalogue={"gizmo": "Gizmo"})
+    args = main.build_parser().parse_args(["--ascend", "1"])
+    result = main.solve_ascension_frontier(args, {}, GameState(masteries={}))
+    fastest = result.plans[0]
+    outcome = fastest.stages[0].plan.ascension
+    assert outcome.masters == ["gizmo"]
+    # Far faster than the ~38-day chore-only wait 100 AK would otherwise take.
+    assert fastest.time < timedelta(days=2)
+    assert result.unexpected_masteries == []
+
+
+def test_paste_items_missing_from_the_catalogue_are_reported(monkeypatch):
+    grow = sources.Offer(
+        "grow gizmo", "farming", {"gizmo": 100.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    _patch_ascend_offers(monkeypatch, [grow], catalogue={"gizmo": "Gizmo"})
+    state = GameState(
+        masteries={
+            "gizmo": Mastery(item="Gizmo", progress=0, required=10),
+            "mystery doodad": Mastery(item="Mystery Doodad", progress=5, required=10),
+        }
+    )
+    args = main.build_parser().parse_args(["--ascend", "1"])
+    result = main.solve_ascension_frontier(args, {}, state)
+    # Display-cased, and only the item the catalogue doesn't know.
+    assert result.unexpected_masteries == ["Mystery Doodad"]
+
+
+def test_no_catalogue_disables_the_unexpected_check(monkeypatch):
+    grow = sources.Offer(
+        "grow gizmo", "farming", {"gizmo": 100.0},
+        time_per_unit=timedelta(minutes=1),
+    )
+    _patch_ascend_offers(monkeypatch, [grow], catalogue={})
+    state = GameState(
+        masteries={"gizmo": Mastery(item="Gizmo", progress=0, required=10)}
+    )
+    args = main.build_parser().parse_args(["--ascend", "1"])
+    result = main.solve_ascension_frontier(args, {}, state)
+    assert result.unexpected_masteries == []
+
+
+def test_load_mastery_catalogue_missing_file_is_empty(tmp_path):
+    assert main.load_mastery_catalogue(tmp_path / "absent.txt") == {}
+    listing = tmp_path / "mastery_items.txt"
+    listing.write_text("Apple\n\n  Zebra Fruit\n")
+    assert main.load_mastery_catalogue(listing) == {
+        "apple": "Apple", "zebra fruit": "Zebra Fruit",
+    }

@@ -197,6 +197,29 @@ def test_candidates_sorted_by_item_name():
     assert items == ["apple", "zebra fruit"]
 
 
+def test_candidates_catalogue_adds_fresh_items_at_progress_zero():
+    # The paste only lists items with progress; the catalogue supplies the
+    # rest as fresh candidates with the full three steps.
+    state = GameState(
+        masteries={"apple": Mastery(item="Apple", progress=4_000, required=10_000)}
+    )
+    result = candidates(state, catalogue=["Apple", "Zebra Fruit"])
+    assert [c.item for c in result] == ["apple", "zebra fruit"]
+    apple, zebra = result
+    # The paste's progress wins for an item both know.
+    assert apple.delta_master == 6_000
+    assert (zebra.delta_master, zebra.delta_grandmaster, zebra.delta_mega) == (
+        10_000, 90_000, 900_000,
+    )
+
+
+def test_candidates_catalogue_never_resurrects_a_mega_item():
+    state = GameState(
+        masteries={"gainite": Mastery(item="Gainite", progress=5_000_000, required=None)}
+    )
+    assert candidates(state, catalogue=["Gainite"]) == []
+
+
 # --- mega_count ----------------------------------------------------------
 
 

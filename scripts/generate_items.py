@@ -7,7 +7,14 @@ staticfiles finder serves anything dropped there with no settings change):
   from a single snapshot, the newest ``mydata/mastery-*.txt`` file: the
   user's own mastery history already tracks nearly every masterable item, so
   one snapshot is enough, and unioning the CSVs would pull in plenty of
-  non-masterable items (fish, chest drops, ...).
+  non-masterable items (fish, chest drops, ...). No longer web-only: the
+  ascension mode's candidate universe is this same catalogue, so the
+  CANONICAL copy now lives at the repo root alongside the other solver data
+  files (``main.load_mastery_catalogue``); the static one is written from
+  the same set purely so the browser can fetch it (app.js hits the static
+  URL at runtime, and a plain text file can't carry a "generated" comment
+  without the pickers treating it as an item -- keep the two in sync by
+  always regenerating with this script, never editing either by hand).
 * ``items.txt`` -- items the Item goal picker suggests. The broad union of
   every ``mydata/mastery-*.txt``/``inventory-*.txt`` snapshot plus every
   per-domain data file (crops, seed drops, fishing, exploring, pets,
@@ -99,7 +106,12 @@ def broad_items() -> set[str]:
 
 def main() -> None:
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
-    _write_sorted(STATIC_DIR / "mastery_items.txt", mastery_items())
+    masterable = mastery_items()
+    # Canonical solver data file (the ascension candidate universe) plus the
+    # web picker's static copy, always written together -- see the module
+    # docstring's sync note.
+    _write_sorted(REPO_ROOT / "mastery_items.txt", masterable)
+    _write_sorted(STATIC_DIR / "mastery_items.txt", masterable)
     _write_sorted(STATIC_DIR / "items.txt", broad_items())
 
 

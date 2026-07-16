@@ -2090,15 +2090,35 @@ def _ascension_chore_rate_line() -> str:
     return f"Daily chores alone earn ≈{rate:.2f} AK/day (smeared across the climb)."
 
 
+def _ascension_unexpected_line(unexpected: list[str]) -> str:
+    """The one-line warning for mastery-paste items the catalogue doesn't know.
+
+    Either the catalogue (``mastery_items.txt``) is stale against newer game
+    content, or the paste has something odd in it -- both worth a look, so the
+    line names the regeneration script.
+    """
+    return (
+        "Warning: mastery items not in the masterable catalogue "
+        "(mastery_items.txt stale? regenerate with scripts/generate_items.py): "
+        + ", ".join(unexpected)
+    )
+
+
 def print_ascension_goal(
-    current: int, target: int, starting_ak: int, unmasterable: list[str],
+    current: int,
+    target: int,
+    starting_ak: int,
+    unmasterable: list[str],
+    unexpected: list[str] | None = None,
 ) -> None:
-    """The ascension Goal header: the AK arithmetic, plus any unmasterable warning.
+    """The ascension Goal header: the AK arithmetic, plus any warnings.
 
     ``unmasterable`` (see :attr:`main.AscensionFrontierResult.unmasterable`,
     already display-cased) renders as one comma-joined paragraph right below
     the arithmetic -- there can be dozens on a real save (seasonal/unobtainable
-    items), so a per-line list would drown the header.
+    items), so a per-line list would drown the header. ``unexpected``
+    (:attr:`main.AscensionFrontierResult.unexpected_masteries`) likewise --
+    see :func:`_ascension_unexpected_line`.
     """
     print(_ascension_goal_line(current, target, starting_ak))
     print(_ascension_chore_rate_line())
@@ -2108,10 +2128,18 @@ def print_ascension_goal(
             "Not masterable (no known source), skipped as candidates: "
             + ", ".join(unmasterable)
         )
+    if unexpected:
+        print()
+        print(_ascension_unexpected_line(unexpected))
 
 
 def markdown_ascension_goal(
-    doc: MarkdownDoc, current: int, target: int, starting_ak: int, unmasterable: list[str],
+    doc: MarkdownDoc,
+    current: int,
+    target: int,
+    starting_ak: int,
+    unmasterable: list[str],
+    unexpected: list[str] | None = None,
 ) -> None:
     """Markdown counterpart to :func:`print_ascension_goal`."""
     doc.heading("Goal")
@@ -2122,6 +2150,8 @@ def markdown_ascension_goal(
             "Not masterable (no known source), skipped as candidates: "
             + ", ".join(unmasterable)
         )
+    if unexpected:
+        doc.para(_ascension_unexpected_line(unexpected))
 
 
 def _ascension_plan_totals(plan: main.StagedPlan) -> tuple[int, int, int, float]:
@@ -2410,7 +2440,12 @@ class Reporter:
         raise NotImplementedError
 
     def ascension_goal(
-        self, current: int, target: int, starting_ak: int, unmasterable: list[str],
+        self,
+        current: int,
+        target: int,
+        starting_ak: int,
+        unmasterable: list[str],
+        unexpected: list[str] | None = None,
     ) -> None:
         raise NotImplementedError
 

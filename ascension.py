@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import copy
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -137,12 +138,21 @@ class StepCandidate:
     delta_mega: float | None
 
 
-def candidates(state: GameState) -> list[StepCandidate]:
+def candidates(
+    state: GameState, catalogue: Iterable[str] | None = None
+) -> list[StepCandidate]:
     """Every masterable item's remaining mastery steps, sorted by item name.
 
-    Built from ``state.masteries`` -- every item in the pasted mastery block
-    is masterable. An item already fully mega'd (``Mastery.required is
-    None``) contributes nothing at all. For an item at progress ``p``:
+    Built from ``state.masteries`` plus, when given, ``catalogue`` -- the full
+    masterable-item universe (any casing; matched lower-cased). The pasted
+    mastery block only lists items with *progress*, so without the catalogue a
+    sparse (or empty) paste would leave the ascension mode almost no
+    candidates at all, when in the game every masterable item is a candidate
+    from progress 0. A catalogue item absent from ``state.masteries`` is a
+    fresh candidate at progress 0 (all three steps, deltas 10k/90k/900k); one
+    present in it keeps the paste's progress. An item already fully mega'd
+    (``Mastery.required is None``) contributes nothing at all. For an item at
+    progress ``p``:
 
     - ``delta_master = MASTER_THRESHOLD - p`` while ``p < MASTER_THRESHOLD``,
       else ``None`` (already mastered).
@@ -154,11 +164,14 @@ def candidates(state: GameState) -> list[StepCandidate]:
     An item with no remaining step at all (``p >= MEGA_THRESHOLD``, or
     ``required is None``) is omitted from the result entirely.
     """
+    entries: dict[str, Mastery | None] = dict(state.masteries)
+    for name in catalogue or ():
+        entries.setdefault(name.lower(), None)
     result: list[StepCandidate] = []
-    for key, mastery in state.masteries.items():
-        if mastery.required is None:
+    for key, mastery in entries.items():
+        if mastery is not None and mastery.required is None:
             continue
-        p = mastery.progress
+        p = mastery.progress if mastery is not None else 0
         delta_master = MASTER_THRESHOLD - p if p < MASTER_THRESHOLD else None
         delta_grandmaster = (
             GRANDMASTER_THRESHOLD - max(p, MASTER_THRESHOLD)
