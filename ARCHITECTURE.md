@@ -427,7 +427,31 @@ code path byte-identical — everything below is gated on the spec.
   captures the *integral* plan's real cost, not the relaxation's. This
   fast path plus the cross-pass base cache (see "Ascension orchestration")
   took `--ascend 60 --tower-level 40` from ~8s to ~1.4s with byte-identical
-  output.
+  output. **Sparse-mastery MIP escape**: one-step-per-round rounding
+  degenerates when the paste is missing most of the masterable catalogue (an
+  empty or tower-level-0 save) — hundreds of interchangeable progress-0
+  candidates enter the model, shared draws co-produce whole channels of them
+  at once, and every pin-down just re-spreads the same fraction onto a fresh
+  item (observed ~380 rounds / ~760 re-solves *per call*, ~90s for even a
+  one-level sparse climb). Past a round budget (`_ASCEND_ROUND_BUDGET`, far
+  above what any real-save call uses, so those keep the loop's exact
+  historical plans) the remaining selection goes to **one HiGHS MIP solve**
+  (`_mip_finish`: the step columns flipped to integer on the in-process
+  model) — the exact decision the trials approximate, priced by
+  branch-and-bound instead of per-variable enumeration, under gap tolerances
+  and a short wall-clock cap (`_ASCEND_MIP_*`; the relaxation bound is weak
+  at the cheap end, so proving optimality is not worth waiting for — the
+  loop never had a bound either, and a time-limit hit adopts the incumbent).
+  The winning selection is cached on the base (`_Base.ascend_mip`): the next
+  sweep call on that base re-tries it with a single pinned LP solve and
+  keeps it when it prices out within the MIP's gap of that call's own
+  relaxation bound, and otherwise skips straight to the MIP (no second walk
+  of the budget). Only the MIP path ever writes the cache, so bases the loop
+  always handled never take these shortcuts. Net effect: sparse `--ascend
+  10 --tower-level 0` ~89s → ~13s with a *better* frontier (the loop's
+  churn also over-ground: its cheapest sparse plan waited 15 days on chores
+  where the MIP finds 12-hour plans); CBC has no in-process model, so it
+  keeps looping exactly as before.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -436,12 +460,23 @@ code path byte-identical — everything below is gated on the spec.
   plans are unaffected -- this path is gated on `base.ascension is not None`.
 - **Outcome readout** (`_ascension_outcome`, attached as `SourcingPlan.ascension`):
   reads the solved, round-and-fixed base into an `ascension.AscensionOutcome` --
-  `masters`/`grandmasters`/`megas` (sorted item lists, `y > 0.5` past rounding),
-  `ak_from_steps` (10/master + 100/grandmaster, selected only), `ak_from_chores`
-  (`spec.chore_rate_per_day * final_makespan_minutes / 1440`, may overshoot the
-  requirement), `mastery_supply` (`{item: S_i.value()}` for every surviving
-  candidate with positive value — incidental production of a candidate item
-  counts as real mastery progress even when nothing pinned it, deliberate).
+  `masters`/`grandmasters`/`megas` (sorted item lists: `y > 0.5` past rounding,
+  **or the item's solved gross supply alone covers the step's cumulative
+  remaining deltas** — an incidental crossing is a real one: `advance` moves
+  the item's progress past the threshold either way (that is how an
+  incidental mega already satisfied a later stage's `megas_required` via
+  `mega_count`), and the game pays every crossing's AK whether the plan
+  "meant" it or not; counting only pinned `y`s made the AK ledger
+  under-credit what the plan's own draws earn — so later stages over-ground —
+  and the to-do list/frontier stop at grandmaster on items whose mega
+  crossing the staged mega accounting was itself relying on, rampant with a
+  sparse paste where mass production co-produces whole catalogues of
+  progress-0 candidates), `ak_from_steps` (10/master + 100/grandmaster over
+  those same lists), `ak_from_chores` (`spec.chore_rate_per_day *
+  final_makespan_minutes / 1440`, may overshoot the requirement),
+  `mastery_supply` (`{item: S_i.value()}` for every surviving candidate with
+  positive value — incidental production of a candidate item counts as real
+  mastery progress even when nothing pinned it, deliberate).
 - **Round-and-fix's own re-solve is rescued too** (`_round_and_fix_ascension`
   returns the solver `_solve_configured` should keep using): its final
   `problem.solve(solver)` — after every step var is pinned to a hard 0/1 — goes
