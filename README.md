@@ -194,7 +194,7 @@ Stamina:
 
 **Pumpkin Juice** is a rare bought item that, drunk on an item, instantly grants **10% of that item's mastery tier** (100,000 mastery for an item mastering to `MM`). It is a pure gold-for-progress lever — bought, never made — so it trades exactly like the other purchases: a juice on a goal item covers a slice of its mastery shortfall directly, so much less of it needs crafting or gathering, which can finish a plan sooner (and sometimes cheaper, when the sourcing it saves is worth more than the juice). It only helps **mastery** goals (the tower and `-m`); an `-i` acquire goal earns no mastery, so a juice does nothing for it.
 
-It is off by default. Turn it on with `--use-pumpkin-juice` (or `mastery.use_pumpkin_juice = true`), and the solver decides how many each frontier plan drinks — the fast plans buy juice to finish quickly, the cheap ones self-source and drink none. `--use-pumpkin-juice=N` caps the total spent across a plan (the cap cannot be exceeded but need not be reached); each juice is priced at `mastery.pumpkin_juice_price` gold (default 230):
+It is off by default. Turn it on with `--use-pumpkin-juice` (or `mastery.use_pumpkin_juice = true`), and the solver decides how many each frontier plan drinks — the fast plans buy juice to finish quickly, the cheap ones self-source and drink none. `--use-pumpkin-juice=N` caps the total spent across a plan (the cap cannot be exceeded but need not be reached); each juice is priced at `trading.pumpkin_juice` gold (default 230) — nominal, since juice cannot be bought from another player, but still a cost plans are ranked on:
 
 ```shell
 python main.py -m "Butter:1000000" --use-pumpkin-juice      # any number

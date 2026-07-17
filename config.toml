@@ -169,12 +169,18 @@ large_net     = 10
 grapes          = 5  # in apk (Arnold Palmers per 1000); a juice presses 200 grapes
 cookie_set      = 20 # priced individually, in gold each (not gk)
 hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
+# Nominal: Pumpkin Juice cannot be bought from another player, so this is not a real
+# trade price -- it is what one juice is reckoned to be worth, so plans that drink it
+# can be ranked against plans that spend anything else. Priced in gold each (not gk).
+# Present-but-0 means free, as everywhere in this section; --use-pumpkin-juice[=N]
+# (or mastery.use_pumpkin_juice) decides whether juice is drunk at all, not this key.
+pumpkin_juice   = 230
 
 [mastery]    # Pumpkin Juice: a bought item that instantly boosts one mastery goal
 # by 10% of its tier. Off by default; --use-pumpkin-juice[=N] overrides this.
 # `true` lets the solver use any number, an integer caps the total, `false` is off.
 use_pumpkin_juice = false
-pumpkin_juice_price = 230   # nominal gold cost of one Pumpkin Juice
+# Its nominal gold cost lives with the other prices, as `trading.pumpkin_juice`.
 
 [workshop]    # Resource Saver perk: how many items an average craft yields
 # 1 -> 1.10, 2 -> 1.25, 3 -> 1.45 crafting bonus. The level-90 tower reward

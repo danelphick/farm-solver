@@ -135,7 +135,7 @@ frontier as before.
 | `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
@@ -220,16 +220,35 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     consumable is crafted/gathered. `_obtainable` seeds the `buyable` set (a buyable
     is always obtainable), so a channel grounded in one is usable even where nothing
     crafts it; `_reachable` walks from a wanted drop into the consumables it burns.
-  - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost. `pj_gain` (from
+  - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost, and the model's **only
+    integer variables** — everything else is a continuous flow. `pj_gain` (from
     `main.pumpkin_juice_gains` = `0.1*threshold/mastery_bonus`) is the demand units one
-    juice covers for a goal item; a `pj` var per reachable goal adds that supply at
-    `pj_price` gold each, capped at fully covering the goal (`pj*gain ≤ need`) and by an
-    optional `pj_limit` total. Its gold folds into `gold`; **off in `favour_passive`**
-    (the buy-nothing regime). `plan_balance` nets `pumpkin_credit` out of `need` so the
-    residual/passive accounting reflects the boost, not passive, covered that slice.
-    The `pj` vars are gated on `pj_gain` alone, **never on `pj_price > 0`**: `pj_gain` is
-    already empty when juice is off, so a present price of 0 means *free juice*, not *no
-    juice* (the falsy-zero trap `[trading]` prices hit in d78542e).
+    juice covers for a goal item; one `pj` var per reachable goal, priced at `pj_price`
+    gold each (from `trading.pumpkin_juice`, **nominal** — juice is never bought from a
+    player, but it is still a cost plans are ranked on), capped by an optional `pj_limit`
+    total. Its gold folds into `gold`; **off in `favour_passive`** (the buy-nothing
+    regime). `plan_balance` nets `pumpkin_credit` out of `need` so the residual/passive
+    accounting reflects the boost, not passive, covered that slice.
+    - **Integrality**: `cat="Integer"`, `upBound = ceil(need/pj_gain)` — a juice is
+      indivisible, and a continuous `pj` bought fractions of one (0.23 of a juice
+      covering a nearly-done goal outright, which nobody can drink; the report then hid
+      it as `whole < 1` and the item looked silently skipped, needing neither juice nor
+      craft). The bound rounds **up**, so the last juice may overshoot the goal.
+    - **`pj_credit`** carries what the juices earn (`≤ pj_gain*pj`, `≤ need`), and it is
+      `pj_credit` — not `pj_gain*pj` — that the balance credits and the readout reports.
+      This replaced a `pj*gain ≤ need` cap, which capped the *credit* and so banned the
+      whole juice that earns it: a goal needing less than one juice's worth (Frost
+      Shield, 2,112 units against a 9,091-unit juice) got 0.23 juices instead of one.
+      Capping the count and clamping the credit separately keeps the last juice legal
+      while still refusing to pay it for overshoot.
+    - Gated on `pj_gain` alone, **never on `pj_price > 0`**: `pj_gain` is already empty
+      when juice is off, so a present price of 0 means *free juice*, not *no juice* (the
+      falsy-zero trap `[trading]` prices hit in d78542e). The report is gated on the
+      juices, never on their gold, for the same reason.
+    - **Cost**: the MIP is ~7x the LP's wall-clock on a juice-fed run (0.57s → 3.15s;
+      `--use-pumpkin-juice` only — juice off means no `pj` vars and no MIP at all).
+      Stage 3 freezes the counts stage 2 settled on (`pj_fix_*`) so presolve drops the
+      integer columns and that stage runs as the pure LP it was.
   - `inventory` credits every item's balance **except directly-demanded ones**
     (their need is already net of stock; stamina is seeded by `--current-stamina`).
   - **Refinement** (determinism): pin makespan, minimise `total_value`, then minimise
@@ -244,6 +263,22 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     tolerance and the juice count fell from 13 to 5 when the price rose 0.0005→0.001.
     The Pareto axis stays **bought gold**: stage 2 pins `gold` too (`stage2_gold_pin`),
     in epsilon mode *before* it runs, since that is what stage 1 minimised.
+    Each pin locks the last stage's optimum with **relative** slack (`_PIN_REL`, token
+    `_PIN_ABS` floor) sized for the solver's own feasibility tolerance: with integer
+    `pj` this is a MIP, and a pin tighter than the tolerance cuts off the optimum the
+    previous stage just found, returning Infeasible with *nothing* loaded. A flat 1e-6
+    floor is the opposite failure — where the pinned quantity is itself ~1e-6 (the
+    fastest plan's gold) the pin stops binding and the LP parks inside the slack.
+    - **Recovery**: if the tower still ends non-Optimal, the pins are dropped and the
+      *primary* objective re-solved (it solved once already, so it is feasible). The
+      plan loses tie-break determinism, not correctness. Uncapped, a still-failing
+      re-solve is a real unsatisfiable demand (`_assert_optimal`); capped, it is a
+      `_UnmeetableCap` and `_sweep` drops the sample — the sweep's caps come from the
+      *active* endpoints, and `favour_passive` turns off the very juice that made
+      `t_fast` instant, so such a cap can be milliseconds long and simply unreachable.
+      Before integrality these solves came back with the previous solution still loaded
+      and read out as empty, cost-`(0, 0)` plans that sorted to the head of the frontier
+      as a bogus 0-minute, 0-gold "fastest".
   - **`_build_base`/`_solve_configured` split**: `minimize` itself is `_build_base`
     (once) + one `_solve_configured` call. `_build_base` builds everything a sweep
     holds fixed call to call — variables, the balance/track constraints,
@@ -284,6 +319,12 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   explicit `0` = free to buy**; an *absent* key means "not traded / self-source
   only". So zeroing a price makes an item free, not unbuyable. (Grape Juice is the
   lone always-present key — never in `BUYABLE`, so never gets a buy var regardless.)
+  `pumpkin_juice` sits here too (gold each, like `cookie_set`) but is read by
+  `main.resolve_pumpkin_juice`, not `trading_prices` — it is **nominal**, since juice
+  cannot be bought from a player, and it is the one key where presence does *not*
+  decide availability (`use_pumpkin_juice` does). A present `0` still means free. It
+  moved here from `mastery.pumpkin_juice_price`, which is now **rejected with an
+  error** rather than ignored — silently ignoring it would reprice every plan.
   `plan_gold(plan, prices)` is the market value of **all** consumables spent;
   **`plan_gold_breakdown`** splits it exactly into `(to_buy, self_sourced)` =
   `(plan.gold, plan_gold − plan.gold)` — to-buy is what the LP actually bought.

@@ -106,6 +106,22 @@ BUYABLE = frozenset(
 _FAST_PRICE = 1e-6
 _FREE_PRICE = 1e9
 
+# Slack on the refinement tower's pins (see :func:`_solve_configured`): each stage
+# locks the last one's optimum at ``value * (1 + _PIN_REL) + _PIN_ABS``. Sized for the
+# solver's own feasibility tolerance rather than for exactness: the whole-juice ``pj``
+# variables make this a MIP, and a MIP optimum the solver reproduces only to within
+# ~1e-6 is cut off by a tighter pin -- the solve then returns Infeasible with nothing
+# loaded, and a capped sweep solve (which skips _assert_optimal) reads that back as an
+# all-zero plan, landing on the frontier as a bogus 0-minute, 0-gold "fastest".
+#
+# The slack is **relative**, with only a token absolute floor. A flat 1e-6 floor is far
+# too coarse where the pinned quantity is itself tiny: the fastest plan's gold is ~1e-6,
+# so the pin stopped binding and the LP simply parked inside the slack. Relative slack
+# tracks the quantity instead -- ~1e-3 gold on a 1000-gold plan, ~0 on a 0-gold one --
+# and stays orders of magnitude below anything the report can show.
+_PIN_REL = 1e-6
+_PIN_ABS = 1e-9
+
 # How many makespan caps the epsilon-constraint sweep samples, at least. Kept
 # well above the requested plan count so thinning has a dense frontier to spread
 # over; the LPs are tiny, so a few dozen extra solves are cheap.
@@ -387,6 +403,10 @@ class _Base:
     buy: dict[str, pulp.LpVariable]
     buy_cookie: pulp.LpVariable | None
     pj: dict[str, pulp.LpVariable]
+    # What each item's juices earn toward its goal, clamped at the goal itself
+    # (``pj_credit <= pj_gain*pj``, ``<= need``). The balance credits this, not
+    # ``pj_gain*pj``, so an overshooting last juice is legal but earns nothing extra.
+    pj_credit: dict[str, pulp.LpVariable]
     gold: pulp.LpAffineExpression
     spend_value: pulp.LpAffineExpression
     # The market value of everything the plan spends, whichever way it was sourced:
@@ -517,7 +537,8 @@ def _build_base(
         return _Base(
             problem=pulp.LpProblem("sourcing", pulp.LpMinimize),
             usage=[], craft={}, opens=[], makespan=pulp.LpVariable("T", lowBound=0),
-            buy={}, buy_cookie=None, pj={}, gold=0, spend_value=0, total_value=0,
+            buy={}, buy_cookie=None, pj={}, pj_credit={}, gold=0, spend_value=0,
+            total_value=0,
             used=[], crafted=[], opened=[], remainder=remainder,
             pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
         )
@@ -605,13 +626,37 @@ def _build_base(
     # when juice is switched off (see main.build_inputs), so a present price of 0
     # means "juice is free", not "no juice" -- the same falsy-zero trap fixed for
     # ``[trading]`` prices.
+    #
+    # **Integer**: a juice is indivisible, and a continuous ``pj`` bought fractions of
+    # one -- 0.23 of a juice covering the whole of a nearly-done goal, which no player
+    # can drink. Bounded above by the juices it takes to *cover* the goal (rounded up,
+    # so the last one is allowed to overshoot); ``pj_credit`` below clamps what that
+    # overshoot earns.
     pj = {}
     if pj_gain:
         pj = {
-            item: pulp.LpVariable(f"pj{i}", lowBound=0)
+            item: pulp.LpVariable(
+                f"pj{i}", lowBound=0,
+                upBound=math.ceil(wanted[item][1] / pj_gain[item]),
+                cat="Integer",
+            )
             for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys()))
             if pj_gain[item] > 0
         }
+    # What the juices actually earn toward the goal: ``pj_gain`` each, but never more
+    # than the goal itself (mastery cannot exceed the requirement, so a juice past full
+    # coverage is wasted, not banked). This is the clamp that used to be written as
+    # ``pj*gain <= need`` -- a cap on the *credit*, which also banned the whole juice
+    # that earns it: an item needing less than one juice's worth (Frost Shield: 2,112
+    # units against a 9,091-unit juice) was capped at 0.23 juices instead of paying for
+    # one and covering it outright. Capping the count and clamping the credit separately
+    # keeps the last juice legal while still refusing to pay it for overshoot.
+    pj_credit = {
+        item: pulp.LpVariable(f"pjc{i}", lowBound=0, upBound=wanted[item][1])
+        for i, item in enumerate(sorted(pj))
+    }
+    for item, var in pj.items():
+        problem += pj_credit[item] <= pj_gain[item] * var
     if pj_limit is not None and pj:
         problem += pulp.lpSum(pj.values()) <= pj_limit
     if pj:
@@ -691,17 +736,14 @@ def _build_base(
         held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
         bought = buy.get(item, 0)
-        # A Pumpkin Juice on this goal item covers pj_gain[item] units of its demand.
-        boosted = pj_gain[item] * pj[item] if item in pj else 0
+        # A Pumpkin Juice on this goal item covers pj_gain[item] units of its demand,
+        # clamped at the goal by pj_credit (built above).
+        boosted = pj_credit[item] if item in pj else 0
         problem += (
             gathered + made - consumed - used_up + unpacked - emptied + held
             + bought + boosted
             >= need
         )
-        # Cap the mastery boost at the goal: juice past full coverage buys no
-        # progress (mastery cannot exceed the requirement), so it would only waste gold.
-        if item in pj:
-            problem += pj_gain[item] * pj[item] <= need
         # Buying can never earn an item's own mastery: a bought unit only covers a
         # non-goal use (a craft material, or a channel's tool), so cap purchases at
         # that derived demand. The goal ``need`` must then come from making or
@@ -773,13 +815,32 @@ def _build_base(
 
     return _Base(
         problem=problem, usage=usage, craft=craft, opens=opens, makespan=makespan,
-        buy=buy, buy_cookie=buy_cookie, pj=pj, gold=gold, spend_value=spend_value,
+        buy=buy, buy_cookie=buy_cookie, pj=pj, pj_credit=pj_credit, gold=gold,
+        spend_value=spend_value,
         total_value=total_value,
         used=used, crafted=crafted, opened=opened, remainder=remainder,
         pj_gain=pj_gain, pj_price=pj_price,
         ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
         unmasterable=unmasterable,
     )
+
+
+class _UnmeetableCap(Exception):
+    """A capped sweep solve whose ``time_cap`` no plan can actually meet.
+
+    The sweep's caps are drawn between the two *active-regime* endpoints, so they are
+    feasible for the regime that produced them -- but not for every regime run against
+    them. ``favour_passive`` switches Pumpkin Juice off, and juice is exactly what
+    makes ``t_fast`` instant, so a cap taken from a juice-fed 0-minute endpoint can be
+    milliseconds long and flatly unreachable once juice is gone.
+
+    That is a fact about the cap, not about the demand: the same base solves fine
+    uncapped. So it is not :func:`_assert_optimal`'s "the demand is unsatisfiable"
+    error -- :func:`frontier` just drops the sample and sweeps on. Before whole-juice
+    ``pj`` made this a MIP, these solves came back with the previous solution still
+    loaded and were silently read out as empty, cost-(0, 0) plans -- which then sorted
+    to the head of the frontier as a bogus 0-minute, 0-gold "fastest".
+    """
 
 
 def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
@@ -1133,13 +1194,14 @@ def _solve_configured(
         # Slowest, most passive-leaning end: fewest tools spent (so passive and
         # farming carry the demand), makespan bounded by ``time_cap`` so it cannot
         # run away onto a centuries-long pet trickle.
-        problem.setObjective(base.spend_value)
+        primary = base.spend_value
     elif time_cap is not None:
-        problem.setObjective(base.gold)  # least gold under the time cap (epsilon-constraint)
+        primary = base.gold  # least gold under the time cap (epsilon-constraint)
     else:
         # A tiny gold_weight buys freely for the fastest plan; a huge one buys
         # nothing (gold 0) for the slowest, fully self-sourced plan.
-        problem.setObjective(base.makespan + gold_weight * base.gold)
+        primary = base.makespan + gold_weight * base.gold
+    problem.setObjective(primary)
     solver = _solver()
     problem.solve(solver)
     if time_cap is None:
@@ -1197,10 +1259,10 @@ def _solve_configured(
     ):
         if favour_passive:
             sv_star = pulp.value(base.spend_value) or 0.0
-            problem += (base.spend_value <= sv_star * (1 + 1e-9) + 1e-9, "stage1_pin")
+            problem += (base.spend_value <= sv_star * (1 + _PIN_REL) + _PIN_ABS, "stage1_pin")
         else:
             t_star = base.makespan.value() or 0.0
-            problem += (base.makespan <= t_star * (1 + 1e-9) + 1e-9, "stage1_pin")
+            problem += (base.makespan <= t_star * (1 + _PIN_REL) + _PIN_ABS, "stage1_pin")
         base.ephemeral.append("stage1_pin")
 
         # Stage 2 -- least total value at the pinned primary, then lock it. Skipped
@@ -1211,14 +1273,14 @@ def _solve_configured(
         if any(base.total_value.values()):
             if time_cap is not None and not favour_passive:
                 problem += (
-                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
+                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + _PIN_REL) + _PIN_ABS,
                     "stage2_gold_pin",
                 )
                 base.ephemeral.append("stage2_gold_pin")
             problem.setObjective(base.total_value)
             problem.solve(solver)
             problem += (
-                base.total_value <= (pulp.value(base.total_value) or 0.0) * (1 + 1e-9) + 1e-9,
+                base.total_value <= (pulp.value(base.total_value) or 0.0) * (1 + _PIN_REL) + _PIN_ABS,
                 "stage2_pin",
             )
             base.ephemeral.append("stage2_pin")
@@ -1226,10 +1288,21 @@ def _solve_configured(
             # stage 3 cannot trade gold for activity behind the value pin.
             if "stage2_gold_pin" not in base.ephemeral:
                 problem += (
-                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
+                    base.gold <= (pulp.value(base.gold) or 0.0) * (1 + _PIN_REL) + _PIN_ABS,
                     "stage2_gold_pin",
                 )
                 base.ephemeral.append("stage2_gold_pin")
+
+        # Freeze the juice counts stage 2 settled on. They are decided by now (stage 2
+        # is what weighs juice against everything else), and stage 3 may not move them
+        # anyway -- its own pins forbid it. Nailing them down lets the solver's presolve
+        # drop the only integer columns in the model, so stage 3 runs as the pure LP it
+        # was before whole juices, which is most of the MIP's cost paid back.
+        for item, var in base.pj.items():
+            fixed = var == round(var.value() or 0.0)
+            fixed.name = f"pj_fix_{item}"
+            problem.addConstraint(fixed)
+            base.ephemeral.append(fixed.name)
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
@@ -1239,6 +1312,34 @@ def _solve_configured(
             + (base.buy_cookie if base.buy_cookie is not None else 0)
         )
         problem.solve(solver)
+
+        # Every pin above only narrows a problem that already had an optimum, so the
+        # tower cannot make the demand unsatisfiable -- but it can still come back
+        # Infeasible on numerics, when the solver cannot reproduce the previous
+        # stage's optimum inside the pin's slack. That is survivable for an LP (the
+        # last solution stays loaded, which is what _assert_optimal's docstring banks
+        # on) but not for a MIP: HiGHS returns with *nothing* loaded, every value
+        # reads back 0, and the readout below would invent an empty plan -- which,
+        # at a 0 makespan and 0 gold, lands on the frontier as a bogus "fastest".
+        # Recover the honest way: drop the refinement's pins and re-solve the primary
+        # objective, which we solved successfully above. The plan loses only its
+        # tie-break determinism, not its correctness.
+        if pulp.LpStatus[problem.status] != "Optimal":
+            for name in ("stage1_pin", "stage2_pin", "stage2_gold_pin"):
+                if name in base.ephemeral:
+                    problem.constraints.pop(name, None)
+                    base.ephemeral.remove(name)
+            problem.setObjective(primary)
+            problem.solve(solver)
+            if pulp.LpStatus[problem.status] != "Optimal":
+                # Unpinned and still no solution: the cap itself is the problem, not
+                # the refinement. Uncapped, that means the demand really cannot be
+                # met, which _assert_optimal says properly (and second-opinions on
+                # CBC first); capped, the sweep just loses this sample.
+                if time_cap is None:
+                    solver = _assert_optimal(problem, solver)
+                else:
+                    raise _UnmeetableCap(_minutes(time_cap))
 
     draws = [
         Draw(offer, units)
@@ -1262,10 +1363,12 @@ def _solve_configured(
     }
     if base.buy_cookie is not None and (bc := base.buy_cookie.value() or 0.0) > UNIT_EPSILON:
         bought["cookie set"] = bc
+    # Integer vars, but the solver returns them as floats a hair off (2.9999999996):
+    # round, or the readout re-introduces the fractions the integrality removed.
     pumpkin_juices = {
         item: units
         for item, var in base.pj.items()
-        if (units := var.value() or 0.0) > UNIT_EPSILON
+        if (units := round(var.value() or 0.0)) > 0
     }
     time, ap, ln = aggregate(draws)
     # Ascension: the chore term can make the optimal makespan exceed every
@@ -1298,8 +1401,11 @@ def _solve_configured(
         gold=pulp.value(base.gold) or 0.0,
         pumpkin_juices=pumpkin_juices,
         pumpkin_gold=sum(pumpkin_juices.values()) * base.pj_price,
+        # Read the credit off its own variable rather than recomputing
+        # ``pj_gain * juices``: the two part company on the last juice, the one
+        # allowed to overshoot the goal and earn only the slice up to it.
         pumpkin_credit={
-            item: base.pj_gain[item] * units for item, units in pumpkin_juices.items()
+            item: base.pj_credit[item].value() or 0.0 for item in pumpkin_juices
         },
         remainder=base.remainder,
         ascension=ascension_outcome,
@@ -1869,6 +1975,30 @@ def plan_surplus_gold(
     return sum(gold for _, _, gold in rows)
 
 
+def _sweep(
+    base: _Base, caps: list[float], favour_passive: bool = False
+) -> list[SourcingPlan]:
+    """Solve ``base`` at each of ``caps`` (seconds), dropping the unmeetable ones.
+
+    A cap no plan in this regime can meet is a gap in the sample, not an error -- see
+    :class:`_UnmeetableCap`. The remaining caps still describe the frontier; a regime
+    where *every* cap is unmeetable simply contributes nothing, and the endpoints
+    (solved uncapped) carry it.
+    """
+    plans = []
+    for cap in caps:
+        try:
+            plans.append(
+                _solve_configured(
+                    base, favour_passive=favour_passive,
+                    time_cap=timedelta(seconds=cap),
+                )
+            )
+        except _UnmeetableCap:
+            continue
+    return plans
+
+
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:
     """Whether ``a`` is at least as good as ``b`` on every objective, better on one
     -- so ``b`` is not worth keeping."""
@@ -2183,10 +2313,7 @@ def frontier(
         if lo < cap < hi
     ]
     caps += breakpoints
-    plans += [
-        _solve_configured(base_active, time_cap=timedelta(seconds=cap))
-        for cap in caps
-    ]
+    plans += _sweep(base_active, caps)
 
     # Slow regime: extend past the cheap endpoint with favour_passive plans that lean
     # ever harder on passive/farming and bank the surplus. Bounded at t_bound, the
@@ -2211,12 +2338,7 @@ def frontier(
             ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
             anchors += ext_breaks
             ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
-            plans += [
-                _solve_configured(
-                    base_passive, favour_passive=True, time_cap=timedelta(seconds=cap),
-                )
-                for cap in ext_caps
-            ]
+            plans += _sweep(base_passive, ext_caps, favour_passive=True)
 
     # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
     # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on

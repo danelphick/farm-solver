@@ -157,7 +157,7 @@ def test_params_to_args_trading_prices_become_config_overrides():
         "trading.arnold_palmer=55.0",
         "trading.large_net=9.0",
         "trading.cookie_set=25.0",
-        "mastery.pumpkin_juice_price=200.0",
+        "trading.pumpkin_juice=200.0",
     ]
 
 

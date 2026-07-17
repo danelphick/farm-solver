@@ -104,8 +104,10 @@ def parse_format(value: str) -> str:
         ) from None
 
 
-# Nominal player-to-player gold cost of one Pumpkin Juice, used when the config
-# does not set mastery.pumpkin_juice_price.
+# Nominal gold cost of one Pumpkin Juice, used when the config does not set
+# trading.pumpkin_juice. Nominal because juice cannot be bought from another player:
+# it is what a juice is reckoned to be worth, so a plan that drinks one can be ranked
+# against a plan that spends anything else.
 DEFAULT_PUMPKIN_JUICE_PRICE = 230.0
 
 
@@ -130,11 +132,27 @@ def resolve_pumpkin_juice(
     ``cli`` is ``args.use_pumpkin_juice``: ``None`` when the flag is absent (falling
     back to ``mastery.use_pumpkin_juice``), ``-1`` for the bare flag (enabled, no
     limit), or ``N >= 0`` for a cap. The config value is ``true`` (enabled, no limit),
-    an integer cap, or ``false``/absent (off). The command line wins. The price comes
-    from ``mastery.pumpkin_juice_price`` (default :data:`DEFAULT_PUMPKIN_JUICE_PRICE`).
+    an integer cap, or ``false``/absent (off). The command line wins.
+
+    The price comes from ``trading.pumpkin_juice`` -- it sits with the other prices
+    even though juice is never *bought* from a player, since it is still a cost the
+    plans are ranked on. Gold each (not "gk"/per-1000, like ``cookie_set``), defaulting
+    to :data:`DEFAULT_PUMPKIN_JUICE_PRICE`. Unlike the rest of ``[trading]``, presence
+    does **not** decide availability -- ``use_pumpkin_juice`` alone does that -- so an
+    absent key means "priced at the default", not "not traded". A present ``0`` means
+    free, as it does for every other price here.
     """
     mastery_cfg = cfg.get("mastery", {})
-    price = float(mastery_cfg.get("pumpkin_juice_price", DEFAULT_PUMPKIN_JUICE_PRICE))
+    # Refuse the old key rather than ignore it: a config that still sets a price here
+    # would otherwise fall back to the default, silently repricing every plan.
+    if "pumpkin_juice_price" in mastery_cfg:
+        raise ValueError(
+            "mastery.pumpkin_juice_price has moved to trading.pumpkin_juice "
+            "(gold each), alongside the other prices"
+        )
+    price = float(
+        cfg.get("trading", {}).get("pumpkin_juice", DEFAULT_PUMPKIN_JUICE_PRICE)
+    )
     if cli is not None:
         return True, (None if cli < 0 else cli), price
     setting = mastery_cfg.get("use_pumpkin_juice")
@@ -647,7 +665,7 @@ def build_parser() -> argparse.ArgumentParser:
             "one mastery goal by 10%% of its tier -- to finish sooner or cheaper "
             "(overrides mastery.use_pumpkin_juice). Bare, any number may be used; "
             "'=N' caps the total spent (the cap need not be reached). Priced at "
-            "mastery.pumpkin_juice_price gold each"
+            "trading.pumpkin_juice gold each"
         ),
     )
     parser.add_argument(

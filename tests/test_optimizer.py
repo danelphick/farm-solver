@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 import ascension
+import optimizer
 from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
@@ -1020,12 +1021,28 @@ def test_minimize_respects_the_pumpkin_juice_limit():
 
 
 def test_minimize_caps_pumpkin_juice_at_the_goal():
-    # 15 demand, each juice covers 10, so at most 1.5 juices are useful -- a juice
-    # past full coverage earns no mastery, so the solver never buys more.
+    # 15 demand, each juice covers 10. Juices are whole, so covering the goal takes 2
+    # -- the second overshoots, and the clamp means it earns only the 5 units left,
+    # not 10 (mastery cannot exceed the requirement). Capping the *credit* instead
+    # used to cap the count at a fractional 1.5 juices, which nobody can drink.
     plan = minimize([FARM_ITEM], {"It": 15}, prices=GOLD, gold_weight=BUY_FREELY,
                     pj_gain={"it": 10}, pj_price=5)
-    assert plan.pumpkin_juices.get("it") == pytest.approx(1.5)
+    assert plan.pumpkin_juices.get("it") == 2
+    assert plan.pumpkin_credit.get("it") == pytest.approx(15)  # clamped, not 20
     assert plan.time == timedelta(0)
+
+
+def test_minimize_drinks_a_whole_juice_for_a_goal_smaller_than_one_juice():
+    # The goal needs less than a single juice covers (3 units against a 10-unit juice).
+    # One whole juice covers it outright; the old credit cap (`pj*gain <= need`) banned
+    # that juice and settled for 0.3 of one -- a plan that reported no juice at all and
+    # no craft either, leaving the item looking silently skipped.
+    plan = minimize([FARM_ITEM], {"It": 3}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": 10}, pj_price=5)
+    assert plan.pumpkin_juices.get("it") == 1
+    assert plan.pumpkin_credit.get("it") == pytest.approx(3)  # clamped at the goal
+    assert plan.time == timedelta(0)
+    assert plan.draws == []  # fully covered by the juice: nothing to grow
 
 
 def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():
@@ -1033,7 +1050,11 @@ def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=SELF_SOURCE,
                     pj_gain={"it": 10}, pj_price=5)
     assert plan.pumpkin_juices == {}
-    assert plan.time == timedelta(minutes=100)
+    # approx, not ==: the whole-juice `pj` vars make this a MIP, and stage 3 settles
+    # anywhere inside the stage-1 makespan pin's own slack (t*(1+1e-9)+1e-9 minutes),
+    # landing a few microseconds above 100 minutes. Immaterial -- the report rounds to
+    # minutes -- but no longer exact to the femtosecond the pure LP happened to give.
+    assert plan.time.total_seconds() == pytest.approx(6000, abs=1e-3)
 
 
 def test_minimize_drinks_pumpkin_juice_priced_at_zero():
@@ -1060,6 +1081,23 @@ def test_minimize_pumpkin_juice_count_is_stable_across_tiny_prices():
         for price in (0.0, 0.0001, 0.0005, 0.001, 0.01)
     ]
     assert counts == [pytest.approx(10)] * 5
+
+
+def test_sweep_drops_caps_no_plan_in_the_regime_can_meet():
+    # The sweep's caps come from the active endpoints, where juice makes t_fast
+    # instant -- but favour_passive switches juice off, so such a cap is unreachable
+    # and its solve is genuinely infeasible. That is a gap in the sample, not a bad
+    # demand: skip it. It used to read back as an empty, cost-(0, 0) plan and sort to
+    # the head of the frontier as a bogus 0-minute, 0-gold "fastest".
+    base = optimizer._build_base(
+        [FARM_ITEM], {"It": 100}, {}, 1.0, [], {}, 0.0, GOLD,
+        pj_gain={"it": 10}, pj_price=5,
+    )
+    # 100 units at 1/minute: a 1-second cap is impossible with juice off.
+    plans = optimizer._sweep(base, [1.0], favour_passive=True)
+    assert plans == []
+    # ...and the same base still solves at a cap it can actually meet.
+    assert optimizer._sweep(base, [100 * 60], favour_passive=True)
 
 
 def test_minimize_skips_pumpkin_juice_when_favouring_passive():

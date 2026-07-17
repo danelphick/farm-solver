@@ -1597,8 +1597,12 @@ def print_plan(
     juices = [
         (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
     ]
-    if juices and plan.pumpkin_gold > 0:
-        per_juice = plan.pumpkin_gold / _pumpkin_juices(plan)
+    # Gated on the juices, never on their gold: at a `trading.pumpkin_juice` of 0 the
+    # juice is free, and hiding the section then dropped a plan's whole mastery boost
+    # out of the report -- the very plans that lean on juice hardest.
+    if juices:
+        total_juices = _pumpkin_juices(plan)
+        per_juice = plan.pumpkin_gold / total_juices if total_juices else 0.0
         print("\nPumpkin Juice (mastery boost):")
         width = _num_width(round(units) for _, units in juices)
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
@@ -1952,8 +1956,12 @@ def markdown_plan(
     juices = [
         (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
     ]
-    if juices and plan.pumpkin_gold > 0:
-        per_juice = plan.pumpkin_gold / _pumpkin_juices(plan)
+    # Gated on the juices, never on their gold: at a `trading.pumpkin_juice` of 0 the
+    # juice is free, and hiding the section then dropped a plan's whole mastery boost
+    # out of the report -- the very plans that lean on juice hardest.
+    if juices:
+        total_juices = _pumpkin_juices(plan)
+        per_juice = plan.pumpkin_gold / total_juices if total_juices else 0.0
         rows = []
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
             cost = round(units * per_juice)

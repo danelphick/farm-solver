@@ -1557,9 +1557,21 @@ def test_resolve_pumpkin_juice_from_config():
     assert resolve_pumpkin_juice(None, {"mastery": {"use_pumpkin_juice": True}}) == (
         True, None, 230.0
     )
+    # The price lives with the other prices, in [trading] -- not under [mastery],
+    # which only decides whether juice is drunk at all.
     assert resolve_pumpkin_juice(
-        None, {"mastery": {"use_pumpkin_juice": 7, "pumpkin_juice_price": 200}}
+        None, {"mastery": {"use_pumpkin_juice": 7}, "trading": {"pumpkin_juice": 200}}
     ) == (True, 7, 200.0)
+    # Present-but-0 is free, as everywhere in [trading] -- not "off".
+    assert resolve_pumpkin_juice(
+        None, {"mastery": {"use_pumpkin_juice": True}, "trading": {"pumpkin_juice": 0}}
+    ) == (True, None, 0.0)
+
+
+def test_resolve_pumpkin_juice_rejects_the_old_price_key():
+    # Ignoring it would silently reprice every plan at the 230 default.
+    with pytest.raises(ValueError, match="trading.pumpkin_juice"):
+        resolve_pumpkin_juice(None, {"mastery": {"pumpkin_juice_price": 500}})
 
 
 # --- Crafting bonus (Resource Saver / tower-level gating) ---
@@ -1834,6 +1846,24 @@ def test_print_plan_shows_the_pumpkin_juice_section(capsys):
     assert "3x Pumpkin Juice on Butter = 690 g" in out
     assert "drink at Butter mastery 700,000 / 800,000 / 900,000" in out
     assert "total 690 g" in out
+
+
+def test_print_plan_shows_the_pumpkin_juice_section_when_juice_is_free(capsys):
+    # At a trading.pumpkin_juice of 0 the juice costs nothing, and gating the section
+    # on its gold hid the whole mastery boost -- from exactly the plans that lean on
+    # juice hardest. The juices are what decide the section, not what they cost.
+    demand = {"Butter": 500}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("fish Pond", "fishing", {"butter": 100}, ln=1), 5)],
+        pumpkin_juices={"butter": 3},
+        pumpkin_gold=0.0,
+        pumpkin_credit={"butter": 300},
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0)
+    out = capsys.readouterr().out
+    assert "Pumpkin Juice (mastery boost):" in out
+    assert "3x Pumpkin Juice on Butter = 0 g" in out
+    assert "total 0 g" in out
 
 
 def test_print_plan_buy_total_excludes_pumpkin_gold(capsys):

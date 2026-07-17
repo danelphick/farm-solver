@@ -94,7 +94,7 @@ _CONFIG_PARAM_FLAGS = {
     "price_arnold_palmer": "trading.arnold_palmer",
     "price_large_net": "trading.large_net",
     "price_cookie_set": "trading.cookie_set",
-    "price_pumpkin_juice": "mastery.pumpkin_juice_price",
+    "price_pumpkin_juice": "trading.pumpkin_juice",
     "price_hickory_omelette": "trading.hickory_omelette",
 }
 
