@@ -135,7 +135,7 @@ frontier as before.
 | `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier`, `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
@@ -178,7 +178,9 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   Juice**), `pumpkin_juices` (`{goal item: count}` juices drunk), `pumpkin_gold`
   (their slice of `gold`), `pumpkin_credit` (`{goal item: demand units}` a juice
   covers, netted out of `need` in `plan_balance`), `surplus_gold`
-  (sale value of banked surplus, set by `frontier`) and `remainder`.
+  (sale value of banked surplus, set by `frontier`), `remainder`, and `_origin`
+  (`(base, kwargs)` stamped by `_solve_configured`, `repr=False`/`compare=False`, so
+  `frontier` can re-solve a returned plan exact — see its cost bullet).
   `.cost` is the pair `(time, net gold)` where **net gold = `gold − surplus_gold`**
   — bought less what the plan banks — so a slow, passive-leaning plan that banks
   more than it buys sits at *negative* gold and the frontier extends past the "buy
@@ -245,10 +247,25 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
       when juice is off, so a present price of 0 means *free juice*, not *no juice* (the
       falsy-zero trap `[trading]` prices hit in d78542e). The report is gated on the
       juices, never on their gold, for the same reason.
-    - **Cost**: the MIP is ~7x the LP's wall-clock on a juice-fed run (0.57s → 3.15s;
-      `--use-pumpkin-juice` only — juice off means no `pj` vars and no MIP at all).
-      Stage 3 freezes the counts stage 2 settled on (`pj_fix_*`) so presolve drops the
-      integer columns and that stage runs as the pure LP it was.
+    - **Cost & the continuous-sweep dodge**: an integer `pj` makes any solve a MIP,
+      and a MIP is **~50x an LP per solve** (measured 10.5 ms vs 0.2 ms) — not from
+      branch-and-bound (only ~6 integers bounded to ~3–5, a trivial tree; `mip_rel_gap`
+      and heuristics-off change nothing) but from the fixed MIP machinery HiGHS applies
+      to the *whole* thousands-of-vars model the moment one variable is integer. So
+      `frontier` sweeps its ~hundreds of interior points on the **continuous relaxation**
+      (`pj_integer=False`, fractional juice, all LP) and re-solves only the handful of
+      plans it *returns* exact (`pj_integer=True`) — the rows of the summary table and
+      the expanded plan, the only juice counts a user reads. Cut ~273 MIP solves → ~21;
+      `--use-pumpkin-juice` wall-clock 3.15s → 0.76s (juice off: no `pj` vars, no MIP,
+      unchanged). Interior *ranking* then uses relaxed costs (off by ≤ one juice's
+      gold/time — already-thinned, harmless); every returned plan is a real whole-juice
+      plan. The finish reuses each plan's `_origin` (the `(base, kwargs)`
+      `_solve_configured` stamps on it) to reproduce its exact solve. Within one solve,
+      stage 3 additionally freezes the counts stage 2 settled on (`pj_fix_*`, integer
+      solves only) so presolve drops the integer columns and that stage runs as pure LP.
+      The readout **rounds** `pj.value()`, so a relaxed sweep plan's reported count is
+      integer even mid-sweep (its *gold*, priced off the fractional var, is not — but
+      those interior plans are always replaced by the exact finish before returning).
   - `inventory` credits every item's balance **except directly-demanded ones**
     (their need is already net of stock; stamina is seeded by `--current-stamina`).
   - **Refinement** (determinism): pin makespan, minimise `total_value`, then minimise
@@ -284,9 +301,12 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     holds fixed call to call — variables, the balance/track constraints,
     `gold`/`spend_value`/`total_value` — and returns a `_Base`. `_solve_configured` adds the
     per-call bit (the objective, an optional `makespan ≤ time_cap`, `favour_passive`'s
-    `pj ≤ 0` neutralisation) then runs the refinement above and reads out the
-    `SourcingPlan`. `frontier` (below) reuses one `_Base` across its ~80-call sweep
-    instead of rebuilding the LP from scratch per call (`plans/MODEL_REUSE_PLAN.md`).
+    `pj ≤ 0` neutralisation, and `pj_integer` — toggles the juice vars' `.cat` between
+    `Integer` and `Continuous` for this solve, see the Pumpkin Juice cost bullet) then
+    runs the refinement above and reads out the `SourcingPlan`, stamping it with
+    `_origin = (base, kwargs)` so `frontier` can re-solve it exact. `frontier` (below)
+    reuses one `_Base` across its ~80-call sweep instead of rebuilding the LP from
+    scratch per call (`plans/MODEL_REUSE_PLAN.md`).
     Every constraint a `_solve_configured` call adds is named and recorded in
     `base.ephemeral`; the *next* call on that base pops exactly those names first —
     **pop happens at the top of the call, not the end**, so a call that raises
@@ -342,12 +362,16 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   (accumulated-only; the old inventory/accumulated split is gone).
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
-  `_non_dominated` then `_thin` to `count`. It builds two `_build_base` bases up
-  front — `base_active` (`favour_passive=False`) shared by the fast endpoint, cheap
-  endpoint and every epsilon-cap solve; `base_passive` (`favour_passive=True`)
-  shared by the probe and every extension-cap solve — and drives every solve
-  through `_solve_configured` against one of them, instead of a fresh `minimize`
-  (full LP rebuild) per call:
+  `_non_dominated` then `_thin` to `count`, then **exact-finishes** the survivors
+  when there are juice vars: the whole sweep runs `pj_integer=False` (the cheap
+  continuous relaxation, since a MIP is ~50x an LP per solve — see the Pumpkin Juice
+  cost bullet), and only the returned plans are re-solved `pj_integer=True` from their
+  `_origin`, re-quantized/re-surplus'd, and deduped by `(time, net gold)`. It builds
+  two `_build_base` bases up front — `base_active` (`favour_passive=False`) shared by
+  the fast endpoint, cheap endpoint and every epsilon-cap solve; `base_passive`
+  (`favour_passive=True`) shared by the probe and every extension-cap solve — and
+  drives every solve through `_solve_configured` against one of them, instead of a
+  fresh `minimize` (full LP rebuild) per call:
   - **Fast regime** `[t_fast, t_cheap]` — fast endpoint (`gold_weight=_FAST_PRICE`,
     buy freely) + cheap endpoint (`_FREE_PRICE`, self-source, `gold = 0`) + an epsilon
     sweep of makespan caps (each minimising gold). Two cap sources:

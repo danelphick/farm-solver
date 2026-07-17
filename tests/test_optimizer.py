@@ -1100,6 +1100,39 @@ def test_sweep_drops_caps_no_plan_in_the_regime_can_meet():
     assert optimizer._sweep(base, [100 * 60], favour_passive=True)
 
 
+def test_solve_configured_relaxes_pumpkin_juice_when_pj_integer_false():
+    # The mechanism behind the frontier's speed: juice is normally integer (a MIP,
+    # ~50x an LP per solve), but the sweep solves the continuous relaxation. 15 units,
+    # each juice covers 10, so the relaxation drinks a fractional 1.5 juices where the
+    # integer solve rounds to 2. frontier sweeps this cheap form and only finishes the
+    # plans it returns exact.
+    base = optimizer._build_base(
+        [FARM_ITEM], {"It": 15}, {}, 1.0, [], {}, 0.0, GOLD,
+        pj_gain={"it": 10}, pj_price=5,
+    )
+    optimizer._solve_configured(base, gold_weight=BUY_FREELY, pj_integer=False)
+    # The relaxation is what the LP actually solved -- the reported count rounds it, but
+    # the variable itself is fractional (and the plan's gold is priced off it).
+    assert base.pj["it"].value() == pytest.approx(1.5)
+    exact = optimizer._solve_configured(base, gold_weight=BUY_FREELY, pj_integer=True)
+    assert base.pj["it"].value() == pytest.approx(2)
+    assert exact.pumpkin_juices.get("it") == 2
+
+
+def test_frontier_returns_whole_pumpkin_juices():
+    # The visible contract: every plan the frontier returns -- each a row of the
+    # summary table -- drinks a whole number of juices, even though the interior sweep
+    # that ranked them ran the fractional relaxation. 15 units, gain 10: the fast plan
+    # would drink a fractional 1.5 unfinished.
+    plans = frontier([FARM_ITEM], {"It": 15}, prices=GOLD, pj_gain={"it": 10}, pj_price=5)
+    drank = False
+    for plan in plans:
+        for count in plan.pumpkin_juices.values():
+            assert count == round(count), f"fractional juice {count} in a returned plan"
+            drank = True
+    assert drank  # the setup actually exercises juice, or the test proves nothing
+
+
 def test_minimize_skips_pumpkin_juice_when_favouring_passive():
     # The buy-nothing slow regime never drinks juice (a gold purchase).
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, favour_passive=True,

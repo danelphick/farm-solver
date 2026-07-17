@@ -257,6 +257,15 @@ class SourcingPlan:
     # mega'd, AK earned from steps vs. chores, gross mastery supply) -- set only
     # when :func:`minimize`/:func:`_build_base` was given an :class:`AscensionSpec`.
     ascension: AscensionOutcome | None = None
+    # What would reproduce this exact solve: ``(base, kwargs)`` for
+    # :func:`_solve_configured`. Stamped there on every plan; :func:`frontier` uses it
+    # to re-solve the plans it returns with integer Pumpkin Juice after sweeping the
+    # cheap continuous relaxation (see there). ``None`` on hand-built plans (tests) and
+    # never read except by the finish step. ``repr=False``/``compare=False`` so it does
+    # not clutter reprs or perturb equality, and excluded from ``cost``-based ranking.
+    _origin: tuple["_Base", dict] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def track_times(self) -> dict[str, timedelta]:
         """Total time each track spends, summed across this plan's draws.
@@ -1149,15 +1158,36 @@ def _solve_configured(
     gold_weight: float = 0.0,
     time_cap: timedelta | None = None,
     favour_passive: bool = False,
+    pj_integer: bool = True,
 ) -> SourcingPlan:
     """Solve ``base`` under one call's mode -- the per-call counterpart of
     :func:`_build_base`. Reusable across many calls sharing a base: every
     constraint this call adds is named and recorded in ``base.ephemeral`` so
     the *next* call's first step can remove exactly them, leaving the shared
     balance/track constraints untouched. See ``plans/MODEL_REUSE_PLAN.md``.
+
+    ``pj_integer`` decides whether the Pumpkin Juice variables solve as whole units
+    (a MIP -- ~50x the per-solve cost, see :func:`frontier`) or as the continuous
+    relaxation. :func:`frontier` sweeps its ~hundreds of interior points with
+    ``pj_integer=False`` and re-solves only the plans it returns with ``True``; a
+    bare :func:`minimize` and every other caller keep the exact default.
     """
+    origin = (
+        base,
+        {
+            "gold_weight": gold_weight,
+            "time_cap": time_cap,
+            "favour_passive": favour_passive,
+        },
+    )
     if base.remainder_only:
-        return SourcingPlan(remainder=base.remainder)
+        return SourcingPlan(remainder=base.remainder, _origin=origin)
+
+    # Toggle the juice variables' integrality for this solve. Cheap and idempotent;
+    # reuses the one shared base rather than building a second integer copy.
+    pj_cat = pulp.LpInteger if pj_integer else pulp.LpContinuous
+    for var in base.pj.values():
+        var.cat = pj_cat
 
     problem = base.problem
     # NOTE: PuLP deprecates dict-style access to `.constraints` (removal by name
@@ -1297,12 +1327,16 @@ def _solve_configured(
         # is what weighs juice against everything else), and stage 3 may not move them
         # anyway -- its own pins forbid it. Nailing them down lets the solver's presolve
         # drop the only integer columns in the model, so stage 3 runs as the pure LP it
-        # was before whole juices, which is most of the MIP's cost paid back.
-        for item, var in base.pj.items():
-            fixed = var == round(var.value() or 0.0)
-            fixed.name = f"pj_fix_{item}"
-            problem.addConstraint(fixed)
-            base.ephemeral.append(fixed.name)
+        # was before whole juices, which is most of the MIP's cost paid back. Only when
+        # solving integer: with the continuous relaxation the values are fractional, and
+        # fixing them to their rounded selves would force an integrality the sweep is
+        # deliberately dropping for speed.
+        if pj_integer:
+            for item, var in base.pj.items():
+                fixed = var == round(var.value() or 0.0)
+                fixed.name = f"pj_fix_{item}"
+                problem.addConstraint(fixed)
+                base.ephemeral.append(fixed.name)
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
@@ -1409,6 +1443,7 @@ def _solve_configured(
         },
         remainder=base.remainder,
         ascension=ascension_outcome,
+        _origin=origin,
     )
 
 
@@ -1976,7 +2011,8 @@ def plan_surplus_gold(
 
 
 def _sweep(
-    base: _Base, caps: list[float], favour_passive: bool = False
+    base: _Base, caps: list[float], favour_passive: bool = False,
+    pj_integer: bool = True,
 ) -> list[SourcingPlan]:
     """Solve ``base`` at each of ``caps`` (seconds), dropping the unmeetable ones.
 
@@ -1984,6 +2020,9 @@ def _sweep(
     :class:`_UnmeetableCap`. The remaining caps still describe the frontier; a regime
     where *every* cap is unmeetable simply contributes nothing, and the endpoints
     (solved uncapped) carry it.
+
+    ``pj_integer`` is forwarded to every solve -- :func:`frontier` sweeps ``False`` (the
+    cheap continuous relaxation) and finishes the survivors exact.
     """
     plans = []
     for cap in caps:
@@ -1991,7 +2030,7 @@ def _sweep(
             plans.append(
                 _solve_configured(
                     base, favour_passive=favour_passive,
-                    time_cap=timedelta(seconds=cap),
+                    time_cap=timedelta(seconds=cap), pj_integer=pj_integer,
                 )
             )
         except _UnmeetableCap:
@@ -2272,8 +2311,8 @@ def frontier(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
     )
-    fast = _solve_configured(base_active, gold_weight=_FAST_PRICE)
-    cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE)
+    fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, pj_integer=False)
+    cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, pj_integer=False)
     # The cheap endpoint's *continuous* makespan -- where its actual sourcing
     # finishes, before quantisation lifts the reported time to a deposit
     # boundary. The slow-regime gate below needs this, not the quantized time:
@@ -2313,7 +2352,7 @@ def frontier(
         if lo < cap < hi
     ]
     caps += breakpoints
-    plans += _sweep(base_active, caps)
+    plans += _sweep(base_active, caps, pj_integer=False)
 
     # Slow regime: extend past the cheap endpoint with favour_passive plans that lean
     # ever harder on passive/farming and bank the surplus. Bounded at t_bound, the
@@ -2327,7 +2366,7 @@ def frontier(
             offers, demand, recipes, crafting_bonus, openables, inventory,
             cookie_sets, prices, pj_gain, pj_price, pj_limit,
         )
-        probe = _solve_configured(base_passive, favour_passive=True)
+        probe = _solve_configured(base_passive, favour_passive=True, pj_integer=False)
         nonpet = _passive_completion_caps(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, passive_pet_items, quantize,
@@ -2338,7 +2377,7 @@ def frontier(
             ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
             anchors += ext_breaks
             ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
-            plans += _sweep(base_passive, ext_caps, favour_passive=True)
+            plans += _sweep(base_passive, ext_caps, favour_passive=True, pj_integer=False)
 
     # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
     # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
@@ -2349,7 +2388,7 @@ def frontier(
     # sell -- a slow, passive-leaning plan dips below zero and the frontier
     # extends past the "buy nothing" line. Both done before pruning:
     # ``_non_dominated`` and ``_thin`` both rank by the net cost.
-    for plan in plans:
+    def post(plan: SourcingPlan) -> None:
         _quantize_plan_time(
             plan, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
         )
@@ -2357,4 +2396,40 @@ def frontier(
             plan, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, prices or {},
         )
-    return _thin(_non_dominated(plans), count, tuple(anchors))
+
+    for plan in plans:
+        post(plan)
+    thinned = _thin(_non_dominated(plans), count, tuple(anchors))
+
+    # Pumpkin Juice is the model's only integer decision, and a MIP costs ~50x an LP
+    # per solve (see :func:`_solve_configured`). The whole sweep above therefore ran
+    # the cheap *continuous* relaxation, letting juice go fractional; only the handful
+    # of plans that survive thinning -- the ones actually shown, each row of the
+    # frontier table and the expanded plan -- are re-solved exact here, from the
+    # ``(base, kwargs)`` each was stamped with. ~5 MIP solves instead of hundreds. The
+    # exact plan for a point can differ from its relaxed row by up to a juice's worth of
+    # gold/time; that shifts interior *ranking* slightly (already-thinned, so harmless)
+    # but every returned plan is a real whole-juice plan. Skipped entirely when there is
+    # no juice (no integer vars -> the relaxation was already exact).
+    if base_active.pj:
+        finished = []
+        for plan in thinned:
+            if plan._origin is None:  # hand-built/remainder-only: nothing to re-solve
+                finished.append(plan)
+                continue
+            base, kwargs = plan._origin
+            exact = _solve_configured(base, pj_integer=True, **kwargs)
+            post(exact)
+            finished.append(exact)
+        # Two survivors can land on the same integer point once juice is whole; drop the
+        # duplicate rows, keeping the first (fastest-first order is preserved).
+        seen: set[tuple[int, int]] = set()
+        deduped = []
+        for plan in finished:
+            key = (round(plan.time.total_seconds()), round(plan.gold - plan.surplus_gold))
+            if key not in seen:
+                seen.add(key)
+                deduped.append(plan)
+        thinned = deduped
+
+    return thinned
