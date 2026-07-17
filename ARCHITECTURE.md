@@ -203,7 +203,7 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     — the market value of every consumable spent — so the plan leans as hard as it
     can on free passive/farming, spends the fewest tools and banks the
     over-production. `time_cap` bounds how far it runs. Its refinement pins
-    `spend_value` (not makespan), then gold, then activity — so it self-sources and
+    `spend_value` (not makespan), then `total_value`, then activity — so it self-sources and
     the makespan settles at just what passive needs, instead of buying tools to
     finish early and undoing the passive lean.
   Crafting/opening are free LP flows; passive is one aggregate offer whose bundle
@@ -227,14 +227,27 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     optional `pj_limit` total. Its gold folds into `gold`; **off in `favour_passive`**
     (the buy-nothing regime). `plan_balance` nets `pumpkin_credit` out of `need` so the
     residual/passive accounting reflects the boost, not passive, covered that slice.
+    The `pj` vars are gated on `pj_gain` alone, **never on `pj_price > 0`**: `pj_gain` is
+    already empty when juice is off, so a present price of 0 means *free juice*, not *no
+    juice* (the falsy-zero trap `[trading]` prices hit in d78542e).
   - `inventory` credits every item's balance **except directly-demanded ones**
     (their need is already net of stock; stamina is seeded by `--current-stamina`).
-  - **Refinement** (determinism): pin makespan, minimise `gold`, then minimise
-    activity (crafts + gathering + buys) — pins `(time, gold)` then sheds slack.
+  - **Refinement** (determinism): pin makespan, minimise `total_value`, then minimise
+    activity (crafts + gathering + buys) — pins `(time, value)` then sheds slack.
+    Stage 2 minimises **`total_value`** (`spend_value` + juice gold: the LP form of
+    `plan_gold` — everything spent at market price, bought or drawn from stock), not
+    `gold`. `gold` charges only what a plan *buys*, and juice — the one consumable with
+    no self-sourced form — is always bought, so least-gold read as *fewest juices* and
+    would burn tens of thousands of held AP/LN/cider to dodge a few juices. It was also
+    numerically unresolvable: a `pj` column carries a ~1e5 `pj_gain` against a
+    `pj_price` cost, so at a low price the least-gold optimum sat under HiGHS's
+    tolerance and the juice count fell from 13 to 5 when the price rose 0.0005→0.001.
+    The Pareto axis stays **bought gold**: stage 2 pins `gold` too (`stage2_gold_pin`),
+    in epsilon mode *before* it runs, since that is what stage 1 minimised.
   - **`_build_base`/`_solve_configured` split**: `minimize` itself is `_build_base`
     (once) + one `_solve_configured` call. `_build_base` builds everything a sweep
     holds fixed call to call — variables, the balance/track constraints,
-    `gold`/`spend_value` — and returns a `_Base`. `_solve_configured` adds the
+    `gold`/`spend_value`/`total_value` — and returns a `_Base`. `_solve_configured` adds the
     per-call bit (the objective, an optional `makespan ≤ time_cap`, `favour_passive`'s
     `pj ≤ 0` neutralisation) then runs the refinement above and reads out the
     `SourcingPlan`. `frontier` (below) reuses one `_Base` across its ~80-call sweep

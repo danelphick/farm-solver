@@ -389,6 +389,11 @@ class _Base:
     pj: dict[str, pulp.LpVariable]
     gold: pulp.LpAffineExpression
     spend_value: pulp.LpAffineExpression
+    # The market value of everything the plan spends, whichever way it was sourced:
+    # ``spend_value`` (every consumable, bought or drawn from stock) plus the juice
+    # gold. The LP form of :func:`plan_gold`, and what stage 2 of the refinement
+    # tower minimises -- see :func:`_solve_configured`.
+    total_value: pulp.LpAffineExpression
     used: list[Offer]
     crafted: list[str]
     opened: list[OpenFlow]
@@ -512,7 +517,7 @@ def _build_base(
         return _Base(
             problem=pulp.LpProblem("sourcing", pulp.LpMinimize),
             usage=[], craft={}, opens=[], makespan=pulp.LpVariable("T", lowBound=0),
-            buy={}, buy_cookie=None, pj={}, gold=0, spend_value=0,
+            buy={}, buy_cookie=None, pj={}, gold=0, spend_value=0, total_value=0,
             used=[], crafted=[], opened=[], remainder=remainder,
             pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
         )
@@ -596,8 +601,12 @@ def _build_base(
     # regime -- built unconditionally here since one base serves both regimes;
     # ``_solve_configured`` neutralises it per call with an ephemeral ``pj <= 0``
     # when ``favour_passive``. Its gold folds into the same ``gold`` the LP minimises.
+    # Gated on ``pj_gain`` alone, never on the price: ``pj_gain`` is already empty
+    # when juice is switched off (see main.build_inputs), so a present price of 0
+    # means "juice is free", not "no juice" -- the same falsy-zero trap fixed for
+    # ``[trading]`` prices.
     pj = {}
-    if pj_gain and pj_price > 0:
+    if pj_gain:
         pj = {
             item: pulp.LpVariable(f"pj{i}", lowBound=0)
             for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys()))
@@ -628,6 +637,14 @@ def _build_base(
         * x
         for o, x in zip(used, usage)
     ) + cookies * prices.get("cookie set", 0.0)
+
+    # Total market value spent, the stage-2 tie-break (see :func:`_solve_configured`).
+    # ``spend_value`` already values every consumable at its price whether bought or
+    # drawn from stock, so adding the juice gold -- juice being the one consumable
+    # with no self-sourced form, and so absent from ``spend_value`` -- completes it.
+    # Buying is not double-charged: ``buy[i] <= consumed + used_up + emptied`` caps
+    # purchases at what the plan actually spends, which ``spend_value`` already counts.
+    total_value = spend_value + (pj_price * pulp.lpSum(pj.values()) if pj else 0)
 
     # Index each offer's yields/consumes by item once, so the per-item loop below
     # doesn't rescan every offer twice (via ``yield_of``) for every item.
@@ -757,6 +774,7 @@ def _build_base(
     return _Base(
         problem=problem, usage=usage, craft=craft, opens=opens, makespan=makespan,
         buy=buy, buy_cookie=buy_cookie, pj=pj, gold=gold, spend_value=spend_value,
+        total_value=total_value,
         used=used, crafted=crafted, opened=opened, remainder=remainder,
         pj_gain=pj_gain, pj_price=pj_price,
         ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
@@ -1140,17 +1158,33 @@ def _solve_configured(
     #
     #   1. cost      -- the first solve above (weighted sum, epsilon cap, or, in
     #                   favour_passive mode, least spend_value under the time cap)
-    #   2. gold      -- least gold at that point, the single priced axis
+    #   2. value     -- least total_value at that point: the market value of
+    #                   everything spent, however sourced
     #   3. activity  -- least crafts + gathering + buying, shedding pointless slack
     #
     # Stage 2 is the crux. In a weighted-sum endpoint the makespan term (~1e5
     # minutes) dwarfs the tiny-weighted gold (~1e-6 for the fastest plan), so within
-    # CBC's tolerance it is free and the first solve parks the buys on an arbitrary
-    # degenerate vertex -- buying Large Nets or Grape Juice that bought no time. Gold
-    # is the Pareto cost, so a plan paying more for no time gain is strictly worse:
-    # with the primary pinned we re-minimise gold alone (now the sole objective, at
-    # a scale CBC resolves), pinning the genuinely cheapest plan. Stage 3 then sheds
-    # surplus crafts / off-track farming without moving time or gold.
+    # the solver's tolerance it is free and the first solve parks the buys on an
+    # arbitrary degenerate vertex -- buying Large Nets or Grape Juice that bought no
+    # time. A plan spending more for no time gain is strictly worse, so with the
+    # primary pinned we re-minimise that spend alone (now the sole objective, at a
+    # scale the solver resolves), pinning the genuinely cheapest plan. Stage 3 then
+    # sheds surplus crafts / off-track farming without moving time or value.
+    #
+    # It minimises ``total_value``, not ``gold``, because gold alone charges only what
+    # a plan *buys* -- and Pumpkin Juice, having no self-sourced form, is the one
+    # consumable whose every use is a purchase. Least-gold therefore read as
+    # "fewest juices" and would burn tens of thousands of held Arnold Palmers, Large
+    # Nets and Apple Cider (thousands of gold at market) to dodge a handful of juices
+    # worth a fraction of a gold. Charging held stock at the same price as bought
+    # stock makes that trade honest. It also fixes a numerical failure: a juice column
+    # carries a ~1e5 demand coefficient (``pj_gain``) against a gold coefficient of
+    # the juice price, so at a low price the least-gold optimum sat below HiGHS's
+    # resolution -- whether it shed juice at all depended on presolve luck, and the
+    # juice count fell from 13 to 5 when the price rose from just 0.0005 to 0.001.
+    # Against ``total_value`` the same choice is decided by thousands of gold, not
+    # thousandths. The frontier's Pareto axis stays bought gold: in epsilon mode that
+    # is what stage 1 minimised, and it is pinned below before this stage runs.
     #
     # Stage 1's pin differs by mode. Normally the makespan is pinned (the first solve
     # minimised it). In favour_passive mode it is spend_value that was minimised, so
@@ -1169,26 +1203,33 @@ def _solve_configured(
             problem += (base.makespan <= t_star * (1 + 1e-9) + 1e-9, "stage1_pin")
         base.ephemeral.append("stage1_pin")
 
-        # Stage 2 -- least gold at the pinned primary, then lock it. Skipped when
-        # nothing is buyable (gold is a constant 0, an empty objective CBC rejects).
-        # Also skipped in epsilon-constraint mode: stage 1 already minimised gold
-        # under `makespan <= time_cap`, and stage 1's `t_star` pin above only
-        # tightens that same bound, so a re-solve here is a provable no-op -- pin
-        # gold from the stage-1 solution directly instead.
-        if base.buy or base.buy_cookie is not None or base.pj:
+        # Stage 2 -- least total value at the pinned primary, then lock it. Skipped
+        # when nothing priced is spendable at all (an all-zero objective, which the
+        # solvers reject). In epsilon-constraint mode stage 1 minimised gold under
+        # `makespan <= time_cap` and that is the frontier's Pareto axis, so pin it
+        # first: this stage may then only choose among equally cheap-to-buy plans.
+        if any(base.total_value.values()):
             if time_cap is not None and not favour_passive:
                 problem += (
                     base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
-                    "stage2_pin",
+                    "stage2_gold_pin",
                 )
-            else:
-                problem.setObjective(base.gold)
-                problem.solve(solver)
+                base.ephemeral.append("stage2_gold_pin")
+            problem.setObjective(base.total_value)
+            problem.solve(solver)
+            problem += (
+                base.total_value <= (pulp.value(base.total_value) or 0.0) * (1 + 1e-9) + 1e-9,
+                "stage2_pin",
+            )
+            base.ephemeral.append("stage2_pin")
+            # Lock the Pareto axis too, at whatever the least-value plan spends, so
+            # stage 3 cannot trade gold for activity behind the value pin.
+            if "stage2_gold_pin" not in base.ephemeral:
                 problem += (
                     base.gold <= (pulp.value(base.gold) or 0.0) * (1 + 1e-9) + 1e-9,
-                    "stage2_pin",
+                    "stage2_gold_pin",
                 )
-            base.ephemeral.append("stage2_pin")
+                base.ephemeral.append("stage2_gold_pin")
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(

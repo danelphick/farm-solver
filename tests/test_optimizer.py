@@ -1036,6 +1036,32 @@ def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():
     assert plan.time == timedelta(minutes=100)
 
 
+def test_minimize_drinks_pumpkin_juice_priced_at_zero():
+    # A present price of 0 means juice is *free*, not off: gating the pj vars on
+    # `pj_price > 0` silently disabled the whole mechanism (the falsy-zero trap).
+    # `pj_gain` alone says whether juice is enabled -- main leaves it empty when not.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": 10}, pj_price=0)
+    assert plan.pumpkin_juices.get("it") == pytest.approx(10)
+    assert plan.pumpkin_gold == pytest.approx(0)
+    assert plan.time == timedelta(0)
+
+
+def test_minimize_pumpkin_juice_count_is_stable_across_tiny_prices():
+    # Juice is the only consumable with no self-sourced form, so its every use is a
+    # purchase -- minimising *bought gold* in the refinement's stage 2 therefore read
+    # as "fewest juices" and traded away near-free juice for held stock. It also put
+    # the choice below the solver's resolution (a ~1e5 pj_gain against a ~1e-3 cost),
+    # so the count flipped on a price change from 0.0005 to 0.001. Stage 2 minimises
+    # total_value instead, so a cheaper juice is never used *less*.
+    counts = [
+        minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                 pj_gain={"it": 10}, pj_price=price).pumpkin_juices.get("it", 0.0)
+        for price in (0.0, 0.0001, 0.0005, 0.001, 0.01)
+    ]
+    assert counts == [pytest.approx(10)] * 5
+
+
 def test_minimize_skips_pumpkin_juice_when_favouring_passive():
     # The buy-nothing slow regime never drinks juice (a gold purchase).
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, favour_passive=True,
