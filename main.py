@@ -15,9 +15,11 @@ from __future__ import annotations
 import argparse
 import copy
 import math
+import os
 import sys
 import tomllib
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -533,6 +535,18 @@ def build_parser() -> argparse.ArgumentParser:
             "proportionally faster -- at the cost of a sparser frontier "
             "between the endpoints. 2 still finds the fastest and the "
             "cheapest plans exactly"
+        ),
+    )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "how many worker processes to fan the --ascend gold-weight sweep "
+            "across (the passes are independent). Default: one per CPU (or the "
+            "FARM_SOLVER_ASCEND_JOBS env var), capped at the pass count. 1 forces "
+            "the in-process sequential path. Ignored outside --ascend"
         ),
     )
     parser.add_argument(
@@ -2072,6 +2086,84 @@ def _select_megas(
     return chosen, set(base.unmasterable)
 
 
+# --- Parallel gold-weight sweep (ascension mode) ---------------------------
+#
+# solve_ascension_frontier's gold-weight passes are independent: each
+# _run_ascend_pass takes the pass-invariant per-stage setup plus one gold
+# weight and returns its own StagedPlan. On a heavy fresh-account climb the
+# sweep is the wall-time knob (e.g. 0->200 --empty-mastery: 16 passes x 10
+# stages of ~10k trial re-solves), so the passes fan out across processes.
+# HiGHS/PuLP hold non-thread-safe solver state, so this MUST be process-based,
+# never threads.
+#
+# The invariant setup (offers/setups/production/...) is shipped to each worker
+# ONCE via the pool initializer and stashed in a module global, so a 16-task
+# sweep pickles it ~once per worker rather than once per task. Each worker keeps
+# its own base_cache (the cross-pass LP-construction reuse _build_base wants)
+# for whatever chunk of weights it handles; cross-worker reuse is lost, but that
+# only ever saved base *construction*, never the dominant solving -- and a
+# base_cache hit is exact reuse (via _solve_configured's ephemeral mechanism),
+# so a pass's result is identical whether its base was freshly built, reused
+# within a worker, or reused across the sequential sweep. That identity is what
+# makes the parallel and sequential frontiers byte-for-byte the same.
+_ASCEND_WORKER_PAYLOAD: dict | None = None
+_ASCEND_WORKER_BASE_CACHE: dict = {}
+
+
+def _ascend_worker_init(payload: dict) -> None:
+    """Pool initializer: stash the pass-invariant setup + a fresh base_cache."""
+    global _ASCEND_WORKER_PAYLOAD, _ASCEND_WORKER_BASE_CACHE
+    _ASCEND_WORKER_PAYLOAD = payload
+    _ASCEND_WORKER_BASE_CACHE = {}
+
+
+def _strip_ascend_origins(staged: StagedPlan) -> None:
+    """Drop each stage plan's ``_origin`` before it crosses a process boundary.
+
+    ``optimizer._solve_configured`` stamps every plan with ``_origin = (base,
+    kwargs)`` so ``optimizer.frontier`` can re-solve it exact -- but ascension
+    mode never uses that path (Pumpkin Juice is rejected in --ascend, so there
+    is no integer finish), and the ``_Base`` it points at holds a live HiGHS
+    solver model that cannot pickle (``cannot pickle 'Highs' object``).
+    ``_origin`` is ``compare=False, repr=False`` and read nowhere in ascension,
+    so clearing it is invisible to the report and to the frontier pruning.
+    """
+    for stage in staged.stages:
+        if getattr(stage.plan, "_origin", None) is not None:
+            stage.plan._origin = None
+
+
+def _ascend_worker_run(gold_weight: float) -> tuple[StagedPlan, set[str]]:
+    """Solve one gold-weight pass in a worker, using the stashed setup."""
+    payload = _ASCEND_WORKER_PAYLOAD
+    assert payload is not None, "worker used before _ascend_worker_init"
+    staged, unmasterable = _run_ascend_pass(
+        payload["stage_crafting_bonus"], payload["stage_setups"],
+        payload["stage_offers"], payload["stage_quantize"],
+        payload["stage_production"], payload["bounds"], payload["state"],
+        payload["args"], payload["starting_ak"], gold_weight,
+        payload["mega_schedule"], payload["catalogue"],
+        base_cache=_ASCEND_WORKER_BASE_CACHE,
+    )
+    _strip_ascend_origins(staged)
+    return staged, unmasterable
+
+
+def _ascend_worker_count(n_passes: int, args: argparse.Namespace) -> int:
+    """How many worker processes to fan the gold-weight sweep across.
+
+    ``--jobs`` wins if given (``--jobs 1`` forces the in-process sequential
+    path); else the ``FARM_SOLVER_ASCEND_JOBS`` env var (the webapp sets this so
+    its own worker pool controls nesting); else one per CPU. Always at least 1
+    and never more than ``n_passes`` (a pass per worker at most).
+    """
+    requested = getattr(args, "jobs", None)
+    if requested is None:
+        env = os.environ.get("FARM_SOLVER_ASCEND_JOBS")
+        requested = int(env) if env else (os.cpu_count() or 1)
+    return max(1, min(requested, n_passes))
+
+
 def solve_ascension_frontier(
     args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
 ) -> AscensionFrontierResult:
@@ -2183,19 +2275,54 @@ def solve_ascension_frontier(
 
     unmasterable: set[str] = set(mega_unmasterable)
     staged_plans: list[StagedPlan] = []
-    base_cache: dict = {}
     n_interior = (
         args.sweep - 2 if args.sweep is not None else _ASCEND_SWEEP_INTERIOR
     )
-    for gold_weight in _ascend_gold_weights(n_interior):
-        staged, pass_unmasterable = _run_ascend_pass(
-            stage_crafting_bonus, stage_setups, stage_offers,
-            stage_quantize, stage_production, bounds, state, args, starting_ak,
-            gold_weight, mega_schedule, catalogue.values(),
-            base_cache=base_cache,
-        )
-        unmasterable.update(pass_unmasterable)
-        staged_plans.append(staged)
+    gold_weights = _ascend_gold_weights(n_interior)
+    n_workers = _ascend_worker_count(len(gold_weights), args)
+    if n_workers <= 1:
+        # In-process sequential path: one shared base_cache across every pass
+        # (the reuse _run_ascend_pass's docstring describes).
+        base_cache: dict = {}
+        for gold_weight in gold_weights:
+            staged, pass_unmasterable = _run_ascend_pass(
+                stage_crafting_bonus, stage_setups, stage_offers,
+                stage_quantize, stage_production, bounds, state, args,
+                starting_ak, gold_weight, mega_schedule, catalogue.values(),
+                base_cache=base_cache,
+            )
+            unmasterable.update(pass_unmasterable)
+            staged_plans.append(staged)
+    else:
+        # Fan the independent passes across processes. The invariant setup goes
+        # to each worker once (initializer); each task ships only a gold weight.
+        # pool.map preserves input order, so staged_plans stays in gold-weight
+        # order exactly as the sequential path produces it -- and each pass's
+        # result is base_cache-independent (exact ephemeral reuse), so the two
+        # paths' frontiers are byte-for-byte identical.
+        payload = {
+            "stage_crafting_bonus": stage_crafting_bonus,
+            "stage_setups": stage_setups,
+            "stage_offers": stage_offers,
+            "stage_quantize": stage_quantize,
+            "stage_production": stage_production,
+            "bounds": bounds,
+            "state": state,
+            "args": args,
+            "starting_ak": starting_ak,
+            "mega_schedule": mega_schedule,
+            "catalogue": list(catalogue.values()),
+        }
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            initializer=_ascend_worker_init,
+            initargs=(payload,),
+        ) as pool:
+            for staged, pass_unmasterable in pool.map(
+                _ascend_worker_run, gold_weights
+            ):
+                unmasterable.update(pass_unmasterable)
+                staged_plans.append(staged)
 
     # Bound the slow end at the chore-only time: every AK earned from chores
     # alone, with not one item mastered, takes ak_cost/rate days -- no plan

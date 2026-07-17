@@ -153,6 +153,33 @@ def test_ascension_frontier_spans_distinct_endpoints_with_a_gold_tradeoff(monkey
     assert result.plans[0].cost[1] > result.plans[-1].cost[1]
 
 
+def test_parallel_and_sequential_sweeps_produce_the_same_frontier(monkeypatch):
+    # The gold-weight passes fan out across processes by default (--jobs); a
+    # pass's result is base_cache-independent (exact ephemeral reuse), so the
+    # parallel and in-process (--jobs 1) frontiers must match exactly. Guards
+    # against a future change to _run_ascend_pass that quietly reintroduces a
+    # cross-pass dependency. (_patch_ascend_offers patches the setup half, which
+    # runs in the parent and is pickled to the workers, so the stub reaches them.)
+    explore = sources.Offer(
+        "explore for gizmo", "exploring", {"gizmo": 1}, {"arnold palmer": 1},
+        time_per_unit=timedelta(minutes=1),
+    )
+    gather_ap = sources.Offer(
+        "gather ap", "farming", {"arnold palmer": 1}, time_per_unit=timedelta(minutes=1000)
+    )
+    _patch_ascend_offers(monkeypatch, [explore, gather_ap], prices={"arnold palmer": 1.0})
+    state = GameState(masteries={"gizmo": Mastery("gizmo", progress=89900, required=100000)})
+
+    def costs(jobs):
+        args = main.build_parser().parse_args(
+            ["--ascend", "1", "--plans", "6", "--jobs", str(jobs)]
+        )
+        result = main.solve_ascension_frontier(args, {}, state)
+        return [p.cost for p in result.plans]
+
+    assert costs(2) == costs(1)
+
+
 # --- 4. State evolution ------------------------------------------------------
 
 
@@ -262,7 +289,13 @@ def test_ascend_sweep_flag_bounds_the_number_of_passes(monkeypatch):
         return orig(*a, **k)
     monkeypatch.setattr(main, "_run_ascend_pass", counting)
     state = GameState(masteries={})
-    args = main.build_parser().parse_args(["--ascend", "1", "--sweep", "2"])
+    # --jobs 1 forces the in-process sequential sweep so this monkeypatch is
+    # actually exercised: the default parallel path runs _run_ascend_pass in
+    # worker processes the parent's patch never reaches (they'd re-import main
+    # unpatched), leaving the counter at 0.
+    args = main.build_parser().parse_args(
+        ["--ascend", "1", "--sweep", "2", "--jobs", "1"]
+    )
     result = main.solve_ascension_frontier(args, {}, state)
     assert passes == 2
     assert result.plans

@@ -733,7 +733,9 @@ stage, since each stage's config/production/inventory differs.
   selection on the base and re-trying it at later sweep weights behind a
   bound-relative adoption gate — the gate almost never validates (the
   correct selection still prices far above the weak bound), measured a
-  ~0–6% no-op. `--sweep` remains the honest lever. No `favour_passive`
+  ~0–6% no-op. `--sweep` remains the honest *algorithmic* lever; the passes
+  are also fanned across processes (see **Parallel sweep** below), which is
+  where the real wall-time wins now come from. No `favour_passive`
   slow-regime extension in
   v1: the chore-AK tradeoff already stretches the slow end on its own (a
   pricier gold weight masters fewer candidates and waits longer on chores
@@ -749,6 +751,38 @@ stage, since each stage's config/production/inventory differs.
   which work purely off `.time`/`.gold`/`.surplus_gold`/`.cost` — then
   prune/thin the resulting `StagedPlan`s exactly as they do `SourcingPlan`s,
   reused as-is (duck-typed) rather than a parallel copy of the pruning logic.
+- **Parallel sweep** (`_ascend_worker_init`/`_ascend_worker_run`/
+  `_ascend_worker_count`, `--jobs`): the gold-weight passes are independent
+  (each `_run_ascend_pass` is one weight in → one `StagedPlan` out), so they
+  fan out across a `ProcessPoolExecutor` — **processes, not threads**, since
+  HiGHS/PuLP hold non-thread-safe solver state (the same reason the web app
+  serialises on a single-solve semaphore). The pass-invariant per-stage setup
+  (offers/setups/production/`mega_schedule`/…, all built once in the parent) is
+  shipped to each worker **once** via the pool `initializer` and stashed in a
+  module global; each task ships only its `gold_weight`. `pool.map` preserves
+  input order so `staged_plans` stays gold-weight-ordered exactly as the
+  sequential path builds it. **Correctness rests on base_cache-independence:** a
+  pass's result is identical whether its `_build_base` was freshly built, reused
+  within a worker's own `base_cache`, or reused across the in-process sweep
+  (ephemeral reuse is exact, never an approximation), so the parallel and
+  `--jobs 1` frontiers are byte-for-byte identical — asserted by
+  `test_parallel_and_sequential_sweeps_produce_the_same_frontier`. One wrinkle:
+  `_solve_configured` stamps every plan with `_origin = (base, kwargs)` for
+  `optimizer.frontier`'s exact-finish, and that `_Base` holds a live HiGHS model
+  that **cannot pickle** (`cannot pickle 'Highs' object`); ascension never uses
+  `_origin` (no juice → no integer finish), so `_strip_ascend_origins` clears it
+  in the worker before the `StagedPlan` crosses back (`_origin` is
+  `compare=False, repr=False`, invisible to the report and pruning). Worker
+  count: `--jobs N` (`--jobs 1` forces the in-process path), else the
+  `FARM_SOLVER_ASCEND_JOBS` env var (the web app sets this so its own worker
+  pool controls nesting), else one per CPU, capped at the pass count.
+  Measured on a fresh-account climb: `--tower-level 0 --ascend 200
+  --empty-mastery` ~72s → ~15s, `--tower-level 40 --ascend 60 --empty-mastery`
+  ~69s → ~8s, byte-identical output. The speedup is bounded by the single
+  heaviest pass (the buy-freely fast endpoint selects the most candidates and
+  its stages are inherently sequential — each depends on the previous stage's
+  evolved inventory/masteries/AK carry), so it is sub-linear at low sweep
+  counts but the whole 0→200 case now clears in seconds.
 - **v1 approximations** (all called out again at their own site in the
   docstrings): **steady-state calendar** — every stage's passive production
   (seasonal pets, the Mechanical Heart's grants) is the yearly/monthly
