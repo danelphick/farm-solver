@@ -320,7 +320,14 @@ class AscensionSpec:
 
 @dataclass
 class AscensionOutcome:
-    """One stage's plan, as produced by the optimiser (milestone 3)."""
+    """One stage's plan, as produced by the optimiser (milestone 3).
+
+    ``masters``/``grandmasters`` are the steps the LP *selected* (they back
+    the AK ledger); ``megas`` is every 1M-threshold **crossing** the stage's
+    gross supply achieves, selected or incidental -- see
+    ``optimizer._ascension_outcome`` for why the two notions differ and why
+    crossings are the truthful mega readout.
+    """
 
     masters: list[str]
     grandmasters: list[str]

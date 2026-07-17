@@ -1260,6 +1260,30 @@ def test_minimize_ascension_mega_floor_does_not_change_which_item_is_cheapest():
     assert plan.ascension.megas == ["cheap"]
 
 
+def test_minimize_ascension_reports_incidental_mega_crossings():
+    # ``megas`` reports 1M-threshold CROSSINGS, not y selections (see
+    # _ascension_outcome): an item whose gross supply covers its whole
+    # remaining distance to 1M is a real megamastery the climb earns --
+    # ascension.advance will count it next stage -- even though nothing
+    # needed its y_mega (megas_required is 0 here). "ore" is only produced
+    # as the ingredient of the ring master the AK requirement forces:
+    # ~91 ring crafts consume ~909 ore, whose gross supply (~1000) covers
+    # ore's remaining 500 to mega.
+    gather = Offer("gather ore", "farming", {"ore": 1}, time_per_unit=timedelta(seconds=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("ring", 100, None, None),
+            ascension.StepCandidate("ore", None, None, 500),
+        ],
+        ak_required=10,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([gather], {}, recipes={"ring": {"ore": 10}}, ascension=spec)
+    assert plan.ascension.masters == ["ring"]
+    assert plan.ascension.megas == ["ore"]
+
+
 def test_minimize_ascension_rounds_fractional_relaxation_to_integral_selection():
     # Two equal-cost candidates each need delta_master=10; ak_required=15 means
     # the LP relaxation can satisfy it with 1.5 masters' worth split across both
@@ -1363,88 +1387,39 @@ def test_minimize_ascension_with_empty_demand_does_not_early_exit():
     assert plan.ascension.masters == ["cheap"]
 
 
-def test_minimize_ascension_credits_steps_supply_crosses_without_selection():
-    # "side" rides along on the demanded item's own offer: sourcing 100 "main"
-    # co-produces 100 "side" (110 gross supply after the 1.1 mastery bonus),
-    # carrying it past master (10) and grandmaster (10 + 90) with no step
-    # selected at all (ak_required is 0, so the LP pins every y down).
-    # ascension.advance moves its progress across both thresholds regardless
-    # -- and the game pays their AK -- so the outcome must credit them.
-    # "scrap" only reaches ~5.5 supply and must stay uncredited.
+def test_ascension_free_crossings_end_up_selected():
+    # "side" and "bonus" ride along on the demanded item's own offer (100
+    # "main" co-produces 100 of each = 110 gross supply after the 1.1
+    # mastery bonus), so their steps cost nothing; ak_required=115 exceeds
+    # what side alone pays (110), so bonus must be picked up too. Whatever
+    # vertex the relaxation lands on -- integral, or fractional across the
+    # free steps -- every supply-covered step the AK requirement leans on
+    # must come back SELECTED (the loop's provable pin-up shortcut prefers
+    # completing a free step over dropping it). "scrap" (~5.5 supply, short
+    # of its 10 delta) must stay unselected: forcing it up would cost real
+    # production.
     bundle = Offer(
-        "gather main", "farming", {"main": 1, "side": 1, "scrap": 0.05},
+        "gather main", "farming",
+        {"main": 1, "side": 1, "bonus": 1, "scrap": 0.05},
         time_per_unit=timedelta(minutes=1),
     )
     spec = ascension.AscensionSpec(
         candidates=[
             ascension.StepCandidate("side", 10, 90, None),
+            ascension.StepCandidate("bonus", 10, None, None),
             ascension.StepCandidate("scrap", 10, 90, None),
         ],
-        ak_required=0,
+        ak_required=115,
         chore_rate_per_day=0,
         megas_required=0,
     )
     plan = minimize([bundle], {"main": 100}, ascension=spec)
-    assert plan.ascension.masters == ["side"]
+    assert plan.ascension.masters == ["bonus", "side"]
     assert plan.ascension.grandmasters == ["side"]
-    assert plan.ascension.ak_from_steps == pytest.approx(110)
-
-
-def test_minimize_ascension_mip_escape_lands_a_covering_integral_plan(monkeypatch):
-    # A zero round budget sends the first fractional solve through the MIP
-    # escape (_mip_finish) instead of the two-sided loop; it must land the
-    # same integral selection the loop's own fractional-relaxation test pins
-    # (ak 15 over two 10-delta candidates -> both mastered). On a backend
-    # with no in-process model the escape is a no-op and the loop still
-    # settles it, so this holds either way.
-    import optimizer as optimizer_module
-
-    monkeypatch.setattr(optimizer_module, "_ASCEND_ROUND_BUDGET", 0)
-    a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
-    b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
-    spec = ascension.AscensionSpec(
-        candidates=[
-            ascension.StepCandidate("a", 10, None, None),
-            ascension.StepCandidate("b", 10, None, None),
-        ],
-        ak_required=15,
-        chore_rate_per_day=0,
-        megas_required=0,
-    )
-    plan = minimize([a, b], {}, ascension=spec)
-    assert sorted(plan.ascension.masters) == ["a", "b"]
-    assert plan.ascension.ak_from_steps == pytest.approx(20)
-
-
-def test_solve_configured_caches_and_reuses_the_mip_selection(monkeypatch):
-    # After a MIP escape, the base carries the integral selection
-    # (ascend_mip); the next call on the same base re-tries it with one
-    # pinned LP solve and keeps it when it prices out within the MIP's gap.
-    # Both calls must cover the AK requirement integrally.
-    import optimizer as optimizer_module
-
-    if optimizer_module._backend != "highs":
-        pytest.skip("the MIP escape needs the in-process HiGHS model")
-    monkeypatch.setattr(optimizer_module, "_ASCEND_ROUND_BUDGET", 0)
-    a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
-    b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
-    spec = ascension.AscensionSpec(
-        candidates=[
-            ascension.StepCandidate("a", 10, None, None),
-            ascension.StepCandidate("b", 10, None, None),
-        ],
-        ak_required=15,
-        chore_rate_per_day=0,
-        megas_required=0,
-    )
-    base = _build_base([a, b], {}, ascension=spec)
-    first = optimizer_module._solve_configured(base, gold_weight=1e-9)
-    assert base.ascend_mip is not None
-    assert sum(base.ascend_mip.values()) == 2
-    second = optimizer_module._solve_configured(base, gold_weight=1e-8)
-    for plan in (first, second):
-        assert sorted(plan.ascension.masters) == ["a", "b"]
-        assert plan.ascension.ak_from_steps == pytest.approx(20)
+    assert plan.ascension.ak_from_steps == pytest.approx(120)
+    # The free steps cost nothing: the plan is still just the demand's own
+    # 100 gathers (a second of tolerance absorbs makespan-variable float dust).
+    assert abs(plan.time - timedelta(minutes=100)) < timedelta(seconds=1)
 
 
 def test_build_base_drops_unmasterable_candidates():

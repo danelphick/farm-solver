@@ -410,14 +410,6 @@ class _Base:
     ascend_y: dict[str, dict[str, pulp.LpVariable]] = field(default_factory=dict)
     ascend_S: dict[str, pulp.LpAffineExpression] = field(default_factory=dict)
     unmasterable: list[str] = field(default_factory=list)
-    # The integral step selection the last _mip_finish adopted on this base
-    # (None until a MIP has run): a sweep re-solves one base at many gold
-    # weights whose optimal selections mostly coincide, so the next call first
-    # re-tries this selection with one pinned LP solve and keeps it when it
-    # prices out within the MIP's own gap -- see _round_and_fix_ascension.
-    # Only ever set by the MIP path, so every case the rounding loop handles
-    # itself (all real-save-sized candidate sets) is byte-identical to before.
-    ascend_mip: dict[tuple[str, str], int] | None = None
 
 
 def _build_base(
@@ -824,23 +816,6 @@ _ASCEND_PREREQS: dict[str, tuple[str, ...]] = {
     "mega": ("master", "grandmaster"),
 }
 
-# The sparse-mastery escape hatch's knobs (see _round_and_fix_ascension's
-# docstring): how many one-step rounds the two-sided loop may spend before its
-# remaining fractions go to one HiGHS MIP solve, and that MIP's termination
-# tolerances -- relative/absolute optimality gap (the loop itself never had a
-# bound at all; the absolute gap, in objective units of minutes + weighted
-# gold, stops branch-and-bound proving exactness on the near-zero degenerate
-# objectives the symmetric candidate flood produces) and a wall-clock cap
-# (a limit hit still adopts a feasible incumbent). Real-save candidate sets
-# settle within ~a hundred rounds at well under a millisecond per trial (the
-# models are small and warm-started), so they never reach the MIP and keep
-# the loop's exact historical plans; the flood pays the budget's trials once
-# per base -- later calls skip straight to the MIP via the selection cache.
-_ASCEND_ROUND_BUDGET = 128
-_ASCEND_MIP_REL_GAP = 0.01
-_ASCEND_MIP_ABS_GAP = 1.0
-_ASCEND_MIP_TIME_LIMIT = 1.0
-
 
 def _round_and_fix_ascension(
     base: _Base, solver: pulp.LpSolver, *, check: bool = True
@@ -884,19 +859,6 @@ def _round_and_fix_ascension(
     pin-down that would break the requirement simply solves worse (or not at
     all, with a zero chore rate) and loses to the pin-up.
 
-    One escape hatch, for the sparse-mastery flood: when the paste is missing
-    most of the masterable catalogue (an empty or level-0 save), hundreds of
-    interchangeable progress-0 candidates enter the model, shared draws
-    co-produce whole channels of them at once, and every pin-down re-spreads
-    the same fraction onto a fresh item -- one-variable-per-round rounding
-    then walks the entire catalogue (~380 rounds, ~90s, for a one-level
-    climb). A round budget detects the churn and hands the remaining
-    selection to one HiGHS MIP solve over the same model (``_mip_finish``):
-    the exact decision the trials approximate, priced by branch-and-bound
-    instead of enumeration. Small fractional sets -- every real-save case --
-    never trip the budget, so their behaviour is unchanged, as is every
-    solve on a backend with no in-process model (CBC).
-
     A trial pin is a *bound flip* (``y`` fixed to 0 or 1), never a structural
     edit, so trials skip pulp's full model rebuild (which costs several times
     the actual solve on real candidate sets): when the primary solve ran on
@@ -906,7 +868,9 @@ def _round_and_fix_ascension(
     basis. On any other backend (CBC fallback, or after a mid-loop rescue)
     trials flip the pulp variables' own bounds and re-solve through pulp.
     Each round keeps the winning trial's solution snapshot -- no third solve
-    to restore the winner. The decisions are materialised at the end as
+    to restore the winner -- and skips the pin-down trial entirely whenever
+    pin-up achieves the running relaxation bound (provably unbeatable, see
+    the loop comment). The decisions are materialised at the end as
     ordinary ephemeral pin constraints (with the y bounds restored to
     ``[0, 1]``), so the refinement tower and the next call's ephemeral pop
     see exactly the constraints the bound-free implementation left.
@@ -952,28 +916,16 @@ def _round_and_fix_ascension(
         (item, step): var.value() or 0.0 for item, step, var in all_steps
     }
     decided: dict[tuple[str, str], int] = {}
-
-    # Round budget: one decision per round is fine when the fractional set is
-    # small and stable (every real-save case: a full paste leaves few
-    # candidates, and pins settle quickly -- measured <= ~0.1s per call), but
-    # it degenerates when a sparse or empty mastery paste floods the model
-    # with hundreds of interchangeable progress-0 catalogue candidates --
-    # shared draws co-produce whole channels of them, so every pin-down just
-    # re-spreads the same fraction onto a fresh item (observed ~380 rounds /
-    # ~760 re-solves per call, ~90s for a ONE-level sparse climb, vs ~1.4s
-    # for a 20-level real-save climb). Past the budget the remaining
-    # selection is handed to one HiGHS MIP solve (_mip_finish below):
-    # branch-and-bound prices completion exactly the way the two-sided
-    # trials do -- the AK/mega constraints stay in the model, the objective
-    # is unchanged -- but explores the symmetric fodder without enumerating
-    # it one variable per round. Every small case stays on the loop's exact
-    # historical behaviour; CBC (no in-process model) has no MIP escape and
-    # keeps looping as before.
-    rounds = 0
-    mip_failed = False
-    # The primary (relaxed) solve's objective: the integral problem's lower
-    # bound, which prices both the MIP's gap and the cached-selection re-try.
-    bound = pulp.value(problem.objective) or 0.0
+    # The objective of the solve that produced ``yvals`` -- the relaxation
+    # optimum of the remaining (partially pinned) problem, hence a lower bound
+    # on every further-pinned solve. Lets the loop skip the pin-down trial
+    # when pin-up already achieves it (see the loop comment). Read from the
+    # same backend the trials use so the two are comparable (the highs model
+    # drops any constant term pulp's objective value would include).
+    if highs is not None:
+        bound = highs.getObjectiveValue()
+    else:
+        bound = pulp.value(problem.objective)
 
     def set_bounds(item: str, step: str, low: int, up: int) -> None:
         var = base.ascend_y[item][step]
@@ -1020,91 +972,6 @@ def _round_and_fix_ascension(
         for (item, step), value in pins.items():
             set_bounds(item, step, value, value)
 
-    def _mip_finish() -> bool:
-        """Settle every remaining fraction with one HiGHS MIP solve.
-
-        Flips the step columns to integer on the still-loaded in-process model
-        (committed decisions stay pinned via their bound flips) and lets
-        branch-and-bound pick the integral selection under the same
-        constraints and objective the trials solve. Gap tolerances keep it
-        from proving exact optimality on the near-degenerate objectives the
-        symmetric flood produces (the two-sided loop never had a bound at
-        all), and the time limit bounds the worst case; on either a clean
-        finish or a limit hit with a feasible incumbent the snapshot is
-        adopted, otherwise everything is restored and the loop carries on.
-        """
-        if highs is None:
-            return False
-        for _, _, var in all_steps:
-            highs.changeColIntegrality(var.index, highspy.HighsVarType.kInteger)
-        highs.setOptionValue("mip_rel_gap", _ASCEND_MIP_REL_GAP)
-        highs.setOptionValue("mip_abs_gap", _ASCEND_MIP_ABS_GAP)
-        highs.setOptionValue("time_limit", _ASCEND_MIP_TIME_LIMIT)
-        # Stop the moment an incumbent prices out within the gap of the
-        # RELAXATION bound, rather than waiting for branch-and-bound to lift
-        # its own lower bound to prove it: on the flood's degenerate
-        # objectives the incumbent is found in moments and nearly all the
-        # solve time is proof (the rounding loop this replaces never had a
-        # proof either). ``bound`` is a valid lower bound on every integral
-        # solution, so a hit is genuinely within the gap of optimal.
-        highs.setOptionValue(
-            "objective_target",
-            bound * (1 + _ASCEND_MIP_REL_GAP) + _ASCEND_MIP_ABS_GAP,
-        )
-        if base.ascend_mip is not None:
-            # Hand the previous call's integral selection to branch-and-bound
-            # as a partial starting solution (HiGHS completes the continuous
-            # columns itself): adjacent sweep weights mostly share a
-            # selection, so it usually prices out as an immediate incumbent
-            # and the search only has to close the gap, not find a solution.
-            # Committed round decisions override the cache -- their bounds
-            # are already flipped, so a conflicting hint could never
-            # complete. An infeasible hint is simply ignored by HiGHS.
-            hint = [
-                (
-                    var.index,
-                    float(decided.get((item, step), base.ascend_mip.get((item, step), 0))),
-                )
-                for item, step, var in all_steps
-            ]
-            highs.setSolution(
-                len(hint), [i for i, _ in hint], [v for _, v in hint]
-            )
-        highs.run()
-        highs.setOptionValue("time_limit", float("inf"))
-        highs.setOptionValue("objective_target", float("-inf"))
-        # kObjectiveTarget / kTimeLimit exits are usable through the primal-
-        # status check below: any feasible incumbent is integral on the y's.
-        usable = highs.getModelStatus() == _optimal_status or (
-            highs.getInfo().primal_solution_status
-            == int(highspy.kSolutionStatusFeasible)
-        )
-        if usable:
-            col = highs.getSolution().col_value
-            yvals.update(
-                {(item, step): col[var.index] for item, step, var in all_steps}
-            )
-            base.ascend_mip = {
-                key: 1 if y > 0.5 else 0 for key, y in yvals.items()
-            }
-        for item, step, var in all_steps:
-            highs.changeColIntegrality(var.index, highspy.HighsVarType.kContinuous)
-        return usable
-
-    # Cached-selection re-try: a sweep re-solves this base at many gold
-    # weights, and adjacent weights mostly keep the same integral selection
-    # -- so when a previous call's MIP already settled one, try it first with
-    # a single pinned LP re-solve and keep it whenever it prices out within
-    # the MIP's own gap of this call's relaxation bound. Only the MIP path
-    # ever populates the cache, so a base the loop always handled (every
-    # real-save case) never takes this shortcut.
-    if base.ascend_mip is not None:
-        cached = trial(dict(base.ascend_mip))
-        if cached is not None and cached[0] <= (
-            bound * (1 + _ASCEND_MIP_REL_GAP) + _ASCEND_MIP_ABS_GAP
-        ):
-            yvals.update(cached[1])
-
     while True:
         fractional = sorted(
             (
@@ -1116,16 +983,6 @@ def _round_and_fix_ascension(
         )
         if not fractional:
             break
-        # A populated cache means a previous call on this base already tripped
-        # the budget (the flood is established), so later calls skip straight
-        # to the MIP instead of re-walking the loop's budget first.
-        if (
-            rounds >= _ASCEND_ROUND_BUDGET or base.ascend_mip is not None
-        ) and not mip_failed:
-            if _mip_finish():
-                break
-            mip_failed = True
-        rounds += 1
         # Decide ONE step per round -- the largest fraction, the relaxation's
         # most-wanted -- and decide it BOTH WAYS: completing it (pin up, with
         # prerequisites) versus dropping it (pin down; the chore term or other
@@ -1143,11 +1000,25 @@ def _round_and_fix_ascension(
             if s in base.ascend_y[item] and (item, s) not in decided
         }
         up = trial(up_pins)
+        # Provable shortcut: ``bound`` is the relaxation optimum of the
+        # remaining problem, and any pin-down solution is feasible in that
+        # relaxation, so pin-down can never solve strictly below it. When
+        # pin-up already achieves the bound it cannot lose -- and a tie
+        # already prefers up (the `<=` below) -- so the down trial is
+        # skipped. On the fast endpoint of a low-mastery climb most steps
+        # free-ride on supply the plan produces anyway (pinning them up
+        # costs nothing), so this collapses most rounds to a single solve.
+        if up is not None and up[0] <= bound + 1e-6 + 1e-9 * abs(bound):
+            commit(up_pins, up[1])
+            bound = up[0]
+            continue
         down = trial({(item, step): 0})
         if up is not None and (down is None or up[0] <= down[0]):
             commit(up_pins, up[1])
+            bound = up[0]
         elif down is not None:
             commit({(item, step): 0}, down[1])
+            bound = down[0]
         else:
             # Neither direction solved cleanly -- keep the down pin (as the
             # constraint implementation did) and surface it like any other
@@ -1167,6 +1038,7 @@ def _round_and_fix_ascension(
             yvals = {
                 (item, step): var.value() or 0.0 for item, step, var in all_steps
             }
+            bound = pulp.value(problem.objective)
 
     # Everything left is integral; materialise every decision (round commits
     # and integral leftovers alike) as ephemeral pin constraints, restoring
@@ -1403,49 +1275,34 @@ def _ascension_outcome(base: _Base) -> AscensionOutcome:
     (a candidate produced only as a side effect of another item's crafting
     still earns real mastery progress -- deliberate, per the module docstring).
 
-    A step also counts as reached when that same solved supply alone carries
-    the item past its threshold, selected or not: ``ascension.advance``
-    already moves the item's progress across it (that is how an incidental
-    mega satisfies a later stage's mega requirement via ``mega_count``), and
-    in the game every crossing pays its master/grandmaster AK whether the
-    plan "meant" it or not. Reading only the pinned ``y``'s here made the two
-    disagree -- rampant with a sparse mastery paste, where mass-production
-    channels co-produce whole catalogues of progress-0 candidates: the AK
-    ledger under-credited what the plan's own draws earn (so later stages
-    over-grind), and the to-do list / frontier counts told the player to stop
-    at grandmaster on items whose mega crossing the staged mega accounting
-    was itself relying on. The supply check mirrors ``advance``'s rounding,
-    against the item's cumulative remaining deltas up to the step.
+    ``masters``/``grandmasters`` are the *selected* steps -- they are what
+    the AK ledger charges (``ak_from_steps``), and every threshold an item's
+    supply happens to cross is worth selecting anyway (its AK is free), so
+    selection tracks reality for those two. ``megas`` instead reports every
+    **threshold crossing** -- items whose gross supply covers their full
+    remaining distance to 1M (the sum of their remaining step deltas),
+    mirroring :func:`ascension.advance`'s state evolution. Selection would
+    badly under-report megas: the mega constraint/floors are satisfied the
+    moment *enough* megas exist, so an item that crosses 1M purely as a side
+    effect of the plan's mass production (ubiquitous on a fresh, low-mastery
+    account) never gets its ``y_mega`` selected, yet it *is* a megamastery
+    the climb earns and `mega_count` will count it next stage. A pinned
+    ``y_mega`` always implies the crossing (its supply constraint forces the
+    full remaining delta via the ordering links), so crossings are a
+    superset of selections.
     """
     spec = base.ascension
     assert spec is not None
-    cand_by_item = {c.item: c for c in spec.candidates}
-
-    def crossed(item: str, step: str) -> bool:
-        cand = cand_by_item.get(item)
-        expr = base.ascend_S.get(item)
-        if cand is None or expr is None:
-            return False
-        needed = 0.0
-        for s in ("master", "grandmaster", "mega"):
-            delta = getattr(cand, f"delta_{s}")
-            if delta is not None:
-                needed += delta
-            if s == step:
-                break
-        return needed > 0 and round(pulp.value(expr) or 0.0) >= needed
 
     def chosen(step: str) -> list[str]:
         return sorted(
             item
             for item, steps in base.ascend_y.items()
-            if step in steps
-            and ((steps[step].value() or 0.0) > 0.5 or crossed(item, step))
+            if step in steps and (steps[step].value() or 0.0) > 0.5
         )
 
     masters = chosen("master")
     grandmasters = chosen("grandmaster")
-    megas = chosen("mega")
     ak_from_steps = AK_PER_MASTER * len(masters) + AK_PER_GRANDMASTER * len(grandmasters)
     makespan_minutes = base.makespan.value() or 0.0
     ak_from_chores = spec.chore_rate_per_day * makespan_minutes / _MINUTES_PER_DAY
@@ -1454,6 +1311,16 @@ def _ascension_outcome(base: _Base) -> AscensionOutcome:
         for item, expr in base.ascend_S.items()
         if (value := pulp.value(expr) or 0.0) > UNIT_EPSILON
     }
+    megas = sorted(
+        cand.item
+        for cand in spec.candidates
+        if cand.delta_mega is not None
+        # round() to match ascension.advance, which advances progress by
+        # round(supply): report exactly the crossings the state evolution
+        # will count.
+        and round(mastery_supply.get(cand.item, 0.0))
+        >= (cand.delta_master or 0) + (cand.delta_grandmaster or 0) + cand.delta_mega
+    )
     return AscensionOutcome(
         masters=masters,
         grandmasters=grandmasters,

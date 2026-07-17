@@ -427,31 +427,13 @@ code path byte-identical — everything below is gated on the spec.
   captures the *integral* plan's real cost, not the relaxation's. This
   fast path plus the cross-pass base cache (see "Ascension orchestration")
   took `--ascend 60 --tower-level 40` from ~8s to ~1.4s with byte-identical
-  output. **Sparse-mastery MIP escape**: one-step-per-round rounding
-  degenerates when the paste is missing most of the masterable catalogue (an
-  empty or tower-level-0 save) — hundreds of interchangeable progress-0
-  candidates enter the model, shared draws co-produce whole channels of them
-  at once, and every pin-down just re-spreads the same fraction onto a fresh
-  item (observed ~380 rounds / ~760 re-solves *per call*, ~90s for even a
-  one-level sparse climb). Past a round budget (`_ASCEND_ROUND_BUDGET`, far
-  above what any real-save call uses, so those keep the loop's exact
-  historical plans) the remaining selection goes to **one HiGHS MIP solve**
-  (`_mip_finish`: the step columns flipped to integer on the in-process
-  model) — the exact decision the trials approximate, priced by
-  branch-and-bound instead of per-variable enumeration, under gap tolerances
-  and a short wall-clock cap (`_ASCEND_MIP_*`; the relaxation bound is weak
-  at the cheap end, so proving optimality is not worth waiting for — the
-  loop never had a bound either, and a time-limit hit adopts the incumbent).
-  The winning selection is cached on the base (`_Base.ascend_mip`): the next
-  sweep call on that base re-tries it with a single pinned LP solve and
-  keeps it when it prices out within the MIP's gap of that call's own
-  relaxation bound, and otherwise skips straight to the MIP (no second walk
-  of the budget). Only the MIP path ever writes the cache, so bases the loop
-  always handled never take these shortcuts. Net effect: sparse `--ascend
-  10 --tower-level 0` ~89s → ~13s with a *better* frontier (the loop's
-  churn also over-ground: its cheapest sparse plan waited 15 days on chores
-  where the MIP finds 12-hour plans); CBC has no in-process model, so it
-  keeps looping exactly as before.
+  output. One provable trial shortcut on top: the objective of the solve
+  that produced the current fractional values is the relaxation optimum of
+  the remaining pinned problem, and any pin-down solution is feasible in
+  that relaxation — so when pin-up already achieves that bound the down
+  trial is skipped (ties already prefer up). It fires rarely (a step is
+  fractional precisely when completing it costs something at the margin),
+  but it is free.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -460,23 +442,22 @@ code path byte-identical — everything below is gated on the spec.
   plans are unaffected -- this path is gated on `base.ascension is not None`.
 - **Outcome readout** (`_ascension_outcome`, attached as `SourcingPlan.ascension`):
   reads the solved, round-and-fixed base into an `ascension.AscensionOutcome` --
-  `masters`/`grandmasters`/`megas` (sorted item lists: `y > 0.5` past rounding,
-  **or the item's solved gross supply alone covers the step's cumulative
-  remaining deltas** — an incidental crossing is a real one: `advance` moves
-  the item's progress past the threshold either way (that is how an
-  incidental mega already satisfied a later stage's `megas_required` via
-  `mega_count`), and the game pays every crossing's AK whether the plan
-  "meant" it or not; counting only pinned `y`s made the AK ledger
-  under-credit what the plan's own draws earn — so later stages over-ground —
-  and the to-do list/frontier stop at grandmaster on items whose mega
-  crossing the staged mega accounting was itself relying on, rampant with a
-  sparse paste where mass production co-produces whole catalogues of
-  progress-0 candidates), `ak_from_steps` (10/master + 100/grandmaster over
-  those same lists), `ak_from_chores` (`spec.chore_rate_per_day *
-  final_makespan_minutes / 1440`, may overshoot the requirement),
-  `mastery_supply` (`{item: S_i.value()}` for every surviving candidate with
-  positive value — incidental production of a candidate item counts as real
-  mastery progress even when nothing pinned it, deliberate).
+  `masters`/`grandmasters` (sorted item lists, `y > 0.5` past rounding — the
+  *selected* steps, which is what the AK ledger charges, and selection tracks
+  reality for those two because a threshold the supply crosses anyway is
+  always worth selecting: its AK is free), `megas` (**threshold crossings**,
+  not selections: every candidate whose gross supply covers its full
+  remaining distance to 1M — the sum of its remaining step deltas, `round()`ed
+  to mirror `ascension.advance` — because the mega constraint/floors stop
+  pulling `y_mega` the moment enough megas exist, so on a fresh account the
+  many items that cross 1M purely as a side effect of mass production would
+  otherwise vanish from the report while `mega_count` still counts them;
+  a pinned `y_mega` always implies the crossing), `ak_from_steps`
+  (10/master + 100/grandmaster, selected only), `ak_from_chores`
+  (`spec.chore_rate_per_day * final_makespan_minutes / 1440`, may overshoot the
+  requirement), `mastery_supply` (`{item: S_i.value()}` for every surviving
+  candidate with positive value — incidental production of a candidate item
+  counts as real mastery progress even when nothing pinned it, deliberate).
 - **Round-and-fix's own re-solve is rescued too** (`_round_and_fix_ascension`
   returns the solver `_solve_configured` should keep using): its final
   `problem.solve(solver)` — after every step var is pinned to a hard 0/1 — goes
@@ -640,7 +621,42 @@ stage, since each stage's config/production/inventory differs.
 - **The sweep** (`_ascend_gold_weights`): the two frontier endpoints
   (`optimizer._FAST_PRICE`/`_FREE_PRICE`) plus 14 log-spaced weights between
   (mirrors `optimizer._time_caps`' geometric spacing, over `gold_weight`
-  rather than a makespan cap). No `favour_passive` slow-regime extension in
+  rather than a makespan cap). `--sweep N` solves N weights instead (min 2 =
+  endpoints only) — every pass is a full staged solve, so the sweep count is
+  the wall-time knob for the heavy low-mastery climbs (a fresh-account
+  `--tower-level 0 --ascend 200 --empty-mastery`: ~92s at the default 16,
+  ~9s at `--sweep 2`, which still produces the exact fastest and cheapest
+  plans; interior weights only add frontier density between them, and
+  occasionally a cheaper alternate rounding of an endpoint). That fresh-account
+  case is trial-solve bound: ~10k warm HiGHS re-solves at ~2.4ms of genuine
+  simplex each (measured; per-trial cost is NOT rebuild overhead there —
+  presolve-off and warm-basis tweaks change nothing). Evaluated and rejected
+  as further levers: solving a stage as a true HiGHS MIP (times out at 30s on
+  the hard stages and its gap tolerances swamp the tiny fast-endpoint
+  objectives, hitting the same false-"Unbounded" numerics documented under
+  "Infeasible ≠ unobtainable"), and pre-pruning "too expensive" candidates
+  (the relaxation already prices bad candidates out for free, and the fresh
+  fastest plan *selects* ~360 of ~430 candidates — there is nothing to
+  prune in exactly the case that is slow; expensiveness is relative to
+  progress and channels, which only the LP evaluates — the real save's
+  ascend-100 plan grandmasters Grand Piano precisely because its remaining
+  delta is cheap there). Two further variants of the MIP idea were also
+  built and rejected on the same data — the disease each time is that the
+  **LP relaxation bound is far below the integral optimum in the gapped
+  regimes** (fractional ys free-ride shared supply, so e.g. a buy-nothing
+  endpoint's bound misses the real cost several-fold), leaving nothing
+  sound to gate against: (1) a budget-gated MIP finisher with a
+  bound-anchored `objective_target` and wall-cap — with any absolute gap
+  loose enough to skip proof it returns junk selections (1.0 objective
+  unit of slack = a million gold at `gold_weight` 1e-6; observed 41k-gold
+  plans where 7.7k is optimal), and with honest relative-only gates it
+  spends 10s+ per gapped stage proving, landing *slower* than the loop
+  (fresh 0→200: 165s vs 86s); (2) caching a flood-priced call's settled
+  selection on the base and re-trying it at later sweep weights behind a
+  bound-relative adoption gate — the gate almost never validates (the
+  correct selection still prices far above the weak bound), measured a
+  ~0–6% no-op. `--sweep` remains the honest lever. No `favour_passive`
+  slow-regime extension in
   v1: the chore-AK tradeoff already stretches the slow end on its own (a
   pricier gold weight masters fewer candidates and waits longer on chores
   instead of buying), so a separate buy-nothing-and-bank-surplus regime would
