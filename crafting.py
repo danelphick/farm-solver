@@ -194,3 +194,22 @@ def top_level_demand(
         best[key] = max(best.get(key, 0.0), amount)
     return {names[key]: amount for key, amount in best.items()}
 
+
+def non_mastery_goal_items(needs: list[ItemNeed]) -> frozenset[str]:
+    """Lower-cased items demanded **only** as a plain ``-i`` count (never ``-m``).
+
+    A trade (or any buy) may satisfy a plain ``-i`` count goal but never a mastery
+    goal -- traded items earn no mastery. An item with *any* mastery need is
+    excluded even if it also has a plain count need: its full demand must be
+    produced (the optimiser's ``buy <= derived`` floor stays tight), which
+    over-covers the count as a side effect. See :func:`optimizer.minimize`'s floor
+    relaxation, which is gated on membership here.
+    """
+    mastery: set[str] = set()
+    plain: set[str] = set()
+    for need in needs:
+        if need.extra <= 0:
+            continue
+        (mastery if need.is_mastery else plain).add(need.item.lower())
+    return frozenset(plain - mastery)
+

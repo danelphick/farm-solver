@@ -453,6 +453,55 @@ def test_minimize_buys_a_demanded_items_tool_use_but_not_its_mastery():
     assert plan.crafts.get("large net") >= 100 - 1e-6
 
 
+def test_minimize_trades_for_a_plain_count_goal():
+    # Red Dye is only self-sourceable by a slow farm, or traded for AP (an instant
+    # buy priced in AP-converted-to-gold). As a plain -i count goal it may be traded.
+    farm = Offer("grow dye", "farming", {"red dye": 1}, time_per_unit=timedelta(minutes=1))
+    prices = {**GOLD, "red dye": 0.008 * 0.06}
+    plan = minimize(
+        [farm], {"red dye": 100}, prices=prices, gold_weight=BUY_FREELY,
+        ap_tradeable=frozenset({"red dye"}), non_mastery_goals=frozenset({"red dye"}),
+    )
+    assert plan.bought.get("red dye") == pytest.approx(100)
+    assert plan.time == timedelta(0)
+
+
+def test_minimize_never_trades_for_a_mastery_goal():
+    # Same setup, but Red Dye is a mastery goal (not in non_mastery_goals): trading
+    # earns no mastery, so the floor stays tight and all 100 are self-sourced.
+    farm = Offer("grow dye", "farming", {"red dye": 1}, time_per_unit=timedelta(minutes=1))
+    prices = {**GOLD, "red dye": 0.008 * 0.06}
+    plan = minimize(
+        [farm], {"red dye": 100}, prices=prices, gold_weight=BUY_FREELY,
+        ap_tradeable=frozenset({"red dye"}), non_mastery_goals=frozenset(),
+    )
+    assert plan.bought.get("red dye", 0) == pytest.approx(0)
+    assert plan.time == timedelta(minutes=100)
+
+
+def test_minimize_trades_for_a_material_use_even_when_the_item_is_a_mastery_goal():
+    # Red Dye is a mastery goal AND a craft material for Cloth (also demanded).
+    # The goal dye must be produced, but the material dye Cloth consumes may be traded.
+    farm = Offer("grow dye", "farming", {"red dye": 1}, time_per_unit=timedelta(minutes=1))
+    recipes = {"cloth": {"red dye": 5}}
+    prices = {**GOLD, "red dye": 0.008 * 0.06}
+    plan = minimize(
+        [farm], {"red dye": 100, "cloth": 10}, recipes, 1.0, prices=prices,
+        gold_weight=BUY_FREELY, ap_tradeable=frozenset({"red dye"}),
+        non_mastery_goals=frozenset(),  # red dye is a mastery goal here
+    )
+    # 10 cloth need 50 material dye (tradeable); the 100 goal dye stay self-sourced.
+    assert plan.bought.get("red dye", 0) <= 50 + 1e-6
+    assert plan.crafts.get("red dye", 0) == pytest.approx(0)  # never crafted here
+    assert plan.time >= timedelta(minutes=100) - timedelta(seconds=1)
+
+
+def test_minimize_default_ap_tradeable_is_unchanged():
+    # No ap_tradeable (the default) leaves the buy set at the gold consumables only.
+    plan = minimize([FARM_ITEM], {"it": 50}, prices=GOLD, gold_weight=BUY_FREELY)
+    assert "it" not in plan.bought
+
+
 def test_frontier_spans_the_tradeoff_fastest_first():
     plans = frontier([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD)
     # The two extremes: instant by buying 100 nets, or free over 100 minutes.
@@ -1010,6 +1059,39 @@ def test_minimize_drinks_pumpkin_juice_to_cover_mastery_when_gold_is_cheap():
     assert plan.pumpkin_credit.get("it") == pytest.approx(100)
     assert plan.time == timedelta(0)
     assert plan.draws == []
+
+
+def test_fast_endpoint_tie_break_counts_trade_gold_against_pumpkin_juice():
+    # A mastery goal "it" (need 100) is either crafted from material "mat" (10 each,
+    # only AP-tradeable) or covered directly by Pumpkin Juice -- both instant, so the
+    # fast endpoint's stage-2 tie-break decides. total_value must charge the trade its
+    # gold, else trading reads as free and beats any priced juice: the Oak-trade vs
+    # Pumpkin-Juice regression. Here PJ (10 * 0.1 = 1 g) undercuts the trade (1000 mat
+    # * 0.01 = 10 g), so the plan drinks juice and buys no material.
+    recipes = {"it": {"mat": 10}}
+    plan = minimize(
+        [], {"it": 100}, recipes, 1.0, prices={**GOLD, "mat": 0.01},
+        gold_weight=BUY_FREELY, pj_gain={"it": 10}, pj_price=0.1,
+        ap_tradeable=frozenset({"mat"}),
+    )
+    assert plan.pumpkin_juices.get("it") == pytest.approx(10)
+    assert plan.bought.get("mat", 0) == pytest.approx(0)
+    assert plan.time == timedelta(0)
+
+
+def test_fast_endpoint_still_trades_when_the_trade_is_cheaper_than_juice():
+    # The honest comparison cuts both ways: with the material trade cheap (1000 mat *
+    # 0.0001 = 0.1 g) and juice dear (10 * 1 = 10 g), the plan trades for the material
+    # and drinks no juice -- the fix values trades, it does not ban them.
+    recipes = {"it": {"mat": 10}}
+    plan = minimize(
+        [], {"it": 100}, recipes, 1.0, prices={**GOLD, "mat": 0.0001},
+        gold_weight=BUY_FREELY, pj_gain={"it": 10}, pj_price=1.0,
+        ap_tradeable=frozenset({"mat"}),
+    )
+    assert plan.bought.get("mat") == pytest.approx(1000)
+    assert plan.pumpkin_juices.get("it", 0) == pytest.approx(0)
+    assert plan.time == timedelta(0)
 
 
 def test_minimize_respects_the_pumpkin_juice_limit():

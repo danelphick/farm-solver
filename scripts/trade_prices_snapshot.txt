@@ -1,0 +1,143 @@
+3-leaf Clover|4-6 AP/k
+Acorn|6-9 AP/k
+Acorn Pie (meal)|5-12 AP
+Apple|15-20 AP/k
+Apple Cider|230-310 AP/k
+Aquamarine|3-5 AP/k
+Arnold Palmer|x
+Arrowhead|2-3 AP/k
+Axe|2-3 AP/k
+Bird Egg|3-5 AP/k
+Black Powder|2-3 AP/k
+Blue Crab|1 AP/k
+Blue Dye|4-6 AP/k
+Blue Feathers|2-3 AP/k
+Bluegill|1 AP/k
+Bomb|5-15 AP
+Bone|1-2 AP/k
+Bouquet of Flowers|75-115 AP/k
+Breakfast Boost (meal)|2-3 AP
+Bucket|2 AP/k
+Cabbage Stew (meal)|6.5-7 AP
+Carbon Sphere|6-10 AP/k
+Carp|1 AP/k
+Carrot|3-5 AP/k
+Cat's Meow (meal)|2.5-4 AP
+Caterpillar|50-100 AP/k
+Cheese|115-155 AP/k
+Christmas Present 02|5-15 AP
+Clawed Card|75-155 AP
+Clubs|30-40 AP
+Coal|2 AP/k
+Coderanger's Missing Semicolon|25-50 AP
+Cricket|75-155 AP
+Crunchy Omelette (meal)|10-15 AP
+Cucumber|3-5 AP/k
+Diamonds|30-40 AP
+Drum|x
+Egg Basket|2 AP
+Eggplant|3-5 AP/k
+Eggs|3-5 AP/k
+Explosive|3-5 AP/k
+Feathers|3-5 AP/k
+Fern Leaf|2-5 AP/k
+Festive Eggnog|1-3 AP
+Fire Ant|5-10 AP/k
+Fireworks|3 AP/k
+Fish and Chips (meal)|75-115 AP
+Fish Bones|1-3 AP/k
+Fishing Net|10 AP/k
+Five Point Mace|310-385 AP
+Flier|5 AP/k
+Giant Centipede|1-2 AP/k
+Glass Orb|2-3 AP/k
+Gold Feather|155-230 AP/k
+Grapes|5-8 AP/k
+Grasshopper|.5-1 AP
+Green Chromis|1 AP/k
+Green Dye|4-7 AP/k
+Green Parchment|3-4 AP/k
+Grubs|1 AP/k
+Hammer|3-5 AP/k
+Happy Cookies|75-155 AP
+Heart Container|310-385 AP
+Hearts|30-40 AP
+Hickory Omelette (meal)|4.5-5.5 AP
+Hide|3-4 AP/k
+Hops|10-20 AP/k
+Horn|8-10 AP/k
+Horned Beetle|3 AP/k
+Iced Tea|3-5 AP/k
+Iron Cup|1 AP/k
+Joker|60-75 AP
+Ladder|3-4 AP/k
+Large Net|155-190 AP/k
+Leather|4-6 AP/k
+Leather Diary|2-3 AP/k
+Leek|35-40 AP/k
+Lemon|11.5-12.5 AP/k
+Lemon Cream Pie (meal)|4.5-6.5 AP
+Lemonade|80-85 AP/k
+Lovely Cookies|75-155 AP
+Magical Egg Basket|15 AP
+MIAB|3 AP/k
+Milk|5-8 AP/k
+Mushroom|1-3 AP/k
+Mushroom Paste|2-3 AP/k
+Mushroom Stew (meal)|4.5-6.5 AP
+Neigh (meal)|4.5-5.5 AP
+Oak|2-3 AP/k
+Old Boot|1-3 AP/k
+Onion|20-30 AP/k
+Onion Soup (meal)|2-3 AP
+Orange|40-45 AP/k
+Orange Juice|110-155 AP/k
+Over The Moon (meal)|3-4 AP
+Peas|3-5 AP/k
+Peppers|3-5 AP/k
+Piece 03|230-385 AP
+Piece 11|230-385 AP
+Pot of Gold (Small)|230 AP
+Potato|5-10 AP/k
+Prism Shell|310-385 AP
+Protein Bar|115-190 AP
+Purple Dye|15-20 AP/k
+Purple Flower|4-7 AP/k
+Purple Parchment|3-5 AP/k
+Quandary Chowder (meal)|4.5-6 AP
+Radish|15-20 AP/k
+Ramjoram's Mask|230-385 AP
+Red Dye|8-10 AP/k
+Red Envelope|310 AP/k
+Rope|2-3 AP/k
+Scrap Metal|1-3 AP/k
+Scrap Wire|1-2 AP/k
+Sea Pincher Special (meal)|4.5-5.5 AP
+Shimmer Stone|1-2 AP/k
+Shiny Beetle|3-5 AP/k
+Shovel|3-5 AP/k
+Shrimp|1-3 AP/k
+Shrimp-a-Plenty (meal)|4.5-5.5 AP
+Skipjack|1 AP/k
+Slimestone|2-3 AP/k
+Small Prawn|1 AP/k
+Snail|3-5 AP/k
+Spades|60-75 AP
+Spider|30-50 AP/k
+Spooky Cookies|75-155 AP
+Stingray|1-3 AP/k
+Stone|1 AP/k
+Support's Ticket|25-50 AP
+Tenfoo's Lost Sock|25-50 AP
+Tomato|15-20 AP/k
+Treat Bag 02|30-40 AP/k
+Twine|2 AP/k
+Unpolished Shimmer Stone|1 AP/k
+Valentines Card|10 AP
+Veggie Juice|100-125 AP/k
+Void Bag 01|3-4 AP
+Wood|1 AP/k
+Wooden Box|2-3 AP/k
+Wooden Button|2-4 AP/k
+Wooden Table|3-5 AP/k
+Yarn|2-4 AP/k

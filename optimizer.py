@@ -459,6 +459,8 @@ def _build_base(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     *,
+    ap_tradeable: frozenset[str] = frozenset(),
+    non_mastery_goals: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
 ) -> _Base:
     """Build the part of :func:`minimize`'s LP that is identical across every
@@ -485,8 +487,13 @@ def _build_base(
     # A buyable consumable can always be bought, so it is obtainable even where
     # nothing crafts or gathers it (a channel grounded in one is then still usable).
     # A *present* price (even 0 -- free) makes it buyable; an absent one does not
-    # (see config.trading_prices for the presence-not-value convention).
-    buyable = {item for item in BUYABLE if item in prices}
+    # (see config.trading_prices for the presence-not-value convention). The buyable
+    # universe is the gold consumables (BUYABLE) plus any Arnold-Palmer-tradeable
+    # items (``ap_tradeable``, from config.arnold_palmer_prices): a trade is just a
+    # buy priced in AP-converted-to-gold (its gold-equivalent is already folded into
+    # ``prices``), so it flows through the same buy machinery below.
+    purchasable = BUYABLE | ap_tradeable
+    buyable = {item for item in purchasable if item in prices}
     # A held, non-demanded item an offer consumes (e.g. an Acorn Pie the exploring
     # channel burns) grounds that offer even when nothing crafts or gathers it. It
     # is bounded by the held stock in each item's balance, and excluding demanded
@@ -611,7 +618,7 @@ def _build_base(
     # bought by lifting their cap below.
     buy = {
         item: pulp.LpVariable(f"b{i}", lowBound=0)
-        for i, item in enumerate(sorted(items & BUYABLE))
+        for i, item in enumerate(sorted(items & purchasable))
         if item in prices
     }
     price_cookie = prices.get("cookie set", 0.0)
@@ -698,7 +705,21 @@ def _build_base(
     # with no self-sourced form, and so absent from ``spend_value`` -- completes it.
     # Buying is not double-charged: ``buy[i] <= consumed + used_up + emptied`` caps
     # purchases at what the plan actually spends, which ``spend_value`` already counts.
-    total_value = spend_value + (pj_price * pulp.lpSum(pj.values()) if pj else 0)
+    #
+    # Arnold-Palmer trades are the exception ``spend_value`` misses: a traded material
+    # (an ``ap_tradeable`` item) is bought -- its gold is in ``gold`` -- but it is not
+    # one of the consumables ``spend_value`` enumerates, so without this its market
+    # value is invisible to the tie-break and the stage-2 solve would treat trading as
+    # *free*. That made the fast endpoint prefer a huge cheap-per-unit trade (millions
+    # of Oak) over a fractionally-priced Pumpkin Juice that covers the same mastery
+    # goal, since only the juice showed up as a cost. Charge each trade its buy gold
+    # here so the tie-break weighs trading honestly against juice and self-sourcing.
+    ap_trade_value = pulp.lpSum(
+        prices[item] * var for item, var in buy.items() if item in ap_tradeable
+    )
+    total_value = (
+        spend_value + ap_trade_value + (pj_price * pulp.lpSum(pj.values()) if pj else 0)
+    )
 
     # Index each offer's yields/consumes by item once, so the per-item loop below
     # doesn't rescan every offer twice (via ``yield_of``) for every item.
@@ -757,8 +778,16 @@ def _build_base(
         # non-goal use (a craft material, or a channel's tool), so cap purchases at
         # that derived demand. The goal ``need`` must then come from making or
         # gathering. Slack for non-goal items (they can be bought up to their use).
+        # Exception: a **plain -i count goal** (in ``non_mastery_goals``, never a
+        # mastery goal) may be satisfied by *trading* -- so an AP-tradeable item's
+        # cap includes its own ``need``. Scoped to ``ap_tradeable`` so gold-buy of
+        # the consumables is untouched; a mastery goal is never in the set, so its
+        # floor stays tight and it must be produced.
         if item in buy:
-            problem += buy[item] <= consumed + used_up + emptied
+            cap = consumed + used_up + emptied
+            if item in ap_tradeable and item in non_mastery_goals:
+                cap = cap + need
+            problem += buy[item] <= cap
 
         # Ascension mastery supply: GROSS production only (gathered + crafted +
         # unpacked, the same terms the balance above uses before ``consumed``/
@@ -1596,6 +1625,8 @@ def minimize(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
+    ap_tradeable: frozenset[str] = frozenset(),
+    non_mastery_goals: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
@@ -1669,6 +1700,7 @@ def minimize(
     base = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
+        ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
         ascension=ascension,
     )
     plan = _solve_configured(
@@ -1950,6 +1982,8 @@ def fastest_endpoint(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
+    ap_tradeable: frozenset[str] = frozenset(),
+    non_mastery_goals: frozenset[str] = frozenset(),
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
 
@@ -1975,7 +2009,7 @@ def fastest_endpoint(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
         cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-        quantize=quantize,
+        quantize=quantize, ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
     )
 
 
@@ -2266,6 +2300,8 @@ def frontier(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
+    ap_tradeable: frozenset[str] = frozenset(),
+    non_mastery_goals: frozenset[str] = frozenset(),
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -2310,6 +2346,7 @@ def frontier(
     base_active = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
+        ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
     )
     fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, pj_integer=False)
     cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, pj_integer=False)
@@ -2365,6 +2402,7 @@ def frontier(
         base_passive = _build_base(
             offers, demand, recipes, crafting_bonus, openables, inventory,
             cookie_sets, prices, pj_gain, pj_price, pj_limit,
+            ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
         )
         probe = _solve_configured(base_passive, favour_passive=True, pj_integer=False)
         nonpet = _passive_completion_caps(

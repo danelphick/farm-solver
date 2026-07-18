@@ -682,6 +682,24 @@ def build_parser() -> argparse.ArgumentParser:
             "trading.pumpkin_juice gold each"
         ),
     )
+    trading = parser.add_mutually_exclusive_group()
+    trading.add_argument(
+        "--use-trading",
+        dest="use_trading",
+        action="store_true",
+        default=None,
+        help=(
+            "let the solver trade resources for Arnold Palmers (overrides "
+            "[trading.ap] enabled). A trade is an instant buy priced in AP, "
+            "converted to gold; it earns no mastery"
+        ),
+    )
+    trading.add_argument(
+        "--no-trading",
+        dest="use_trading",
+        action="store_false",
+        help="forbid Arnold-Palmer trading even if [trading.ap] enabled is set",
+    )
     parser.add_argument(
         "--current-stamina",
         type=int,
@@ -1190,6 +1208,14 @@ class SolveInputs:
     # The tower level the goal targets (an explicit --target/-l, else the
     # tower's top level), or None when a pure -m/-i goal has no tower part.
     target_level: int | None = None
+    # Items demanded only as a plain -i count (never -m mastery); a trade may
+    # satisfy these, so the optimiser's buy-floor is relaxed for them (see
+    # crafting.non_mastery_goal_items and optimizer.minimize's floor). Defaulted so
+    # hand-built test SolveInputs need not supply it.
+    non_mastery_goals: frozenset[str] = frozenset()
+    # Per-unit Arnold Palmer trade prices (see _ChannelSetup.ap_prices). Defaulted
+    # likewise; empty means no AP-trading.
+    ap_prices: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -1218,6 +1244,12 @@ class _ChannelSetup:
     prices: dict[str, float] | None
     boost_offers: list[sources.Offer]
     model_calendar: bool
+    # Per-unit Arnold Palmer trade prices (config.arnold_palmer_prices), keyed by
+    # lower-cased item name; empty when trading is disabled. Their gold-equivalent
+    # is already folded into ``prices``; this copy is for the report's Trade section
+    # and for deriving the ``ap_tradeable`` buyable set passed to the optimiser.
+    # Defaulted so hand-built test _ChannelSetups need not supply it.
+    ap_prices: dict[str, float] = field(default_factory=dict)
 
 
 def _build_channel_setup(
@@ -1295,6 +1327,13 @@ def _build_channel_setup(
     # makes each buyable, so the frontier can trade makespan against real gold.
     # Absent, nothing is buyable and every plan is fully self-sourced.
     prices = config.trading_prices(cfg, crafting_bonus=crafting_bonus)
+    # Arnold-Palmer trade prices (per-unit AP) for the resources not already
+    # gold-buyable: an extra instant-buy channel whose gold-equivalent is already
+    # folded into ``prices`` by trading_prices. Empty when disabled. Kept for the
+    # report's Trade section and to derive the optimiser's ``ap_tradeable`` set.
+    ap_prices = config.arnold_palmer_prices(
+        cfg, enabled_override=getattr(args, "use_trading", None)
+    )
 
     # Hickory Omelette sawmill boost: a grounded, omelette-consuming channel (see
     # sources.sawmill_boost_offers) built from the sawmill's base hourly outputs, the
@@ -1320,6 +1359,7 @@ def _build_channel_setup(
         inventory=inventory,
         cookie_sets=cookie_sets,
         prices=prices,
+        ap_prices=ap_prices,
         boost_offers=boost_offers,
         model_calendar=model_calendar,
     )
@@ -1374,6 +1414,7 @@ def build_inputs(
             target_level = requirements.max_level
 
     demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
+    non_mastery_goals = crafting.non_mastery_goal_items(solution.needs)
 
     # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
     # mastery goal's shortfall directly, trading gold for a faster (or cheaper) plan;
@@ -1402,9 +1443,11 @@ def build_inputs(
         smith=setup.smith,
         open_flows=setup.open_flows,
         demand=demand,
+        non_mastery_goals=non_mastery_goals,
         inventory=setup.inventory,
         cookie_sets=setup.cookie_sets,
         prices=setup.prices,
+        ap_prices=setup.ap_prices,
         boost_offers=setup.boost_offers,
         pj_gain=pj_gain,
         pj_price=pj_price,
@@ -1455,6 +1498,8 @@ def solve_frontier(
     inventory = inputs.inventory
     cookie_sets = inputs.cookie_sets
     prices = inputs.prices
+    ap_tradeable = frozenset(inputs.ap_prices)
+    non_mastery_goals = inputs.non_mastery_goals
     pj_gain = inputs.pj_gain
     pj_price = inputs.pj_price
     pj_limit = inputs.pj_limit
@@ -1499,7 +1544,8 @@ def solve_frontier(
                 offers, demand, recipes, args.crafting_bonus, prices=prices,
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
                 pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-                quantize=quantize,
+                quantize=quantize, ap_tradeable=ap_tradeable,
+                non_mastery_goals=non_mastery_goals,
             )
             if not fast.draws and not fast.crafts:  # nothing to source
                 break
@@ -1520,7 +1566,8 @@ def solve_frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-            quantize=quantize,
+            quantize=quantize, ap_tradeable=ap_tradeable,
+            non_mastery_goals=non_mastery_goals,
         )
         if not plans:
             return FrontierResult(
@@ -2506,7 +2553,7 @@ def run(args: argparse.Namespace) -> int:
         chosen, inputs.demand, inputs.farm, inputs.workshop, args.crafting_bonus,
         fr.production, inputs.open_flows, inputs.smith.names, inputs.inventory,
         ctx.sourceable_elsewhere, ctx.max_passive_residuals, inputs.prices,
-        pj_schedule,
+        pj_schedule, ap_prices=inputs.ap_prices,
     )
 
     if args.breakdown:

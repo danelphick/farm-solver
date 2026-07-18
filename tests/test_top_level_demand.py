@@ -1,7 +1,25 @@
 import pytest
 
-from crafting import top_level_demand
+from crafting import non_mastery_goal_items, top_level_demand
 from farm_solver import ItemNeed
+
+
+def test_non_mastery_goal_items_are_the_plain_i_goals():
+    needs = [
+        ItemNeed(item="Red Dye", have=0, target=5000, is_mastery=False),  # plain -i
+        ItemNeed(item="Board", have=0, target=100, is_mastery=True),  # mastery
+    ]
+    assert non_mastery_goal_items(needs) == frozenset({"red dye"})
+
+
+def test_an_item_with_any_mastery_need_is_excluded():
+    # Both a plain count and a mastery need on one item -> must be produced, so it
+    # is NOT trade-satisfiable (excluded from the set).
+    needs = [
+        ItemNeed(item="Board", have=0, target=100, is_mastery=False),
+        ItemNeed(item="Board", have=0, target=500, is_mastery=True),
+    ]
+    assert non_mastery_goal_items(needs) == frozenset()
 
 
 def test_mastery_shortfall_divides_by_mastery_bonus():

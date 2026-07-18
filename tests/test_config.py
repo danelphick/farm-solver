@@ -633,6 +633,53 @@ def test_trading_prices_absent_section_is_none():
     assert trading_prices({"vineyard": {"grapes": 1}}) is None
 
 
+def _ap_cfg(**ap):
+    return {"trading": {"arnold_palmer": 60, "ap": {"enabled": True, **ap}}}
+
+
+def test_arnold_palmer_prices_converts_apk_to_per_unit():
+    prices = config.arnold_palmer_prices(_ap_cfg(prices={"red_dye": 8, "stone": 1}))
+    # apk / 1000 = per-unit AP; keys normalise underscores to spaces.
+    assert prices == {"red dye": 0.008, "stone": 0.001}
+
+
+def test_arnold_palmer_prices_disabled_or_absent_is_empty():
+    assert config.arnold_palmer_prices({"trading": {"arnold_palmer": 60}}) == {}
+    off = {"trading": {"arnold_palmer": 60, "ap": {"enabled": False, "prices": {"red_dye": 8}}}}
+    assert config.arnold_palmer_prices(off) == {}
+
+
+def test_arnold_palmer_prices_enabled_override():
+    off = {"trading": {"arnold_palmer": 60, "ap": {"enabled": False, "prices": {"red_dye": 8}}}}
+    assert config.arnold_palmer_prices(off, enabled_override=True) == {"red dye": 0.008}
+    on = _ap_cfg(prices={"red_dye": 8})
+    assert config.arnold_palmer_prices(on, enabled_override=False) == {}
+
+
+def test_arnold_palmer_prices_allow_and_deny_filters():
+    both = _ap_cfg(prices={"red_dye": 8, "stone": 1, "grapes": 5})
+    assert config.arnold_palmer_prices({**both, "trading": {**both["trading"], "ap": {**both["trading"]["ap"], "allow": ["red dye"]}}}) == {"red dye": 0.008}
+    deny = _ap_cfg(prices={"red_dye": 8, "stone": 1}, deny=["stone"])
+    assert config.arnold_palmer_prices(deny) == {"red dye": 0.008}
+
+
+def test_arnold_palmer_prices_allow_and_deny_together_raises():
+    cfg = _ap_cfg(prices={"red_dye": 8}, allow=["red dye"], deny=["stone"])
+    with pytest.raises(ValueError, match="only one"):
+        config.arnold_palmer_prices(cfg)
+
+
+def test_trading_prices_folds_ap_items_as_gold_equivalent():
+    # An AP-traded item's gold price is its per-unit AP * the Arnold Palmer's own
+    # per-unit gold (60 gk -> 0.06 g): red dye at 8 apk -> 0.008 * 0.06.
+    prices = trading_prices(_ap_cfg(prices={"red_dye": 8}))
+    assert prices["red dye"] == pytest.approx(0.008 * 0.06)
+    # A consumable already priced in gold keeps its gold price (not overwritten).
+    both = _ap_cfg(prices={"red_dye": 8})
+    both["trading"]["large_net"] = 10
+    assert trading_prices(both)["large net"] == 0.01
+
+
 def test_is_smeared_producer_flags_pets_and_grants():
     # Pets' daily output and the Mechanical Heart's monthly grants are averaged
     # rates standing in for lumpy real events; buildings are real depositors.

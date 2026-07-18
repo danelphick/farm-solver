@@ -1283,6 +1283,7 @@ def print_plan(
     prices: dict[str, float] | None = None,
     pumpkin_schedule: dict[str, list[int]] | None = None,
     skip_critical_path: bool = False,
+    ap_prices: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials.
 
@@ -1574,22 +1575,48 @@ def print_plan(
         for item, units in sorted(held, key=lambda kv: -kv[1]):
             print(f"  {round(units):>{width},}x {display.get(item, item)}")
 
+    ap_prices = ap_prices or {}
     purchases = [(item, units) for item, units in plan.bought.items() if round(units) >= 1]
-    if purchases and prices is not None:
+    # Split buys into gold purchases (the consumables) and Arnold-Palmer trades (the
+    # resources priced only in AP -- an item in ap_prices). Both fold into plan.gold
+    # (a trade's gold-equivalent is AP-converted), but they read differently.
+    gold_buys = [(i, u) for i, u in purchases if i not in ap_prices]
+    trades = [(i, u) for i, u in purchases if i in ap_prices]
+    if gold_buys and prices is not None:
         print("\nBuy (with gold):")
         ordered = sorted(
-            purchases, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
+            gold_buys, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
         )
-        width = _num_width(round(units) for _, units in purchases)
+        width = _num_width(round(units) for _, units in gold_buys)
+        total = 0.0
         for item, units in ordered:
             cost = round(units * prices.get(item, 0.0))
+            total += units * prices.get(item, 0.0)
             print(
                 f"  {round(units):>{width},}x {display.get(item, item)}"
                 f" = {cost:,} g"
             )
-        # Pumpkin Juice is bought too but has no per-unit price in ``prices`` (its
-        # gold is on the plan), so the consumable buys total is plan.gold net of it.
-        print(f"  total {round(plan.gold - plan.pumpkin_gold):,} g")
+        print(f"  total {round(total):,} g")
+
+    # Trade (for Arnold Palmers): the resources bought with AP rather than gold.
+    # Each line shows the AP it costs and the gold that AP is worth (its ranking
+    # cost); the section totals both so a plan says how many Arnold Palmers it needs.
+    if trades:
+        print("\nTrade (for Arnold Palmers):")
+        ordered = sorted(trades, key=lambda kv: kv[1] * ap_prices.get(kv[0], 0.0), reverse=True)
+        width = _num_width(round(units) for _, units in trades)
+        total_ap = 0.0
+        total_gold = 0.0
+        for item, units in ordered:
+            ap = units * ap_prices.get(item, 0.0)
+            gold = units * (prices or {}).get(item, 0.0)
+            total_ap += ap
+            total_gold += gold
+            print(
+                f"  {round(units):>{width},}x {display.get(item, item)}"
+                f" = {round(ap):,} AP ({round(gold):,} g)"
+            )
+        print(f"  total {round(total_ap):,} AP ({round(total_gold):,} g)")
 
     # Pumpkin Juice: a bought mastery boost, listed apart from the consumable buys
     # since it covers a goal's mastery directly rather than feeding a channel. Each
@@ -1649,6 +1676,7 @@ def markdown_plan(
     prices: dict[str, float] | None = None,
     pumpkin_schedule: dict[str, list[int]] | None = None,
     skip_critical_path: bool = False,
+    ap_prices: dict[str, float] | None = None,
 ) -> None:
     """Markdown counterpart to :func:`print_plan`: the same sections, as tables.
 
@@ -1936,10 +1964,14 @@ def markdown_plan(
         doc.heading("From inventory (held consumables)")
         doc.table(["Item", "Qty"], rows)
 
+    ap_prices = ap_prices or {}
     purchases = [(item, units) for item, units in plan.bought.items() if round(units) >= 1]
-    if purchases and prices is not None:
+    # Split into gold purchases and Arnold-Palmer trades (see print_plan).
+    gold_buys = [(i, u) for i, u in purchases if i not in ap_prices]
+    trades = [(i, u) for i, u in purchases if i in ap_prices]
+    if gold_buys and prices is not None:
         ordered = sorted(
-            purchases, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
+            gold_buys, key=lambda kv: kv[1] * prices.get(kv[0], 0.0), reverse=True
         )
         rows = [
             [
@@ -1949,9 +1981,27 @@ def markdown_plan(
             ]
             for item, units in ordered
         ]
+        total = sum(units * prices.get(item, 0.0) for item, units in gold_buys)
         doc.heading("Buy (with gold)")
         doc.table(["Item", "Qty", "Gold"], rows)
-        doc.para(f"Total: {round(plan.gold - plan.pumpkin_gold):,} g")
+        doc.para(f"Total: {round(total):,} g")
+
+    if trades:
+        ordered = sorted(trades, key=lambda kv: kv[1] * ap_prices.get(kv[0], 0.0), reverse=True)
+        rows = [
+            [
+                display.get(item, item),
+                f"{round(units):,}",
+                f"{round(units * ap_prices.get(item, 0.0)):,} AP",
+                f"{round(units * (prices or {}).get(item, 0.0)):,} g",
+            ]
+            for item, units in ordered
+        ]
+        total_ap = sum(units * ap_prices.get(item, 0.0) for item, units in trades)
+        total_gold = sum(units * (prices or {}).get(item, 0.0) for item, units in trades)
+        doc.heading("Trade (for Arnold Palmers)")
+        doc.table(["Item", "Qty", "Arnold Palmers", "Gold value"], rows)
+        doc.para(f"Total: {round(total_ap):,} AP ({round(total_gold):,} g)")
 
     juices = [
         (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
@@ -2500,6 +2550,7 @@ class Reporter:
         prices: dict[str, float] | None = None,
         pumpkin_schedule: dict[str, list[int]] | None = None,
         skip_critical_path: bool = False,
+        ap_prices: dict[str, float] | None = None,
     ) -> None:
         raise NotImplementedError
 

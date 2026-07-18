@@ -611,6 +611,7 @@ def render(
         chosen, inputs.demand, inputs.farm, inputs.workshop, args.crafting_bonus,
         fr.production, inputs.open_flows, inputs.smith.names, inputs.inventory,
         ctx.sourceable_elsewhere, ctx.max_passive_residuals, inputs.prices, pj_schedule,
+        ap_prices=inputs.ap_prices,
     )
     if args.breakdown:
         reporter.crafts(chosen, inputs.workshop, args.crafting_bonus, args.mastery_bonus)

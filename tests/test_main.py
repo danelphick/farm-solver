@@ -533,6 +533,29 @@ def test_highlight_unreachable_rows_colours_only_the_flagged_line():
     assert "\x1b[31m" not in wood_line
 
 
+def test_print_plan_splits_gold_buys_from_arnold_palmer_trades(capsys):
+    # A plan that buys a Large Net (gold) and trades for Red Dye (AP): the two land
+    # in separate sections, with the trade showing its AP cost and gold-equivalent.
+    plan = SourcingPlan(
+        bought={"large net": 200, "red dye": 5000},
+        gold=200 * 0.01 + 5000 * (0.008 * 0.06),
+    )
+    prices = {"large net": 0.01, "red dye": 0.008 * 0.06}
+    ap_prices = {"red dye": 0.008}
+    print_plan(
+        plan, {}, Farm(), Workshop(), 1.0, prices=prices, ap_prices=ap_prices
+    )
+    out = capsys.readouterr().out
+    assert "Buy (with gold):" in out
+    assert "200x large net = 2 g" in out
+    assert "Trade (for Arnold Palmers):" in out
+    # 5000 red dye * 0.008 AP = 40 AP; * 0.06 g/AP = 2 g.
+    assert "5,000x red dye = 40 AP (2 g)" in out
+    assert "total 40 AP (2 g)" in out
+    # Red Dye is a trade, not a gold buy -- it must not appear in the gold section.
+    assert "red dye = 2 g" not in out
+
+
 def test_print_plan_names_the_acorn_pies_a_pie_explore_eats(capsys):
     # A pie-boosted explore burns 1/450 of an Acorn Pie per palmer; 109 palmers is
     # 0.24 of a pie, but you eat whole pies, so the line rounds up to 1.

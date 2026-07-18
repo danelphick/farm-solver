@@ -757,4 +757,72 @@ def trading_prices(
     ):
         if cfg_key in section:
             prices[item] = float(section[cfg_key]) / GK_UNITS
+
+    # Arnold-Palmer trading (see arnold_palmer_prices): resources bought for AP
+    # rather than gold. The AP cost is converted to gold at the Arnold Palmer's own
+    # per-unit gold rate and folded in here, so the LP ranks trades on the same gold
+    # axis as everything else (per the user's "convert AP to gold" choice) -- no
+    # separate AP objective. Only when Arnold Palmer itself is priced (nothing to
+    # convert against otherwise); a consumable already priced in gold above keeps
+    # that price (skip the collision).
+    if arnold_palmer > 0:
+        for item, ap_per_unit in arnold_palmer_prices(config).items():
+            if item not in prices:
+                prices[item] = ap_per_unit * arnold_palmer  # AP/unit * gold/AP
+    return prices
+
+
+def _normalise_item(name: str) -> str:
+    """Config item key -> the lower-cased, space-separated name the solver uses.
+
+    Mirrors how :func:`trading_prices` maps ``arnold_palmer`` -> ``"arnold palmer"``:
+    underscores become spaces (so a TOML key like ``red_dye`` matches ``"red dye"``),
+    and an allow/deny entry written with spaces already normalises to itself.
+    """
+    return name.replace("_", " ").strip().lower()
+
+
+def arnold_palmer_prices(
+    config: dict[str, Any], enabled_override: bool | None = None
+) -> dict[str, float]:
+    """Per-unit **Arnold Palmer** trade prices, keyed by lower-cased item name.
+
+    Reads ``[trading.ap]`` -- the ``enabled`` master switch, the mutually exclusive
+    ``allow``/``deny`` filters -- and the ``[trading.ap.prices]`` sub-table of prices
+    in "apk" (Arnold Palmers per 1000, like ``[trading] grapes``), divided by
+    :data:`GK_UNITS` to a per-unit AP price. (The section is ``[trading.ap]`` rather
+    than ``[trading.arnold_palmer]`` because the latter would collide with the
+    ``arnold_palmer`` gold-price key already in ``[trading]``.) These are the
+    resources that were **not** already tradeable for gold (raw materials, crafting
+    inputs, meals) -- a new instant-buy channel whose AP cost :func:`trading_prices`
+    converts to gold.
+
+    Returns ``{}`` -- the feature fully off, so the solver is byte-identical to before
+    -- when the section is absent or ``enabled`` is falsey. ``allow`` keeps only the
+    listed items; ``deny`` drops the listed items; setting **both** is a config error.
+
+    ``enabled_override`` (from ``--use-trading``/``--no-trading``) forces the feature
+    on or off regardless of the config ``enabled`` flag; ``None`` (the default) uses
+    the config value.
+    """
+    trading = config.get("trading") or {}
+    section = trading.get("ap") or {}
+    enabled = section.get("enabled", False) if enabled_override is None else enabled_override
+    if not enabled:
+        return {}
+    raw = section.get("prices") or {}
+    prices = {_normalise_item(k): float(v) / GK_UNITS for k, v in raw.items()}
+
+    allow = section.get("allow")
+    deny = section.get("deny")
+    if allow and deny:
+        raise ValueError(
+            "[trading.ap]: set only one of 'allow' or 'deny', not both"
+        )
+    if allow:
+        keep = {_normalise_item(a) for a in allow}
+        prices = {k: v for k, v in prices.items() if k in keep}
+    elif deny:
+        drop = {_normalise_item(d) for d in deny}
+        prices = {k: v for k, v in prices.items() if k not in drop}
     return prices

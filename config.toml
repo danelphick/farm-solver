@@ -176,6 +176,131 @@ hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
 # (or mastery.use_pumpkin_juice) decides whether juice is drunk at all, not this key.
 pumpkin_juice   = 230
 
+[trading.ap]    # Trade OTHER resources for Arnold Palmers (a finer currency than
+# gold, which only trades in units of 5). These are the items NOT already buyable
+# for gold above -- raw materials, crafting inputs, meals. A trade is an instant
+# buy whose AP cost is converted to gold (at the arnold_palmer rate above) and
+# folded into the gold the frontier ranks on; traded items earn no mastery, so a
+# trade can cover a material use or a plain -i count goal but never a -m mastery
+# goal. Section is [trading.ap], not [trading.arnold_palmer], to avoid colliding
+# with the arnold_palmer gold-price key above.
+enabled = true                # master switch for the whole feature
+# Restrict which items may be traded. Mutually exclusive -- set at most one.
+# allow = ["red dye", "grapes"]   # if set, ONLY these are tradeable
+deny  = ["veggie juice"]        # if set, all priced items EXCEPT these
+
+[trading.ap.prices]  # AP trade prices in apk (Arnold Palmers per 1000)
+"3-leaf clover" = 4       # 4-6 AP/k
+"acorn" = 6       # 6-9 AP/k
+"acorn pie" = 5000    # 5-12 AP each
+"apple" = 15      # 15-20 AP/k
+"aquamarine" = 3       # 3-5 AP/k
+"arrowhead" = 2       # 2-3 AP/k
+"axe" = 2       # 2-3 AP/k
+"bird egg" = 3       # 3-5 AP/k
+"black powder" = 2       # 2-3 AP/k
+"blue crab" = 1       # 1 AP/k
+"blue dye" = 4       # 4-6 AP/k
+"blue feathers" = 2       # 2-3 AP/k
+"bluegill" = 1       # 1 AP/k
+"bone" = 1       # 1-2 AP/k
+"bouquet of flowers" = 75      # 75-115 AP/k
+"breakfast boost" = 2000    # 2-3 AP each
+"bucket" = 2       # 2 AP/k
+"cabbage stew" = 6500    # 6.5-7 AP each
+"carbon sphere" = 6       # 6-10 AP/k
+"carp" = 1       # 1 AP/k
+"carrot" = 3       # 3-5 AP/k
+"cat's meow" = 2500    # 2.5-4 AP each
+"caterpillar" = 50      # 50-100 AP/k
+"cheese" = 115     # 115-155 AP/k
+"coal" = 2       # 2 AP/k
+"cricket" = 75000   # 75-155 AP each
+"crunchy omelette" = 10000   # 10-15 AP each
+"cucumber" = 3       # 3-5 AP/k
+"eggplant" = 3       # 3-5 AP/k
+"eggs" = 3       # 3-5 AP/k
+"explosive" = 3       # 3-5 AP/k
+"feathers" = 3       # 3-5 AP/k
+"fern leaf" = 2       # 2-5 AP/k
+"festive eggnog" = 1000    # 1-3 AP each
+"fire ant" = 5       # 5-10 AP/k
+"fish bones" = 1       # 1-3 AP/k
+"fishing net" = 10      # 10 AP/k
+"flier" = 5       # 5 AP/k
+"giant centipede" = 1       # 1-2 AP/k
+"glass orb" = 2       # 2-3 AP/k
+"gold feather" = 155     # 155-230 AP/k
+"grapes" = 5       # 5-8 AP/k
+"grasshopper" = 500     # .5-1 AP each
+"green chromis" = 1       # 1 AP/k
+"green dye" = 4       # 4-7 AP/k
+"green parchment" = 3       # 3-4 AP/k
+"grubs" = 1       # 1 AP/k
+"hammer" = 3       # 3-5 AP/k
+"heart container" = 310000  # 310-385 AP each
+"hide" = 3       # 3-4 AP/k
+"hops" = 10      # 10-20 AP/k
+"horn" = 8       # 8-10 AP/k
+"horned beetle" = 3       # 3 AP/k
+"iced tea" = 3       # 3-5 AP/k
+"iron cup" = 1       # 1 AP/k
+"ladder" = 3       # 3-4 AP/k
+"leather" = 4       # 4-6 AP/k
+"leather diary" = 2       # 2-3 AP/k
+"leek" = 35      # 35-40 AP/k
+"lemon" = 11.5    # 11.5-12.5 AP/k
+"lemonade" = 80      # 80-85 AP/k
+"miab" = 3       # 3 AP/k
+"milk" = 5       # 5-8 AP/k
+"mushroom" = 1       # 1-3 AP/k
+"mushroom paste" = 2       # 2-3 AP/k
+"mushroom stew" = 4500    # 4.5-6.5 AP each
+"neigh" = 4500    # 4.5-5.5 AP each
+"oak" = 2       # 2-3 AP/k
+"old boot" = 1       # 1-3 AP/k
+"onion" = 20      # 20-30 AP/k
+"onion soup" = 2000    # 2-3 AP each
+"orange" = 40      # 40-45 AP/k
+"over the moon" = 3000    # 3-4 AP each
+"peas" = 3       # 3-5 AP/k
+"peppers" = 3       # 3-5 AP/k
+"piece 03" = 230000  # 230-385 AP each
+"piece 11" = 230000  # 230-385 AP each
+"potato" = 5       # 5-10 AP/k
+"purple dye" = 15      # 15-20 AP/k
+"purple flower" = 4       # 4-7 AP/k
+"purple parchment" = 3       # 3-5 AP/k
+"quandary chowder" = 4500    # 4.5-6 AP each
+"radish" = 15      # 15-20 AP/k
+"red dye" = 8       # 8-10 AP/k
+"rope" = 2       # 2-3 AP/k
+"scrap metal" = 1       # 1-3 AP/k
+"scrap wire" = 1       # 1-2 AP/k
+"sea pincher special" = 4500    # 4.5-5.5 AP each
+"shimmer stone" = 1       # 1-2 AP/k
+"shiny beetle" = 3       # 3-5 AP/k
+"shovel" = 3       # 3-5 AP/k
+"shrimp" = 1       # 1-3 AP/k
+"shrimp-a-plenty" = 4500    # 4.5-5.5 AP each
+"skipjack" = 1       # 1 AP/k
+"slimestone" = 2       # 2-3 AP/k
+"small prawn" = 1       # 1 AP/k
+"snail" = 3       # 3-5 AP/k
+"spider" = 30      # 30-50 AP/k
+"stingray" = 1       # 1-3 AP/k
+"stone" = 1       # 1 AP/k
+"tomato" = 15      # 15-20 AP/k
+"twine" = 2       # 2 AP/k
+"unpolished shimmer stone" = 1       # 1 AP/k
+"valentines card" = 10000   # 10 AP each
+"veggie juice" = 100     # 100-125 AP/k
+"wood" = 1       # 1 AP/k
+"wooden box" = 2       # 2-3 AP/k
+"wooden button" = 2       # 2-4 AP/k
+"wooden table" = 3       # 3-5 AP/k
+"yarn" = 2       # 2-4 AP/k
+
 [mastery]    # Pumpkin Juice: a bought item that instantly boosts one mastery goal
 # by 10% of its tier. Off by default; --use-pumpkin-juice[=N] overrides this.
 # `true` lets the solver use any number, an integer caps the total, `false` is off.

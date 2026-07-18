@@ -391,6 +391,36 @@ Surplus (accumulates past the goal), craftable into sellable goods:
 
 It is rigorous for every plan: consumables are always grounded, so a plan self-sources exactly what it needs (net of what it buys) and the leftovers are genuine spare capacity — naturally zero when the binding materials are all used up.
 
+#### Trading resources for Arnold Palmers
+
+Beyond the handful of gold-buyable consumables above, most FarmRPG resources trade between players for **Arnold Palmers** — a finer-grained currency than gold, which only settles in units of 5. Buying a resource this way is often far cheaper than making it (trading for Red Dye beats exploring Whispering Creek and crafting it), so the `[trading.ap]` section turns each such resource into an extra **instant buy** the solver can choose instead of self-sourcing:
+
+```toml
+[trading.ap]
+enabled = true                # master switch (also --use-trading / --no-trading)
+# allow = ["red dye", "grapes"]   # if set, ONLY these trade
+# deny  = ["veggie juice"]        # if set, all priced items EXCEPT these; allow/deny are mutually exclusive
+
+[trading.ap.prices]           # AP trade prices in "apk" (Arnold Palmers per 1000), low end of the range
+"red dye" = 8
+"grapes"  = 5
+"stone"   = 1
+# … ~110 resources the solver knows (raw materials, crafting inputs, meals) …
+"acorn pie" = 5000            # a per-each price stored as apk (5 AP each × 1000)
+```
+
+Each trade's AP cost is **converted to gold** (at the `arnold_palmer` rate in `[trading]` above — 60 gk → 0.06 g/AP) and folded into the same gold the frontier ranks on, so trading and self-sourcing compete on one axis; no separate AP budget. The solver still weighs it against getting the item free as an explore *byproduct* — an exploring Arnold Palmer yields a whole bundle, so a resource the plan already gathers on the way to something else is never paid for twice. The section is `[trading.ap]` rather than `[trading.arnold_palmer]` only because the latter would collide with the `arnold_palmer` gold-price key.
+
+**Trading earns no mastery** (like any purchase): a trade may cover a material/tool use, or a plain **`-i` count** goal, but **never an item's own `-m` mastery** goal, which must still be crafted or gathered. The five gold-buyable consumables are left gold-only (no duplicate AP channel). A priced plan lists what it trades in a **Trade (for Arnold Palmers)** section — each resource with the Arnold Palmers it costs and their gold value, plus a total — so you can see how many Arnold Palmers the plan needs:
+
+```text
+Trade (for Arnold Palmers):
+  5,000x Red Dye = 40 AP (2 g)
+  total 40 AP (2 g)
+```
+
+The price table is generated from a captured community price list by `scripts/generate_trade_prices.py` (offline, from a committed snapshot); regenerate with it rather than hand-editing en masse. Ascension mode does not trade.
+
 ### Fishing and exploring
 
 The consumable channels have their own perk flags; the zones and drop rates come from `fishing.csv` and `exploring.csv`:
