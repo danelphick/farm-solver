@@ -175,6 +175,11 @@ hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
 # Present-but-0 means free, as everywhere in this section; --use-pumpkin-juice[=N]
 # (or mastery.use_pumpkin_juice) decides whether juice is drunk at all, not this key.
 pumpkin_juice   = 230
+# Charge free (banked --current-stamina + Farmhouse passive) stamina spent on Apple
+# Cider explores its Orange-Juice-equivalent opportunity cost (orange_juice / 100 per
+# stamina), so a plan that drains the stamina bank is not treated as free. Needs an
+# orange_juice price above. --price-stamina / --no-price-stamina override it.
+price_stamina = true
 
 [trading.ap]    # Trade OTHER resources for Arnold Palmers (a finer currency than
 # gold, which only trades in units of 5). These are the items NOT already buyable

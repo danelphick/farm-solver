@@ -29,6 +29,7 @@ from main import (
     limit_shortfall,
     parse_gold_budget,
     parse_target,
+    price_stamina_enabled,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
     resolve_crafting_bonus,
@@ -87,6 +88,30 @@ def test_cheapest_plan_ranks_by_net_gold_crediting_banked_surplus():
         SourcingPlan(time=timedelta(hours=3), gold=8, surplus_gold=20),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_cheapest_plan_ranks_by_net_gold_charging_stamina():
+    # Plan 0 buys nothing but drains banked stamina worth 30 (net 30); plan 1 buys
+    # 10 and burns no stamina (net 10), so it is the cheapest.
+    plans = [
+        SourcingPlan(time=timedelta(hours=1), gold=0, stamina_gold=30),
+        SourcingPlan(time=timedelta(hours=3), gold=10, stamina_gold=0),
+    ]
+    assert cheapest_plan(plans) == 1
+
+
+def test_price_stamina_enabled_cli_overrides_config():
+    on = build_parser().parse_args(["--price-stamina"])
+    off = build_parser().parse_args(["--no-price-stamina"])
+    assert price_stamina_enabled(on, {"trading": {"price_stamina": False}}) is True
+    assert price_stamina_enabled(off, {"trading": {"price_stamina": True}}) is False
+
+
+def test_price_stamina_enabled_defaults_from_config_then_true():
+    unset = build_parser().parse_args([])  # price_stamina is None
+    assert price_stamina_enabled(unset, {"trading": {"price_stamina": False}}) is False
+    assert price_stamina_enabled(unset, {"trading": {}}) is True  # default on
+    assert price_stamina_enabled(unset, {}) is True
 
 
 def test_limit_shortfall_reports_a_too_tight_time_limit():

@@ -297,6 +297,25 @@ def resolve_crafting_bonus(args: argparse.Namespace, cfg: dict) -> None:
     args.crafting_bonus = _crafting_bonus_for_cfg(args.crafting_bonus, cfg)
 
 
+def price_stamina_enabled(args: argparse.Namespace, cfg: dict) -> bool:
+    """Whether to charge free stamina its Orange-Juice-equivalent opportunity cost.
+
+    Stamina an Apple Cider explore burns that arrived for free -- the banked
+    ``--current-stamina`` and the Farmhouse's passive deposit -- is otherwise a
+    free resource, so a plan that drains it looks cheaper than it is. With this on
+    (the default), it is valued at what replacing it would cost in Orange Juice
+    (``orange_juice_price / 100``) and folded into a plan's gold (see
+    :func:`optimizer.plan_gold`, :attr:`optimizer.SourcingPlan.cost`). ``--price-
+    stamina``/``--no-price-stamina`` override ``[trading] price_stamina`` (default
+    true). Off in ascension mode -- a staged climb prices stamina by stage and does
+    not thread the opportunity cost through :class:`StagedPlan`.
+    """
+    override = getattr(args, "price_stamina", None)
+    if override is not None:
+        return override
+    return bool(cfg.get("trading", {}).get("price_stamina", True))
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     state: farm_solver.GameState,
@@ -710,6 +729,24 @@ def build_parser() -> argparse.ArgumentParser:
             "(default: 0)"
         ),
     )
+    stamina_pricing = parser.add_mutually_exclusive_group()
+    stamina_pricing.add_argument(
+        "--price-stamina",
+        dest="price_stamina",
+        action="store_true",
+        default=None,
+        help=(
+            "charge free (banked + passive) stamina its Orange-Juice-equivalent "
+            "opportunity cost, so a plan that drains the stamina bank is not free "
+            "(overrides [trading] price_stamina; the default is on)"
+        ),
+    )
+    stamina_pricing.add_argument(
+        "--no-price-stamina",
+        dest="price_stamina",
+        action="store_false",
+        help="treat banked/passive stamina as free (do not price it)",
+    )
     parser.add_argument(
         "--plans",
         type=int,
@@ -1114,19 +1151,16 @@ def limit_shortfall(
 def cheapest_plan(plans: list[optimizer.SourcingPlan]) -> int:
     """Index of the cheapest plan: least net gold, ties broken by least time.
 
-    A plan's net gold is ``plan.gold - plan.surplus_gold`` (see
-    :attr:`optimizer.SourcingPlan.cost`) -- the gold it spends buying consumables
-    less the sale value of the surplus it banks. The cheapest plan is the one lowest
-    on that axis: it buys least and banks most, the fully self-sourced, passive-
-    leaning end of the frontier, which credited for its banked surplus can sit below
-    zero gold.
+    A plan's net gold is ``plan.cost[1]`` (see :attr:`optimizer.SourcingPlan.cost`)
+    -- the gold it spends buying consumables, less the sale value of the surplus it
+    banks, plus the opportunity cost of the free stamina it burns. The cheapest plan
+    is the one lowest on that axis: it buys least and banks most, the fully
+    self-sourced, passive-leaning end of the frontier, which credited for its banked
+    surplus can sit below zero gold.
     """
     return min(
         range(len(plans)),
-        key=lambda i: (
-            plans[i].gold - plans[i].surplus_gold,
-            plans[i].time.total_seconds(),
-        ),
+        key=lambda i: (plans[i].cost[1], plans[i].time.total_seconds()),
     )
 
 
@@ -1327,6 +1361,17 @@ def _build_channel_setup(
     # makes each buyable, so the frontier can trade makespan against real gold.
     # Absent, nothing is buyable and every plan is fully self-sourced.
     prices = config.trading_prices(cfg, crafting_bonus=crafting_bonus)
+    # Value free (banked + passive) stamina at its Orange-Juice equivalent so a
+    # plan that drains it is not treated as free (see price_stamina_enabled,
+    # optimizer._build_base). A valuation-only key, like grape juice -- never
+    # buyable. Off in ascension mode (a staged climb does not aggregate it).
+    if (
+        prices
+        and "orange juice" in prices
+        and not getattr(args, "ascend", None)
+        and price_stamina_enabled(args, cfg)
+    ):
+        prices["stamina"] = prices["orange juice"] / sources.ORANGE_JUICE_STAMINA
     # Arnold-Palmer trade prices (per-unit AP) for the resources not already
     # gold-buyable: an extra instant-buy channel whose gold-equivalent is already
     # folded into ``prices`` by trading_prices. Empty when disabled. Kept for the

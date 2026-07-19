@@ -181,14 +181,15 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   Juice**), `pumpkin_juices` (`{goal item: count}` juices drunk), `pumpkin_gold`
   (their slice of `gold`), `pumpkin_credit` (`{goal item: demand units}` a juice
   covers, netted out of `need` in `plan_balance`), `surplus_gold`
-  (sale value of banked surplus, set by `frontier`), `remainder`, and `_origin`
+  (sale value of banked surplus, set by `frontier`), `stamina_gold` (the free-stamina
+  opportunity cost, see the Gold-prices section), `remainder`, and `_origin`
   (`(base, kwargs)` stamped by `_solve_configured`, `repr=False`/`compare=False`, so
   `frontier` can re-solve a returned plan exact — see its cost bullet).
-  `.cost` is the pair `(time, net gold)` where **net gold = `gold − surplus_gold`**
-  — bought less what the plan banks — so a slow, passive-leaning plan that banks
-  more than it buys sits at *negative* gold and the frontier extends past the "buy
-  nothing" line. Two plans equal on both are equivalent however they mix making,
-  buying and banking.
+  `.cost` is the pair `(time, net gold)` where **net gold = `gold − surplus_gold`
+  plus `stamina_gold`** — bought less what the plan banks, plus the free stamina
+  it drains — so a slow, passive-leaning plan that banks more than it buys sits at
+  *negative* gold and the frontier extends past the "buy nothing" line. Two plans
+  equal on both are equivalent however they mix making, buying and banking.
 - **`sources.OpenFlow(name, consumes, yields)`** — opening a chest/bag: a free,
   instant multi-output LP flow.
 - **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
@@ -380,8 +381,8 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   **`plan_surplus_gold`** = `Σ surplus_sale_value(accumulated_leftovers(...))`, the
   sale value of what a plan **accumulates** past its goal; `frontier` stores it on
   each plan as `surplus_gold`, so `cost`'s net gold nets it off (see the
-  `SourcingPlan` bullet). `main.cheapest_plan` ranks by **net** gold
-  (`plan.gold − plan.surplus_gold`) — buys least, banks most.
+  `SourcingPlan` bullet). `main.cheapest_plan` ranks by **net** gold (`plan.cost[1]`)
+  — buys least, banks most, drains least free stamina.
   **`accumulated_leftovers`** = `plan_leftovers` minus each item's
   `leftover_inventory_share`: pre-existing inventory sitting unused is **not** counted
   as surplus the plan banks (otherwise every plan on a save with a big consumable
@@ -389,6 +390,28 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   what executing the plan produces beyond all it consumes (passive, crafts, opens,
   gathering) is credited — the same figure the report's Surplus section now shows
   (accumulated-only; the old inventory/accumulated split is gone).
+- **Stamina opportunity cost** (`price_stamina` option, default on): stamina an Apple
+  Cider explore burns that arrived free — the banked `--current-stamina` (an inventory
+  `held` credit) and the Farmhouse passive deposit — is otherwise a free resource, so a
+  plan draining it looks cheaper than it is. `main._build_channel_setup` injects a
+  **valuation-only** `prices["stamina"] = orange_juice_price / ORANGE_JUICE_STAMINA`
+  key (like grape juice: never in `BUYABLE`, so never a buy var; needs an OJ price;
+  off in ascension mode). `optimizer._build_base` then meters the *free* stamina
+  consumed with a `stamina_op ≥ Σ(cider stamina) − Σ(topped-up stamina)` variable
+  (`≥ 0`), where topped-up = stamina from the item-consuming flows (drinking Orange
+  Juice, eating an Apple); subtracting both leaves exactly the banked + passive
+  stamina. OJ stamina is already priced as the juice (double-charge avoided), and
+  eating a surplus Apple is the deliberate near-free path the LP already leans on —
+  both outside this "banked + passive" charge, per the user's scope. It adds
+  `stamina_price * stamina_op` to **`spend_value`/`total_value`
+  only, never `gold`** (using free stamina spends no real gold, so it must stay a
+  zero-gold action for the buy-nothing / `--max-gold` endpoints). The readout puts
+  `stamina_price * stamina_op.value()` on `plan.stamina_gold`; it is **not** in
+  `plan_gold` (not a tradeable consumable's market value) but `cost`'s net gold nets it
+  in, so the frontier ranks a stamina-draining plan for it. `main.price_stamina_enabled`
+  resolves `--price-stamina`/`--no-price-stamina` over `[trading] price_stamina`.
+  `report._net_gold_note`/`_print_stamina_cost` surface it (a `(stamina N, net M)`
+  frontier annotation and a "Stamina (opportunity cost)" plan section).
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
   `_non_dominated` then `_thin` to `count`, then **exact-finishes** the survivors

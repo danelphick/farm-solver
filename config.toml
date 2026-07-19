@@ -175,6 +175,11 @@ hickory_omelette = 350  # 35g per 100 = 350 gold per 1000
 # Present-but-0 means free, as everywhere in this section; --use-pumpkin-juice[=N]
 # (or mastery.use_pumpkin_juice) decides whether juice is drunk at all, not this key.
 pumpkin_juice   = 230
+# Charge free (banked --current-stamina + Farmhouse passive) stamina spent on Apple
+# Cider explores its Orange-Juice-equivalent opportunity cost (orange_juice / 100 per
+# stamina), so a plan that drains the stamina bank is not treated as free. Needs an
+# orange_juice price above. --price-stamina / --no-price-stamina override it.
+price_stamina = true
 
 [trading.ap]    # Trade OTHER resources for Arnold Palmers (a finer currency than
 # gold, which only trades in units of 5). These are the items NOT already buyable
@@ -187,7 +192,7 @@ pumpkin_juice   = 230
 enabled = true                # master switch for the whole feature
 # Restrict which items may be traded. Mutually exclusive -- set at most one.
 # allow = ["red dye", "grapes"]   # if set, ONLY these are tradeable
-deny  = ["veggie juice"]        # if set, all priced items EXCEPT these
+deny  = ["oak", "apple", "wood", "stone", "hammer"]        # if set, all priced items EXCEPT these
 
 [trading.ap.prices]  # AP trade prices in apk (Arnold Palmers per 1000)
 "3-leaf clover" = 4       # 4-6 AP/k
@@ -196,6 +201,7 @@ deny  = ["veggie juice"]        # if set, all priced items EXCEPT these
 "apple" = 15      # 15-20 AP/k
 "aquamarine" = 3       # 3-5 AP/k
 "arrowhead" = 2       # 2-3 AP/k
+
 "axe" = 2       # 2-3 AP/k
 "bird egg" = 3       # 3-5 AP/k
 "black powder" = 2       # 2-3 AP/k

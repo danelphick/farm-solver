@@ -27,7 +27,14 @@ from optimizer import (
     surplus_sale_value,
 )
 from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
-from sources import Draw, Offer, OpenFlow, passive_offers, sawmill_boost_offers
+from sources import (
+    Draw,
+    Offer,
+    OpenFlow,
+    passive_offers,
+    sawmill_boost_offers,
+    stamina_offers,
+)
 
 # Per-unit gold prices for the buyable consumables (see config.trading_prices).
 GOLD = {
@@ -1233,6 +1240,69 @@ def test_plan_gold_includes_pumpkin_juice():
     # Pumpkin Juice has no self-sourced form, so its whole gold adds to the total.
     plan = SourcingPlan(large_nets=100, pumpkin_gold=50)
     assert plan_gold(plan, GOLD) == pytest.approx(100 * 0.01 + 50)
+
+
+# --- Stamina opportunity cost (the ``price_stamina`` option) ---
+
+# A cider-like explore: instant, burns one stamina, yields 0.4 wood. 100 explores
+# (250 stamina) cover a demand of 100 wood; the stamina comes from the bank, the
+# Farmhouse-like passive deposit, or drinking Orange Juice.
+_STAMINA_EXPLORE = Offer(
+    "explore", "exploring", {"wood": 0.4}, consumes={"stamina": 1.0},
+    time_per_unit=timedelta(0),
+)
+# Per-stamina gold: an Orange Juice (0.008 g) yields 100 stamina.
+_STAMINA_GOLD = {**GOLD, "stamina": 0.008 / 100}
+
+
+def test_stamina_cost_charges_banked_stamina_at_orange_juice_value():
+    offers = [_STAMINA_EXPLORE, *stamina_offers()]
+    demand = {"wood": 40}  # 100 explores -> 100 stamina, all from the 1000 banked
+    priced = minimize(offers, demand, prices=_STAMINA_GOLD, gold_weight=BUY_FREELY,
+                      inventory={"stamina": 1000})
+    # 100 free stamina at 0.008/100 each (solver slack of a few 1e-9 aside).
+    assert priced.stamina_gold == pytest.approx(100 * 0.008 / 100, abs=1e-5)
+    # It buys nothing, so it is not gold, but cost's net gold charges it.
+    assert priced.gold == pytest.approx(0, abs=1e-6)
+    assert priced.cost[1] == pytest.approx(priced.stamina_gold, abs=1e-6)
+
+
+def test_stamina_cost_off_without_the_price_key():
+    # No "stamina" key (the option off): banked stamina stays free, byte-identical.
+    offers = [_STAMINA_EXPLORE, *stamina_offers()]
+    plan = minimize(offers, {"wood": 40}, prices=GOLD, gold_weight=BUY_FREELY,
+                    inventory={"stamina": 1000})
+    assert plan.stamina_gold == 0
+    assert plan.cost[1] == pytest.approx(0)
+
+
+def test_stamina_cost_excludes_orange_juice_stamina():
+    # No bank: the plan must drink Orange Juice, which is already priced via the
+    # juice (in gold) -- so the stamina charge must not double-count it.
+    offers = [_STAMINA_EXPLORE, *stamina_offers()]
+    plan = minimize(offers, {"wood": 40}, prices=_STAMINA_GOLD,
+                    gold_weight=BUY_FREELY, inventory={})
+    assert plan.orange_juice == pytest.approx(1)  # 100 stamina / 100 per juice
+    assert plan.stamina_gold == pytest.approx(0, abs=1e-6)
+    assert plan.gold == pytest.approx(0.008)  # the juice, once
+
+
+def test_stamina_cost_excludes_apple_stamina():
+    # Eating an Apple tops up stamina by consuming an item, like drinking Orange
+    # Juice, so it is exempt too: only banked/passive stamina is charged. Here the
+    # only stamina source is eating Apples (from a held stock), which must stay free.
+    eat_apple = next(o for o in stamina_offers() if "apple" in o.consumes)
+    offers = [_STAMINA_EXPLORE, eat_apple]
+    plan = minimize(offers, {"wood": 40}, prices=_STAMINA_GOLD,
+                    gold_weight=BUY_FREELY, inventory={"apple": 1000})
+    assert plan.stamina_gold == pytest.approx(0, abs=1e-6)
+
+
+def test_stamina_cost_absent_from_plan_gold():
+    # plan_gold is the market value of tradeable consumables; the stamina
+    # opportunity cost is carried by cost, not folded in here.
+    plan = SourcingPlan(large_nets=100, stamina_gold=50)
+    assert plan_gold(plan, _STAMINA_GOLD) == pytest.approx(100 * 0.01)
 
 
 # --- Ascension: the LP chooses which candidates to master/grandmaster/mega ---

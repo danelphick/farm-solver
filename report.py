@@ -260,6 +260,46 @@ def _pumpkin_juices(plan: optimizer.SourcingPlan) -> float:
     return sum(plan.pumpkin_juices.values())
 
 
+def _net_gold_note(plan: optimizer.SourcingPlan) -> str:
+    """`` (bank B, stamina S, net N)`` for a frontier row, or "" if nothing to note.
+
+    Shows the surplus the plan banks (a credit) and the free-stamina opportunity
+    cost it spends (a charge), plus its **net** gold ``plan.cost[1]`` -- the real
+    cost the frontier trades against time (see :attr:`optimizer.SourcingPlan.cost`).
+    Each piece is omitted when zero, so a plan with neither adds nothing.
+    """
+    banked = round(plan.surplus_gold)
+    stamina = round(plan.stamina_gold)
+    pieces = []
+    if banked:
+        pieces.append(f"bank {banked:,}")
+    if stamina:
+        pieces.append(f"stamina {stamina:,}")
+    if not pieces:
+        return ""
+    return f" ({', '.join(pieces)}, net {round(plan.cost[1]):,})"
+
+
+def _stamina_units(plan: optimizer.SourcingPlan, prices: dict[str, float] | None) -> float:
+    """Free stamina units behind ``plan.stamina_gold`` (gold / per-unit price)."""
+    unit = (prices or {}).get("stamina", 0.0)
+    return plan.stamina_gold / unit if unit else 0.0
+
+
+def _print_stamina_cost(
+    plan: optimizer.SourcingPlan, prices: dict[str, float] | None
+) -> None:
+    """Text ``Stamina (opportunity cost)`` section, skipped when the cost rounds to 0."""
+    if prices is None or round(plan.stamina_gold) < 1:
+        return
+    units = _stamina_units(plan, prices)
+    print("\nStamina (opportunity cost):")
+    print(
+        f"  {round(units):,} banked/passive stamina"
+        f" = {round(plan.stamina_gold):,} g (at Orange-Juice value)"
+    )
+
+
 def print_frontier(
     plans: list[optimizer.SourcingPlan],
     selected: int,
@@ -277,10 +317,12 @@ def print_frontier(
     (one ``(to_buy, passive)`` pair per plan, from
     :func:`optimizer.plan_gold_breakdown`) splits that into what the plan **buys**
     and the market value of what it **self-sources** instead, summing to the total.
-    A plan that banks surplus then shows ``(bank B, net N)``: the sale value of what
-    it produces past all it consumes (``plan.surplus_gold``), and its **net** gold
-    ``buy - bank`` -- the real cost the frontier trades against time, which for a
-    slow, passive-leaning plan falls below zero (see
+    A plan that banks surplus or drains free stamina then shows ``(bank B,
+    stamina S, net N)`` (each piece omitted when zero, see :func:`_net_gold_note`):
+    the sale value of what it produces past all it consumes (``plan.surplus_gold``),
+    the free-stamina opportunity cost it spends (``plan.stamina_gold``), and its
+    **net** gold ``buy - bank + stamina`` -- the real cost the frontier trades
+    against time, which for a slow, passive-leaning plan falls below zero (see
     :attr:`optimizer.SourcingPlan.cost`); this is what "cheapest" ranks by.
     ``reasons`` annotates why each plan is on the frontier (a resource plan says
     "all Steel Wire from passive"); endpoints and farming intermediates carry only
@@ -327,13 +369,12 @@ def print_frontier(
                 gold = f" -> {buy:,} + {passv:,} = {buy + passv:,} g"
             else:
                 gold = f" -> {round(optimizer.plan_gold(plan, prices)):,} g"
-            # Credit the surplus the plan banks: its net cost (what the frontier
-            # trades against time) is what it buys less what it can sell, which for a
-            # slow, passive-leaning plan drops below zero (see SourcingPlan.cost).
-            banked = round(plan.surplus_gold)
-            if banked:
-                net = round(plan.gold - plan.surplus_gold)
-                gold += f" (bank {banked:,}, net {net:,})"
+            # Credit the surplus the plan banks and charge the free stamina it
+            # drains: its net cost (what the frontier trades against time) is what
+            # it buys, less what it can sell, plus the Orange-Juice-equivalent of
+            # the banked/passive stamina spent -- which for a slow, passive-leaning
+            # plan drops below zero (see SourcingPlan.cost).
+            gold += _net_gold_note(plan)
         tags = []
         if i == 0:
             tags.append("fastest")
@@ -409,10 +450,7 @@ def markdown_frontier(
                 gold = f"{buy:,} + {passv:,} = {buy + passv:,} g"
             else:
                 gold = f"{round(optimizer.plan_gold(plan, prices)):,} g"
-            banked = round(plan.surplus_gold)
-            if banked:
-                net = round(plan.gold - plan.surplus_gold)
-                gold += f" (bank {banked:,}, net {net:,})"
+            gold += _net_gold_note(plan)
             row.append(gold)
         tags = []
         if i == 0:
@@ -1645,6 +1683,12 @@ def print_plan(
             print(line)
         print(f"  total {round(plan.pumpkin_gold):,} g")
 
+    # Stamina opportunity cost: the free (banked + passive) stamina spent on Apple
+    # Cider explores, valued at the Orange-Juice equivalent (see
+    # optimizer._build_base). Not a purchase -- so it sits apart from the buys --
+    # but a real cost the plan is priced and ranked on.
+    _print_stamina_cost(plan, prices)
+
     # Every consumable is grounded now, so the plan self-sources exactly what it
     # needs (net of buying) and the leftovers are genuine spare capacity -- the
     # surplus value is rigorous, shown whenever consumables are priced.
@@ -2022,6 +2066,15 @@ def markdown_plan(
         doc.heading("Pumpkin Juice (mastery boost)")
         doc.table(["Goal", "Juices", "Gold", "Drink at mastery"], rows)
         doc.para(f"Total: {round(plan.pumpkin_gold):,} g")
+
+    # Stamina opportunity cost (see print_plan's matching section / _build_base).
+    if prices is not None and round(plan.stamina_gold) >= 1:
+        units = _stamina_units(plan, prices)
+        doc.heading("Stamina (opportunity cost)")
+        doc.para(
+            f"{round(units):,} banked/passive stamina"
+            f" = {round(plan.stamina_gold):,} g (at Orange-Juice value)"
+        )
 
     if prices is not None:
         markdown_surplus_value(

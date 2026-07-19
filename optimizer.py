@@ -241,6 +241,16 @@ class SourcingPlan:
     # is ``sum(pumpkin_juices) * price``, the slice of ``gold`` spent on juice.
     pumpkin_juices: dict[str, float] = field(default_factory=dict)
     pumpkin_gold: float = 0.0
+    # Opportunity cost (gold) of the free stamina this plan spends on Apple Cider
+    # explores -- the banked ``--current-stamina`` and the Farmhouse's passive
+    # deposit, which arrive at no gold but could have fuelled something else, so are
+    # valued at the Orange-Juice equivalent (``orange_juice_price / 100``, see
+    # :func:`_build_base`). Stamina drunk from Orange Juice is excluded (already
+    # priced via the juice). 0 unless the ``price_stamina`` option is on. It buys
+    # nothing -- so it is not in ``gold``, nor a tradeable consumable so not in
+    # :func:`plan_gold` -- but :attr:`cost` nets it in, so the frontier ranks a
+    # stamina-draining plan for it (and the report prices it on its own line).
+    stamina_gold: float = 0.0
     # Demand each item's juices cover (lower-cased goal item -> units, ``count *
     # pj_gain``). This is a credit against that item's requirement, so
     # :func:`plan_balance` nets it out of ``need`` and the passive/residual accounting
@@ -306,8 +316,16 @@ class SourcingPlan:
         other tasks), extending the frontier past the "buy nothing" line. Two plans
         with the same time and net gold are equivalent however they mix making,
         buying and banking.
+
+        The stamina opportunity cost (``stamina_gold``, the free banked/passive
+        stamina a plan burns, valued at its Orange-Juice equivalent) is a real cost
+        added on: a fast plan that drains a big stamina bank is not free, it spent
+        stamina worth gold. 0 unless the ``price_stamina`` option is on.
         """
-        return (self.time.total_seconds(), self.gold - self.surplus_gold)
+        return (
+            self.time.total_seconds(),
+            self.gold - self.surplus_gold + self.stamina_gold,
+        )
 
 
 def _minutes(time: timedelta) -> float:
@@ -429,6 +447,12 @@ class _Base:
     remainder: dict[str, float]
     pj_gain: dict[str, float]
     pj_price: float
+    # Stamina opportunity cost (see _build_base): ``stamina_op`` meters the free
+    # (banked + passive) stamina consumed and ``stamina_price`` is its per-unit
+    # Orange-Juice-equivalent gold value, folded into ``spend_value``/``total_value``
+    # above. ``None``/``0`` when the option is off (no ``prices["stamina"]``).
+    stamina_op: pulp.LpVariable | None = None
+    stamina_price: float = 0.0
     # True when no demanded item is obtainable at all -- the LP is never built
     # (mirrors ``minimize``'s old early return), so ``_solve_configured`` must
     # skip straight to the trivial remainder-only plan without touching ``problem``.
@@ -733,6 +757,46 @@ def _build_base(
             if qty > 0:
                 consume_terms.setdefault(item, []).append(qty * x)
 
+    # Stamina opportunity cost. Stamina an Apple Cider explore burns that arrived
+    # *free* -- the banked ``--current-stamina`` (an inventory ``held`` credit) and
+    # the Farmhouse's daily passive deposit, neither of which consumes anything --
+    # could have fuelled something else, so its real cost is what it would take to
+    # replace: an Orange Juice yields ``ORANGE_JUICE_STAMINA`` per unit, hence
+    # ``prices["stamina"] = orange_juice_price / 100`` gold each (a valuation-only
+    # key, like grape juice -- never in ``BUYABLE``, so it never gets a buy var; see
+    # config.trading_prices). ``config`` injects it only when the option is on, so an
+    # absent key (the default in every optimizer unit test) leaves this path off and
+    # every existing solve byte-identical.
+    #
+    # Charge the free stamina consumed = all stamina an offer spends less the stamina
+    # *topped up* by an item-consuming flow (drinking Orange Juice, eating an Apple --
+    # the two offers that yield stamina by consuming an item). Those are left to their
+    # own sourcing: Orange Juice is already priced as the juice in ``spend_value``/
+    # ``gold`` (charging its stamina here too would double count), and eating a surplus
+    # Apple is the deliberate near-free path the LP already leans on -- both outside
+    # this "banked + passive" charge, per the user's scope. A free variable pinned at
+    # ``>= consumed - topped_up`` (never below 0) so a plan that tops up more stamina
+    # than it burns is not handed a negative charge. Only in ``spend_value`` (hence
+    # ``total_value``), never ``gold``: using free stamina spends no real gold, so it
+    # must stay a zero-gold action for the buy-nothing / --max-gold endpoints (this is
+    # an opportunity cost the tie-break and favour_passive lean weigh, and
+    # ``SourcingPlan.cost`` nets in for the frontier -- not a purchase).
+    stamina_price = prices.get("stamina", 0.0)
+    stamina_op: pulp.LpVariable | None = None
+    if stamina_price > 0:
+        stamina_op = pulp.LpVariable("stamina_op", lowBound=0)
+        consumed_stamina = pulp.lpSum(consume_terms.get("stamina", []))
+        topped_up_stamina = pulp.lpSum(
+            o.yields.get("stamina", 0.0) * x
+            for o, x in zip(used, usage)
+            if o.consumes and o.yields.get("stamina", 0.0)
+        )
+        problem += (
+            stamina_op >= consumed_stamina - topped_up_stamina, "stamina_op_free"
+        )
+        spend_value = spend_value + stamina_price * stamina_op
+        total_value = total_value + stamina_price * stamina_op
+
     # Net production of each item covers its demand:
     # gathered + crafted + opened - consumed-by-crafts - consumed-by-opens.
     # Iterate in a fixed (sorted) order: ``items`` is a set, whose iteration
@@ -858,6 +922,7 @@ def _build_base(
         total_value=total_value,
         used=used, crafted=crafted, opened=opened, remainder=remainder,
         pj_gain=pj_gain, pj_price=pj_price,
+        stamina_op=stamina_op, stamina_price=stamina_price,
         ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
         unmasterable=unmasterable,
     )
@@ -1462,6 +1527,15 @@ def _solve_configured(
         ),
         bought=bought,
         gold=pulp.value(base.gold) or 0.0,
+        # Opportunity cost of the free (banked + passive) stamina this plan burns,
+        # valued at the Orange-Juice equivalent (see _build_base). 0 when the option
+        # is off (``base.stamina_op is None``). Not part of ``gold`` (no real gold is
+        # spent), but priced by ``plan_gold`` and netted into ``cost``.
+        stamina_gold=(
+            base.stamina_price * (base.stamina_op.value() or 0.0)
+            if base.stamina_op is not None
+            else 0.0
+        ),
         pumpkin_juices=pumpkin_juices,
         pumpkin_gold=sum(pumpkin_juices.values()) * base.pj_price,
         # Read the credit off its own variable rather than recomputing
@@ -1737,7 +1811,10 @@ def plan_gold(plan: SourcingPlan, prices: dict[str, float]) -> float:
     plans can be ranked by real gold cost. Grape Juice, priced from its grape
     content (or 0 if no grape price is configured), is included like the rest.
     Pumpkin Juice has no self-sourced form, so its whole cost (``plan.pumpkin_gold``)
-    is added on -- it only ever counts as bought, never made.
+    is added on -- it only ever counts as bought, never made. The free-stamina
+    opportunity cost (``plan.stamina_gold``) is deliberately **not** here: it is not
+    a tradeable consumable's market value but a notional charge, carried instead by
+    :attr:`SourcingPlan.cost` (net gold) and shown as its own report line.
     """
     return sum(
         spent * prices.get(item, 0.0)
