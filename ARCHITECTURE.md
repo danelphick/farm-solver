@@ -451,6 +451,22 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     passive residuals inject no full-completion breakpoint there.
 - `_dominates`/`_non_dominated` prune by the `cost` tuple `(time, net gold)`; dedup key
   rounds both.
+- **Juice-count gap-fill** (`_pumpkin_gap_fill`/`_thin_pumpkin`, after the exact-finish):
+  a steep juice price (e.g. `trading.pumpkin_juice` pushed to `1e8` to make juice a last
+  resort) makes the exact frontier *jump* whole-juice counts — `3, 3, 2, 0`, skipping the
+  lone 1-juice plan. The relaxed sweep can't recover it: relaxed juice under-counts the
+  exact by a whole juice or two in the transition (the integrality gap), so no swept plan
+  rounds to the missing count. Since exact juice is monotone non-increasing in the time
+  cap, `_pumpkin_gap_fill` **bisects the cap axis** between two adjacent shown plans that
+  differ by ≥2 juice, MIP-solving each midpoint, to pin the fastest real plan at every
+  count in `[hi_pj, lo_pj)` (the lower bracket level included, so a *fast* juice-free plan
+  surfaces alongside the slow cheapest endpoint). `_thin_pumpkin` then re-thins the merged
+  set keeping both ends and the fastest plan per count, spending the redundant same-count
+  rows on the decreasing-juice curve (`3, 2, 1, 0, 0`). **Gated** on `distinct counts <
+  count`: when juice is cheap enough that every shown row already carries a different
+  count there is no spare row for a filler, so the branch does zero extra MIP solves and
+  the output is byte-identical to no gap-fill. This is the *only* place the frontier
+  MIP-solves points it did not sweep.
 
 ### Ascension extension (`_build_base`/`_solve_configured`, milestone 3)
 

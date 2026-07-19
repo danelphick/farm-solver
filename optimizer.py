@@ -2203,6 +2203,88 @@ def _thin(
     return [plans[i] for i in sorted(keep)]
 
 
+def _juice_count(plan: SourcingPlan) -> int:
+    """A plan's whole Pumpkin Juice count (exact plans only -- relaxed plans carry
+    a fractional sum that :func:`frontier` never rounds)."""
+    return round(sum(plan.pumpkin_juices.values()))
+
+
+def _pumpkin_gap_fill(
+    base: _Base, lo_t: float, lo_pj: int, hi_t: float, hi_pj: int,
+) -> dict[int, SourcingPlan]:
+    """The fastest exact plan at each whole-juice count in ``[hi_pj, lo_pj)``,
+    found by bisecting the time-cap axis between two bracket plans.
+
+    Juice is the model's only integer decision and its count is monotone
+    non-increasing in the time cap (each juice buys a mastery-tier slice of
+    farming time), yet the sweep's *relaxed* count is an unreliable proxy for the
+    exact one -- the integrality gap runs to a whole juice or two in the
+    transition. So when the exact-finished frontier skips a count (a wall of
+    3-juice fast plans jumping straight to the juice-free tail, ``3, 3, 2, 0``),
+    the missing rows cannot be recovered from the relaxation; they must be pinned
+    with real MIP solves. Bisection needs only a handful, and only here, where a
+    gap actually exists (normal juice prices leave none). The lower bracket level
+    ``hi_pj`` is included so its *fastest* representative surfaces too -- a fast
+    juice-free plan distinct from the slow cheapest endpoint.
+    """
+    found: dict[int, SourcingPlan] = {}
+
+    def at(cap: float) -> SourcingPlan:
+        return _solve_configured(
+            base, pj_integer=True, time_cap=timedelta(seconds=cap))
+
+    def record(plan: SourcingPlan) -> int:
+        level = _juice_count(plan)
+        if hi_pj <= level < lo_pj:
+            best = found.get(level)
+            if best is None or plan.time < best.time:
+                found[level] = plan
+        return level
+
+    def bisect(a: float, ka: int, b: float, kb: int, depth: int) -> None:
+        if ka - kb <= 1 or b - a < 60 or depth > 24:
+            return
+        mid = (a + b) / 2
+        plan = at(mid)
+        km = record(plan)
+        bisect(a, ka, mid, km, depth + 1)
+        bisect(mid, km, b, kb, depth + 1)
+
+    bisect(lo_t, lo_pj, hi_t, hi_pj, 0)
+    return found
+
+
+def _thin_pumpkin(plans: list[SourcingPlan], count: int) -> list[SourcingPlan]:
+    """Thin an exact, fastest-first juice frontier to ``count`` rows, keeping both
+    ends and the *fastest* plan at each distinct juice count.
+
+    Unlike :func:`_thin`'s even time-spread, this spends the scarce rows on the
+    decreasing-juice story: one representative per count, so redundant same-count
+    plans give way to the missing intermediates (see :func:`_pumpkin_gap_fill`).
+    """
+    if len(plans) <= count:
+        return plans
+    keep = {0, len(plans) - 1}  # fastest (max juice) and cheapest (juice-free)
+    seen: set[int] = set()
+    for i, plan in enumerate(plans):  # fastest-first: the fastest plan per count
+        if len(keep) >= count:
+            break
+        level = _juice_count(plan)
+        if level not in seen:
+            seen.add(level)
+            keep.add(i)
+    step = (len(plans) - 1) / (count - 1)
+    for i in range(count):
+        if len(keep) >= count:
+            break
+        keep.add(round(i * step))
+    for i in range(len(plans)):
+        if len(keep) >= count:
+            break
+        keep.add(i)
+    return [plans[i] for i in sorted(keep)]
+
+
 class PlanBalance(NamedTuple):
     """A plan's per-item production accounting (all keys lower-cased).
 
@@ -2546,5 +2628,36 @@ def frontier(
                 seen.add(key)
                 deduped.append(plan)
         thinned = deduped
+
+        # A steep juice price makes the exact frontier jump counts (``3, 3, 2, 0``):
+        # the relaxation under-counted juice, so thinning kept no plan at the skipped
+        # counts and none can be recovered from it. Bisect the cap axis for the
+        # missing whole-juice plans (see :func:`_pumpkin_gap_fill`) and re-thin,
+        # spending the redundant same-count rows on the decreasing-juice curve. Gated
+        # on there being a spare row to show them in (distinct counts below ``count``)
+        # so the common case -- juice cheap enough that every row already carries a
+        # different count -- does no extra solves and is byte-identical to no gap-fill.
+        distinct = len({_juice_count(p) for p in thinned})
+        if count >= 3 and len(thinned) >= 2 and distinct < count:
+            extra: list[SourcingPlan] = []
+            for lo, hi in zip(thinned, thinned[1:]):
+                lo_pj, hi_pj = _juice_count(lo), _juice_count(hi)
+                if lo_pj - hi_pj >= 2:
+                    fill = _pumpkin_gap_fill(
+                        base_active, lo.time.total_seconds(), lo_pj,
+                        hi.time.total_seconds(), hi_pj,
+                    )
+                    extra.extend(fill.values())
+            if extra:
+                for plan in extra:
+                    post(plan)
+                merged: dict[tuple[int, int], SourcingPlan] = {}
+                for plan in sorted(thinned + extra, key=lambda p: p.cost):
+                    key = (
+                        round(plan.time.total_seconds()),
+                        round(plan.gold - plan.surplus_gold),
+                    )
+                    merged.setdefault(key, plan)
+                thinned = _thin_pumpkin(list(merged.values()), count)
 
     return thinned

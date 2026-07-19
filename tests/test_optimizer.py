@@ -1222,6 +1222,41 @@ def test_frontier_returns_whole_pumpkin_juices():
     assert drank  # the setup actually exercises juice, or the test proves nothing
 
 
+def test_frontier_juice_count_is_non_increasing_with_time():
+    # The frontier's whole-juice count only falls as makespan grows (each juice buys
+    # a slice of farming time), so the rows read as a decreasing-juice curve.
+    plans = frontier([FARM_ITEM], {"It": 50}, prices=GOLD, count=6,
+                     pj_gain={"it": 10}, pj_price=5)
+    counts = [round(sum(p.pumpkin_juices.values())) for p in plans]
+    assert counts == sorted(counts, reverse=True)
+
+
+def test_pumpkin_gap_fill_recovers_intermediate_juice_counts():
+    # Between a 5-juice fast plan and a juice-free 50-minute plan, the whole counts
+    # 4, 3, 2, 1 all exist; bisecting the cap axis pins a real plan at each even when
+    # the relaxed sweep skipped it. (Count 0 sits on the bracket's far endpoint here,
+    # already a shown row, so it is not among the recovered interior counts.)
+    base = optimizer._build_base(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5)
+    fill = optimizer._pumpkin_gap_fill(base, 0.0, 5, 50 * 60, 0)
+    assert set(fill) == {1, 2, 3, 4}
+    for level, plan in fill.items():
+        assert round(sum(plan.pumpkin_juices.values())) == level
+
+
+def test_thin_pumpkin_keeps_one_plan_per_juice_count():
+    # Fastest-first plans carrying juice 3, 3, 3, 2, 1, 0, 0. Thinned to 5 must keep
+    # both ends and the *fastest* plan at each distinct count -- the decreasing-juice
+    # curve -- rather than an even time-spread that repeats the 3-juice wall.
+    def plan(juice: int) -> SourcingPlan:
+        return SourcingPlan(pumpkin_juices={"it": juice})
+
+    plans = [plan(3), plan(3), plan(3), plan(2), plan(1), plan(0), plan(0)]
+    kept = optimizer._thin_pumpkin(plans, 5)
+    counts = [round(sum(p.pumpkin_juices.values())) for p in kept]
+    assert counts == [3, 2, 1, 0, 0]
+
+
 def test_minimize_skips_pumpkin_juice_when_favouring_passive():
     # The buy-nothing slow regime never drinks juice (a gold purchase).
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, favour_passive=True,
