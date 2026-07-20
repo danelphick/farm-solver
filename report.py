@@ -370,13 +370,30 @@ def _ascii_plot(series: optimizer.GraphSeries) -> str:
     for x, y in zip(xs, ys):
         grid[row(y)][col(x)] = "*"
 
-    gutter = 13  # width of the left-hand y-axis label column below
-    lines = [f"{series.y_label:>{gutter - 1}} |" + "".join(r) for r in grid]
-    lines.append(" " * gutter + "-" * width)
-    lo_label, hi_label = f"{x_lo:,.0f}", f"{x_hi:,.0f}"
+    # The y-axis carries the metric's *scale* -- its value at the top, middle and
+    # bottom gridlines (the label itself is in the caller's "Y vs X" heading, so
+    # repeating it every row said nothing). Other rows keep a blank gutter.
+    def y_at(r: int) -> float:
+        if height <= 1 or y_hi == y_lo:
+            return y_hi
+        return y_hi - (y_hi - y_lo) * r / (height - 1)
+
+    y_ticks = {
+        r: _format_axis_value(series.y_label, y_at(r))
+        for r in {0, (height - 1) // 2, height - 1}
+    }
+    gutter = max(len(label) for label in y_ticks.values())
+    lines = [
+        f"{y_ticks.get(r, ''):>{gutter}} |" + "".join(cells)
+        for r, cells in enumerate(grid)
+    ]
+    indent = gutter + 2  # the "<gutter> |" prefix width
+    lines.append(" " * indent + "-" * width)
+    lo_label = _format_axis_value(series.x_label, x_lo)
+    hi_label = _format_axis_value(series.x_label, x_hi)
     pad = max(1, width - len(lo_label) - len(hi_label))
-    lines.append(" " * gutter + lo_label + " " * pad + hi_label)
-    lines.append(" " * gutter + series.x_label)
+    lines.append(" " * indent + lo_label + " " * pad + hi_label)
+    lines.append(" " * indent + series.x_label)
     return "\n".join(lines)
 
 

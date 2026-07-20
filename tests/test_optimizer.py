@@ -1889,7 +1889,7 @@ def test_spread_graph_series_auto_picks_gold_for_a_non_gold_axis():
     plans = _graph_fixture()
     series = spread_graph_series(plans, "time", "auto")
     assert isinstance(series, GraphSeries)
-    assert series.x_label == "Time (s)"
+    assert series.x_label == "Time"
     assert series.y_label == "Net gold"
     assert series.xs == [p.time.total_seconds() for p in plans]
     assert series.ys == [p.cost[1] for p in plans]
@@ -1900,7 +1900,7 @@ def test_spread_graph_series_auto_picks_time_for_the_gold_axis():
     plans = _graph_fixture()
     series = spread_graph_series(plans, "gold", "auto")
     assert series.x_label == "Net gold"
-    assert series.y_label == "Time (s)"
+    assert series.y_label == "Time"
     assert series.xs == [p.cost[1] for p in plans]
     assert series.ys == [p.time.total_seconds() for p in plans]
 
@@ -1908,7 +1908,7 @@ def test_spread_graph_series_auto_picks_time_for_the_gold_axis():
 def test_spread_graph_series_passive_axis_uses_time_as_x():
     plans = _graph_fixture()
     series = spread_graph_series(plans, "passive", "gold")
-    assert series.x_label == "Time (s)"
+    assert series.x_label == "Time"
     assert series.xs == [p.time.total_seconds() for p in plans]
     assert series.ys == [p.cost[1] for p in plans]
 
@@ -1917,6 +1917,6 @@ def test_spread_graph_series_explicit_metric_overrides_auto():
     plans = _graph_fixture()
     series = spread_graph_series(plans, "pumpkin-juice", "time")
     assert series.x_label == "Pumpkin Juice"
-    assert series.y_label == "Time (s)"
+    assert series.y_label == "Time"
     assert series.xs == [round(sum(p.pumpkin_juices.values())) for p in plans]
     assert series.ys == [p.time.total_seconds() for p in plans]

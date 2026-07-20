@@ -2488,12 +2488,12 @@ _SPREAD_BISECT_DEPTH = 24
 _SPREAD_MIN_BRACKET = 60.0
 
 _SPREAD_AXIS_LABELS = {
-    "time": "Time (s)",
+    "time": "Time",
     "gold": "Net gold",
     "pumpkin-juice": "Pumpkin Juice",
-    "passive": "Time (s)",
+    "passive": "Time",
 }
-_SPREAD_METRIC_LABELS = {"gold": "Net gold", "time": "Time (s)"}
+_SPREAD_METRIC_LABELS = {"gold": "Net gold", "time": "Time"}
 
 
 def _axis_value(plan: SourcingPlan, axis: str) -> float:

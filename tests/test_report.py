@@ -92,8 +92,10 @@ def test_ascii_plot_nonempty_multiline():
     text = _ascii_plot(series)
     assert text
     assert "\n" in text
-    assert "Time (s)" in text
-    assert "Net gold" in text
+    assert "Time (s)" in text  # x-axis caption
+    # y-axis shows the metric's scale (its high/low values), not a repeated label.
+    assert "20" in text
+    assert "5" in text
 
 
 def test_ascii_plot_single_point_does_not_crash():
@@ -150,7 +152,7 @@ def test_print_frontier_graph_only_when_graph_metric_set(capsys):
 
     print_frontier(PLANS, selected=0, cheapest=1, graph_metric="gold")
     out = capsys.readouterr().out
-    assert "Net gold vs Time (s):" in out
+    assert "Net gold vs Time:" in out
 
 
 def test_markdown_frontier_graph_embeds_svg_when_requested():
