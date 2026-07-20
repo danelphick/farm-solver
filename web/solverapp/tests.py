@@ -76,6 +76,25 @@ class ApiSolveTests(SimpleTestCase):
         self.assertIn("solution_html", body)
         self.assertIn("Board", body["solution_html"])
 
+    def test_impact_graph_is_served_as_raw_svg(self):
+        # The graph section is an <svg> fragment; it must be served raw, not run
+        # through the Markdown converter (which wraps the opening tag as
+        # `<p><svg></p>` and breaks the graphic -- only its text nodes then show).
+        response = self._post(
+            {"items": "Board:50000", "plans": 5, "spread": "time", "graph": "auto"}
+        )
+        self.assertEqual(response.status_code, 200)
+        html = response.json()["graph"]["html"].strip()
+        self.assertTrue(html.startswith("<svg"), html[:60])
+        self.assertIn("</svg>", html)
+        self.assertIn('class="pt"', html)
+        self.assertNotIn("<p>", html)  # not Markdown-wrapped
+
+    def test_no_graph_section_when_not_requested(self):
+        response = self._post({"items": "Board:50000", "plans": 2})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["graph"]["html"], "")
+
     def test_identical_repost_is_a_cache_hit(self):
         params = {"items": "Board:50000", "plans": 2}
         first = self._post(params)

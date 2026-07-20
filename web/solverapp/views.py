@@ -108,9 +108,12 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         # exists in SectionedReporter.docs when the request asked for one (see
         # report.SectionedReporter.frontier); absent -> no graph was requested,
         # so the client gets an empty html string and leaves #graph-section as-is.
+        # It is already a self-contained <svg> fragment -- served raw, NOT through
+        # the Markdown converter, which would wrap the opening tag as `<p><svg></p>`
+        # and break the graphic (leaving only its stray text nodes visible).
         "graph": {
             "html": (
-                _section_html(result.sections["graph"])
+                result.sections["graph"]
                 if result.sections.get("graph", "").strip()
                 else ""
             ),
