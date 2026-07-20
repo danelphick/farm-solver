@@ -71,6 +71,10 @@ _KNOWN_PARAM_KEYS = frozenset({
     "price_large_net", "price_cookie_set", "price_pumpkin_juice",
     "price_hickory_omelette",
     "instant_grow_time", "hickory_omelette",
+    # The Material trading pane: which items may be traded for Arnold Palmers,
+    # plus any custom AP prices. Turned into [trading.ap] overrides (see
+    # _ap_trading_override_lines) -- an allow list only, never a deny list.
+    "ap_trading",
     # The preference panels (exploring effectiveness, farming, pets, buildings)
     # send every control they touch as one {section.flag: value} object under
     # this key; params_to_args turns each entry into an args.override line (see
@@ -120,6 +124,52 @@ def _config_override_line(key: str, value: object) -> str:
             f"not {type(value).__name__}"
         )
     return f"{key}={literal}"
+
+
+def _ap_trading_override_lines(trading: object) -> list[str]:
+    """Turn the Material-trading pane's ``ap_trading`` param into config overrides.
+
+    The pane sends ``{"allow": [item, ...], "prices": {item: apk, ...}}``. The web
+    UI works purely with an **allow** list (never a deny list, per the design), so:
+
+    * ``allow`` non-empty -> ``trading.ap.enabled=true`` + the allow list + an empty
+      ``deny`` (clearing web_default_config's own deny so the two never collide in
+      :func:`config.arnold_palmer_prices`, which errors on both being set).
+    * ``allow`` empty -> ``trading.ap.enabled=false``: an *empty* allow list would be
+      falsey there and wrongly fall through to "trade everything", so an all-off
+      pane turns the whole feature off instead.
+
+    ``prices`` (optional) fully **replaces** ``[trading.ap.prices]`` -- the pane sends
+    every allowed item's price (default or edited) when any was edited, and omits the
+    key entirely when none were, leaving config's defaults in place. Rendered as a
+    TOML inline table so :func:`main.apply_overrides` parses it like a hand-typed
+    override; item names become double-quoted keys (they carry spaces/apostrophes).
+    """
+    if not isinstance(trading, dict):
+        raise ValueError("ap_trading must be a JSON object")
+    allow = trading.get("allow")
+    if not isinstance(allow, list) or not all(isinstance(a, str) for a in allow):
+        raise ValueError("ap_trading.allow must be a list of item names")
+
+    lines: list[str] = []
+    if allow:
+        lines.append("trading.ap.enabled=true")
+        lines.append(f"trading.ap.allow={json.dumps(allow)}")
+        lines.append("trading.ap.deny=[]")
+    else:
+        lines.append("trading.ap.enabled=false")
+
+    prices = trading.get("prices")
+    if prices is not None:
+        if not isinstance(prices, dict):
+            raise ValueError("ap_trading.prices must be a JSON object")
+        items = []
+        for item, value in prices.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"ap_trading price for {item!r} must be a number")
+            items.append(f"{json.dumps(item)} = {value}")
+        lines.append("trading.ap.prices={" + ", ".join(items) + "}")
+    return lines
 
 
 # The web app's own default config, deliberately separate from the developer's
@@ -207,6 +257,14 @@ def args_to_command(args: argparse.Namespace) -> str:
         tokens.append("--fastest-plan")
     elif args.plan is not None:
         add("--plan", args.plan)
+    spread = getattr(args, "spread", None)
+    if spread is not None:
+        text = spread.axis
+        if spread.lo is not None and spread.hi is not None:
+            text += f"={spread.lo:g}:{spread.hi:g}"
+        add("--spread", text)
+    if getattr(args, "graph", None) is not None:
+        add("--graph", args.graph)
     for override in args.override or []:
         add("--override", override)
 
@@ -394,6 +452,10 @@ def params_to_args(params: dict) -> argparse.Namespace:
                 f"hickory_omelette must be one of {config.HICKORY_MODES}, not {raw!r}"
             )
         config_overrides.append(f'sawmill.hickory_omelette="{raw}"')
+    if "ap_trading" in params and params["ap_trading"] is not None:
+        ap_lines = _ap_trading_override_lines(params["ap_trading"])
+        main.apply_overrides({}, ap_lines)  # validate before solving; cfg discarded
+        config_overrides.extend(ap_lines)
     if config_overrides:
         args.override = config_overrides
 

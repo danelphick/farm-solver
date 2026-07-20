@@ -253,6 +253,58 @@ def test_params_to_args_config_panel_follows_free_text_overrides():
     assert args.override == ["farming.rows=1", "farming.rows=13"]
 
 
+def test_params_to_args_ap_trading_allow_becomes_trading_overrides():
+    args = webapi.params_to_args(
+        {"ap_trading": {"allow": ["red dye", "grapes"]}}
+    )
+    assert args.override == [
+        "trading.ap.enabled=true",
+        'trading.ap.allow=["red dye", "grapes"]',
+        "trading.ap.deny=[]",
+    ]
+
+
+def test_params_to_args_ap_trading_empty_allow_disables_the_feature():
+    # An empty allow list would be falsey in config.arnold_palmer_prices (falling
+    # through to "trade everything"), so all-off turns the whole feature off.
+    args = webapi.params_to_args({"ap_trading": {"allow": []}})
+    assert args.override == ["trading.ap.enabled=false"]
+
+
+def test_params_to_args_ap_trading_prices_replace_the_table():
+    args = webapi.params_to_args(
+        {"ap_trading": {"allow": ["red dye"], "prices": {"red dye": 9}}}
+    )
+    assert args.override == [
+        "trading.ap.enabled=true",
+        'trading.ap.allow=["red dye"]',
+        "trading.ap.deny=[]",
+        'trading.ap.prices={"red dye" = 9}',
+    ]
+
+
+def test_params_to_args_ap_trading_overrides_apply_cleanly_to_web_config():
+    # The generated override lines parse and drive config.arnold_palmer_prices
+    # (an allow list wins, deny is cleared so the two never collide).
+    import config
+
+    args = webapi.params_to_args(
+        {"ap_trading": {"allow": ["acorn"], "prices": {"acorn": 8}}}
+    )
+    cfg = webapi.load_web_config()
+    main.apply_overrides(cfg, args.override)
+    assert config.arnold_palmer_prices(cfg) == {"acorn": 0.008}
+
+
+def test_params_to_args_ap_trading_rejects_bad_shapes():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"ap_trading": [1, 2, 3]})
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"ap_trading": {"allow": "red dye"}})
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"ap_trading": {"allow": ["x"], "prices": {"x": "cheap"}}})
+
+
 def test_params_to_args_rejects_non_object_config():
     with pytest.raises(ValueError):
         webapi.params_to_args({"config": [1, 2, 3]})
@@ -297,6 +349,22 @@ def test_args_to_command_omits_defaults():
     # A bare request is just the program, the web config, and the target.
     command = webapi.args_to_command(webapi.params_to_args({"target": "tower"}))
     assert command == "python main.py --config web_default_config.toml --target tower"
+
+
+def test_args_to_command_includes_spread_and_graph():
+    args = webapi.params_to_args(
+        {"target": "tower", "spread": "pj=0:10", "graph": "gold"}
+    )
+    command = webapi.args_to_command(args)
+    assert "--spread pumpkin-juice=0:10" in command
+    assert "--graph gold" in command
+
+
+def test_args_to_command_spread_without_range():
+    args = webapi.params_to_args({"target": "tower", "spread": "passive"})
+    command = webapi.args_to_command(args)
+    assert "--spread passive" in command
+    assert "passive=" not in command  # no range appended
 
 
 def test_config_defaults_exposes_game_sections_without_solver():
