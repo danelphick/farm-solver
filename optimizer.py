@@ -768,19 +768,24 @@ def _build_base(
     # absent key (the default in every optimizer unit test) leaves this path off and
     # every existing solve byte-identical.
     #
-    # Charge the free stamina consumed = all stamina an offer spends less the stamina
-    # *topped up* by an item-consuming flow (drinking Orange Juice, eating an Apple --
-    # the two offers that yield stamina by consuming an item). Those are left to their
-    # own sourcing: Orange Juice is already priced as the juice in ``spend_value``/
-    # ``gold`` (charging its stamina here too would double count), and eating a surplus
-    # Apple is the deliberate near-free path the LP already leans on -- both outside
-    # this "banked + passive" charge, per the user's scope. A free variable pinned at
-    # ``>= consumed - topped_up`` (never below 0) so a plan that tops up more stamina
-    # than it burns is not handed a negative charge. Only in ``spend_value`` (hence
-    # ``total_value``), never ``gold``: using free stamina spends no real gold, so it
-    # must stay a zero-gold action for the buy-nothing / --max-gold endpoints (this is
-    # an opportunity cost the tie-break and favour_passive lean weigh, and
-    # ``SourcingPlan.cost`` nets in for the frontier -- not a purchase).
+    # Charge the free stamina consumed = all stamina an offer spends less only the
+    # stamina *topped up by drinking Orange Juice*. A unit of stamina an explore burns
+    # has the same replacement cost -- one Orange Juice's worth -- whatever its source,
+    # so all of it is priced EXCEPT juice-drinking stamina: the juice is already paid
+    # for as the juice in ``spend_value``/``gold``, and charging its stamina here too
+    # would double count. Eating an Apple is deliberately NOT exempt: those Apples are
+    # overwhelmingly free byproducts of opening idle chests (unpriced keys), so exempting
+    # their stamina handed the solver a loophole -- manufacture free Apples to fuel
+    # explores and never touch the priced banked/passive stamina, dodging the charge
+    # entirely (a real plan did exactly this). Charging Apple-eaten stamina closes it;
+    # the Apple's own trade value is a separate, near-zero cost for a surplus Apple, so
+    # this reflects the stamina's real value rather than double counting in practice.
+    # A free variable pinned at ``>= consumed - topped_up`` (never below 0) so a plan
+    # that drinks more juice-stamina than it burns is not handed a negative charge. Only
+    # in ``spend_value`` (hence ``total_value``), never ``gold``: using free stamina
+    # spends no real gold, so it must stay a zero-gold action for the buy-nothing /
+    # --max-gold endpoints (an opportunity cost the tie-break and favour_passive lean
+    # weigh, and ``SourcingPlan.cost`` nets in for the frontier -- not a purchase).
     stamina_price = prices.get("stamina", 0.0)
     stamina_op: pulp.LpVariable | None = None
     if stamina_price > 0:
@@ -789,7 +794,7 @@ def _build_base(
         topped_up_stamina = pulp.lpSum(
             o.yields.get("stamina", 0.0) * x
             for o, x in zip(used, usage)
-            if o.consumes and o.yields.get("stamina", 0.0)
+            if o.yields.get("stamina", 0.0) and "orange juice" in o.consumes
         )
         problem += (
             stamina_op >= consumed_stamina - topped_up_stamina, "stamina_op_free"

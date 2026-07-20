@@ -1326,15 +1326,18 @@ def test_stamina_cost_excludes_orange_juice_stamina():
     assert plan.gold == pytest.approx(0.008)  # the juice, once
 
 
-def test_stamina_cost_excludes_apple_stamina():
-    # Eating an Apple tops up stamina by consuming an item, like drinking Orange
-    # Juice, so it is exempt too: only banked/passive stamina is charged. Here the
-    # only stamina source is eating Apples (from a held stock), which must stay free.
+def test_stamina_cost_charges_apple_stamina():
+    # Eating an Apple for stamina is NOT exempt (unlike drinking Orange Juice): the
+    # Apples are near-free chest byproducts, so exempting their stamina let the solver
+    # dodge the banked/passive charge by manufacturing free stamina. A stamina unit
+    # costs its Orange-Juice replacement value whatever its source. Here the only
+    # stamina source is eating Apples (from a held stock), so the whole burn is charged.
     eat_apple = next(o for o in stamina_offers() if "apple" in o.consumes)
     offers = [_STAMINA_EXPLORE, eat_apple]
     plan = minimize(offers, {"wood": 40}, prices=_STAMINA_GOLD,
                     gold_weight=BUY_FREELY, inventory={"apple": 1000})
-    assert plan.stamina_gold == pytest.approx(0, abs=1e-6)
+    # 100 stamina burned (100 explores for 40 wood at 0.4 each), all charged.
+    assert plan.stamina_gold == pytest.approx(100 * 0.008 / 100, abs=1e-5)
 
 
 def test_stamina_cost_absent_from_plan_gold():
