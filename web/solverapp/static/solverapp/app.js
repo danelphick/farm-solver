@@ -471,6 +471,191 @@ function applyConfigParams(config) {
   });
 }
 
+// --- Material trading pane --------------------------------------------------
+//
+// Which raw materials the plan may trade for Arnold Palmers, and at what price.
+// Everything comes from the injected config's `[trading.ap]` section: `prices`
+// (item -> default apk) is the item universe, `price_bounds` (item -> [low,high])
+// is the greyed guide range, and `enabled`/`allow`/`deny` give the default
+// checkbox state. The pane always emits an ALLOW list (never a deny list -- see
+// webapi._ap_trading_override_lines), sent as the `ap_trading` param only when it
+// deviates from those defaults, so an untouched pane adds nothing to the request.
+
+function apTradingConfig() {
+  return (CONFIG_DEFAULTS.trading && CONFIG_DEFAULTS.trading.ap) || {};
+}
+
+// Every tradeable item, sorted -- the keys of [trading.ap.prices].
+function apTradingItems() {
+  return Object.keys(apTradingConfig().prices || {}).sort();
+}
+
+function apDefaultPrice(item) {
+  return (apTradingConfig().prices || {})[item];
+}
+
+// [low, high] guide bounds for an item, or undefined.
+function apPriceBounds(item) {
+  return (apTradingConfig().price_bounds || {})[item];
+}
+
+// Normalise a config allow/deny entry the way config._normalise_item does, so a
+// TOML key written with underscores matches the spaced item name.
+function normaliseItem(name) {
+  return String(name).replace(/_/g, " ").trim().toLowerCase();
+}
+
+// The set of items tradeable by default, given a `[trading.ap]` config table and
+// the item universe -- what "Restore defaults" resets to (mirrors
+// config.arnold_palmer_prices). Pure, so it can be unit-tested.
+export function computeDefaultAllowed(ap, items) {
+  ap = ap || {};
+  if (ap.enabled === false) return new Set();
+  if (Array.isArray(ap.allow)) {
+    const keep = new Set(ap.allow.map(normaliseItem));
+    return new Set(items.filter((i) => keep.has(normaliseItem(i))));
+  }
+  if (Array.isArray(ap.deny)) {
+    const drop = new Set(ap.deny.map(normaliseItem));
+    return new Set(items.filter((i) => !drop.has(normaliseItem(i))));
+  }
+  return new Set(items); // enabled, no filter -> everything
+}
+
+function defaultAllowedItems() {
+  return computeDefaultAllowed(apTradingConfig(), apTradingItems());
+}
+
+// Core of readMaterialTrading, pure for testing: given the checked items, the
+// map of items whose price was edited, the default allow set, and a
+// default-price lookup, return the `ap_trading` param -- or null when nothing
+// deviates from the config default. `prices` is included only when a price was
+// edited, and then carries every allowed item so it can replace the whole table.
+export function computeApTradingParam(allowed, edited, defaultAllowed, defaultPriceOf) {
+  const sameAllow =
+    allowed.length === defaultAllowed.size && allowed.every((i) => defaultAllowed.has(i));
+  const anyEdited = Object.keys(edited).length > 0;
+  if (sameAllow && !anyEdited) return null;
+
+  const result = { allow: allowed };
+  if (anyEdited) {
+    const prices = {};
+    allowed.forEach((item) => {
+      prices[item] = item in edited ? edited[item] : defaultPriceOf(item);
+    });
+    result.prices = prices;
+  }
+  return result;
+}
+
+function titleCaseItem(name) {
+  return name.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Build one checkbox + price + bounds row per tradeable item, checked to the
+// config default. Called from init() before the blanket input wiring, so each
+// checkbox/price input gets its onAnyChange listener like a hand-written one.
+function buildMaterialTradingPane() {
+  const list = document.getElementById("material-trading-list");
+  if (!list) return;
+  const defaults = defaultAllowedItems();
+  apTradingItems().forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "material-row";
+    row.dataset.item = item;
+
+    const label = document.createElement("label");
+    label.className = "material-check";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.dataset.apItem = item;
+    check.checked = defaults.has(item);
+    const name = document.createElement("span");
+    name.className = "material-name";
+    name.textContent = titleCaseItem(item);
+    label.append(check, name);
+
+    const price = document.createElement("input");
+    price.type = "number";
+    price.min = "0";
+    price.step = "any";
+    price.className = "material-price narrow";
+    price.dataset.apPrice = item;
+    const def = apDefaultPrice(item);
+    if (def !== undefined) price.placeholder = String(def);
+
+    const bounds = document.createElement("span");
+    bounds.className = "material-bounds";
+    const range = apPriceBounds(item);
+    if (Array.isArray(range)) {
+      bounds.textContent = range[0] === range[1] ? String(range[0]) : `${range[0]}–${range[1]}`;
+    }
+
+    row.append(label, price, bounds);
+    list.appendChild(row);
+  });
+}
+
+// Read the pane into an `ap_trading` param, or null when it matches the config
+// default (so an untouched pane sends nothing). `prices` is included only when a
+// price was actually edited, and then carries EVERY allowed item (edited value or
+// default) because the override replaces the whole [trading.ap.prices] table.
+function readMaterialTrading() {
+  const rows = document.querySelectorAll("#material-trading-list .material-row");
+  if (!rows.length) return null;
+  const allowed = [];
+  const edited = {};
+  rows.forEach((row) => {
+    const item = row.dataset.item;
+    if (!row.querySelector("[data-ap-item]").checked) return;
+    allowed.push(item);
+    const raw = row.querySelector("[data-ap-price]").value;
+    if (raw !== "") edited[item] = Number(raw);
+  });
+  return computeApTradingParam(allowed, edited, defaultAllowedItems(), apDefaultPrice);
+}
+
+// Restore the pane from a saved `ap_trading` param (or the config default when
+// absent/null). A custom price fills its input; a price equal to the default is
+// left as an empty placeholder, so the round-trip doesn't turn every default into
+// a phantom "edit".
+function applyMaterialTrading(apTrading) {
+  const rows = document.querySelectorAll("#material-trading-list .material-row");
+  if (!rows.length) return;
+  const hasOverride = apTrading && Array.isArray(apTrading.allow);
+  const allowedSet = hasOverride ? new Set(apTrading.allow) : defaultAllowedItems();
+  const prices = (hasOverride && apTrading.prices) || {};
+  rows.forEach((row) => {
+    const item = row.dataset.item;
+    row.querySelector("[data-ap-item]").checked = allowedSet.has(item);
+    const priceInput = row.querySelector("[data-ap-price]");
+    priceInput.value =
+      item in prices && Number(prices[item]) !== Number(apDefaultPrice(item))
+        ? prices[item]
+        : "";
+  });
+}
+
+function setAllMaterials(on) {
+  document
+    .querySelectorAll("#material-trading-list [data-ap-item]")
+    .forEach((cb) => { cb.checked = on; });
+  onAnyChange();
+}
+
+function restoreMaterialDefaults() {
+  applyMaterialTrading(null);
+  onAnyChange();
+}
+
+// Filter the visible rows by name substring (UI-only; never re-solves).
+function filterMaterialRows() {
+  const q = ($("#material-trading-filter").value || "").trim().toLowerCase();
+  document.querySelectorAll("#material-trading-list .material-row").forEach((row) => {
+    row.hidden = q !== "" && !row.dataset.item.includes(q);
+  });
+}
+
 // The two goal lists: each maps its row-container id to the <datalist> id
 // backing its item picker. Mastery goals only ever suggest from the user's
 // own masterable-item catalogue (mastery_items.txt); item goals suggest from
@@ -734,6 +919,9 @@ function readParams() {
   const config = readConfigParams();
   if (Object.keys(config).length) params.config = config;
 
+  const apTrading = readMaterialTrading();
+  if (apTrading) params.ap_trading = apTrading;
+
   if (planSelect) params.plan_select = planSelect;
 
   return params;
@@ -803,6 +991,7 @@ function applyParams(params) {
   $("#instant-grow-time").value = params.instant_grow_time || "";
   $("#overrides").value = (params.overrides || []).join("\n");
   applyConfigParams(params.config);
+  applyMaterialTrading(params.ap_trading);
   updateGoalSummary();
 }
 
@@ -1403,8 +1592,14 @@ function init() {
   // wiring below attaches onAnyChange and before restoreState/applyParams runs.
   readConfigDefaults();
   buildConfigPanels();
+  buildMaterialTradingPane();
   initHelpTooltips();
   initDebugCommand();
+
+  $("#material-trading-enable-all").addEventListener("click", () => setAllMaterials(true));
+  $("#material-trading-disable-all").addEventListener("click", () => setAllMaterials(false));
+  $("#material-trading-restore").addEventListener("click", restoreMaterialDefaults);
+  $("#material-trading-filter").addEventListener("input", filterMaterialRows);
 
   $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
   $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));
@@ -1435,6 +1630,7 @@ function init() {
     if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above
     if (el.name === "calendar" || el.id === "start-date") return; // wired above
     if (el.id === "spread-axis") return; // wired above
+    if (el.id === "material-trading-filter") return; // a UI-only row filter, no re-solve
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
@@ -1449,7 +1645,10 @@ function init() {
     renderGoalRows(containerId, [], datalistId);
     wireGoalList(containerId);
   });
-  document.querySelectorAll(".btn-add").forEach((btn) => {
+  // Only the goal-list "+ Add" buttons carry data-goal; other .btn-add buttons
+  // (Enable/Disable/Restore in the trading pane, Expand/Collapse, debug Copy)
+  // have their own handlers and must not get the append-row one.
+  document.querySelectorAll(".btn-add[data-goal]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const containerId = btn.dataset.goal;
       appendGoalRow(containerId, GOAL_LISTS[containerId]);

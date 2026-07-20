@@ -442,6 +442,81 @@ details[open] > summary .summary-detail {
   min-width: 0;
 }
 
+/* Material trading pane: a filter/buttons toolbar over a scrollable list of
+   one checkbox + price + guide-range row per tradeable material. */
+.material-trading-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.material-trading-toolbar #material-trading-filter {
+  flex: 1 1 8rem;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.material-trading-buttons {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.material-trading-list {
+  max-height: 22rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.material-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.material-check {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.material-check .material-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-row input.material-price {
+  flex: 0 0 4rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  color: var(--fg);
+  min-width: 0;
+}
+
+.material-bounds {
+  flex: 0 0 3.5rem;
+  text-align: right;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Per-parameter [?] help icon, sitting just after a control's label; on
    hover/focus it shows the shared floating .help-tooltip (positioned in JS). */
 .help-icon {

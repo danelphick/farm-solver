@@ -133,7 +133,7 @@ frontier as before.
 | File | Owns | Key names |
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
-| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
+| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
@@ -156,9 +156,12 @@ catalogue -- the ascension mode's candidate universe, generated by
 `scripts/generate_items.py`, which writes the web Mastery picker's static
 copy from the same set; regenerate with the script, never edit either by
 hand); game state comes from pasted text files. The `[trading.ap.prices]` block
-in `config.toml`/`web_default_config.toml` is likewise generated, by
+(and its sibling `[trading.ap.price_bounds]`, a `{item: [low, high]}` guide table
+read ONLY by the web Material-trading pane -- `config.arnold_palmer_prices`
+ignores it) in `config.toml`/`web_default_config.toml` is likewise generated, by
 `scripts/generate_trade_prices.py` from `scripts/trade_prices_snapshot.txt` (see
-"Arnold-Palmer trading" above). The
+"Arnold-Palmer trading" above): the price is the low end of each quoted range,
+the bounds table carries both ends. The
 web app has its own `web_default_config.toml` (a copy of `config.toml`, edited
 independently) for a fresh session's defaults -- see `webapi.load_web_config`.
 
@@ -251,7 +254,11 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
     an AP **Trade (for Arnold Palmers)** section (AP + gold-equiv totals). Prices are
     generated offline by `scripts/generate_trade_prices.py` from
     `scripts/trade_prices_snapshot.txt` (a committed, hand-captured price list — no
-    live-fetch/anti-bot code) intersected with the solver's item universe.
+    live-fetch/anti-bot code) intersected with the solver's item universe; the same
+    script also emits `[trading.ap.price_bounds]` (`{item: [low, high]}`, the range's
+    two ends) for the web pane's guide, which the solver never reads. The web
+    Material-trading pane edits `enabled`/`allow`/`prices` per-session (allow list
+    only); see "Web app (web/)".
   - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost, and the model's **only
     integer variables** — everything else is a continuous flow. `pj_gain` (from
     `main.pumpkin_juice_gains` = `0.1*threshold/mastery_bonus`) is the demand units one
@@ -1459,7 +1466,24 @@ that imports it without going through `manage.py`.
   one delegated hover/focus listener set that shows a single shared floating
   `.help-tooltip` (positioned in JS above the icon, flipped below near the top
   edge, clamped to the viewport, hidden on scroll/Escape) -- no library, works
-  for keyboard focus too. **DEBUG-only CLI command** (`initDebugCommand`): when
+  for keyboard focus too. The **Material trading pane** (`buildMaterialTradingPane`,
+  also run at the top of `init()` before the blanket wiring) is a checkbox + price +
+  guide-range row per tradeable material, built from the injected config's
+  `trading.ap` (`prices` is the item universe and default apk, `price_bounds` the
+  greyed `low–high` guide, `enabled`/`allow`/`deny` the default checkbox state via
+  `computeDefaultAllowed`). It always emits an **allow** list, never a deny list:
+  `readMaterialTrading` → `computeApTradingParam` (both exported, unit-tested) sends
+  the `ap_trading` param **only when the pane deviates** from the config default (a
+  narrowed allow set, or an edited price), so an untouched pane adds nothing to the
+  request; `prices` is included only once a price is actually edited, and then
+  carries every allowed item (edited value or default) because the server-side
+  override *replaces* the whole `[trading.ap.prices]` table (see
+  `webapi._ap_trading_override_lines`). Enable-all / Disable-all / Restore-defaults
+  buttons and a UI-only name filter (`filterMaterialRows`, excluded from the blanket
+  `onAnyChange` wiring so it never re-solves) sit above the list; "Restore defaults"
+  resets to `computeDefaultAllowed` and clears price edits. (The pane's buttons carry
+  `.btn-add` for styling but no `data-goal`, so the goal-list append wiring is scoped
+  to `.btn-add[data-goal]`.) **DEBUG-only CLI command** (`initDebugCommand`): when
   Django's `DEBUG` is on, `views.index` renders a `[</>]` button into the fixed
   `#bottom-bar` (just left of the status box) and a `#debug-popup`; each solve
   response carries a `debug_command` (`webapi.args_to_command`, `None` in

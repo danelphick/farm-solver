@@ -233,6 +233,27 @@
         <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow">
       </div>
     </details>
+
+    <details id="material-trading-details" class="pane">
+      <summary>Material trading</summary>
+      <p class="pane-hint">
+        Which raw materials the plan may trade for (buy with) Arnold Palmers, and
+        the price it assumes. Untick anything you would not actually trade — a
+        material nobody spare-trades, or one you would only ever buy at a price
+        not worth your time — so plans lean only on trades you would really make.
+        Prices are in AP per 1,000 units; the greyed range is the going rate as a
+        guide, but you can enter any price.
+      </p>
+      <div class="material-trading-toolbar">
+        <input type="search" id="material-trading-filter" placeholder="Filter materials…" aria-label="Filter materials">
+        <div class="material-trading-buttons">
+          <button type="button" id="material-trading-enable-all" class="btn-add">Enable all</button>
+          <button type="button" id="material-trading-disable-all" class="btn-add">Disable all</button>
+          <button type="button" id="material-trading-restore" class="btn-add">Restore defaults</button>
+        </div>
+      </div>
+      <div id="material-trading-list" class="material-trading-list"></div>
+    </details>
     </div>
   </div>
 </main>

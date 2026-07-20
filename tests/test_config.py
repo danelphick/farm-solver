@@ -669,6 +669,28 @@ def test_arnold_palmer_prices_allow_and_deny_together_raises():
         config.arnold_palmer_prices(cfg)
 
 
+def test_arnold_palmer_prices_ignores_the_price_bounds_table():
+    # [trading.ap.price_bounds] is UI-only metadata; the solver must not read it.
+    cfg = _ap_cfg(prices={"red_dye": 8}, price_bounds={"red_dye": [8, 10]})
+    assert config.arnold_palmer_prices(cfg) == {"red dye": 0.008}
+
+
+@pytest.mark.parametrize("path", ["config.toml", "web_default_config.toml"])
+def test_config_price_bounds_align_with_prices(path):
+    # The generated [trading.ap.price_bounds] guide table must cover exactly the
+    # priced items, each a [low, high] with low == the configured price and
+    # low <= high (see scripts/generate_trade_prices.py).
+    from pathlib import Path
+
+    cfg = config.load_config(Path(path))
+    ap = cfg["trading"]["ap"]
+    prices, bounds = ap["prices"], ap["price_bounds"]
+    assert set(bounds) == set(prices)
+    for item, price in prices.items():
+        low, high = bounds[item]
+        assert low == price and low <= high
+
+
 def test_trading_prices_folds_ap_items_as_gold_equivalent():
     # An AP-traded item's gold price is its per-unit AP * the Arnold Palmer's own
     # per-unit gold (60 gk -> 0.06 g): red dye at 8 apk -> 0.008 * 0.06.

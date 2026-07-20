@@ -45,7 +45,9 @@ CONSUMABLES = {
 }
 
 _MEAL_SUFFIX = re.compile(r"\s*\(meal\)\s*$")
-_FIRST_NUMBER = re.compile(r"-?\d*\.?\d+")
+# No leading sign: a hyphen in the snapshot is a range separator ("4-6"), never
+# a minus (prices are never negative), so both ends parse as positive numbers.
+_NUMBER = re.compile(r"\d*\.?\d+")
 
 
 def solver_items() -> set[str]:
@@ -71,24 +73,26 @@ def solver_items() -> set[str]:
     return names
 
 
-def parse_snapshot() -> list[tuple[str, float, str]]:
-    """``[(item_name, apk_low_end, original_price_string)]`` from the snapshot.
+def parse_snapshot() -> list[tuple[str, float, float, str]]:
+    """``[(item_name, apk_low, apk_high, original_price_string)]`` from the snapshot.
 
-    Skips rows with no AP price (``x``). A per-each price (no ``/k``) is scaled to
-    apk (x1000); a per-1000 price (``/k``) is taken as-is.
+    Skips rows with no AP price (``x``). A quoted range (``4-6 AP/k``) yields both
+    ends; a single price (``1 AP/k``) makes the two ends equal. A per-each price
+    (no ``/k``) is scaled to apk (x1000); a per-1000 price (``/k``) is taken as-is.
+    The low end is the price the solver uses; both ends are the UI's guide bounds.
     """
-    rows: list[tuple[str, float, str]] = []
+    rows: list[tuple[str, float, float, str]] = []
     for line in SNAPSHOT.read_text().splitlines():
         if "|" not in line:
             continue
         name, price = (part.strip() for part in line.split("|", 1))
         name = _MEAL_SUFFIX.sub("", name)
-        match = _FIRST_NUMBER.search(price)
-        if match is None:  # "x" / non-numeric -> not AP-tradeable
+        numbers = [float(n) for n in _NUMBER.findall(price)]
+        if not numbers:  # "x" / non-numeric -> not AP-tradeable
             continue
-        low = float(match.group())
-        apk = low if "/k" in price else low * 1000  # per-each -> per-1000
-        rows.append((name, apk, price))
+        low, high = numbers[0], numbers[-1]
+        scale = 1 if "/k" in price else 1000  # per-each -> per-1000
+        rows.append((name, low * scale, high * scale, price))
     return rows
 
 
@@ -98,17 +102,25 @@ def _fmt(value: float) -> str:
 
 def main() -> None:
     universe = solver_items()
-    entries: list[tuple[str, float, str]] = []
-    for name, apk, price in parse_snapshot():
+    entries: list[tuple[str, float, float, str]] = []
+    for name, low, high, price in parse_snapshot():
         key = name.lower()
         if key in universe and key not in CONSUMABLES:
-            entries.append((key, apk, price))
+            entries.append((key, low, high, price))
     entries.sort()
 
     print("[trading.ap.prices]  # AP trade prices in apk (Arnold Palmers per 1000)")
-    for key, apk, price in entries:
+    for key, low, _high, price in entries:
         note = price if "/k" in price else f"{price} each"
-        print(f'"{key}" = {_fmt(apk):<7} # {note}')
+        print(f'"{key}" = {_fmt(low):<7} # {note}')
+
+    # Guide bounds [low, high] for the web UI's Material trading pane -- the
+    # low/high of each quoted range, so a control shows "6-9" while defaulting to
+    # the low end above. The solver never reads this table (see
+    # config.arnold_palmer_prices); it is metadata for the UI only.
+    print("\n[trading.ap.price_bounds]  # [low, high] apk guide range, UI only")
+    for key, low, high, _price in entries:
+        print(f'"{key}" = [{_fmt(low)}, {_fmt(high)}]')
     print(f"\n# {len(entries)} tradeable items", file=sys.stderr)
 
 

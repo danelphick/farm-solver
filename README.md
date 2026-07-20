@@ -410,7 +410,12 @@ enabled = true                # master switch (also --use-trading / --no-trading
 "stone"   = 1
 # … ~110 resources the solver knows (raw materials, crafting inputs, meals) …
 "acorn pie" = 5000            # a per-each price stored as apk (5 AP each × 1000)
+
+[trading.ap.price_bounds]     # [low, high] of each quoted range — a guide for the web UI; the solver ignores it
+"red dye" = [8, 10]
 ```
+
+Just because a resource *can* be traded doesn't mean people actually do — some trade only at prices not worth your time, others are hoarded by the same players chasing the same tower goals. The `allow`/`deny` filters (or, in the web app, the **Material trading** pane's per-item checkboxes) let you restrict trading to the ones you would realistically make, so plans lean only on trades you can actually apply. The `[trading.ap.prices]` and `[trading.ap.price_bounds]` blocks are generated together by `scripts/generate_trade_prices.py` from a committed price snapshot — regenerate with the script, don't hand-edit.
 
 Each trade's AP cost is **converted to gold** (at the `arnold_palmer` rate in `[trading]` above — 60 gk → 0.06 g/AP) and folded into the same gold the frontier ranks on, so trading and self-sourcing compete on one axis; no separate AP budget. The solver still weighs it against getting the item free as an explore *byproduct* — an exploring Arnold Palmer yields a whole bundle, so a resource the plan already gathers on the way to something else is never paid for twice. The section is `[trading.ap]` rather than `[trading.arnold_palmer]` only because the latter would collide with the `arnold_palmer` gold-price key.
 
@@ -547,6 +552,15 @@ A solve takes roughly the same ~0.5s a CLI run does on capable hardware (see
 "Server hardware reality" below); a *refilter* — changing a limit or which
 plan is expanded, without changing what needs solving — is answered from an
 in-process cache in a few milliseconds.
+
+Most of the `config.toml` settings have their own controls too, in collapsible
+panes: Exploring effectiveness, Farming, Pets, Buildings, Trading values, and a
+**Material trading** pane listing every resource that can be traded for Arnold
+Palmers with a checkbox (trade it or not) and an editable price (the going-rate
+range shown greyed as a guide). Untick the ones you wouldn't realistically
+trade; **Enable all** / **Disable all** / **Restore defaults** reset the list
+(Restore returns it to the server config's own allow/deny). Anything without its
+own control is still reachable via the Advanced panel's raw `--override` box.
 
 ### Running it locally
 
