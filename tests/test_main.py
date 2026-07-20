@@ -19,6 +19,7 @@ from farm_solver import (
 from main import (
     DEWSTAR_TOWER_LEVEL,
     MONTHLY_GRANT_TOWER_LEVEL,
+    _parse_spread,
     _should_model_calendar,
     resolve_calendar_mode,
     strip_dated_sources,
@@ -34,6 +35,8 @@ from main import (
     pumpkin_juice_schedule,
     resolve_crafting_bonus,
     resolve_dewstars_journal,
+    resolve_frontier_graph,
+    resolve_frontier_spread,
     resolve_fungus_processing,
     resolve_monthly_grants,
     resolve_pumpkin_juice,
@@ -56,7 +59,7 @@ from report import (
     print_plan,
     print_solution,
 )
-from optimizer import SourcingPlan
+from optimizer import SourcingPlan, SpreadSpec
 from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
 
@@ -288,6 +291,115 @@ def test_parse_gold_budget_maps_the_named_aliases():
         parse_gold_budget("-1")
     with pytest.raises(argparse.ArgumentTypeError):
         parse_gold_budget("lots")
+
+
+def test_parse_spread_bare_axis_names():
+    assert _parse_spread("time") == SpreadSpec("time")
+    assert _parse_spread("gold") == SpreadSpec("gold")
+    assert _parse_spread("passive") == SpreadSpec("passive")
+    assert _parse_spread("pumpkin-juice") == SpreadSpec("pumpkin-juice")
+
+
+def test_parse_spread_pj_is_an_alias_for_pumpkin_juice():
+    assert _parse_spread("pj") == SpreadSpec("pumpkin-juice")
+
+
+def test_parse_spread_is_case_insensitive():
+    assert _parse_spread("PJ") == SpreadSpec("pumpkin-juice")
+    assert _parse_spread("Time") == SpreadSpec("time")
+
+
+def test_parse_spread_with_a_range():
+    assert _parse_spread("pj=0:10") == SpreadSpec("pumpkin-juice", 0.0, 10.0)
+    assert _parse_spread("gold=0:5000") == SpreadSpec("gold", 0.0, 5000.0)
+
+
+def test_parse_spread_rejects_a_bad_axis():
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_spread("banana")
+
+
+def test_parse_spread_rejects_a_malformed_range():
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_spread("pj=0")  # no colon
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_spread("pj=abc:10")  # not numbers
+    with pytest.raises(argparse.ArgumentTypeError):
+        _parse_spread("time=:10")  # lo omitted -- both required together
+
+
+def test_spread_flag_parses_through_build_parser():
+    args = build_parser().parse_args(["--spread", "pj=0:10"])
+    assert args.spread == SpreadSpec("pumpkin-juice", 0.0, 10.0)
+
+
+def test_spread_flag_defaults_to_none():
+    assert build_parser().parse_args([]).spread is None
+
+
+def test_graph_flag_bare_defaults_to_auto():
+    assert build_parser().parse_args(["--graph"]).graph == "auto"
+
+
+def test_graph_flag_accepts_an_explicit_metric():
+    assert build_parser().parse_args(["--graph", "gold"]).graph == "gold"
+    assert build_parser().parse_args(["--graph", "time"]).graph == "time"
+
+
+def test_graph_flag_defaults_to_none_when_absent():
+    assert build_parser().parse_args([]).graph is None
+
+
+def test_graph_flag_rejects_an_unknown_metric():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--graph", "nonsense"])
+
+
+def test_resolve_frontier_spread_cli_overrides_config():
+    args = build_parser().parse_args(["--spread", "gold=0:100"])
+    cfg = {"frontier": {"spread": "pumpkin-juice"}}
+    assert resolve_frontier_spread(args, cfg) == SpreadSpec("gold", 0.0, 100.0)
+
+
+def test_resolve_frontier_spread_parses_the_config_string():
+    args = build_parser().parse_args([])
+    assert resolve_frontier_spread(args, {"frontier": {"spread": "time"}}) == (
+        SpreadSpec("time")
+    )
+
+
+def test_resolve_frontier_spread_fills_range_from_spread_range():
+    args = build_parser().parse_args([])
+    cfg = {"frontier": {"spread": "pumpkin-juice", "spread_range": [0, 10]}}
+    assert resolve_frontier_spread(args, cfg) == SpreadSpec("pumpkin-juice", 0.0, 10.0)
+
+
+def test_resolve_frontier_spread_inline_range_wins_over_spread_range():
+    args = build_parser().parse_args([])
+    cfg = {"frontier": {"spread": "gold=5:50", "spread_range": [0, 10]}}
+    assert resolve_frontier_spread(args, cfg) == SpreadSpec("gold", 5.0, 50.0)
+
+
+def test_resolve_frontier_spread_none_when_unset():
+    args = build_parser().parse_args([])
+    assert resolve_frontier_spread(args, {}) is None
+    assert resolve_frontier_spread(args, {"frontier": {}}) is None
+
+
+def test_resolve_frontier_graph_cli_overrides_config():
+    args = build_parser().parse_args(["--graph", "time"])
+    assert resolve_frontier_graph(args, {"frontier": {"graph": "gold"}}) == "time"
+
+
+def test_resolve_frontier_graph_from_config():
+    args = build_parser().parse_args([])
+    assert resolve_frontier_graph(args, {"frontier": {"graph": "auto"}}) == "auto"
+
+
+def test_resolve_frontier_graph_none_when_unset():
+    args = build_parser().parse_args([])
+    assert resolve_frontier_graph(args, {}) is None
+    assert resolve_frontier_graph(args, {"frontier": {}}) is None
 
 
 def test_parse_target_accepts_tower_case_insensitively():

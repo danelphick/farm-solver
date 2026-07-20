@@ -703,6 +703,18 @@ function readParams() {
   const passiveLimit = $("#passive-limit").value.trim();
   if (passiveLimit) params.passive_limit = passiveLimit;
   if ($("#plans").value) params.plans = Number($("#plans").value);
+
+  const spreadAxis = $("#spread-axis").value;
+  if (spreadAxis) {
+    // AXIS[=LO:HI] -- the same grammar --spread/webapi's "spread" param parses
+    // (main._parse_spread); a blank lo/hi leaves that axis's own default range.
+    const lo = $("#spread-lo").value.trim();
+    const hi = $("#spread-hi").value.trim();
+    params.spread = lo !== "" && hi !== "" ? `${spreadAxis}=${lo}:${hi}` : spreadAxis;
+  }
+  const graphMetric = $("#graph-metric").value;
+  if (graphMetric) params.graph = graphMetric;
+
   // The craft breakdown renders into its own collapsible pane, so it is
   // always requested (a refilter field -- asking costs no extra solve).
   params.breakdown = true;
@@ -775,6 +787,16 @@ function applyParams(params) {
   $("#max-ac").value = params.max_ac ?? "";
   $("#passive-limit").value = params.passive_limit || "";
   $("#plans").value = params.plans || 5;
+
+  const spreadSpec = params.spread || "";
+  const [spreadAxisValue, spreadRange] = spreadSpec.split("=");
+  $("#spread-axis").value = spreadAxisValue || "";
+  const [spreadLo, spreadHi] = spreadRange ? spreadRange.split(":") : ["", ""];
+  $("#spread-lo").value = spreadLo || "";
+  $("#spread-hi").value = spreadHi || "";
+  updateSpreadRangeVisibility();
+  $("#graph-metric").value = params.graph || "";
+
   for (const [key, sel] of Object.entries(PRICE_FIELDS)) {
     $(sel).value = params[key] ?? "";
   }
@@ -782,6 +804,14 @@ function applyParams(params) {
   $("#overrides").value = (params.overrides || []).join("\n");
   applyConfigParams(params.config);
   updateGoalSummary();
+}
+
+// The lo/hi range only means anything for an axis actually sampling a range
+// (pumpkin-juice/time/gold); "passive" enumerates its own breakpoints and the
+// default "" (no spread) has no range either, so the row stays hidden for both.
+function updateSpreadRangeVisibility() {
+  const axis = $("#spread-axis").value;
+  $("#spread-range-row").hidden = axis === "" || axis === "passive";
 }
 
 // --- The Goal pane's collapsed-state summary --------------------------------
@@ -975,6 +1005,9 @@ function renderResult(data) {
 
   $("#frontier-section").innerHTML = data.frontier.html;
   wireFrontierRows(data.frontier.plans || []);
+
+  $("#graph-section").innerHTML = (data.graph && data.graph.html) || "";
+  wireGraphHover(data.frontier.plans || []);
 
   $("#plan-section").innerHTML = data.plan.html;
   collapsePlanGroups();
@@ -1271,6 +1304,87 @@ function wireFrontierRows(plans) {
   });
 }
 
+// --- Impact graph hover tooltip ---------------------------------------------
+//
+// The graph SVG (report._svg_plot) already gives each `<circle class="pt">` a
+// CSS :hover state (enlarge + highlight) and a <title> tooltip -- a no-JS
+// baseline that works even here. This adds a richer floating overlay on top,
+// mirroring the help-icon tooltip's own singleton-div/positioning pattern
+// (ensureHelpTooltip/positionHelpTooltip above), but keyed to the pointer
+// instead of a fixed icon and reading each point's numbers straight from
+// data.frontier.plans (axis_value/secondary/time/net_gold/pumpkin_juices --
+// see webapi.render's frontier_rows) rather than parsing the SVG's own title.
+
+let graphTooltipEl = null;
+
+function ensureGraphTooltip() {
+  if (!graphTooltipEl) {
+    graphTooltipEl = document.createElement("div");
+    graphTooltipEl.className = "graph-tooltip";
+    graphTooltipEl.setAttribute("role", "tooltip");
+    graphTooltipEl.hidden = true;
+    document.body.appendChild(graphTooltipEl);
+  }
+  return graphTooltipEl;
+}
+
+function positionGraphTooltip(tip, event) {
+  const margin = 8;
+  const offset = 14; // clear of the cursor, so the tooltip doesn't eat the hover
+  const tw = tip.offsetWidth;
+  const th = tip.offsetHeight;
+  let left = event.clientX + offset;
+  let top = event.clientY + offset;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tw - margin));
+  top = Math.max(margin, Math.min(top, window.innerHeight - th - margin));
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+function hideGraphTooltip() {
+  if (graphTooltipEl) graphTooltipEl.hidden = true;
+}
+
+function graphTooltipHtml(info) {
+  const gold = Math.round(info.net_gold).toLocaleString();
+  const rows = [`<div class="graph-tooltip-time">${escapeHtml(info.time)}</div>`];
+  rows.push(`<div>Net gold: ${gold}</div>`);
+  if (info.pumpkin_juices) {
+    rows.push(`<div>Pumpkin Juice: ${Math.round(info.pumpkin_juices).toLocaleString()}</div>`);
+  }
+  return rows.join("");
+}
+
+// `plans` is the same data.frontier.plans array wireFrontierRows zips with the
+// frontier table, fastest-first -- the graph's points are plotted from the
+// same shown-plans list (see optimizer.spread_graph_series/webapi's
+// frontier_rows), so index i's <circle class="pt"> is plans[i].
+function wireGraphHover(plans) {
+  const svg = document.querySelector("#graph-section svg");
+  if (!svg) return;
+  const tip = ensureGraphTooltip();
+  svg.querySelectorAll(".pt").forEach((point, i) => {
+    const info = plans[i];
+    if (!info) return;
+    point.addEventListener("mouseover", (event) => {
+      tip.innerHTML = graphTooltipHtml(info);
+      tip.hidden = false;
+      positionGraphTooltip(tip, event);
+    });
+    point.addEventListener("mousemove", (event) => positionGraphTooltip(tip, event));
+    point.addEventListener("mouseout", hideGraphTooltip);
+  });
+}
+
+function initGraphTooltip() {
+  // Viewport-positioned like the help tooltip -- a scroll or Escape strands
+  // it, so hide it the same way (see initHelpTooltips).
+  window.addEventListener("scroll", hideGraphTooltip, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideGraphTooltip();
+  });
+}
+
 // --- Wiring ----------------------------------------------------------------
 
 const debouncedSave = debounce(saveState, DEBOUNCE_MS);
@@ -1312,10 +1426,15 @@ function init() {
     setStartDateDisplay($("#start-date").value);
     onAnyChange();
   });
+  $("#spread-axis").addEventListener("change", () => {
+    updateSpreadRangeVisibility();
+    onAnyChange();
+  });
 
   document.querySelectorAll("input, textarea, select").forEach((el) => {
     if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above
     if (el.name === "calendar" || el.id === "start-date") return; // wired above
+    if (el.id === "spread-axis") return; // wired above
     const changeEvent =
       el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
     el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
@@ -1369,10 +1488,12 @@ function init() {
     });
   });
 
-  // A brand-new session never runs applyParams, so seed the implicit today
-  // and the Goal pane's summary.
+  // A brand-new session never runs applyParams, so seed the implicit today,
+  // the Goal pane's summary, and the spread-range row's initial visibility.
   setStartDateDisplay("");
   updateGoalSummary();
+  updateSpreadRangeVisibility();
+  initGraphTooltip();
 
   if (restoreState()) {
     solve();

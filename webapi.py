@@ -44,7 +44,7 @@ import report
 # fingerprint). A change to any of these invalidates the cached frontier.
 RESOLVE_FIELDS = (
     "target", "level", "mastery", "items", "use_pumpkin_juice",
-    "current_stamina", "cookie_sets", "plans", "start_date",
+    "current_stamina", "cookie_sets", "plans", "spread", "graph", "start_date",
     "model_calendar", "average_calendar", "ignore_calendar", "crafting_bonus",
     "mastery_bonus", "override_inventory", "override",
 )
@@ -62,9 +62,9 @@ REFILTER_FIELDS = (
 _KNOWN_PARAM_KEYS = frozenset({
     "target", "level", "mastery", "items", "override_inventory",
     "use_pumpkin_juice", "max_gold", "cookie_sets", "current_stamina",
-    "plans", "start_date", "calendar", "plan_select", "max_ap", "max_ln",
-    "max_ac", "passive_limit", "overrides", "crafting_bonus", "mastery_bonus",
-    "breakdown",
+    "plans", "spread", "graph", "start_date", "calendar", "plan_select",
+    "max_ap", "max_ln", "max_ac", "passive_limit", "overrides",
+    "crafting_bonus", "mastery_bonus", "breakdown",
     # Trading Values / Advanced config knobs -- exposed with their own web
     # controls but funnelled through args.override (see _CONFIG_PARAM_FLAGS).
     "price_orange_juice", "price_apple_cider", "price_arnold_palmer",
@@ -288,6 +288,26 @@ def params_to_args(params: dict) -> argparse.Namespace:
         args.current_stamina = int(params["current_stamina"])
     if "plans" in params and params["plans"] is not None:
         args.plans = int(params["plans"])
+    if "spread" in params:
+        # AXIS[=LO:HI], e.g. "pj=0:10" or bare "time" -- same grammar as
+        # --spread, parsed by the CLI's own main._parse_spread so both paths
+        # agree on axis aliases/range syntax. An empty/absent value is "off"
+        # (the default time-thinned frontier, args.spread stays None).
+        raw = params["spread"]
+        args.spread = (
+            _wrap_argument_error(main._parse_spread, str(raw)) if raw else None
+        )
+    if "graph" in params:
+        # "" / absent -> off (None); otherwise one of --graph's own choices.
+        raw = params["graph"]
+        if not raw:
+            args.graph = None
+        elif raw in ("auto", "gold", "time"):
+            args.graph = raw
+        else:
+            raise ValueError(
+                f"graph must be 'auto', 'gold', 'time', or empty, not {raw!r}"
+            )
     if "start_date" in params:
         value = params["start_date"]
         args.start_date = date.fromisoformat(value) if value else None
@@ -602,7 +622,16 @@ def render(
         )
         warnings.append(message)
 
-    reporter.frontier(shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds)
+    # Resolved the same way main.run does (both are pure functions of args+cfg,
+    # see resolve_frontier_spread/resolve_frontier_graph's own docstrings) --
+    # not threaded through FrontierResult, since a refilter never changes them.
+    resolved_spread = main.resolve_frontier_spread(args, session.cfg)
+    graph_metric = main.resolve_frontier_graph(args, session.cfg)
+    reporter.frontier(
+        shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds,
+        spread_axis=resolved_spread.axis if resolved_spread else None,
+        graph_metric=graph_metric,
+    )
     chosen = shown[selected]
     inputs.solution.arnold_palmers = round(chosen.arnold_palmers)
     inputs.solution.large_nets = round(chosen.large_nets)
@@ -616,22 +645,48 @@ def render(
     if args.breakdown:
         reporter.crafts(chosen, inputs.workshop, args.crafting_bonus, args.mastery_bonus)
 
-    frontier_rows = [
-        {
+    # The impact graph's own axis + metric, resolved once for every row below.
+    # "axis_value" is each plan's position on the spread axis (falling back to
+    # "time" -- the default time-thinned frontier's own axis -- when no spread
+    # was requested); "secondary" is the graph's y metric. Both are read off
+    # the fields already computed per row rather than re-deriving them (mirrors
+    # optimizer.spread_graph_series's own "auto" -> the *other* of gold/time
+    # resolution), so app.js's graph tooltip can plot/label a point without
+    # importing any solver logic of its own.
+    graph_axis = resolved_spread.axis if resolved_spread else "time"
+    graph_y_metric = graph_metric
+    if graph_y_metric in (None, "auto"):
+        graph_y_metric = "time" if graph_axis == "gold" else "gold"
+
+    frontier_rows = []
+    for i, plan in enumerate(shown):
+        time_seconds = plan.time.total_seconds()
+        net_gold = plan.gold - plan.surplus_gold
+        pumpkin_juices = round(report._pumpkin_juices(plan))
+        axis_value = {
+            "time": time_seconds,
+            "passive": time_seconds,
+            "gold": net_gold,
+            "pumpkin-juice": pumpkin_juices,
+        }[graph_axis]
+        secondary = time_seconds if graph_y_metric == "time" else net_gold
+        frontier_rows.append({
             "index": i,
             "time": passive.format_duration(plan.time),
-            "time_seconds": plan.time.total_seconds(),
+            "time_seconds": time_seconds,
             "gold": plan.gold,
-            "net_gold": plan.gold - plan.surplus_gold,
-            "pumpkin_juices": round(report._pumpkin_juices(plan)),
+            "net_gold": net_gold,
+            "pumpkin_juices": pumpkin_juices,
             "selected": i == selected,
             "cheapest": i == ctx.cheapest,
             # The frontier is fastest-first, so shown[0] is the fastest plan --
             # the same row markdown_frontier tags "[fastest]".
             "fastest": i == 0,
-        }
-        for i, plan in enumerate(shown)
-    ]
+            # This row's point on the impact graph (see graph_axis/graph_y_metric
+            # above) -- what app.js's wireGraphHover tooltip reads per point.
+            "axis_value": axis_value,
+            "secondary": secondary,
+        })
 
     result = SolveResult(
         sections={name: doc.render() for name, doc in reporter.docs.items()},

@@ -2444,6 +2444,268 @@ def _time_caps(t_fast: float, t_slow: float, count: int) -> list[float]:
     return [math.exp(lo + (hi - lo) * (i + 1) / (count + 1)) for i in range(count)]
 
 
+# --- Spread engine: pin plans linearly along a caller-chosen axis --------------
+#
+# The default frontier spreads its shown plans evenly across *time* (`_thin`). That
+# answers "what changes between fast and slow" but not "how should I spend my
+# Pumpkin Juice" or "what does buying more speed cost me right now" -- both better
+# read off a spread on the juice or gold axis instead. `SpreadSpec`/`frontier`'s
+# `spread=` kwarg opt into that: `count` plans sampled linearly along one axis
+# (`_spread`), plus `efficiency`/`spread_graph_series` as read-only helpers over
+# whatever plan list is shown (spread or the default time-thin, either one).
+
+
+class SpreadSpec(NamedTuple):
+    """A request to spread a frontier's shown plans along ``axis`` instead of the
+    default time-thin (see :func:`_spread`, :func:`frontier`'s ``spread=`` kwarg).
+
+    ``lo``/``hi`` override that axis's default range; ``None`` picks the natural
+    bound (the fast/cheap endpoints' own values, or -- for ``pumpkin-juice`` --
+    ``[0, feasible max]``). Ignored for ``"passive"``, which enumerates breakpoints
+    rather than sampling a range.
+    """
+
+    axis: str  # "time" | "gold" | "pumpkin-juice" | "passive"
+    lo: float | None = None
+    hi: float | None = None
+
+
+class GraphSeries(NamedTuple):
+    """The (x, y) points and axis labels for a spread's impact graph (see
+    :func:`spread_graph_series`) -- what a renderer plots, terminal or web."""
+
+    xs: list[float]
+    ys: list[float]
+    x_label: str
+    y_label: str
+
+
+# How many times :func:`_solve_at_axis_target` bisects the time-cap axis chasing a
+# gold/juice target, and the bracket width (seconds) below which it stops --
+# mirrors :func:`_pumpkin_gap_fill`'s own ``depth > 24`` / ``b - a < 60`` limits,
+# since this generalizes that same search.
+_SPREAD_BISECT_DEPTH = 24
+_SPREAD_MIN_BRACKET = 60.0
+
+_SPREAD_AXIS_LABELS = {
+    "time": "Time (s)",
+    "gold": "Net gold",
+    "pumpkin-juice": "Pumpkin Juice",
+    "passive": "Time (s)",
+}
+_SPREAD_METRIC_LABELS = {"gold": "Net gold", "time": "Time (s)"}
+
+
+def _axis_value(plan: SourcingPlan, axis: str) -> float:
+    """``plan``'s value on a spread axis ("passive" has none of its own -- a
+    passive spread reads its x-axis off "time" instead, see
+    :func:`spread_graph_series`)."""
+    if axis == "time":
+        return plan.time.total_seconds()
+    if axis == "gold":
+        return plan.cost[1]
+    if axis == "pumpkin-juice":
+        return _juice_count(plan)
+    raise ValueError(f"no axis value for {axis!r}")
+
+
+def _linspace(lo: float, hi: float, count: int) -> list[float]:
+    """``count`` values evenly spaced across ``[lo, hi]`` inclusive of both ends.
+
+    ``count <= 1`` collapses to just ``lo`` -- the same "no step to divide by"
+    guard :func:`_thin` uses for a one-plan request.
+    """
+    if count <= 1 or hi == lo:
+        return [lo]
+    return [lo + (hi - lo) * i / (count - 1) for i in range(count)]
+
+
+def _solve_at_axis_target(
+    base: _Base, axis: str, target: float, t_lo: float, t_hi: float,
+) -> SourcingPlan:
+    """The fastest exact plan whose ``axis`` value lands closest to ``target``,
+    found within the time-cap range ``[t_lo, t_hi]``.
+
+    ``"time"`` is trivial: the cap *is* the target, simply clamped into range.
+    ``"gold"`` and ``"pumpkin-juice"`` are both monotone **non-increasing** in the
+    time cap (net gold falls, whole-juice count falls, as a plan is given more
+    time to self-source -- see :func:`frontier`'s module notes), so this bisects
+    the cap axis exactly like :func:`_pumpkin_gap_fill` brackets a juice count,
+    generalized to any target on either axis rather than one fixed whole-count
+    bracket. Every solve here is exact (``pj_integer=True``) -- unlike the dense
+    sweep :func:`frontier` thins from, a spread only ever solves the handful of
+    points it actually shows, so there is no relaxed-then-finished two-phase step
+    to reuse.
+    """
+    if axis == "time":
+        cap = min(max(target, t_lo), t_hi)
+        return _solve_configured(base, pj_integer=True, time_cap=timedelta(seconds=cap))
+
+    def at(cap: float) -> SourcingPlan:
+        return _solve_configured(base, pj_integer=True, time_cap=timedelta(seconds=cap))
+
+    a, b = t_lo, t_hi
+    best = at(a)
+    best_val = _axis_value(best, axis)
+    hi_plan = at(b)
+    hi_val = _axis_value(hi_plan, axis)
+    if abs(hi_val - target) < abs(best_val - target):
+        best, best_val = hi_plan, hi_val
+    for _ in range(_SPREAD_BISECT_DEPTH):
+        if b - a < _SPREAD_MIN_BRACKET or abs(best_val - target) < 1e-6:
+            break
+        mid = (a + b) / 2
+        try:
+            plan = at(mid)
+        except _UnmeetableCap:
+            # A gap in this regime's reachable caps (see _sweep) -- the bracket
+            # can no longer narrow past it, so stop with the best point found.
+            break
+        val = _axis_value(plan, axis)
+        if abs(val - target) < abs(best_val - target):
+            best, best_val = plan, val
+        # Both axes fall as the cap grows: above target, the answer needs more
+        # time (raise the low bracket); below, it needs less (lower the high one).
+        if val > target:
+            a = mid
+        else:
+            b = mid
+    return best
+
+
+def _spread(
+    base_active: _Base,
+    fast: SourcingPlan,
+    cheap: SourcingPlan,
+    spec: SpreadSpec,
+    count: int,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None,
+    crafting_bonus: float,
+    openables: list[OpenFlow] | None,
+    inventory: dict[str, float] | None,
+    passive_pet_items: set[str],
+    prices: dict[str, float] | None,
+    quantize: Callable[[str, float], timedelta | None] | None,
+) -> list[SourcingPlan]:
+    """:func:`frontier`'s ``spread=`` path: ``count`` plans sampled linearly along
+    ``spec.axis`` (fastest-first, deduped), in place of the default time-thin.
+    Supersedes the default :func:`_pumpkin_gap_fill` gap-fill for this call --
+    that mechanism exists to recover missing juice counts from a *time*-spread
+    frontier, which spreading directly on the juice axis makes moot.
+
+    ``fast``/``cheap`` are the two endpoints :func:`frontier` already built and
+    quantized; re-solved here exact (see :func:`_solve_at_axis_target`'s note)
+    when juice vars exist, so every returned plan -- endpoints included -- drinks
+    a whole number of juices like the rest of the frontier's contract.
+    """
+    if base_active.pj:
+        if fast._origin is not None:
+            base, kwargs = fast._origin
+            fast = _solve_configured(base, pj_integer=True, **kwargs)
+        if cheap._origin is not None:
+            base, kwargs = cheap._origin
+            cheap = _solve_configured(base, pj_integer=True, **kwargs)
+
+    def post(plan: SourcingPlan) -> None:
+        _quantize_plan_time(
+            plan, quantize, demand, recipes or {}, crafting_bonus,
+            openables or [], inventory or {},
+        )
+        plan.surplus_gold = plan_surplus_gold(
+            plan, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {}, prices or {},
+        )
+
+    plans: list[SourcingPlan] = [fast, cheap]
+    for plan in plans:
+        post(plan)
+    t_fast, t_cheap = fast.time.total_seconds(), cheap.time.total_seconds()
+
+    if spec.axis == "passive":
+        # No range to sample -- one plan per passive-completion breakpoint in the
+        # cheap plan's own timeline (see :func:`_passive_completion_caps`).
+        caps = _passive_completion_caps(
+            cheap, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {}, passive_pet_items, quantize,
+        )
+        for cap in caps:
+            try:
+                plan = _solve_configured(
+                    base_active, pj_integer=True, time_cap=timedelta(seconds=cap),
+                )
+            except _UnmeetableCap:
+                continue
+            post(plan)
+            plans.append(plan)
+    else:
+        if spec.axis == "time":
+            lo = t_fast if spec.lo is None else spec.lo
+            hi = t_cheap if spec.hi is None else spec.hi
+        elif spec.axis == "gold":
+            lo = fast.cost[1] if spec.lo is None else spec.lo
+            hi = cheap.cost[1] if spec.hi is None else spec.hi
+        else:  # "pumpkin-juice": clamp both ends to what the fast plan can reach
+            feasible_max = float(_juice_count(fast))
+            lo = 0.0 if spec.lo is None else max(spec.lo, 0.0)
+            hi = feasible_max if spec.hi is None else min(spec.hi, feasible_max)
+        for target in _linspace(lo, hi, count):
+            plan = _solve_at_axis_target(base_active, spec.axis, target, t_fast, t_cheap)
+            post(plan)
+            plans.append(plan)
+
+    # Prune like the default frontier: drop dominated samples (a target that lands
+    # on a slower-but-costlier point than another, and the endpoint/target pair that
+    # coincide) so no row is beaten outright by another and the efficiency between
+    # adjacent rows stays meaningful. Also dedups and sorts fastest-first.
+    return _non_dominated(plans)
+
+
+def efficiency(plans: list[SourcingPlan]) -> list[float | None]:
+    """Gold per second of makespan saved going one row faster, per row (fastest
+    first): row ``i`` vs the next *slower* row ``i+1`` is ``(net_gold[i] -
+    net_gold[i+1]) / (time[i+1] - time[i])`` -- positive when the faster row costs
+    more (the usual case, buying speed), the marginal price of shaving that time
+    off. ``None`` for the last row (no slower neighbour to compare against) and
+    for a tied time (would divide by zero -- two rows landing on the same
+    makespan have no time saved to price).
+    """
+    result: list[float | None] = []
+    for i, plan in enumerate(plans):
+        if i + 1 >= len(plans):
+            result.append(None)
+            continue
+        nxt = plans[i + 1]
+        dt = nxt.time.total_seconds() - plan.time.total_seconds()
+        if dt <= 0:
+            result.append(None)
+            continue
+        result.append((plan.cost[1] - nxt.cost[1]) / dt)
+    return result
+
+
+def spread_graph_series(
+    plans: list[SourcingPlan], axis: str, metric: str,
+) -> GraphSeries:
+    """The impact-graph series for ``plans``: ``y`` (``metric``) against each
+    plan's value on ``axis``, for a renderer to plot (terminal ASCII or a web SVG).
+
+    ``metric`` is ``"gold"``, ``"time"``, or ``"auto"`` -- the *other* of the two,
+    since plotting an axis against itself is a straight line: gold, unless the
+    spread axis already is gold, in which case time. A ``"passive"`` spread has no
+    axis value of its own, so its x is each plan's time, like the "time" axis.
+    """
+    if metric == "auto":
+        metric = "time" if axis == "gold" else "gold"
+    x_axis = "time" if axis == "passive" else axis
+    xs = [_axis_value(p, x_axis) for p in plans]
+    ys = [_axis_value(p, metric) for p in plans]
+    return GraphSeries(
+        xs=xs, ys=ys,
+        x_label=_SPREAD_AXIS_LABELS[axis], y_label=_SPREAD_METRIC_LABELS[metric],
+    )
+
+
 def frontier(
     offers: list[Offer],
     demand: dict[str, float],
@@ -2461,6 +2723,7 @@ def frontier(
     quantize: Callable[[str, float], timedelta | None] | None = None,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    spread: SpreadSpec | None = None,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -2501,6 +2764,12 @@ def frontier(
     extension-cap sweep) -- and drives every solve in the sweep through
     :func:`_solve_configured` against one of them, instead of a fresh :func:`minimize`
     (which rebuilds the whole LP) per call. See ``plans/MODEL_REUSE_PLAN.md``.
+
+    ``spread`` (default ``None``, byte-identical to the behaviour above) opts out of
+    all of it: instead of the time-thinned sweep, :func:`_spread` pins ``count``
+    plans sampled linearly along ``spread.axis`` (time / gold / whole Pumpkin Juice
+    / a passive-completion breakpoint), still fastest-first, deduped, with the fast
+    and cheap endpoints always included.
     """
     base_active = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
@@ -2528,6 +2797,14 @@ def frontier(
     _quantize_plan_time(
         cheap, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
     )
+
+    if spread is not None:
+        return _spread(
+            base_active, fast, cheap, spread, count, demand, recipes,
+            crafting_bonus, openables, inventory, passive_pet_items, prices,
+            quantize,
+        )
+
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)

@@ -104,6 +104,17 @@ def api_solve(request: HttpRequest) -> JsonResponse:
             "html": _section_html(result.sections["frontier"]),
             "plans": result.frontier_rows,
         },
+        # The impact graph (--graph's web counterpart): a "graph" section only
+        # exists in SectionedReporter.docs when the request asked for one (see
+        # report.SectionedReporter.frontier); absent -> no graph was requested,
+        # so the client gets an empty html string and leaves #graph-section as-is.
+        "graph": {
+            "html": (
+                _section_html(result.sections["graph"])
+                if result.sections.get("graph", "").strip()
+                else ""
+            ),
+        },
         "plan": {
             "index": result.selected,
             "html": _section_html(result.sections["plan"]),

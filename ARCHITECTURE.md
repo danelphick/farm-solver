@@ -467,6 +467,23 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   count there is no spare row for a filler, so the branch does zero extra MIP solves and
   the output is byte-identical to no gap-fill. This is the *only* place the frontier
   MIP-solves points it did not sweep.
+- **Spread engine** (`SpreadSpec`/`GraphSeries`, `frontier`'s `spread=` kwarg, `_spread`):
+  an alternative to the default time-thin above -- spread `count` plans linearly along a
+  caller-chosen axis (`time`/`gold`/`pumpkin-juice`/`passive`) instead of makespan, e.g.
+  "show me 0..10 Pumpkin Juice" or "show me the marginal cost of buying more speed".
+  `_axis_value` reads a plan's value on an axis; `_solve_at_axis_target` generalizes
+  `_pumpkin_gap_fill`'s bisection to any target rather than one fixed juice-count bracket
+  (`time` just pins the cap directly -- net gold and juice count are both monotone
+  non-increasing in the cap, so gold/juice bisect the same way). `_spread` resolves each
+  axis's default range (the fast/cheap endpoints' own cost/juice, clamped to the feasible
+  max for `pumpkin-juice`; `_passive_completion_caps` breakpoints, no range, for
+  `passive`), always keeps the fast/cheap endpoints (re-solved exact first when juice
+  vars exist), and dedupes/sorts like the default path -- superseding
+  `_pumpkin_gap_fill` for that call, since spreading directly on the juice axis makes
+  its gap-recovery moot. `spread=None` (the default) leaves `frontier` on its old path,
+  byte-identical. `efficiency` (gold per second of makespan saved, row vs. the next
+  slower row) and `spread_graph_series` (axis + secondary metric -> `GraphSeries` for a
+  rendered impact graph) are read-only helpers over any shown plan list, spread or not.
 
 ### Ascension extension (`_build_base`/`_solve_configured`, milestone 3)
 

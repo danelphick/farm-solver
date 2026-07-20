@@ -8,12 +8,15 @@ from crops import Crop, Farm
 from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
 from optimizer import (
+    GraphSeries,
     SourcingPlan,
+    SpreadSpec,
     _build_base,
     _passive_completion_caps,
     _thin,
     all_offers,
     draw_consumed,
+    efficiency,
     frontier,
     minimize,
     passive_residuals,
@@ -24,6 +27,7 @@ from optimizer import (
     plan_leftovers,
     plan_surplus_gold,
     self_sourced_endpoint,
+    spread_graph_series,
     surplus_sale_value,
 )
 from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
@@ -1727,3 +1731,192 @@ def test_build_base_drops_unmasterable_candidates():
     assert plan.ascension.masters == ["cheap"]
     assert "ghost" not in plan.ascension.masters
     assert "ghost" not in plan.ascension.mastery_supply
+
+
+# --- Spread engine: SpreadSpec / _spread / _axis_value / efficiency / graphs ---
+#
+# FARM_ITEM + FISH_ITEM (defined at the top of this file) give a simple, exactly
+# linear time<->gold tradeoff at these prices: buying ``b`` of 100 "It" via
+# FISH_ITEM costs ``b * 0.01`` gold (a large net each) and leaves ``100 - b``
+# minutes of farming, so gold = 0.01 * (100 - time_minutes). That linearity is
+# what lets the gold-axis test check bisected targets tightly.
+
+
+def test_axis_value_reads_time_gold_and_juice():
+    plan = SourcingPlan(
+        time=timedelta(seconds=120), gold=5.0, pumpkin_juices={"it": 3}
+    )
+    assert optimizer._axis_value(plan, "time") == pytest.approx(120.0)
+    assert optimizer._axis_value(plan, "gold") == pytest.approx(plan.cost[1])
+    assert optimizer._axis_value(plan, "pumpkin-juice") == 3
+
+
+def test_solve_at_axis_target_bisects_gold_to_the_target():
+    base = _build_base([FARM_ITEM, FISH_ITEM], {"It": 100}, {}, 1.0, [], {}, 0.0, GOLD)
+    plan = optimizer._solve_at_axis_target(base, "gold", 0.5, 0.0, 6000.0)
+    # b = 100 * gold, so a target of 0.5 gold sits at 50 minutes (3000 s).
+    assert plan.cost[1] == pytest.approx(0.5, abs=0.02)
+    assert plan.time.total_seconds() == pytest.approx(3000, abs=120)
+
+
+def test_spread_time_axis_tracks_linear_targets():
+    plans = frontier(
+        [FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD, count=5,
+        spread=SpreadSpec("time", 0.0, 6000.0),
+    )
+    assert [p.time for p in plans] == sorted(p.time for p in plans)  # fastest-first
+    keys = [(round(p.time.total_seconds()), round(p.gold - p.surplus_gold)) for p in plans]
+    assert len(keys) == len(set(keys))  # deduped
+    # "time" pins the cap directly, so each linear target lands almost exactly.
+    for target in (0, 1500, 3000, 4500, 6000):
+        assert any(abs(p.time.total_seconds() - target) < 1 for p in plans), target
+
+
+def test_spread_gold_axis_tracks_linear_targets():
+    plans = frontier(
+        [FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD, count=5,
+        spread=SpreadSpec("gold", 0.0, 1.0),
+    )
+    assert [p.time for p in plans] == sorted(p.time for p in plans)
+    golds = [p.cost[1] for p in plans]
+    for target in (0.0, 0.25, 0.5, 0.75, 1.0):
+        assert any(abs(g - target) < 0.02 for g in golds), (target, golds)
+
+
+def test_spread_pumpkin_juice_axis_tracks_linear_targets():
+    # The flagship case from the design doc: 50 demand, 10/juice -> feasible max 5.
+    plans = frontier(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5,
+        count=6, spread=SpreadSpec("pumpkin-juice", 0, 5),
+    )
+    assert [p.time for p in plans] == sorted(p.time for p in plans)
+    counts = sorted(
+        {round(sum(p.pumpkin_juices.values())) for p in plans}, reverse=True
+    )
+    assert counts == [5, 4, 3, 2, 1, 0]
+
+
+def test_spread_pumpkin_juice_clamps_above_feasible_max():
+    # Feasible max is 5 (50 demand / 10 per juice); asking for up to 100 must
+    # clamp rather than crash, and never invent a count past what is reachable.
+    plans = frontier(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5,
+        count=6, spread=SpreadSpec("pumpkin-juice", 0, 100),
+    )
+    counts = {round(sum(p.pumpkin_juices.values())) for p in plans}
+    assert max(counts) == 5
+    assert len(counts) <= 6  # feasible (5) + 1
+
+
+def test_spread_passive_axis_yields_one_plan_per_breakpoint():
+    # Horn finishes passively at 100/10 = 10 min (600 s); Oak, the slower item,
+    # only at 100/1 = 100 min (6000 s, the cheap endpoint itself).
+    offers = [
+        Offer("passive", "passive", {"oak": 1.0, "horn": 10.0}, time_per_unit=timedelta(minutes=1)),
+        Offer("fish Oak", "fishing", {"oak": 1}, consumes={"large net": 1}, ln=1),
+        Offer("fish Horn", "fishing", {"horn": 1}, consumes={"large net": 1}, ln=1),
+    ]
+    plans = frontier(
+        offers, {"Oak": 100, "Horn": 100}, prices=GOLD, count=5,
+        spread=SpreadSpec("passive"),
+    )
+    times = {round(p.time.total_seconds()) for p in plans}
+    assert 0 in times  # fast endpoint: buy everything, instant
+    assert 600 in times  # Horn's breakpoint
+    assert max(times) >= 6000  # Oak's breakpoint / the cheap endpoint
+
+
+def test_spread_is_deduped_and_fastest_first():
+    offers = [
+        Offer("grow It", "farming", {"it": 1}, time_per_unit=timedelta(minutes=1)),
+        Offer("fish A", "fishing", {"it": 1}, consumes={"large net": 1}, ln=1),
+    ]
+    plans = frontier(offers, {"It": 1000}, count=5, prices=GOLD, spread=SpreadSpec("time"))
+    assert [p.time for p in plans] == sorted(p.time for p in plans)
+    keys = [(round(p.time.total_seconds()), round(p.gold - p.surplus_gold)) for p in plans]
+    assert len(keys) == len(set(keys))
+    # No shown plan is dominated by another (a sample landing on a slower-but-
+    # costlier point, or an endpoint/target that coincide) -- the spread prunes
+    # like the default frontier so the per-row efficiency stays meaningful.
+    assert not any(
+        optimizer._dominates(a, b)
+        for a in plans for b in plans if a is not b
+    )
+
+
+def test_frontier_spread_none_matches_default_behaviour():
+    # The regression contract: an explicit spread=None is byte-identical to
+    # omitting the argument entirely.
+    baseline = frontier([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD, count=5)
+    explicit = frontier(
+        [FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD, count=5, spread=None
+    )
+    assert len(baseline) == len(explicit)
+    assert [p.cost for p in baseline] == [p.cost for p in explicit]
+    assert baseline[0].cost == explicit[0].cost
+    assert baseline[-1].cost == explicit[-1].cost
+
+
+def test_efficiency_is_positive_when_faster_costs_more_and_none_for_the_last_row():
+    plans = [
+        SourcingPlan(time=timedelta(seconds=0), gold=10.0),
+        SourcingPlan(time=timedelta(seconds=100), gold=4.0),
+        SourcingPlan(time=timedelta(seconds=300), gold=0.0),
+    ]
+    effs = efficiency(plans)
+    assert effs[0] == pytest.approx((10.0 - 4.0) / (100 - 0))
+    assert effs[1] == pytest.approx((4.0 - 0.0) / (300 - 100))
+    assert effs[2] is None  # no slower neighbour
+
+
+def test_efficiency_guards_equal_time():
+    plans = [
+        SourcingPlan(time=timedelta(seconds=0), gold=5.0),
+        SourcingPlan(time=timedelta(seconds=0), gold=2.0),
+    ]
+    assert efficiency(plans) == [None, None]
+
+
+def _graph_fixture() -> list[SourcingPlan]:
+    return [
+        SourcingPlan(time=timedelta(seconds=0), gold=10.0, pumpkin_juices={"it": 3}),
+        SourcingPlan(time=timedelta(seconds=50), gold=5.0, pumpkin_juices={"it": 1}),
+        SourcingPlan(time=timedelta(seconds=100), gold=0.0, pumpkin_juices={"it": 0}),
+    ]
+
+
+def test_spread_graph_series_auto_picks_gold_for_a_non_gold_axis():
+    plans = _graph_fixture()
+    series = spread_graph_series(plans, "time", "auto")
+    assert isinstance(series, GraphSeries)
+    assert series.x_label == "Time (s)"
+    assert series.y_label == "Net gold"
+    assert series.xs == [p.time.total_seconds() for p in plans]
+    assert series.ys == [p.cost[1] for p in plans]
+    assert len(series.xs) == len(series.ys) == len(plans)
+
+
+def test_spread_graph_series_auto_picks_time_for_the_gold_axis():
+    plans = _graph_fixture()
+    series = spread_graph_series(plans, "gold", "auto")
+    assert series.x_label == "Net gold"
+    assert series.y_label == "Time (s)"
+    assert series.xs == [p.cost[1] for p in plans]
+    assert series.ys == [p.time.total_seconds() for p in plans]
+
+
+def test_spread_graph_series_passive_axis_uses_time_as_x():
+    plans = _graph_fixture()
+    series = spread_graph_series(plans, "passive", "gold")
+    assert series.x_label == "Time (s)"
+    assert series.xs == [p.time.total_seconds() for p in plans]
+    assert series.ys == [p.cost[1] for p in plans]
+
+
+def test_spread_graph_series_explicit_metric_overrides_auto():
+    plans = _graph_fixture()
+    series = spread_graph_series(plans, "pumpkin-juice", "time")
+    assert series.x_label == "Pumpkin Juice"
+    assert series.y_label == "Time (s)"
+    assert series.xs == [round(sum(p.pumpkin_juices.values())) for p in plans]
+    assert series.ys == [p.time.total_seconds() for p in plans]

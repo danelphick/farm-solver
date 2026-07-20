@@ -106,6 +106,52 @@ def parse_format(value: str) -> str:
         ) from None
 
 
+# Axis names --spread/[frontier] spread accept, plus the "pj" shorthand for the
+# flagship "spend Pumpkin Juice" use case -- both map onto optimizer.SpreadSpec.axis.
+_SPREAD_AXIS_ALIASES = {
+    "time": "time",
+    "gold": "gold",
+    "pumpkin-juice": "pumpkin-juice",
+    "pj": "pumpkin-juice",
+    "passive": "passive",
+}
+
+
+def _parse_spread(text: str) -> optimizer.SpreadSpec:
+    """Parse ``--spread AXIS[=LO:HI]`` into an :class:`optimizer.SpreadSpec`.
+
+    ``AXIS`` is one of ``time``/``gold``/``pumpkin-juice`` (alias ``pj``)/
+    ``passive``, case-insensitively; an optional ``=LO:HI`` (both floats, both
+    required together) narrows the sampled range, otherwise ``lo``/``hi`` are
+    ``None`` and :func:`optimizer._spread` picks that axis's natural default
+    (ignored entirely for ``passive``, which enumerates breakpoints instead of
+    sampling a range -- see the module docstring on ``optimizer.SpreadSpec``).
+    """
+    raw = text.strip()
+    axis_part, sep, range_part = raw.partition("=")
+    axis = _SPREAD_AXIS_ALIASES.get(axis_part.strip().lower())
+    if axis is None:
+        raise argparse.ArgumentTypeError(
+            "--spread axis must be one of time, gold, pumpkin-juice (pj), "
+            f"passive, not {axis_part.strip()!r}"
+        )
+    if not sep:
+        return optimizer.SpreadSpec(axis)
+    lo_text, colon, hi_text = range_part.partition(":")
+    if not colon:
+        raise argparse.ArgumentTypeError(
+            f"--spread range must be 'LO:HI', not {range_part!r}"
+        )
+    try:
+        lo = float(lo_text)
+        hi = float(hi_text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--spread range LO:HI must both be numbers, not {range_part!r}"
+        ) from None
+    return optimizer.SpreadSpec(axis, lo, hi)
+
+
 # Nominal gold cost of one Pumpkin Juice, used when the config does not set
 # trading.pumpkin_juice. Nominal because juice cannot be bought from another player:
 # it is what a juice is reckoned to be worth, so a plan that drinks one can be ranked
@@ -314,6 +360,44 @@ def price_stamina_enabled(args: argparse.Namespace, cfg: dict) -> bool:
     if override is not None:
         return override
     return bool(cfg.get("trading", {}).get("price_stamina", True))
+
+
+def resolve_frontier_spread(
+    args: argparse.Namespace, cfg: dict
+) -> optimizer.SpreadSpec | None:
+    """Resolve ``--spread``/``[frontier] spread`` into an :class:`optimizer.SpreadSpec`.
+
+    ``--spread`` (already parsed to a ``SpreadSpec`` by :func:`_parse_spread`) wins
+    when given. Otherwise ``[frontier] spread`` (the same ``AXIS[=LO:HI]`` grammar,
+    as a plain string -- e.g. ``"pumpkin-juice"`` or ``"gold=0:5000"``) is parsed the
+    same way; a range-less config string can still get one from ``[frontier]
+    spread_range`` (a two-element ``[lo, hi]``), so a shared range needn't be
+    repeated inline. ``None`` (both absent) means the default time-thinned frontier,
+    unchanged.
+    """
+    if args.spread is not None:
+        return args.spread
+    frontier_cfg = cfg.get("frontier", {})
+    text = frontier_cfg.get("spread")
+    if not text:
+        return None
+    spec = _parse_spread(text)
+    if spec.lo is None and spec.hi is None:
+        span = frontier_cfg.get("spread_range")
+        if span is not None:
+            lo, hi = span
+            spec = optimizer.SpreadSpec(spec.axis, float(lo), float(hi))
+    return spec
+
+
+def resolve_frontier_graph(args: argparse.Namespace, cfg: dict) -> str | None:
+    """Resolve ``--graph``/``[frontier] graph``: the impact-graph metric, or ``None``
+    (off, the default) when neither is set. ``--graph`` wins when given (bare ->
+    ``"auto"``); otherwise ``[frontier] graph`` (``"auto"``/``"gold"``/``"time"``).
+    """
+    if args.graph is not None:
+        return args.graph
+    return cfg.get("frontier", {}).get("graph")
 
 
 def pumpkin_juice_gains(
@@ -753,6 +837,37 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         metavar="N",
         help="how many plans to spread across the frontier (default: 5)",
+    )
+    parser.add_argument(
+        "--spread",
+        type=_parse_spread,
+        default=None,
+        metavar="AXIS[=LO:HI]",
+        help=(
+            "spread the --plans shown frontier plans linearly along AXIS instead "
+            "of the default time-thin -- one of time, gold, pumpkin-juice (alias "
+            "pj), or passive (overrides [frontier] spread). An optional '=LO:HI' "
+            "narrows the sampled range (ignored for passive, which enumerates its "
+            "own breakpoints); the default range stays within the fast regime "
+            "already explored (each axis's own fast/cheap endpoints, or the "
+            "feasible max for pumpkin-juice), so an explicit lo:hi is only needed "
+            "to go beyond that. E.g. 'pj=0:10' to see 0..10 Pumpkin Juice spent, "
+            "'gold=0:5000', or bare 'time'"
+        ),
+    )
+    parser.add_argument(
+        "--graph",
+        nargs="?",
+        const="auto",
+        default=None,
+        choices=["auto", "gold", "time"],
+        help=(
+            "render an impact graph (the chosen metric against the spread axis) "
+            "alongside the frontier table -- ASCII in the terminal, an SVG on the "
+            "web (overrides [frontier] graph). Bare, 'auto' picks the natural "
+            "counterpart of the spread axis (gold, or time when spreading by "
+            "gold); 'gold'/'time' pick one explicitly. Off by default"
+        ),
     )
     parser.add_argument(
         "--passive-limit",
@@ -1550,6 +1665,7 @@ def solve_frontier(
     pj_limit = inputs.pj_limit
     model_calendar = inputs.model_calendar
     start = inputs.start
+    spread = resolve_frontier_spread(args, cfg)
 
     horizon: timedelta | None = horizon_seed
     production = config.passive_production(
@@ -1612,7 +1728,7 @@ def solve_frontier(
             inventory, cookie_sets, report._pet_dominated_items(production),
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
             quantize=quantize, ap_tradeable=ap_tradeable,
-            non_mastery_goals=non_mastery_goals,
+            non_mastery_goals=non_mastery_goals, spread=spread,
         )
         if not plans:
             return FrontierResult(
@@ -2583,8 +2699,13 @@ def run(args: argparse.Namespace) -> int:
                 args.max_gold, args.max_ac,
             )
         )
+    # Recomputed (rather than threaded through FrontierResult) since both resolvers
+    # are pure functions of args+cfg, same as price_stamina_enabled's usage elsewhere.
+    resolved_spread = resolve_frontier_spread(args, cfg)
     reporter.frontier(
-        fr.shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds
+        fr.shown, selected, ctx.cheapest, ctx.reasons, inputs.prices, ctx.golds,
+        spread_axis=resolved_spread.axis if resolved_spread else None,
+        graph_metric=resolve_frontier_graph(args, cfg),
     )
     chosen = fr.shown[selected]
     inputs.solution.arnold_palmers = round(chosen.arnold_palmers)

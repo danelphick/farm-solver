@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import pytest
 
 import main
+import optimizer
 import webapi
 from crafting import Workshop
 from crops import Farm
@@ -64,6 +65,39 @@ def test_params_to_args_parses_consumable_limits():
     assert (args.max_ap, args.max_ln, args.max_ac) == (100, 50, 25)
     # An explicit null clears a limit (the client sends null to unset it).
     assert webapi.params_to_args({"max_ac": None}).max_ac is None
+
+
+def test_params_to_args_spread_and_graph_round_trip():
+    # "spread" parses through main._parse_spread -- same AXIS[=LO:HI] grammar
+    # --spread accepts on the CLI -- into an optimizer.SpreadSpec; "graph" is
+    # stored as-is (one of --graph's own choices).
+    args = webapi.params_to_args({"spread": "pj=0:10", "graph": "auto"})
+    assert args.spread == optimizer.SpreadSpec("pumpkin-juice", 0.0, 10.0)
+    assert args.graph == "auto"
+
+    bare = webapi.params_to_args({"spread": "time", "graph": "gold"})
+    assert bare.spread == optimizer.SpreadSpec("time")
+    assert bare.graph == "gold"
+
+
+def test_params_to_args_spread_and_graph_empty_means_off():
+    args = webapi.params_to_args({"spread": "", "graph": ""})
+    assert args.spread is None
+    assert args.graph is None
+    assert webapi.params_to_args({}).spread is None
+    assert webapi.params_to_args({}).graph is None
+
+
+def test_params_to_args_rejects_bad_spread_as_value_error():
+    # main._parse_spread raises argparse.ArgumentTypeError; params_to_args
+    # wraps it the same way it wraps target/max_gold's own parsers.
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"spread": "not-an-axis"})
+
+
+def test_params_to_args_rejects_bad_graph_metric():
+    with pytest.raises(ValueError):
+        webapi.params_to_args({"graph": "sometimes"})
 
 
 def test_params_to_args_validates_mastery_spec_but_stores_the_raw_string():
@@ -319,6 +353,8 @@ def test_fingerprint_changes_with_every_resolve_field():
         "current_stamina": {"current_stamina": 500},
         "cookie_sets": {"cookie_sets": 3},
         "plans": {"plans": 9},
+        "spread": {"spread": "pj=0:10"},
+        "graph": {"graph": "auto"},
         "start_date": {"start_date": "2026-01-01"},
         "calendar": {"calendar": "average"},
         "crafting_bonus": {"crafting_bonus": 2.0},
@@ -474,7 +510,50 @@ def test_solve_and_render_end_to_end_on_synthetic_paste_text():
     assert session.frontier.plans  # something to source (580 more Board needed)
 
     result, _ = webapi.render(session, args)
-    assert set(result.sections) == {"solution", "notes", "frontier", "plan", "crafts"}
+    # "graph" is always present (see report.SectionedReporter.__init__) but
+    # renders empty unless a graph was requested -- this request asked for
+    # neither spread nor graph, so it stays "".
+    assert set(result.sections) == {
+        "solution", "notes", "frontier", "plan", "crafts", "graph",
+    }
+    assert result.sections["graph"].strip() == ""
     assert "Board" in result.sections["solution"]
     assert result.frontier_rows
     assert any(row["selected"] for row in result.frontier_rows)
+    # Widened per row even with no spread requested: axis_value falls back to
+    # time_seconds (the default time-thinned frontier's own axis, see
+    # webapi.render's graph_axis/graph_y_metric).
+    for row in result.frontier_rows:
+        assert row["axis_value"] == row["time_seconds"]
+        assert row["secondary"] == row["net_gold"]
+
+
+def test_solve_and_render_with_spread_and_graph_renders_the_impact_graph():
+    # A mastery goal (not -i) is what earns Pumpkin Juice gains (see
+    # main.pumpkin_juice_gains), so this is the "pj=0:3" spread's flagship use
+    # case: --use-pumpkin-juice --spread pj=0:3 --graph.
+    args = webapi.params_to_args({
+        "mastery": "Board:100000",
+        "use_pumpkin_juice": -1,
+        "plans": 4,
+        "spread": "pj=0:3",
+        "graph": "auto",
+    })
+    assert args.spread == optimizer.SpreadSpec("pumpkin-juice", 0.0, 3.0)
+    assert args.graph == "auto"
+
+    session = webapi.solve(_MASTERY_TEXT, _INVENTORY_TEXT, args)
+    assert session.frontier.plans
+
+    result, _ = webapi.render(session, args)
+    graph_html = result.sections["graph"]
+    assert "<svg" in graph_html
+    assert 'class="pt"' in graph_html
+
+    assert result.frontier_rows
+    for row in result.frontier_rows:
+        # Spread by pumpkin-juice -> each row's axis_value is its juice count;
+        # graph="auto" on a pj spread plots the *other* metric, net gold (see
+        # optimizer.spread_graph_series's own "auto" resolution).
+        assert row["axis_value"] == row["pumpkin_juices"]
+        assert row["secondary"] == row["net_gold"]

@@ -328,6 +328,25 @@ resource_saver = 3
 # [tower]
 # level = 250
 
+[frontier]    # spread the shown frontier plans along a chosen axis instead of the
+# default time-thin, and/or render an impact graph alongside the table. Both
+# are off by default (unchanged behaviour); --spread/--graph on the command
+# line override these.
+#   spread        AXIS or "AXIS=LO:HI" -- axis is one of time / gold /
+#                 pumpkin-juice (alias pj) / passive; LO:HI narrows the
+#                 sampled range (ignored for passive, which enumerates its
+#                 own breakpoints instead of sampling one).
+# spread = "pumpkin-juice"
+#   spread_range  [LO, HI] -- fills in the range when spread above names an
+#                 axis with no range of its own (an explicit "AXIS=LO:HI"
+#                 always wins over this).
+# spread_range = [0, 10]
+#   graph         "auto" (the natural counterpart of the spread axis --
+#                 gold, or time when spreading by gold), "gold", or "time" --
+#                 renders a secondary-metric-vs-axis plot under the frontier
+#                 table (ASCII in the terminal, an interactive SVG on the web).
+# graph = "gold"
+
 [pets]    # each pet's current level; tier items come from pets.csv
 use_crunchy_omelette = true
 "Cat" = 8

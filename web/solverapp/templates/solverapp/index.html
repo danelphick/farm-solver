@@ -87,6 +87,30 @@
         <label for="plans">Plans across frontier<button type="button" class="help-icon" aria-label="Help" data-help="How many plans to list along the time-vs-gold frontier.">?</button></label>
         <input id="plans" type="number" min="1" value="5">
       </div>
+      <div class="field-row">
+        <label for="spread-axis">Spread along<button type="button" class="help-icon" aria-label="Help" data-help="Spread the shown plans linearly along this axis instead of the default time-thin — e.g. see the impact of spending 0..10 Pumpkin Juice, or the marginal cost of buying more speed.">?</button></label>
+        <select id="spread-axis">
+          <option value="">Time (default)</option>
+          <option value="pumpkin-juice">Pumpkin Juice</option>
+          <option value="time">Time</option>
+          <option value="gold">Gold</option>
+          <option value="passive">Passive completion</option>
+        </select>
+      </div>
+      <div class="field-row" id="spread-range-row" hidden>
+        <label for="spread-lo">Range<button type="button" class="help-icon" aria-label="Help" data-help="Optional lo:hi range to sample the spread axis across. Blank uses that axis's own natural default (the fast/cheap endpoints, or the feasible max for Pumpkin Juice).">?</button></label>
+        <input id="spread-lo" type="number" step="any" placeholder="lo" class="narrow">
+        <input id="spread-hi" type="number" step="any" placeholder="hi" class="narrow">
+      </div>
+      <div class="field-row">
+        <label for="graph-metric">Impact graph<button type="button" class="help-icon" aria-label="Help" data-help="Plot a secondary metric against the spread axis alongside the frontier table (an SVG, hover a point for details).">?</button></label>
+        <select id="graph-metric">
+          <option value="">Off</option>
+          <option value="auto">Auto</option>
+          <option value="gold">Gold</option>
+          <option value="time">Time</option>
+        </select>
+      </div>
     </details>
 
     <details id="farming-details" class="pane">
@@ -222,6 +246,8 @@
   <div id="notes-section"></div>
 
   <div id="frontier-section" class="report-section"></div>
+
+  <div id="graph-section" class="report-section"></div>
 
   <div class="plan-heading-row">
     <h2>Selected plan</h2>

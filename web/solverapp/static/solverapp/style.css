@@ -490,6 +490,34 @@ details[open] > summary .summary-detail {
   display: none;
 }
 
+/* The impact graph's floating hover overlay (wireGraphHover), on top of the
+   SVG's own no-JS :hover baseline (report._svg_plot's inline <style>) --
+   same singleton-div/fixed-position pattern as .help-tooltip above, just
+   cursor-anchored instead of icon-anchored. */
+.graph-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: min(16rem, calc(100vw - 1rem));
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.graph-tooltip[hidden] {
+  display: none;
+}
+
+.graph-tooltip-time {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
 /* The start date always displays a date, but until the user picks one it
    shows today muted, placeholder-style -- the value is not sent (the solver
    defaults to today server-side). */
@@ -701,6 +729,21 @@ details[open] > summary .summary-detail {
 .report-section th {
   color: var(--muted);
   font-weight: 600;
+}
+
+/* The impact graph (--graph's web counterpart, a self-contained inline SVG
+   from report._svg_plot -- see the "graph" SectionedReporter section). The
+   container scrolls rather than squashing the SVG's own fixed viewBox on a
+   narrow viewport; the SVG's own <style> handles its .pt:hover state. */
+#graph-section:not(:empty) {
+  margin: 0.5rem 0 1rem;
+  overflow-x: auto;
+}
+
+#graph-section svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 #frontier-section table tbody tr.clickable {

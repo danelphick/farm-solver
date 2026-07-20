@@ -280,6 +280,32 @@ def _net_gold_note(plan: optimizer.SourcingPlan) -> str:
     return f" ({', '.join(pieces)}, net {round(plan.cost[1]):,})"
 
 
+# Seconds per day, for turning `optimizer.efficiency`'s gold/second rate into a
+# human "gold/day" figure -- the unit a plan's marginal speed is worth reasoning
+# about in (nobody buys a few seconds; they buy a day off the makespan).
+_SECONDS_PER_DAY = 86400
+
+
+def _efficiency_note(
+    plan: optimizer.SourcingPlan, next_plan: optimizer.SourcingPlan, eff: float | None
+) -> str:
+    """``"(saves 3d for 100,000 g = 33,300 g/day)"`` -- how much makespan ``plan``
+    buys over the next **slower** shown plan (``next_plan``) and what that costs,
+    expressed as a gold/day rate (see :func:`optimizer.efficiency`, which supplies
+    ``eff``, the gold/second version of the same ratio). ``""`` when ``eff`` is
+    ``None`` (the slowest row has no slower neighbour to compare against).
+    Modelled on :func:`_net_gold_note`, but returned unspaced -- the caller joins
+    it into a frontier row's other notes rather than appending it to the gold cell,
+    since it should show up whether or not ``prices`` is set.
+    """
+    if eff is None:
+        return ""
+    dt = next_plan.time - plan.time
+    dgold = round(plan.cost[1] - next_plan.cost[1])
+    per_day = round(eff * _SECONDS_PER_DAY)
+    return f"(saves {passive.format_duration(dt)} for {dgold:,} g = {per_day:,} g/day)"
+
+
 def _stamina_units(plan: optimizer.SourcingPlan, prices: dict[str, float] | None) -> float:
     """Free stamina units behind ``plan.stamina_gold`` (gold / per-unit price)."""
     unit = (prices or {}).get("stamina", 0.0)
@@ -300,6 +326,191 @@ def _print_stamina_cost(
     )
 
 
+# --- Impact graph: series.ys vs series.xs, terminal ASCII or a web SVG --------
+#
+# Both renderers plot the same optimizer.GraphSeries (see frontier()'s
+# spread_axis/graph_metric kwargs below): _ascii_plot for TextReporter/
+# print_frontier, _svg_plot for SectionedReporter's web "graph" section (and
+# MarkdownReporter, which embeds the same SVG inline -- markdown renders to
+# HTML, so no separate ASCII path is needed there).
+
+_ASCII_PLOT_WIDTH = 60
+_ASCII_PLOT_HEIGHT = 12
+
+
+def _ascii_plot(series: optimizer.GraphSeries) -> str:
+    """A compact, fixed-size ASCII scatter of ``series`` for the terminal.
+
+    Each point lands on the row/column its ``(x, y)`` maps to in a
+    ``_ASCII_PLOT_WIDTH`` x ``_ASCII_PLOT_HEIGHT`` grid (y flipped so a larger
+    value plots nearer the top, as any chart would); axis labels and the
+    range's low/high values print below. A single point, or a flat axis (every
+    x or every y equal -- a one-row spread, or a metric that doesn't move over
+    the sampled range), would otherwise divide by zero mapping into the grid;
+    both are guarded to land dead-centre on that axis instead of crashing.
+    """
+    xs, ys = series.xs, series.ys
+    if not xs:
+        return "(no data)"
+    width, height = _ASCII_PLOT_WIDTH, _ASCII_PLOT_HEIGHT
+    x_lo, x_hi = min(xs), max(xs)
+    y_lo, y_hi = min(ys), max(ys)
+
+    def col(x: float) -> int:
+        if x_hi == x_lo:
+            return width // 2
+        return round((x - x_lo) / (x_hi - x_lo) * (width - 1))
+
+    def row(y: float) -> int:
+        if y_hi == y_lo:
+            return height // 2
+        return round((y_hi - y) / (y_hi - y_lo) * (height - 1))
+
+    grid = [[" "] * width for _ in range(height)]
+    for x, y in zip(xs, ys):
+        grid[row(y)][col(x)] = "*"
+
+    gutter = 13  # width of the left-hand y-axis label column below
+    lines = [f"{series.y_label:>{gutter - 1}} |" + "".join(r) for r in grid]
+    lines.append(" " * gutter + "-" * width)
+    lo_label, hi_label = f"{x_lo:,.0f}", f"{x_hi:,.0f}"
+    pad = max(1, width - len(lo_label) - len(hi_label))
+    lines.append(" " * gutter + lo_label + " " * pad + hi_label)
+    lines.append(" " * gutter + series.x_label)
+    return "\n".join(lines)
+
+
+def _format_axis_value(label: str, value: float) -> str:
+    """Render one axis tick/tooltip value in the unit its ``GraphSeries`` label
+    implies -- a duration for a time-flavoured axis, else a plain comma-grouped
+    count (gold or a Pumpkin Juice count both read fine as one)."""
+    if label.startswith("Time"):
+        return passive.format_duration(timedelta(seconds=value))
+    return f"{round(value):,}"
+
+
+def _svg_escape(text: str) -> str:
+    """Minimal XML escaping for text embedded in the SVG (labels, tooltips)."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+_SVG_WIDTH = 560
+_SVG_HEIGHT = 280
+_SVG_MARGIN_LEFT = 68
+_SVG_MARGIN_RIGHT = 20
+_SVG_MARGIN_TOP = 16
+_SVG_MARGIN_BOTTOM = 44
+
+
+def _svg_plot(
+    series: optimizer.GraphSeries, plans: list[optimizer.SourcingPlan]
+) -> str:
+    """A self-contained, theme-aware inline SVG scatter of ``series`` -- the
+    web report's impact graph (:class:`SectionedReporter`'s ``"graph"``
+    section, and the same markup :class:`MarkdownReporter` embeds inline).
+
+    No JavaScript: hover enlarge/highlight is a nested ``<style>``'s
+    ``:hover`` rule on each ``.pt`` circle, and the tooltip is a native
+    ``<title>`` child per point -- naming its axis value plus, always, net
+    gold and time (``plans``, matched index-for-index with ``series``, since
+    the tooltip shows both regardless of which one ``series.y_label`` actually
+    plots). Colors are CSS custom properties scoped to the root ``<svg>``,
+    re-themed by one ``@media (prefers-color-scheme: dark)`` block, so the
+    same markup reads on either background without a second render.
+    """
+    xs, ys = series.xs, series.ys
+    w, h = _SVG_WIDTH, _SVG_HEIGHT
+    left, right = _SVG_MARGIN_LEFT, w - _SVG_MARGIN_RIGHT
+    top, bottom = _SVG_MARGIN_TOP, h - _SVG_MARGIN_BOTTOM
+
+    x_lo, x_hi = (min(xs), max(xs)) if xs else (0.0, 1.0)
+    y_lo, y_hi = (min(ys), max(ys)) if ys else (0.0, 1.0)
+    if x_hi == x_lo:  # a flat/one-point range still needs a span to place in
+        x_lo, x_hi = x_lo - 1, x_hi + 1
+    if y_hi == y_lo:
+        y_lo, y_hi = y_lo - 1, y_hi + 1
+
+    def px(x: float) -> float:
+        return left + (x - x_lo) / (x_hi - x_lo) * (right - left)
+
+    def py(y: float) -> float:
+        return bottom - (y - y_lo) / (y_hi - y_lo) * (bottom - top)
+
+    circles = []
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        tip = f"{series.x_label}: {_format_axis_value(series.x_label, x)}"
+        if i < len(plans):
+            plan = plans[i]
+            tip += (
+                f"\nNet gold: {round(plan.cost[1]):,} g"
+                f"\nTime: {passive.format_duration(plan.time)}"
+            )
+        circles.append(
+            f'<circle class="pt" cx="{px(x):.1f}" cy="{py(y):.1f}" r="5">'
+            f"<title>{_svg_escape(tip)}</title></circle>"
+        )
+
+    x_ticks = [x_lo, (x_lo + x_hi) / 2, x_hi]
+    y_ticks = [y_lo, (y_lo + y_hi) / 2, y_hi]
+    x_tick_marks = "".join(
+        f'<text class="muted" x="{px(v):.1f}" y="{bottom + 16}" text-anchor="middle">'
+        f"{_svg_escape(_format_axis_value(series.x_label, v))}</text>"
+        for v in x_ticks
+    )
+    y_tick_marks = "".join(
+        f'<text class="muted" x="{left - 8}" y="{py(v) + 4:.1f}" text-anchor="end">'
+        f"{_svg_escape(_format_axis_value(series.y_label, v))}</text>"
+        for v in y_ticks
+    )
+    y_label_cy = (top + bottom) / 2
+
+    return f'''<svg class="spread-graph" viewBox="0 0 {w} {h}" width="100%" \
+height="auto" role="img" \
+aria-label="{_svg_escape(series.y_label)} vs {_svg_escape(series.x_label)}" \
+xmlns="http://www.w3.org/2000/svg">
+<style>
+.spread-graph {{
+  --sg-surface: #fcfcfb;
+  --sg-ink: #0b0b0b;
+  --sg-muted: #898781;
+  --sg-axis: #c3c2b7;
+  --sg-accent: #2a78d6;
+  --sg-accent-hover: #eb6834;
+  font: 11px system-ui, -apple-system, "Segoe UI", sans-serif;
+}}
+@media (prefers-color-scheme: dark) {{
+  .spread-graph {{
+    --sg-surface: #1a1a19;
+    --sg-ink: #ffffff;
+    --sg-axis: #383835;
+    --sg-accent: #3987e5;
+    --sg-accent-hover: #d95926;
+  }}
+}}
+.spread-graph .axis {{ stroke: var(--sg-axis); stroke-width: 1; }}
+.spread-graph text {{ fill: var(--sg-ink); }}
+.spread-graph .muted {{ fill: var(--sg-muted); }}
+.spread-graph .label {{ fill: var(--sg-muted); }}
+.spread-graph .pt {{
+  fill: var(--sg-accent);
+  stroke: var(--sg-surface);
+  stroke-width: 2;
+  transition: r 120ms ease, fill 120ms ease;
+}}
+.spread-graph .pt:hover {{ r: 8; fill: var(--sg-accent-hover); }}
+</style>
+<line class="axis" x1="{left}" y1="{bottom}" x2="{right}" y2="{bottom}" />
+<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{bottom}" />
+{x_tick_marks}
+{y_tick_marks}
+<text class="label" x="{(left + right) / 2:.1f}" y="{h - 6}" text-anchor="middle">\
+{_svg_escape(series.x_label)}</text>
+<text class="label" x="14" y="{y_label_cy:.1f}" text-anchor="middle" \
+transform="rotate(-90 14 {y_label_cy:.1f})">{_svg_escape(series.y_label)}</text>
+{"".join(circles)}
+</svg>'''
+
+
 def print_frontier(
     plans: list[optimizer.SourcingPlan],
     selected: int,
@@ -307,6 +518,8 @@ def print_frontier(
     reasons: list[str | None] | None = None,
     prices: dict[str, float] | None = None,
     golds: list[tuple[float, float]] | None = None,
+    spread_axis: str | None = None,
+    graph_metric: str | None = None,
 ) -> None:
     """The frontier table: each plan's time, consumables and gold, fastest first.
 
@@ -327,7 +540,19 @@ def print_frontier(
     ``reasons`` annotates why each plan is on the frontier (a resource plan says
     "all Steel Wire from passive"); endpoints and farming intermediates carry only
     their fastest/cheapest tag.
+
+    ``spread_axis`` (the axis a ``--spread`` frontier was sampled along, or
+    ``None`` in normal time-thinned mode) turns on a per-row marginal-efficiency
+    note -- see :func:`_efficiency_note` -- computed from
+    :func:`optimizer.efficiency`. ``graph_metric`` (``"auto"``/``"gold"``/
+    ``"time"``, or ``None`` to leave the graph off) prints an ASCII impact-graph
+    plot (:func:`_ascii_plot`) after the table, ``y=graph_metric`` against
+    ``x=spread_axis`` (falling back to "time" when there was no spread, matching
+    :func:`optimizer.spread_graph_series`'s own default). Both default to
+    ``None``, leaving this function's output byte-identical to before either
+    existed.
     """
+    effs = optimizer.efficiency(plans) if spread_axis is not None else None
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
     show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
@@ -386,8 +611,17 @@ def print_frontier(
         reason = reasons[i] if reasons is not None else None
         if reason:
             note_parts.append(f"— {reason}")
+        if effs is not None and i + 1 < len(plans):
+            eff_note = _efficiency_note(plan, plans[i + 1], effs[i])
+            if eff_note:
+                note_parts.append(eff_note)
         note = "  " + " ".join(note_parts) if note_parts else ""
         print(f" {marker} {i + 1}. {' + '.join(parts)}{gold}{note}")
+
+    if graph_metric is not None:
+        series = optimizer.spread_graph_series(plans, spread_axis or "time", graph_metric)
+        print(f"\n{series.y_label} vs {series.x_label}:")
+        print(_ascii_plot(series))
 
 
 def markdown_frontier(
@@ -399,6 +633,8 @@ def markdown_frontier(
     prices: dict[str, float] | None = None,
     golds: list[tuple[float, float]] | None = None,
     include_selected_tag: bool = True,
+    spread_axis: str | None = None,
+    graph_metric: str | None = None,
 ) -> None:
     """Markdown counterpart to :func:`print_frontier`: the same rows, as a table.
 
@@ -409,7 +645,15 @@ def markdown_frontier(
     time a click moves it from one row's text to another's. The CLI (through
     ``MarkdownReporter``, both the raw Markdown source and the terminal
     render) has no such highlight, so it keeps the word -- the default.
+
+    ``spread_axis``/``graph_metric`` mirror :func:`print_frontier`'s own
+    (efficiency notes, an impact-graph plot) -- here the plot is a self-
+    contained inline SVG (:func:`_svg_plot`) appended after the table, since
+    Markdown renders to HTML. :class:`SectionedReporter` calls this with
+    ``graph_metric=None`` regardless and renders the SVG into its own
+    ``"graph"`` section instead -- see its ``frontier`` method.
     """
+    effs = optimizer.efficiency(plans) if spread_axis is not None else None
     show_cookies = any(_cookie_sets_used(p) >= 1 for p in plans)
     show_juices = any(round(p.grape_juices) >= 1 for p in plans)
     show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
@@ -465,11 +709,19 @@ def markdown_frontier(
         reason = reasons[i] if reasons is not None else None
         if reason:
             notes.append(reason)
+        if effs is not None and i + 1 < len(plans):
+            eff_note = _efficiency_note(plan, plans[i + 1], effs[i])
+            if eff_note:
+                notes.append(eff_note)
         row.append(" ".join(notes))
         rows.append(row)
 
     doc.heading("Sourcing plans")
     doc.table(headers, rows)
+    if graph_metric is not None:
+        series = optimizer.spread_graph_series(plans, spread_axis or "time", graph_metric)
+        doc.heading("Impact graph")
+        doc.para(_svg_plot(series, plans))
 
 
 def _frontier_reasons(
@@ -2584,6 +2836,8 @@ class Reporter:
         reasons: list[str | None] | None = None,
         prices: dict[str, float] | None = None,
         golds: list[tuple[float, float]] | None = None,
+        spread_axis: str | None = None,
+        graph_metric: str | None = None,
     ) -> None:
         raise NotImplementedError
 
@@ -2766,6 +3020,11 @@ class SectionedReporter(Reporter):
             "frontier": MarkdownDoc(),
             "plan": MarkdownDoc(heading_shift=1),
             "crafts": MarkdownDoc(heading_shift=1),
+            # The impact graph (see frontier()) -- its own section rather than
+            # appended to "frontier", so the web page can lay it out as a
+            # separate pane instead of inline after the table. Stays empty
+            # (renders to "") when no graph is requested.
+            "graph": MarkdownDoc(),
         }
         self.notes: list[str] = []
 
@@ -2794,12 +3053,32 @@ class SectionedReporter(Reporter):
     def ascension_plan(self, *args, **kwargs) -> None:
         markdown_ascension_plan(self.docs["plan"], *args, **kwargs)
 
-    def frontier(self, *args, **kwargs) -> None:
+    def frontier(
+        self,
+        plans: list[optimizer.SourcingPlan],
+        selected: int,
+        cheapest: int,
+        reasons: list[str | None] | None = None,
+        prices: dict[str, float] | None = None,
+        golds: list[tuple[float, float]] | None = None,
+        spread_axis: str | None = None,
+        graph_metric: str | None = None,
+    ) -> None:
         # The web app's own row highlight already shows selection; see
-        # markdown_frontier's include_selected_tag docstring.
+        # markdown_frontier's include_selected_tag docstring. graph_metric is
+        # withheld from markdown_frontier itself (the table's own doc) -- the
+        # graph goes in its own "graph" section (a separate pane in the web
+        # UI) instead of appended inline after the table like the CLI's
+        # Markdown output.
         markdown_frontier(
-            self.docs["frontier"], *args, include_selected_tag=False, **kwargs
+            self.docs["frontier"], plans, selected, cheapest, reasons, prices, golds,
+            include_selected_tag=False, spread_axis=spread_axis,
         )
+        if graph_metric is not None:
+            series = optimizer.spread_graph_series(
+                plans, spread_axis or "time", graph_metric
+            )
+            self.docs["graph"].para(_svg_plot(series, plans))
 
     def plan(self, *args, **kwargs) -> None:
         markdown_plan(self.docs["plan"], *args, **kwargs)
