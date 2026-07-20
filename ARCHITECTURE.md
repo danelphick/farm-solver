@@ -403,13 +403,15 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   plan draining it looks cheaper than it is. `main._build_channel_setup` injects a
   **valuation-only** `prices["stamina"] = orange_juice_price / ORANGE_JUICE_STAMINA`
   key (like grape juice: never in `BUYABLE`, so never a buy var; needs an OJ price;
-  off in ascension mode). `optimizer._build_base` then meters the *free* stamina
-  consumed with a `stamina_op ≥ Σ(cider stamina) − Σ(topped-up stamina)` variable
-  (`≥ 0`), where topped-up = stamina from the item-consuming flows (drinking Orange
-  Juice, eating an Apple); subtracting both leaves exactly the banked + passive
-  stamina. OJ stamina is already priced as the juice (double-charge avoided), and
-  eating a surplus Apple is the deliberate near-free path the LP already leans on —
-  both outside this "banked + passive" charge, per the user's scope. It adds
+  off in ascension mode). `optimizer._build_base` then meters the stamina consumed
+  with a `stamina_op ≥ Σ(cider stamina) − Σ(Orange-Juice stamina)` variable (`≥ 0`):
+  a stamina unit costs its OJ replacement value whatever its source, so **all** of it
+  is priced except stamina from *drinking Orange Juice* — the juice is already priced
+  as the juice, so charging its stamina too would double-count. Eating an Apple is
+  **not** exempt (it once was): those Apples are near-free byproducts of opening idle
+  chests (unpriced keys), so exempting their stamina handed the solver a loophole —
+  manufacture free Apples to fuel explores and never touch the priced banked/passive
+  stamina, dodging the charge (a real plan did exactly this). It adds
   `stamina_price * stamina_op` to **`spend_value`/`total_value`
   only, never `gold`** (using free stamina spends no real gold, so it must stay a
   zero-gold action for the buy-nothing / `--max-gold` endpoints). The readout puts
