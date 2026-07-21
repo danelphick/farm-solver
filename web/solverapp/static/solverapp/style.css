@@ -373,6 +373,18 @@ details[open] > summary .summary-detail {
   flex: 0 0 6rem;
 }
 
+/* The spread Range row has two narrow inputs (lo, hi) after its label. When the
+   row is too narrow to fit both, we want "hi" to wrap directly under "lo" (in the
+   control column) rather than under the "Range" label. Indent the row's content
+   box to the control column and pull the label back into that gutter with a
+   negative margin, so a wrapped input starts under lo instead of at the label. */
+#spread-range-row {
+  padding-left: 11.5rem;
+}
+#spread-range-row label {
+  margin-left: -11.5rem;
+}
+
 /* Tri-state config bool selects ("Default (off)" / On / Off) need room for the
    longest label but shouldn't stretch full width like a plain field-row select. */
 .field-row select.narrow {
