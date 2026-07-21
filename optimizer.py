@@ -1258,6 +1258,7 @@ def _solve_configured(
     time_cap: timedelta | None = None,
     favour_passive: bool = False,
     pj_integer: bool = True,
+    juice_cap: int | None = None,
 ) -> SourcingPlan:
     """Solve ``base`` under one call's mode -- the per-call counterpart of
     :func:`_build_base`. Reusable across many calls sharing a base: every
@@ -1270,6 +1271,12 @@ def _solve_configured(
     relaxation. :func:`frontier` sweeps its ~hundreds of interior points with
     ``pj_integer=False`` and re-solves only the plans it returns with ``True``; a
     bare :func:`minimize` and every other caller keep the exact default.
+
+    ``juice_cap`` bounds the whole-juice total at ``sum(pj) <= juice_cap`` -- the
+    lever a ``--spread pumpkin-juice`` uses to pin the juice axis *directly* (one
+    exact solve per target, reaching 0), rather than bisecting the time cap for a
+    plan that happens to land on a given count. Paired with ``gold_weight`` it asks
+    "the fastest plan using at most N juices". No-op when the model has no juice.
     """
     origin = (
         base,
@@ -1277,6 +1284,7 @@ def _solve_configured(
             "gold_weight": gold_weight,
             "time_cap": time_cap,
             "favour_passive": favour_passive,
+            "juice_cap": juice_cap,
         },
     )
     if base.remainder_only:
@@ -1318,6 +1326,10 @@ def _solve_configured(
     if time_cap is not None:
         problem += (base.makespan <= _minutes(time_cap), "cap")
         base.ephemeral.append("cap")
+
+    if juice_cap is not None and base.pj:
+        problem += (pulp.lpSum(base.pj.values()) <= juice_cap, "juice_cap")
+        base.ephemeral.append("juice_cap")
 
     if favour_passive:
         # Slowest, most passive-leaning end: fewest tools spent (so passive and
@@ -2529,18 +2541,19 @@ def _solve_at_axis_target(
     base: _Base, axis: str, target: float, t_lo: float, t_hi: float,
 ) -> SourcingPlan:
     """The fastest exact plan whose ``axis`` value lands closest to ``target``,
-    found within the time-cap range ``[t_lo, t_hi]``.
+    found within the time-cap range ``[t_lo, t_hi]`` -- for the ``"time"`` and
+    ``"gold"`` axes only (``"pumpkin-juice"`` pins its juice variable directly, see
+    :func:`_spread`).
 
     ``"time"`` is trivial: the cap *is* the target, simply clamped into range.
-    ``"gold"`` and ``"pumpkin-juice"`` are both monotone **non-increasing** in the
-    time cap (net gold falls, whole-juice count falls, as a plan is given more
-    time to self-source -- see :func:`frontier`'s module notes), so this bisects
-    the cap axis exactly like :func:`_pumpkin_gap_fill` brackets a juice count,
-    generalized to any target on either axis rather than one fixed whole-count
-    bracket. Every solve here is exact (``pj_integer=True``) -- unlike the dense
-    sweep :func:`frontier` thins from, a spread only ever solves the handful of
-    points it actually shows, so there is no relaxed-then-finished two-phase step
-    to reuse.
+    ``"gold"`` net gold is monotone **non-increasing** in the time cap (it falls as
+    a plan is given more time to self-source -- see :func:`frontier`'s module
+    notes) but is not a clean LP expression to pin (surplus/stamina fold in after
+    the solve), so this bisects the cap axis exactly like :func:`_pumpkin_gap_fill`
+    brackets a juice count, generalized to any gold target. Every solve here is
+    exact (``pj_integer=True``) -- unlike the dense sweep :func:`frontier` thins
+    from, a spread only ever solves the handful of points it actually shows, so
+    there is no relaxed-then-finished two-phase step to reuse.
     """
     if axis == "time":
         cap = min(max(target, t_lo), t_hi)
@@ -2629,12 +2642,50 @@ def _spread(
             inventory or {}, prices or {},
         )
 
-    plans: list[SourcingPlan] = [fast, cheap]
-    for plan in plans:
-        post(plan)
     t_fast, t_cheap = fast.time.total_seconds(), cheap.time.total_seconds()
 
-    if spec.axis == "passive":
+    if spec.axis == "pumpkin-juice":
+        # Juice is the one spread axis that is itself an LP variable sum, so pin it
+        # *directly* -- ``sum(pj) <= N`` (see _solve_configured's ``juice_cap``),
+        # taking the fastest plan under it, one exact solve per target -- rather than
+        # bisecting the time cap for a plan that happens to land on N juices. That
+        # cap bisection only ever spanned ``t_fast..t_cheap`` (the *top* of the juice
+        # range), so every target below the cheap endpoint's count collapsed onto it;
+        # a direct cap reaches 0. The fast/cheap endpoints are also **not** seeded
+        # here: every shown plan is a sampled target, so a ``5:18`` spread shows only
+        # counts within [5, 18] and never leaks the 20-juice fastest plan in from an
+        # unconditional endpoint.
+        #
+        # Objective per target: the *fastest* plan using at most N juices
+        # (``gold_weight=_FAST_PRICE``) -- "if I ration myself to N juices, how fast
+        # can I finish and what does it cost". These rows are **deliberately
+        # dominated**: whenever juice is cheaper per unit than its substitute (the
+        # usual case -- and exactly why the user rations it: the model prices juice
+        # below the future tower levels they are saving it for), a lower-juice plan
+        # is same-speed-or-slower *and* costlier, so :func:`_non_dominated` would
+        # throw all but the top count away. So this branch skips that prune entirely
+        # and returns one plan per distinct juice count, fastest-first -- the whole
+        # point is to *see* the juice-vs-speed/gold trade the frontier hides.
+        feasible_max = _juice_count(fast)
+        lo = 0 if spec.lo is None else max(int(spec.lo), 0)
+        hi = feasible_max if spec.hi is None else min(int(spec.hi), feasible_max)
+        by_count: dict[int, SourcingPlan] = {}
+        seen: set[int] = set()
+        for target in _linspace(lo, hi, count):
+            n = round(target)
+            if n in seen:
+                continue
+            seen.add(n)
+            plan = _solve_configured(
+                base_active, gold_weight=_FAST_PRICE, pj_integer=True, juice_cap=n,
+            )
+            post(plan)
+            by_count.setdefault(_juice_count(plan), plan)  # dedup by *actual* count
+        return sorted(by_count.values(), key=lambda p: p.cost)
+    elif spec.axis == "passive":
+        plans = [fast, cheap]
+        for plan in plans:
+            post(plan)
         # No range to sample -- one plan per passive-completion breakpoint (see
         # :func:`_passive_completion_caps`). Anchor those breakpoints on the
         # ``favour_passive`` probe (built pet-free by :func:`frontier`, see there)
@@ -2665,17 +2716,16 @@ def _spread(
                 continue
             post(plan)
             plans.append(plan)
-    else:
+    else:  # "time" / "gold": bisect the time cap (net gold has no clean LP pin)
+        plans = [fast, cheap]
+        for plan in plans:
+            post(plan)
         if spec.axis == "time":
             lo = t_fast if spec.lo is None else spec.lo
             hi = t_cheap if spec.hi is None else spec.hi
-        elif spec.axis == "gold":
+        else:  # "gold"
             lo = fast.cost[1] if spec.lo is None else spec.lo
             hi = cheap.cost[1] if spec.hi is None else spec.hi
-        else:  # "pumpkin-juice": clamp both ends to what the fast plan can reach
-            feasible_max = float(_juice_count(fast))
-            lo = 0.0 if spec.lo is None else max(spec.lo, 0.0)
-            hi = feasible_max if spec.hi is None else min(spec.hi, feasible_max)
         for target in _linspace(lo, hi, count):
             plan = _solve_at_axis_target(base_active, spec.axis, target, t_fast, t_cheap)
             post(plan)

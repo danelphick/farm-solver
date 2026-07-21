@@ -1799,6 +1799,38 @@ def test_spread_pumpkin_juice_axis_tracks_linear_targets():
     assert counts == [5, 4, 3, 2, 1, 0]
 
 
+def test_spread_pumpkin_juice_keeps_dominated_rows():
+    # When juice is cheaper per unit than its substitute (here instant fishing) and
+    # both are instant, a lower-juice plan is same-time and costlier -- dominated.
+    # The frontier's _non_dominated would keep only the 5-juice row; the juice
+    # spread must skip that prune and show one plan per count, because rationing
+    # juice against its true (higher, off-model) value is the whole point.
+    FISH = Offer("fish It", "fishing", {"it": 1}, consumes={"large net": 1}, ln=1)
+    prices = {"it": 1.0, "large net": 1.0}
+    plans = frontier(
+        [FARM_ITEM, FISH], {"It": 50}, prices=prices, pj_gain={"it": 10},
+        pj_price=0.5, count=6, spread=SpreadSpec("pumpkin-juice", 0, 5),
+    )
+    assert all(p.time.total_seconds() == 0 for p in plans)  # all instant
+    counts = [round(sum(p.pumpkin_juices.values())) for p in plans]
+    assert counts == [5, 4, 3, 2, 1, 0]  # every count kept despite domination
+    # Net gold rises monotonically as juice falls -- the rationing cost curve.
+    assert [p.cost[1] for p in plans] == sorted(p.cost[1] for p in plans)
+
+
+def test_spread_pumpkin_juice_range_excludes_out_of_range_endpoints():
+    # Feasible max is 5, but a 2:4 request must show only counts inside [2, 4] --
+    # the fastest (5-juice) and cheapest (0-juice) endpoints are pinned targets, not
+    # unconditional extras, so neither leaks in (the "I asked for 5:18 and got a
+    # 20-juice plan" bug). Direct juice-var pinning, not time-cap bisection.
+    plans = frontier(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5,
+        count=3, spread=SpreadSpec("pumpkin-juice", 2, 4),
+    )
+    counts = {round(sum(p.pumpkin_juices.values())) for p in plans}
+    assert counts == {2, 3, 4}
+
+
 def test_spread_pumpkin_juice_clamps_above_feasible_max():
     # Feasible max is 5 (50 demand / 10 per juice); asking for up to 100 must
     # clamp rather than crash, and never invent a count past what is reachable.

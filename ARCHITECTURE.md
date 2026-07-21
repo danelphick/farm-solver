@@ -480,16 +480,27 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   an alternative to the default time-thin above -- spread `count` plans linearly along a
   caller-chosen axis (`time`/`gold`/`pumpkin-juice`/`passive`) instead of makespan, e.g.
   "show me 0..10 Pumpkin Juice" or "show me the marginal cost of buying more speed".
-  `_axis_value` reads a plan's value on an axis; `_solve_at_axis_target` generalizes
-  `_pumpkin_gap_fill`'s bisection to any target rather than one fixed juice-count bracket
-  (`time` just pins the cap directly -- net gold and juice count are both monotone
-  non-increasing in the cap, so gold/juice bisect the same way). `_spread` resolves each
-  axis's default range (the fast/cheap endpoints' own cost/juice, clamped to the feasible
-  max for `pumpkin-juice`; `_passive_completion_caps` breakpoints, no range, for
-  `passive`), always keeps the fast/cheap endpoints (re-solved exact first when juice
-  vars exist), and dedupes/sorts like the default path -- superseding
-  `_pumpkin_gap_fill` for that call, since spreading directly on the juice axis makes
-  its gap-recovery moot. The `passive` axis anchors its breakpoints on the
+  `_axis_value` reads a plan's value on an axis. The axes split by *how the value is
+  pinned*:
+  - **`time`/`gold`** go through `_solve_at_axis_target`, which pins the **time cap**
+    (`time`: the cap *is* the target; `gold`: net gold is monotone non-increasing in
+    the cap but isn't a clean LP expression to constrain — surplus/stamina fold in
+    after the solve — so it bisects the cap like `_pumpkin_gap_fill`). These seed the
+    fast/cheap endpoints and dedupe/sort via `_non_dominated` like the default path.
+  - **`pumpkin-juice`** pins the juice **variable** directly: juice is the model's one
+    integer var, so `_solve_configured(juice_cap=N)` adds `sum(pj) <= N` and takes the
+    *fastest* plan under it (`_FAST_PRICE`), one exact MILP per target — no cap
+    bisection (which only spanned `t_fast..t_cheap`, the top of the juice range, so
+    every target below the cheap endpoint's count collapsed onto it and 0 was
+    unreachable). Endpoints are **not** seeded (so a `5:18` range shows only counts in
+    [5,18], never the 20-juice fastest leaking in), and the result is **not**
+    `_non_dominated`-pruned: whenever juice is cheaper per unit than its substitute
+    (the usual case, and why the user rations it — the model prices juice below the
+    future tower levels they save it for) a lower-juice row is same-time-or-slower and
+    costlier, i.e. dominated, and pruning would collapse the spread to one plan. It
+    returns one plan per distinct actual juice count, fastest-first. This supersedes
+    `_pumpkin_gap_fill` for that call.
+  - **`passive`** anchors its breakpoints on the
   **`favour_passive` probe** (built in `frontier` when surplus is priced) and solves
   each cap `favour_passive` too, not on the cheap-explore endpoint through `base_active`:
   when an active source is cheap in gold but priced in `spend_value` (e.g. an explore
