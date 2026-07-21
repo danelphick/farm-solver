@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import NamedTuple
 
@@ -2637,15 +2637,16 @@ def _spread(
     if spec.axis == "passive":
         # No range to sample -- one plan per passive-completion breakpoint (see
         # :func:`_passive_completion_caps`). Anchor those breakpoints on the
-        # ``favour_passive`` probe and solve each cap ``favour_passive`` too, not on
-        # the cheap-explore endpoint through ``base_active``: when exploring is
-        # cheap the active base never *chooses* to wait for passive output, so a
-        # base_active-solved passive spread collapses to the single explore plan
-        # (the user's "why is there no wait-it-out option?" bug). The probe leans
-        # maximally on passive production, so its residuals expose every passive
-        # completion as a real "wait it out" milestone -- the levers the user wants
-        # to boost from. Falls back to the cheap plan / base_active when no probe
-        # was built (surplus unpriced, so slow passive plans are dominated anyway).
+        # ``favour_passive`` probe (built pet-free by :func:`frontier`, see there)
+        # and solve each cap ``favour_passive`` too, not on the cheap-explore
+        # endpoint through ``base_active``: when exploring is cheap the active base
+        # never *chooses* to wait for passive output, so a base_active-solved
+        # passive spread collapses to the single explore plan (the user's "why is
+        # there no wait-it-out option?" bug). The pet-free probe leans on the real
+        # non-pet passive plateaus, so its residuals expose every passive completion
+        # as a "wait it out" milestone -- the levers the user boosts from. Falls
+        # back to the cheap plan / base_active when no probe was built (surplus
+        # unpriced, or demand unsatisfiable pet-free).
         if probe is not None and base_passive is not None:
             anchor, solve_base, fp = probe, base_passive, True
         else:
@@ -2831,14 +2832,36 @@ def frontier(
         # slow passive plans it would surface are all dominated.
         base_passive = probe = None
         if spread.axis == "passive" and prices:
+            # Anchor the passive breakpoints on a favour_passive probe -- but built
+            # over a passive bundle with the *pet-dominated* items removed (their
+            # yields dropped from the one aggregate passive offer). Without that the
+            # probe leans on the ultra-slow pet trickle for exactly those items
+            # (Purple Flower/Twine here, a 200-year tail), which is the tail
+            # _passive_completion_caps already excludes -- so every residual it
+            # returns is a pet item, the caps come back empty, and the spread
+            # collapses to the single explore plan. Dropping the pet supply forces
+            # the probe onto the real non-pet plateaus (wait for Straw, craft Twine),
+            # whose completions are the "wait it out" milestones the user boosts
+            # from. If that leaves the probe infeasible (an item *only* a pet makes),
+            # fall back to no probe -> _spread uses the cheap/base_active anchor.
+            probe_offers = [
+                replace(o, yields={
+                    k: v for k, v in o.yields.items() if k not in passive_pet_items
+                })
+                if o.track == PASSIVE_TRACK and passive_pet_items else o
+                for o in offers
+            ]
             base_passive = _build_base(
-                offers, demand, recipes, crafting_bonus, openables, inventory,
+                probe_offers, demand, recipes, crafting_bonus, openables, inventory,
                 cookie_sets, prices, pj_gain, pj_price, pj_limit,
                 ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
             )
-            probe = _solve_configured(
-                base_passive, favour_passive=True, pj_integer=False,
-            )
+            try:
+                probe = _solve_configured(
+                    base_passive, favour_passive=True, pj_integer=False,
+                )
+            except ValueError:  # _assert_optimal: demand unsatisfiable pet-free
+                base_passive = probe = None
         return _spread(
             base_active, fast, cheap, spread, count, demand, recipes,
             crafting_bonus, openables, inventory, passive_pet_items, prices,

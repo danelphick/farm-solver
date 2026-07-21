@@ -1855,6 +1855,46 @@ def test_spread_passive_anchors_on_favour_passive_not_the_explore_endpoint():
     assert 6000 in times  # Straw's passive completion, surfaced only via the probe
 
 
+def test_spread_passive_drops_pet_items_to_find_the_non_pet_plateau():
+    # Mirrors the Purple Twine goal: it needs Flower (a pet-only passive item) and
+    # Twine (pet passive, but also craftable from non-pet passive Straw). Left as-is
+    # the favour_passive probe takes both from the free pet trickle, so *every*
+    # residual it returns is a pet item _passive_completion_caps excludes -> caps
+    # empty -> the spread collapses to the single fast plan (the user's bug).
+    # Building the probe pet-free (Flower/Twine dropped from the passive bundle)
+    # forces it to fish Flower and craft Twine from passively-gathered Straw,
+    # surfacing Straw's completion as the "wait it out" milestone.
+    offers = [
+        # One aggregate passive offer: Flower + Twine (the ultra-slow pets, 0.1/min)
+        # + Straw (a real building, 5/min). The slow pet rates keep the time-weighted
+        # endpoints off the passive route (they fish), as in the real data.
+        Offer("passive", "passive", {"flower": 0.1, "twine": 0.1, "straw": 5.0},
+              time_per_unit=timedelta(minutes=1)),
+        # Active fallbacks (cost a priced Large Net) so the endpoints stay fast and
+        # the pet-free probe is feasible -- Flower has no craft route.
+        Offer("fish F", "fishing", {"flower": 1}, consumes={"large net": 1}, ln=1),
+        Offer("fish T", "fishing", {"twine": 1}, consumes={"large net": 1}, ln=1),
+    ]
+    prices = {"flower": 1.0, "twine": 1.0, "large net": 1.0}
+    plans = frontier(
+        offers, {"Flower": 100, "Twine": 100}, recipes={"twine": {"straw": 2.0}},
+        prices=prices, count=5, passive_pet_items={"flower", "twine"},
+        spread=SpreadSpec("passive"),
+    )
+    times = {round(p.time.total_seconds()) for p in plans}
+    assert len(plans) >= 2
+    assert min(times) < 60  # the fast fishing endpoint
+    # 100 Twine = 200 Straw at 5/min = 40 min = 2400 s: Straw's non-pet plateau,
+    # surfaced only because the pet-free probe crafts Twine from Straw.
+    assert 2400 in times
+    # That wait-it-out plan crafts Twine from Straw, not the pet: its passive draw
+    # has Straw and no pet Twine (it fishes the Twine it does not craft).
+    straw_plan = next(p for p in plans if round(p.time.total_seconds()) == 2400)
+    assert straw_plan.passive_draw is not None
+    assert straw_plan.passive_draw.produced.get("straw", 0) > 0
+    assert straw_plan.passive_draw.produced.get("twine", 0) == 0
+
+
 def test_spread_is_deduped_and_fastest_first():
     offers = [
         Offer("grow It", "farming", {"it": 1}, time_per_unit=timedelta(minutes=1)),

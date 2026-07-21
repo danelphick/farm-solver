@@ -495,8 +495,15 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   when an active source is cheap in gold but priced in `spend_value` (e.g. an explore
   burning banked stamina), the cheap plan sources everything through it and has no
   passive residual, so a cheap-anchored passive spread collapses to that one explore
-  plan and hides the "wait it out" milestones the user wants to boost from (falls back
-  to cheap/`base_active` when no probe was built). `spread=None` (the default) leaves
+  plan and hides the "wait it out" milestones the user wants to boost from. The probe's
+  passive bundle has the **pet-dominated items dropped** (`passive_pet_items` yields
+  removed from the aggregate passive offer via `dataclasses.replace`) — otherwise it
+  leans on the ultra-slow pet trickle for exactly those items (a 200-year tail that
+  `_passive_completion_caps` already excludes), so every residual it returns is a pet
+  item and the caps come back empty. Dropping the pet supply forces the probe onto the
+  real non-pet plateaus (wait for Straw, craft Twine) whose completions are the
+  milestones. Falls back to cheap/`base_active` when no probe was built (surplus
+  unpriced, or the demand is unsatisfiable pet-free). `spread=None` (the default) leaves
   `frontier` on its old path,
   byte-identical. `efficiency` (gold per second of makespan saved, row vs. the next
   slower row) and `spread_graph_series` (axis + secondary metric -> `GraphSeries` for a
