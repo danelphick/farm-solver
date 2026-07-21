@@ -45,6 +45,23 @@ def _section_html(text: str) -> str:
     return markdown.markdown(text, extensions=["tables"])
 
 
+def _debug_command(args, mastery_text: str, inventory_text: str) -> str | None:
+    """The debug popup's CLI command, or None outside DEBUG.
+
+    In DEBUG we capture the pasted mastery/inventory to a local temp directory
+    (webapi.capture_debug_state) and point the command's --mastery-file/
+    --inventory-file at them, so running it reproduces the exact browser solve.
+    """
+    if not settings.DEBUG:
+        return None
+    mastery_file, inventory_file = webapi.capture_debug_state(
+        mastery_text, inventory_text
+    )
+    return webapi.args_to_command(
+        args, mastery_file=mastery_file, inventory_file=inventory_file
+    )
+
+
 @csrf_exempt  # a JSON POST API with no session/cookie auth -- nothing to forge
 @require_POST
 def api_solve(request: HttpRequest) -> JsonResponse:
@@ -133,5 +150,7 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         },
         # DEBUG only: the equivalent `python main.py` command, for the debug
         # button's popup. None in production so the button never has content.
-        "debug_command": webapi.args_to_command(args) if settings.DEBUG else None,
+        # The pasted mastery/inventory are dumped to a local temp directory so
+        # the command reproduces the exact solve (see webapi.capture_debug_state).
+        "debug_command": _debug_command(args, mastery_text, inventory_text),
     })

@@ -27,8 +27,9 @@ import argparse
 import hashlib
 import json
 import shlex
+import tempfile
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import config
@@ -193,7 +194,60 @@ def load_web_config() -> dict:
         return {}
 
 
-def args_to_command(args: argparse.Namespace) -> str:
+# DEBUG-only capture directory for the browser's pasted mastery/inventory text,
+# so the "CLI command" popup can point --mastery-file/--inventory-file at the
+# exact state the browser solved. Lives on the local disk under the system temp
+# dir; each solve writes a fresh timestamped pair, so past captures are kept and
+# the command reflects that specific solve.
+DEBUG_CAPTURE_DIR = Path(tempfile.gettempdir()) / "farm-solver-debug"
+
+
+def capture_debug_state(
+    mastery_text: str, inventory_text: str
+) -> tuple[Path, Path]:
+    """Write the pasted mastery/inventory text to :data:`DEBUG_CAPTURE_DIR`.
+
+    DEBUG-only helper for :func:`args_to_command`: dumps the browser's pasted
+    text to a fresh timestamped file pair on the local disk and returns their
+    paths, so the reconstructed CLI command can reproduce the *exact* solve via
+    ``--mastery-file``/``--inventory-file`` instead of relying on whatever the
+    configured data directory happens to hold. Each solve gets its own pair
+    (``mastery-<ts>.txt``/``inventory-<ts>.txt``, ``ts`` a microsecond-precision
+    timestamp that sorts chronologically), so earlier captures are preserved and
+    a command keeps working after a later solve. The user vetted storing their
+    config this way for a local-only debug feature.
+    """
+    DEBUG_CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S-%f")
+    mastery_path = DEBUG_CAPTURE_DIR / f"mastery-{stamp}.txt"
+    inventory_path = DEBUG_CAPTURE_DIR / f"inventory-{stamp}.txt"
+    mastery_path.write_text(mastery_text, encoding="utf-8")
+    inventory_path.write_text(inventory_text, encoding="utf-8")
+    return mastery_path, inventory_path
+
+
+def _shell_quote(token: str) -> str:
+    """Shell-quote one command token, readably.
+
+    Like :func:`shlex.quote` (single-quote wrapping, safe tokens left bare) but
+    with a friendlier escape for an embedded apostrophe: instead of ``shlex``'s
+    ``'"'"'`` close/escaped-quote/reopen dance, use bash/zsh ANSI-C quoting
+    (``$'...'``), where a single quote is simply ``\\'``. A literal backslash
+    must be doubled too, since backslash is the escape character inside
+    ``$'...'``. Apostrophe-free tokens keep ``shlex.quote``'s output unchanged.
+    """
+    if "'" not in token:
+        return shlex.quote(token)
+    escaped = token.replace("\\", "\\\\").replace("'", "\\'")
+    return f"$'{escaped}'"
+
+
+def args_to_command(
+    args: argparse.Namespace,
+    *,
+    mastery_file: Path | None = None,
+    inventory_file: Path | None = None,
+) -> str:
     """Reconstruct the equivalent ``python main.py`` command line from ``args``.
 
     A debug aid (the web app's "CLI command" popup): reproduces the same solve
@@ -203,10 +257,10 @@ def args_to_command(args: argparse.Namespace) -> str:
     whose value differs from the CLI default are emitted, to keep it short.
 
     The command loads the same ``web_default_config.toml`` the web app uses
-    (via ``--config``), so only the mastery/inventory differ: the CLI reads
-    those from files rather than the browser's paste, so it relies on the
-    configured data directory (point ``--mastery-file``/``--inventory-file`` at
-    your own files if they differ).
+    (via ``--config``). When ``mastery_file``/``inventory_file`` are given (the
+    web view passes the :func:`capture_debug_state` paths), the command points
+    ``--mastery-file``/``--inventory-file`` at them so the CLI solves the exact
+    pasted state; without them it falls back to the configured data directory.
     """
     tokens: list[str] = ["python", "main.py", "--config", WEB_CONFIG_PATH.name]
 
@@ -214,6 +268,10 @@ def args_to_command(args: argparse.Namespace) -> str:
         tokens.append(flag)
         tokens.append(str(value))
 
+    if mastery_file is not None:
+        add("--mastery-file", mastery_file)
+    if inventory_file is not None:
+        add("--inventory-file", inventory_file)
     if args.target is not None:
         add("--target", args.target)
     if args.mastery:
@@ -268,7 +326,7 @@ def args_to_command(args: argparse.Namespace) -> str:
     for override in args.override or []:
         add("--override", override)
 
-    return " ".join(shlex.quote(token) for token in tokens)
+    return " ".join(_shell_quote(token) for token in tokens)
 
 
 def config_defaults() -> dict:

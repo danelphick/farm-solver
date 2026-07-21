@@ -2,6 +2,7 @@
 
 import textwrap
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -351,6 +352,16 @@ def test_args_to_command_omits_defaults():
     assert command == "python main.py --config web_default_config.toml --target tower"
 
 
+def test_shell_quote_uses_ansi_c_escape_only_when_needed():
+    # Apostrophe-free tokens keep shlex.quote's output (bare / single-quoted).
+    assert webapi._shell_quote("plain") == "plain"
+    assert webapi._shell_quote("Gold Bar:1") == "'Gold Bar:1'"
+    # An embedded apostrophe switches to ANSI-C quoting with a \' escape.
+    assert webapi._shell_quote("Cat's Eye:5") == "$'Cat\\'s Eye:5'"
+    # A literal backslash in such a token is doubled (backslash is $'...''s escape).
+    assert webapi._shell_quote("a'b\\c") == "$'a\\'b\\\\c'"
+
+
 def test_args_to_command_includes_spread_and_graph():
     args = webapi.params_to_args(
         {"target": "tower", "spread": "pj=0:10", "graph": "gold"}
@@ -365,6 +376,52 @@ def test_args_to_command_spread_without_range():
     command = webapi.args_to_command(args)
     assert "--spread passive" in command
     assert "passive=" not in command  # no range appended
+
+
+def test_args_to_command_points_at_captured_files():
+    args = webapi.params_to_args({"target": "tower"})
+    command = webapi.args_to_command(
+        args, mastery_file=Path("/tmp/m.txt"), inventory_file=Path("/tmp/i.txt")
+    )
+    assert "--mastery-file /tmp/m.txt" in command
+    assert "--inventory-file /tmp/i.txt" in command
+
+
+def test_capture_debug_state_writes_pasted_text(monkeypatch, tmp_path):
+    monkeypatch.setattr(webapi, "DEBUG_CAPTURE_DIR", tmp_path / "capture")
+    mastery_path, inventory_path = webapi.capture_debug_state(
+        "mastery lines", "inventory lines"
+    )
+    assert mastery_path.read_text(encoding="utf-8") == "mastery lines"
+    assert inventory_path.read_text(encoding="utf-8") == "inventory lines"
+    assert mastery_path.name.startswith("mastery-")
+    assert inventory_path.name.startswith("inventory-")
+
+
+def test_capture_debug_state_keeps_each_solve_under_a_fresh_name(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(webapi, "DEBUG_CAPTURE_DIR", tmp_path / "capture")
+    # A stable stamp per call would collide; force two distinct timestamps.
+    stamps = iter(["2026-07-21T10-00-00-000001", "2026-07-21T10-00-00-000002"])
+
+    class _Clock:
+        @staticmethod
+        def now():
+            class _T:
+                @staticmethod
+                def strftime(_fmt):
+                    return next(stamps)
+
+            return _T()
+
+    monkeypatch.setattr(webapi, "datetime", _Clock)
+    first_mastery, _ = webapi.capture_debug_state("older", "older inv")
+    second_mastery, _ = webapi.capture_debug_state("newer", "newer inv")
+    assert first_mastery != second_mastery
+    # The earlier capture survives the later solve.
+    assert first_mastery.read_text(encoding="utf-8") == "older"
+    assert second_mastery.read_text(encoding="utf-8") == "newer"
 
 
 def test_config_defaults_exposes_game_sections_without_solver():
