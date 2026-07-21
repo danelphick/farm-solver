@@ -421,6 +421,22 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   resolves `--price-stamina`/`--no-price-stamina` over `[trading] price_stamina`.
   `report._net_gold_note`/`_print_stamina_cost` surface it (a `(stamina N, net M)`
   frontier annotation and a "Stamina (opportunity cost)" plan section).
+- **Pumpkin Juice net-gold exclusion** (`price_pumpkin_juice` option, default on):
+  `pj_price` plays two roles — it **gates** juice (folded into `base.gold` at
+  `_build_base`, so an epsilon-min-gold solve drinks a juice only where it beats the
+  alternative) and **charges** that cost into net gold. Unlike `price_stamina`, this
+  option does **not** touch the LP — the gate always stays. When off it only re-labels
+  the readout: the flag rides `_build_base(price_pumpkin_juice=…)` → `_Base` →
+  stamped onto every `SourcingPlan`, and `SourcingPlan.cost` subtracts `pumpkin_gold`
+  (the `pj_price · juices` slice already inside `gold`) from net when it is False. So
+  plans are compared/ranked on **real gold spent**, the juice left as its own count to
+  weigh against a value higher than any single tower level's price (why juice is worth
+  rationing — see the `--spread pumpkin-juice` bullet, which this pairs with).
+  Threaded through `minimize`/`frontier`/`fastest_endpoint` (default True keeps every
+  existing caller byte-identical); `main.price_pumpkin_juice_enabled` resolves
+  `--price-pumpkin-juice`/`--no-price-pumpkin-juice` over `[trading]
+  price_pumpkin_juice`; `report._net_gold_note` breaks the dropped cost out as a
+  `(…, juice J, …, net N)` piece so net staying far below the gold cell is legible.
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
   `_non_dominated` then `_thin` to `count`, then **exact-finishes** the survivors

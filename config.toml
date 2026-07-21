@@ -181,6 +181,13 @@ pumpkin_juice   = 230
 # Only stamina from drinking Orange Juice is exempt (already priced as the juice).
 # Needs an orange_juice price above. --price-stamina / --no-price-stamina override it.
 price_stamina = true
+# Count the Pumpkin Juice price above in a plan's reported net gold. On (default):
+# juice costs gold like any buy. Off: the LP still prices juice -- so it is drunk
+# only where it beats its alternative, the price stays a *gate* -- but that cost is
+# netted back out, so plans compare on real gold spent and the juice count is left to
+# weigh against your own (higher, off-model) value for it. Useful with
+# --spread pumpkin-juice. --price-pumpkin-juice / --no-price-pumpkin-juice override it.
+price_pumpkin_juice = true
 
 [trading.ap]    # Trade OTHER resources for Arnold Palmers (a finer currency than
 # gold, which only trades in units of 5). These are the items NOT already buyable

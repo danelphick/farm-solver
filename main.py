@@ -362,6 +362,25 @@ def price_stamina_enabled(args: argparse.Namespace, cfg: dict) -> bool:
     return bool(cfg.get("trading", {}).get("price_stamina", True))
 
 
+def price_pumpkin_juice_enabled(args: argparse.Namespace, cfg: dict) -> bool:
+    """Whether Pumpkin Juice's cost counts in a plan's reported net gold.
+
+    Juice is always *priced* in the LP (``trading.pumpkin_juice``), so it is only
+    drunk where it beats its alternative -- the price is a gate. With this on (the
+    default), that cost also lands in net gold like any buy. With it off
+    (``--no-price-pumpkin-juice`` / ``[trading] price_pumpkin_juice = false``), the
+    gate stays but the cost is netted back out (see
+    :attr:`optimizer.SourcingPlan.cost`), so plans are compared on real gold spent
+    and the juice count is left to weigh against one's own value for it -- what a
+    ``--spread pumpkin-juice`` is usually read for. Unlike ``price_stamina``, this
+    does *not* change the LP; it only re-labels the reported net.
+    """
+    override = getattr(args, "price_pumpkin_juice", None)
+    if override is not None:
+        return override
+    return bool(cfg.get("trading", {}).get("price_pumpkin_juice", True))
+
+
 def resolve_frontier_spread(
     args: argparse.Namespace, cfg: dict
 ) -> optimizer.SpreadSpec | None:
@@ -830,6 +849,27 @@ def build_parser() -> argparse.ArgumentParser:
         dest="price_stamina",
         action="store_false",
         help="treat banked/passive stamina as free (do not price it)",
+    )
+    pj_pricing = parser.add_mutually_exclusive_group()
+    pj_pricing.add_argument(
+        "--price-pumpkin-juice",
+        dest="price_pumpkin_juice",
+        action="store_true",
+        default=None,
+        help=(
+            "count Pumpkin Juice's cost in net gold like any buy "
+            "(overrides [trading] price_pumpkin_juice; the default is on)"
+        ),
+    )
+    pj_pricing.add_argument(
+        "--no-price-pumpkin-juice",
+        dest="price_pumpkin_juice",
+        action="store_false",
+        help=(
+            "keep pricing juice in the LP (so it is still only used where it beats "
+            "its alternative) but drop its cost from the reported net gold, so plans "
+            "are compared on real gold spent -- useful with --spread pumpkin-juice"
+        ),
     )
     parser.add_argument(
         "--plans",
@@ -1666,6 +1706,7 @@ def solve_frontier(
     model_calendar = inputs.model_calendar
     start = inputs.start
     spread = resolve_frontier_spread(args, cfg)
+    price_pj = price_pumpkin_juice_enabled(args, cfg)
 
     horizon: timedelta | None = horizon_seed
     production = config.passive_production(
@@ -1706,7 +1747,7 @@ def solve_frontier(
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
                 pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
                 quantize=quantize, ap_tradeable=ap_tradeable,
-                non_mastery_goals=non_mastery_goals,
+                non_mastery_goals=non_mastery_goals, price_pumpkin_juice=price_pj,
             )
             if not fast.draws and not fast.crafts:  # nothing to source
                 break
@@ -1729,6 +1770,7 @@ def solve_frontier(
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
             quantize=quantize, ap_tradeable=ap_tradeable,
             non_mastery_goals=non_mastery_goals, spread=spread,
+            price_pumpkin_juice=price_pj,
         )
         if not plans:
             return FrontierResult(

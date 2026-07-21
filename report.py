@@ -261,18 +261,24 @@ def _pumpkin_juices(plan: optimizer.SourcingPlan) -> float:
 
 
 def _net_gold_note(plan: optimizer.SourcingPlan) -> str:
-    """`` (bank B, stamina S, net N)`` for a frontier row, or "" if nothing to note.
+    """`` (bank B, juice J, stamina S, net N)`` for a frontier row, or "" if nothing.
 
-    Shows the surplus the plan banks (a credit) and the free-stamina opportunity
-    cost it spends (a charge), plus its **net** gold ``plan.cost[1]`` -- the real
-    cost the frontier trades against time (see :attr:`optimizer.SourcingPlan.cost`).
-    Each piece is omitted when zero, so a plan with neither adds nothing.
+    Shows the surplus the plan banks (a credit), the Pumpkin Juice cost dropped from
+    net when ``price_pumpkin_juice`` is off (a credit), and the free-stamina
+    opportunity cost it spends (a charge), plus its **net** gold ``plan.cost[1]`` --
+    the real cost the frontier trades against time (see
+    :attr:`optimizer.SourcingPlan.cost`). Each piece is omitted when zero, so a plan
+    with none adds nothing. ``juice`` explains why net sits far below the gold cell
+    (that gold still includes the juice buy; only net nets it out).
     """
     banked = round(plan.surplus_gold)
     stamina = round(plan.stamina_gold)
+    juice = 0 if plan.price_pumpkin_juice else round(plan.pumpkin_gold)
     pieces = []
     if banked:
         pieces.append(f"bank {banked:,}")
+    if juice:
+        pieces.append(f"juice {juice:,}")
     if stamina:
         pieces.append(f"stamina {stamina:,}")
     if not pieces:

@@ -30,6 +30,7 @@ from main import (
     limit_shortfall,
     parse_gold_budget,
     parse_target,
+    price_pumpkin_juice_enabled,
     price_stamina_enabled,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
@@ -115,6 +116,22 @@ def test_price_stamina_enabled_defaults_from_config_then_true():
     assert price_stamina_enabled(unset, {"trading": {"price_stamina": False}}) is False
     assert price_stamina_enabled(unset, {"trading": {}}) is True  # default on
     assert price_stamina_enabled(unset, {}) is True
+
+
+def test_price_pumpkin_juice_enabled_cli_overrides_config():
+    on = build_parser().parse_args(["--price-pumpkin-juice"])
+    off = build_parser().parse_args(["--no-price-pumpkin-juice"])
+    cfg_off = {"trading": {"price_pumpkin_juice": False}}
+    cfg_on = {"trading": {"price_pumpkin_juice": True}}
+    assert price_pumpkin_juice_enabled(on, cfg_off) is True
+    assert price_pumpkin_juice_enabled(off, cfg_on) is False
+
+
+def test_price_pumpkin_juice_enabled_defaults_from_config_then_true():
+    unset = build_parser().parse_args([])  # price_pumpkin_juice is None
+    assert price_pumpkin_juice_enabled(unset, {"trading": {"price_pumpkin_juice": False}}) is False
+    assert price_pumpkin_juice_enabled(unset, {"trading": {}}) is True  # default on
+    assert price_pumpkin_juice_enabled(unset, {}) is True
 
 
 def test_limit_shortfall_reports_a_too_tight_time_limit():

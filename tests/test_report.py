@@ -17,10 +17,23 @@ from report import (
     SectionedReporter,
     _ascii_plot,
     _efficiency_note,
+    _net_gold_note,
     _svg_plot,
     markdown_frontier,
     print_frontier,
 )
+
+
+def test_net_gold_note_breaks_out_excluded_juice_cost():
+    # price_pumpkin_juice off: net excludes pumpkin_gold, and the note shows a
+    # "juice" piece explaining why net sits below the gold cell.
+    priced = SourcingPlan(time=timedelta(0), gold=4600, pumpkin_gold=4600)
+    assert _net_gold_note(priced) == ""  # net == gold, nothing to explain
+    free = SourcingPlan(
+        time=timedelta(0), gold=4600, pumpkin_gold=4600, price_pumpkin_juice=False,
+    )
+    assert "juice 4,600" in _net_gold_note(free)
+    assert "net 0" in _net_gold_note(free)
 
 PLANS = [
     SourcingPlan(time=timedelta(days=1), gold=100_000),

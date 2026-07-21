@@ -1799,6 +1799,24 @@ def test_spread_pumpkin_juice_axis_tracks_linear_targets():
     assert counts == [5, 4, 3, 2, 1, 0]
 
 
+def test_price_pumpkin_juice_off_nets_out_the_juice_cost():
+    # The LP still prices juice (so it is used only where it wins), but with
+    # price_pumpkin_juice=False the reported net gold drops the juice cost -- net
+    # excludes pumpkin_gold, so a plan is compared on real gold spent.
+    spec = SpreadSpec("pumpkin-juice", 3, 3)  # pin a 3-juice plan
+    priced = frontier(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5,
+        count=1, spread=spec, price_pumpkin_juice=True,
+    )[0]
+    free = frontier(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5,
+        count=1, spread=spec, price_pumpkin_juice=False,
+    )[0]
+    assert round(sum(free.pumpkin_juices.values())) == 3
+    assert free.pumpkin_gold == pytest.approx(15)  # 3 * 5, still priced in the LP
+    assert priced.cost[1] - free.cost[1] == pytest.approx(free.pumpkin_gold)
+
+
 def test_spread_pumpkin_juice_keeps_dominated_rows():
     # When juice is cheaper per unit than its substitute (here instant fishing) and
     # both are instant, a lower-juice plan is same-time and costlier -- dominated.

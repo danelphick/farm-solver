@@ -262,6 +262,14 @@ class SourcingPlan:
     # time, is ``gold - surplus_gold``. Set by :func:`frontier`; a plan straight out
     # of :func:`minimize` leaves it 0 (its net is just what it bought).
     surplus_gold: float = 0.0
+    # Whether the Pumpkin Juice opportunity cost (``pumpkin_gold``) counts in net
+    # gold (see :attr:`cost`). Default True -- juice is priced like any buy. Set
+    # False by the ``price_pumpkin_juice`` option: the LP still prices juice (so it
+    # is used only when it beats its alternative -- the price stays a *gate*), but
+    # its cost is dropped from the reported/ranked net gold, so a plan is compared on
+    # real gold spent with the juice shown as its own count. Not symmetric with
+    # ``price_stamina=false``, which zeroes the price in the LP too.
+    price_pumpkin_juice: bool = True
     remainder: dict[str, int] = field(default_factory=dict)
     # This stage's ascension outcome (which items were mastered/grandmastered/
     # mega'd, AK earned from steps vs. chores, gross mastery supply) -- set only
@@ -321,11 +329,17 @@ class SourcingPlan:
         stamina a plan burns, valued at its Orange-Juice equivalent) is a real cost
         added on: a fast plan that drains a big stamina bank is not free, it spent
         stamina worth gold. 0 unless the ``price_stamina`` option is on.
+
+        Pumpkin Juice's cost (``pumpkin_gold``, part of ``gold``) is netted back out
+        when :attr:`price_pumpkin_juice` is False -- the ``price_pumpkin_juice``
+        option: the LP still priced juice (so it was used only where it beat its
+        alternative), but the reported net gold then reflects real gold spent, with
+        the juice a separate count to weigh against one's own value for it.
         """
-        return (
-            self.time.total_seconds(),
-            self.gold - self.surplus_gold + self.stamina_gold,
-        )
+        net = self.gold - self.surplus_gold + self.stamina_gold
+        if not self.price_pumpkin_juice:
+            net -= self.pumpkin_gold
+        return (self.time.total_seconds(), net)
 
 
 def _minutes(time: timedelta) -> float:
@@ -453,6 +467,9 @@ class _Base:
     # above. ``None``/``0`` when the option is off (no ``prices["stamina"]``).
     stamina_op: pulp.LpVariable | None = None
     stamina_price: float = 0.0
+    # Stamped onto every plan this base yields (see :attr:`SourcingPlan.cost`); the
+    # LP prices juice regardless, this only governs whether that cost shows in net.
+    price_pumpkin_juice: bool = True
     # True when no demanded item is obtainable at all -- the LP is never built
     # (mirrors ``minimize``'s old early return), so ``_solve_configured`` must
     # skip straight to the trivial remainder-only plan without touching ``problem``.
@@ -486,6 +503,7 @@ def _build_base(
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
+    price_pumpkin_juice: bool = True,
 ) -> _Base:
     """Build the part of :func:`minimize`'s LP that is identical across every
     call in a sweep sharing these inputs -- variables, the balance/track
@@ -581,6 +599,7 @@ def _build_base(
             total_value=0,
             used=[], crafted=[], opened=[], remainder=remainder,
             pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
+            price_pumpkin_juice=price_pumpkin_juice,
         )
 
     used = [
@@ -928,6 +947,7 @@ def _build_base(
         used=used, crafted=crafted, opened=opened, remainder=remainder,
         pj_gain=pj_gain, pj_price=pj_price,
         stamina_op=stamina_op, stamina_price=stamina_price,
+        price_pumpkin_juice=price_pumpkin_juice,
         ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
         unmasterable=unmasterable,
     )
@@ -1288,7 +1308,10 @@ def _solve_configured(
         },
     )
     if base.remainder_only:
-        return SourcingPlan(remainder=base.remainder, _origin=origin)
+        return SourcingPlan(
+            remainder=base.remainder, _origin=origin,
+            price_pumpkin_juice=base.price_pumpkin_juice,
+        )
 
     # Toggle the juice variables' integrality for this solve. Cheap and idempotent;
     # reuses the one shared base rather than building a second integer copy.
@@ -1561,6 +1584,7 @@ def _solve_configured(
         pumpkin_credit={
             item: base.pj_credit[item].value() or 0.0 for item in pumpkin_juices
         },
+        price_pumpkin_juice=base.price_pumpkin_juice,
         remainder=base.remainder,
         ascension=ascension_outcome,
         _origin=origin,
@@ -1719,6 +1743,7 @@ def minimize(
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
+    price_pumpkin_juice: bool = True,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -1792,7 +1817,7 @@ def minimize(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-        ascension=ascension,
+        ascension=ascension, price_pumpkin_juice=price_pumpkin_juice,
     )
     plan = _solve_configured(
         base, gold_weight=gold_weight, time_cap=time_cap, favour_passive=favour_passive,
@@ -2078,6 +2103,7 @@ def fastest_endpoint(
     quantize: Callable[[str, float], timedelta | None] | None = None,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    price_pumpkin_juice: bool = True,
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
 
@@ -2104,6 +2130,7 @@ def fastest_endpoint(
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
         cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         quantize=quantize, ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+        price_pumpkin_juice=price_pumpkin_juice,
     )
 
 
@@ -2801,6 +2828,7 @@ def frontier(
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
     spread: SpreadSpec | None = None,
+    price_pumpkin_juice: bool = True,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -2852,6 +2880,7 @@ def frontier(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+        price_pumpkin_juice=price_pumpkin_juice,
     )
     fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, pj_integer=False)
     cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, pj_integer=False)
@@ -2905,6 +2934,7 @@ def frontier(
                 probe_offers, demand, recipes, crafting_bonus, openables, inventory,
                 cookie_sets, prices, pj_gain, pj_price, pj_limit,
                 ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+                price_pumpkin_juice=price_pumpkin_juice,
             )
             try:
                 probe = _solve_configured(
@@ -2952,6 +2982,7 @@ def frontier(
             offers, demand, recipes, crafting_bonus, openables, inventory,
             cookie_sets, prices, pj_gain, pj_price, pj_limit,
             ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+            price_pumpkin_juice=price_pumpkin_juice,
         )
         probe = _solve_configured(base_passive, favour_passive=True, pj_integer=False)
         nonpet = _passive_completion_caps(
