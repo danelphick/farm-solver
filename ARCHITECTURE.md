@@ -489,7 +489,15 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   `passive`), always keeps the fast/cheap endpoints (re-solved exact first when juice
   vars exist), and dedupes/sorts like the default path -- superseding
   `_pumpkin_gap_fill` for that call, since spreading directly on the juice axis makes
-  its gap-recovery moot. `spread=None` (the default) leaves `frontier` on its old path,
+  its gap-recovery moot. The `passive` axis anchors its breakpoints on the
+  **`favour_passive` probe** (built in `frontier` when surplus is priced) and solves
+  each cap `favour_passive` too, not on the cheap-explore endpoint through `base_active`:
+  when an active source is cheap in gold but priced in `spend_value` (e.g. an explore
+  burning banked stamina), the cheap plan sources everything through it and has no
+  passive residual, so a cheap-anchored passive spread collapses to that one explore
+  plan and hides the "wait it out" milestones the user wants to boost from (falls back
+  to cheap/`base_active` when no probe was built). `spread=None` (the default) leaves
+  `frontier` on its old path,
   byte-identical. `efficiency` (gold per second of makespan saved, row vs. the next
   slower row) and `spread_graph_series` (axis + secondary metric -> `GraphSeries` for a
   rendered impact graph) are read-only helpers over any shown plan list, spread or not.

@@ -1829,6 +1829,32 @@ def test_spread_passive_axis_yields_one_plan_per_breakpoint():
     assert max(times) >= 6000  # Oak's breakpoint / the cheap endpoint
 
 
+def test_spread_passive_anchors_on_favour_passive_not_the_explore_endpoint():
+    # The bug: when an active source is cheap in *gold* but not in spend_value --
+    # here an explore burning banked (gold-free but priced) stamina -- the cheap
+    # endpoint sources everything through it and has no passive residual, so a
+    # passive spread anchored on `cheap` collapses to that one explore plan and
+    # never shows the "wait it out" option. Anchoring on the favour_passive probe
+    # (which avoids the priced stamina and leans on passive Straw) surfaces it.
+    offers = [
+        Offer("passive", "passive", {"straw": 1.0}, time_per_unit=timedelta(minutes=1)),
+        Offer(
+            "explore", "exploring", {"straw": 5.0},
+            consumes={"stamina": 1.0}, time_per_unit=timedelta(seconds=1),
+        ),
+    ]
+    prices = {"straw": 1.0, "stamina": 0.01}  # banked stamina priced -> fp avoids it
+    plans = frontier(
+        offers, {"Straw": 100}, prices=prices, inventory={"stamina": 100_000.0},
+        count=5, spread=SpreadSpec("passive"),
+    )
+    times = {round(p.time.total_seconds()) for p in plans}
+    # The fast explore endpoint AND the passive wait-it-out plan, not just the one.
+    assert len(plans) >= 2
+    assert min(times) < 60  # the ~20 s explore
+    assert 6000 in times  # Straw's passive completion, surfaced only via the probe
+
+
 def test_spread_is_deduped_and_fastest_first():
     offers = [
         Offer("grow It", "farming", {"it": 1}, time_per_unit=timedelta(minutes=1)),

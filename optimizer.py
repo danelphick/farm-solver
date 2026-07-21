@@ -2592,6 +2592,8 @@ def _spread(
     passive_pet_items: set[str],
     prices: dict[str, float] | None,
     quantize: Callable[[str, float], timedelta | None] | None,
+    base_passive: _Base | None = None,
+    probe: SourcingPlan | None = None,
 ) -> list[SourcingPlan]:
     """:func:`frontier`'s ``spread=`` path: ``count`` plans sampled linearly along
     ``spec.axis`` (fastest-first, deduped), in place of the default time-thin.
@@ -2603,6 +2605,11 @@ def _spread(
     quantized; re-solved here exact (see :func:`_solve_at_axis_target`'s note)
     when juice vars exist, so every returned plan -- endpoints included -- drinks
     a whole number of juices like the rest of the frontier's contract.
+
+    ``base_passive``/``probe`` are supplied only for a ``passive`` spread (when
+    surplus is priced): the ``favour_passive`` base and its uncapped probe plan
+    that the passive breakpoints anchor on -- see that branch for why the cheap
+    endpoint is the wrong anchor.
     """
     if base_active.pj:
         if fast._origin is not None:
@@ -2628,16 +2635,30 @@ def _spread(
     t_fast, t_cheap = fast.time.total_seconds(), cheap.time.total_seconds()
 
     if spec.axis == "passive":
-        # No range to sample -- one plan per passive-completion breakpoint in the
-        # cheap plan's own timeline (see :func:`_passive_completion_caps`).
+        # No range to sample -- one plan per passive-completion breakpoint (see
+        # :func:`_passive_completion_caps`). Anchor those breakpoints on the
+        # ``favour_passive`` probe and solve each cap ``favour_passive`` too, not on
+        # the cheap-explore endpoint through ``base_active``: when exploring is
+        # cheap the active base never *chooses* to wait for passive output, so a
+        # base_active-solved passive spread collapses to the single explore plan
+        # (the user's "why is there no wait-it-out option?" bug). The probe leans
+        # maximally on passive production, so its residuals expose every passive
+        # completion as a real "wait it out" milestone -- the levers the user wants
+        # to boost from. Falls back to the cheap plan / base_active when no probe
+        # was built (surplus unpriced, so slow passive plans are dominated anyway).
+        if probe is not None and base_passive is not None:
+            anchor, solve_base, fp = probe, base_passive, True
+        else:
+            anchor, solve_base, fp = cheap, base_active, False
         caps = _passive_completion_caps(
-            cheap, demand, recipes or {}, crafting_bonus, openables or [],
+            anchor, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, passive_pet_items, quantize,
         )
         for cap in caps:
             try:
                 plan = _solve_configured(
-                    base_active, pj_integer=True, time_cap=timedelta(seconds=cap),
+                    solve_base, favour_passive=fp, pj_integer=not fp,
+                    time_cap=timedelta(seconds=cap),
                 )
             except _UnmeetableCap:
                 continue
@@ -2804,10 +2825,24 @@ def frontier(
     )
 
     if spread is not None:
+        # A passive spread anchors on the favour_passive probe (see _spread's
+        # passive branch); build it here, mirroring the slow-regime extension
+        # below. Only when surplus is priced -- else banking is worthless and the
+        # slow passive plans it would surface are all dominated.
+        base_passive = probe = None
+        if spread.axis == "passive" and prices:
+            base_passive = _build_base(
+                offers, demand, recipes, crafting_bonus, openables, inventory,
+                cookie_sets, prices, pj_gain, pj_price, pj_limit,
+                ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+            )
+            probe = _solve_configured(
+                base_passive, favour_passive=True, pj_integer=False,
+            )
         return _spread(
             base_active, fast, cheap, spread, count, demand, recipes,
             crafting_bonus, openables, inventory, passive_pet_items, prices,
-            quantize,
+            quantize, base_passive=base_passive, probe=probe,
         )
 
     plans = [fast, cheap]
