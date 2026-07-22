@@ -147,6 +147,22 @@ def test_svg_plot_has_svg_pt_hover_and_one_title_per_plan():
     assert svg.count("<title>") == len(PLANS)
 
 
+def test_svg_plot_points_carry_plan_index_and_number():
+    # Each point is clickable-to-select: it stamps its 0-based data-plan-index and
+    # names its 1-based plan number in the tooltip, so the web app can wire both.
+    series = GraphSeries(
+        xs=[p.time.total_seconds() for p in PLANS],
+        ys=[p.cost[1] for p in PLANS],
+        x_label="Time (s)",
+        y_label="Net gold",
+    )
+    svg = _svg_plot(series, PLANS)
+    for i in range(len(PLANS)):
+        assert f'data-plan-index="{i}"' in svg
+        assert f"Plan {i + 1}" in svg
+    assert "cursor: pointer" in svg
+
+
 def test_svg_plot_single_point_does_not_crash():
     plan = SourcingPlan(time=timedelta(days=1), gold=10)
     series = GraphSeries(xs=[1.0], ys=[10.0], x_label="Time (s)", y_label="Net gold")

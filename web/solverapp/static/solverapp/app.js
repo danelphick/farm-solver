@@ -1543,7 +1543,12 @@ function hideGraphTooltip() {
 
 function graphTooltipHtml(info) {
   const gold = Math.round(info.net_gold).toLocaleString();
-  const rows = [`<div class="graph-tooltip-time">${escapeHtml(info.time)}</div>`];
+  // info.index is the 0-based frontier position (webapi.render); +1 is the plan
+  // number shown in the frontier table and what clicking the point selects.
+  const rows = [
+    `<div class="graph-tooltip-plan">Plan ${info.index + 1}</div>`,
+    `<div class="graph-tooltip-time">${escapeHtml(info.time)}</div>`,
+  ];
   rows.push(`<div>Net gold: ${gold}</div>`);
   if (info.pumpkin_juices) {
     rows.push(`<div>Pumpkin Juice: ${Math.round(info.pumpkin_juices).toLocaleString()}</div>`);
@@ -1562,6 +1567,7 @@ function wireGraphHover(plans) {
   svg.querySelectorAll(".pt").forEach((point, i) => {
     const info = plans[i];
     if (!info) return;
+    point.classList.toggle("selected", !!info.selected);
     point.addEventListener("mouseover", (event) => {
       tip.innerHTML = graphTooltipHtml(info);
       tip.hidden = false;
@@ -1569,6 +1575,15 @@ function wireGraphHover(plans) {
     });
     point.addEventListener("mousemove", (event) => positionGraphTooltip(tip, event));
     point.addEventListener("mouseout", hideGraphTooltip);
+    // Clicking a point selects that plan, exactly like clicking its frontier row
+    // (see wireFrontierRows): the API's plan_select index is 1-based, info.index
+    // is the 0-based frontier position.
+    point.addEventListener("click", () => {
+      hideGraphTooltip();
+      planSelect = { kind: "index", index: info.index + 1 };
+      saveState();
+      solve();
+    });
   });
 }
 

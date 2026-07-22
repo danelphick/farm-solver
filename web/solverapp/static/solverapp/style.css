@@ -600,6 +600,11 @@ details[open] > summary .summary-detail {
   display: none;
 }
 
+.graph-tooltip-plan {
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+
 .graph-tooltip-time {
   font-weight: 600;
   margin-bottom: 0.15rem;

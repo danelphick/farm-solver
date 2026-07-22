@@ -434,12 +434,15 @@ def _svg_plot(
 
     No JavaScript: hover enlarge/highlight is a nested ``<style>``'s
     ``:hover`` rule on each ``.pt`` circle, and the tooltip is a native
-    ``<title>`` child per point -- naming its axis value plus, always, net
-    gold and time (``plans``, matched index-for-index with ``series``, since
-    the tooltip shows both regardless of which one ``series.y_label`` actually
-    plots). Colors are CSS custom properties scoped to the root ``<svg>``,
-    re-themed by one ``@media (prefers-color-scheme: dark)`` block, so the
-    same markup reads on either background without a second render.
+    ``<title>`` child per point -- naming its **plan number** (1-based) and axis
+    value plus, always, net gold and time (``plans``, matched index-for-index with
+    ``series``, since the tooltip shows both regardless of which one
+    ``series.y_label`` actually plots). Each point also carries ``data-plan-index``
+    (its 0-based position) so the web app can wire a click to select that plan
+    (``cursor: pointer`` marks them as actionable); the no-JS render just ignores it.
+    Colors are CSS custom properties scoped to the root ``<svg>``, re-themed by one
+    ``@media (prefers-color-scheme: dark)`` block, so the same markup reads on either
+    background without a second render.
     """
     xs, ys = series.xs, series.ys
     w, h = _SVG_WIDTH, _SVG_HEIGHT
@@ -461,16 +464,17 @@ def _svg_plot(
 
     circles = []
     for i, (x, y) in enumerate(zip(xs, ys)):
-        tip = f"{series.x_label}: {_format_axis_value(series.x_label, x)}"
+        # Point i is the i-th shown plan (see docstring), so it carries that plan's
+        # 1-based number -- named in the tooltip, and stamped as data-plan-index (the
+        # 0-based position) so the web app can select the plan on click.
+        lines = [f"Plan {i + 1}", f"{series.x_label}: {_format_axis_value(series.x_label, x)}"]
         if i < len(plans):
             plan = plans[i]
-            tip += (
-                f"\nNet gold: {round(plan.cost[1]):,} g"
-                f"\nTime: {passive.format_duration(plan.time)}"
-            )
+            lines.append(f"Net gold: {round(plan.cost[1]):,} g")
+            lines.append(f"Time: {passive.format_duration(plan.time)}")
         circles.append(
-            f'<circle class="pt" cx="{px(x):.1f}" cy="{py(y):.1f}" r="5">'
-            f"<title>{_svg_escape(tip)}</title></circle>"
+            f'<circle class="pt" data-plan-index="{i}" cx="{px(x):.1f}" cy="{py(y):.1f}" r="5">'
+            f"<title>{_svg_escape(chr(10).join(lines))}</title></circle>"
         )
 
     x_ticks = [x_lo, (x_lo + x_hi) / 2, x_hi]
@@ -518,9 +522,11 @@ xmlns="http://www.w3.org/2000/svg">
   fill: var(--sg-accent);
   stroke: var(--sg-surface);
   stroke-width: 2;
+  cursor: pointer;
   transition: r 120ms ease, fill 120ms ease;
 }}
 .spread-graph .pt:hover {{ r: 8; fill: var(--sg-accent-hover); }}
+.spread-graph .pt.selected {{ r: 7; fill: var(--sg-accent-hover); }}
 </style>
 <line class="axis" x1="{left}" y1="{bottom}" x2="{right}" y2="{bottom}" />
 <line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{bottom}" />
