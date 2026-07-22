@@ -384,6 +384,32 @@ def test_cookie_day_yield_is_none_when_the_crop_does_not_qualify():
     assert farm.cookie_day_yield("Fast") is None
 
 
+def test_cookie_burst_yield_is_the_boosted_window_only():
+    # Same 1h crop as the cookie-day test: the burst is the boost slice alone --
+    # 9 * (1 natural in the window + 2 Grape Juice) = 27 -- with none of the day's
+    # 23 other natural harvests (those are the plain grow offer's job).
+    farm = Farm(
+        crops={"x": Crop("X", timedelta(hours=1), {"x": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_burst_yield("X") == pytest.approx(27)
+    # One planting per boosted harvest: the window crop plus the Grape Juice grows.
+    assert farm.cookie_burst_plantings("X") == pytest.approx(3)
+
+
+def test_cookie_burst_yield_is_none_when_the_crop_does_not_qualify():
+    farm = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_burst_yield("Fast") is None
+    assert farm.cookie_burst_plantings("Fast") == 0.0
+
+
 def test_farm_from_config_reads_the_cookie_threshold():
     farm = farm_from_config({"cookies_grow_time_threshold": "18m"})
     assert farm.cookie_time_threshold == timedelta(minutes=18)

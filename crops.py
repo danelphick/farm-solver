@@ -323,6 +323,79 @@ class Farm:
             return None
         return harvests * per_harvest
 
+    def _cookie_burst_harvests(self, name: str) -> float | None:
+        """Boosted-equivalent harvest count from a single once-per-day cookie burst.
+
+        A cookie set's five-minute :data:`COOKIE_WINDOW` is used once a day and is
+        the best home for that day's Grape Juice: everything harvested in it -- the
+        one or few crops that mature inside the window plus every Grape Juice instant
+        grow -- comes out at :data:`COOKIE_SET_MULTIPLIER`. This is that boost *only*
+        (``multiplier * (in_window + grape_juices)``); the day's other natural
+        harvests belong to the plain ``grow`` offer, so the burst is an effectively
+        instant action rather than a whole day (contrast :meth:`_cookie_boosted_
+        harvests`, the whole-day count this is the boosted slice of). ``None`` for an
+        unknown crop.
+        """
+        grow_time = self.grow_time(name)
+        if grow_time is None:
+            return None
+        natural = timedelta(days=1) / grow_time
+        in_window = min(natural, 1 + math.floor(COOKIE_WINDOW / grow_time))
+        return COOKIE_SET_MULTIPLIER * (in_window + self.grape_juices_per_day)
+
+    def cookie_burst_yield(self, name: str, item: str | None = None) -> float | None:
+        """Expected ``item`` from one once-per-day cookie burst on ``name``.
+
+        See :meth:`_cookie_burst_harvests`; the burst yields that many harvests'
+        worth of ``item``. ``None`` when the crop does not qualify for cookies (see
+        :meth:`takes_cookies`) or does not drop the item.
+        """
+        if not self.takes_cookies(name):
+            return None
+        per_harvest = self.per_harvest(name, item)
+        harvests = self._cookie_burst_harvests(name)
+        if not per_harvest or harvests is None:
+            return None
+        return harvests * per_harvest
+
+    def cookie_burst_plantings(self, name: str) -> float:
+        """Full-field plantings one cookie burst harvests (window crops + Grape Juice).
+
+        One planting per boosted harvest -- the Cookie multiplier boosts the yield,
+        not the number of plantings -- so this is a limited-seed crop's seed spend
+        per burst. Zero when the crop does not qualify for cookies or is unknown.
+        """
+        if not self.takes_cookies(name):
+            return 0.0
+        grow_time = self.grow_time(name)
+        if grow_time is None:
+            return 0.0
+        natural = timedelta(days=1) / grow_time
+        in_window = min(natural, 1 + math.floor(COOKIE_WINDOW / grow_time))
+        return in_window + self.grape_juices_per_day
+
+    def dewstar_cookie_burst_bonus(self, name: str) -> dict[str, float]:
+        """Dewstar bonus crops from one cookie burst on ``name``.
+
+        Mirrors :meth:`dewstar_cookie_bonus` but over the burst's harvests only:
+        boosted with Dewstar's Journal (:meth:`_cookie_burst_harvests`), the raw
+        window plantings without it (:meth:`cookie_burst_plantings`). Empty when
+        Dewstar is off or the crop does not qualify for cookies.
+        """
+        if not self.dewstar or not self.takes_cookies(name):
+            return {}
+        bonus = self.dewstar_bonus(name)
+        if not bonus:
+            return {}
+        harvests = (
+            self._cookie_burst_harvests(name)
+            if self.dewstar_journal
+            else self.cookie_burst_plantings(name)
+        )
+        if harvests is None:
+            return {}
+        return {item: rate * harvests for item, rate in bonus.items()}
+
     def _dewstar_pool(self, name: str) -> list[Crop]:
         """Crops the Scythe of Dewstar may pick as a bonus for growing ``name``.
 

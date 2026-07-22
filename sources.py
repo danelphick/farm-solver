@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from crops import PLOTS_PER_ROW, Farm
+from crops import COOKIE_WINDOW, PLOTS_PER_ROW, Farm
 from exploring import ACORN_PIE_EXPLORES, Exploring
 from fishing import Fishing
 from locksmith import Locksmith
@@ -93,6 +93,11 @@ class Offer:
     cookie sets and Grape Juices one unit costs (the priced/reported tally),
     ``time_per_unit`` the time one unit takes on its ``track``. Everything scales
     linearly with the number of units used.
+
+    ``max_units`` caps how many units the optimiser may use (an upper bound on
+    the offer's LP usage variable); ``None`` leaves it unbounded. Used by the
+    once-per-day cookie burst (see :func:`farming_offers`), the one activity you
+    cannot simply repeat back-to-back.
     """
 
     name: str
@@ -104,6 +109,7 @@ class Offer:
     cookies: float = 0.0
     gj: float = 0.0
     time_per_unit: timedelta = timedelta(0)
+    max_units: float | None = None
 
     def yield_of(self, item: str) -> float:
         """How many of ``item`` one unit yields (0 if the bundle lacks it)."""
@@ -546,6 +552,39 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
                     cookies=1,
                     gj=juices,
                     time_per_unit=day,
+                )
+            )
+            # The once-per-day cookie *burst*: the five-minute window plus that
+            # day's Grape Juice grows, all boosted -- the boost slice of the whole
+            # day above, at effectively no wait (see Farm.cookie_burst_yield). It is
+            # the best home for the daily Grape Juice, so it is a standalone instant
+            # action; the day's remaining natural harvests are the plain `grow`
+            # offer's job. Capped at one use (`max_units=1`): the burst is once a
+            # day, so a plan that wants more waits out further days via the whole-day
+            # offer above (each a day, each its own burst). A whole cookie set is
+            # still spent (cost rounds it up), and the burst's Grape Juice with it.
+            burst_bundle = {
+                item: farm.cookie_burst_yield(crop.name, item) for item in crop.drops
+            }
+            for item, rate in farm.dewstar_cookie_burst_bonus(crop.name).items():
+                burst_bundle[item] = burst_bundle.get(item, 0.0) + rate
+            burst_consumes: dict[str, float] = {}
+            if ground and juices:
+                burst_consumes["grape juice"] = juices
+            if seed:
+                burst_consumes[seed] = (
+                    seeds_per_planting * farm.cookie_burst_plantings(crop.name)
+                )
+            offers.append(
+                Offer(
+                    name=f"grow {crop.name} with cookies (burst)",
+                    track=FARMING_TRACK,
+                    yields=burst_bundle,
+                    consumes=burst_consumes,
+                    cookies=1,
+                    gj=juices,
+                    time_per_unit=COOKIE_WINDOW,
+                    max_units=1,
                 )
             )
     return offers

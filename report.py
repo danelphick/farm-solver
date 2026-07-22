@@ -1039,14 +1039,18 @@ def _crop_of(offer: sources.Offer) -> str:
     """
     return (
         offer.name.removeprefix("grow ")
+        .removesuffix(" (burst)")
         .removesuffix(" with cookies")
         .removesuffix(" without grape juice")
     )
 
 
 def _farming_action(draw: sources.Draw) -> str:
-    """The action and crop a farming draw stands for, cookie days included."""
+    """The action and crop a farming draw stands for, cookie days/bursts included."""
     crop = _crop_of(draw.offer)
+    if draw.offer.name.endswith("(burst)"):
+        # The once-per-day cookie burst -- capped at one, effectively instant.
+        return f"cookie burst of {crop}"
     if draw.offer.cookies:
         # A partial cookie set still consumes a whole one, so round days (and the
         # sets they stand for) up — never down.

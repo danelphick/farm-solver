@@ -17,7 +17,9 @@ from report import (
     MarkdownDoc,
     SectionedReporter,
     _ascii_plot,
+    _crop_of,
     _efficiency_note,
+    _farming_action,
     _farming_grow_time,
     _net_gold_note,
     _plan_makespan,
@@ -84,6 +86,18 @@ def test_frontier_row_quotes_whole_grow_farming_time(capsys):
     out = capsys.readouterr().out
     assert passive.format_duration(timedelta(minutes=240)) in out
     assert passive.format_duration(timedelta(minutes=204)) not in out
+
+
+def test_farming_action_names_a_cookie_burst():
+    # The once-per-day cookie burst reads as an instant burst, not "N cookie-boosted
+    # days" (which is the whole-day offer) nor "M Harvest Alls" (a plain grow).
+    burst = Offer(
+        "grow Pine Tree with cookies (burst)", "farming", {"pine": 1}, cookies=1
+    )
+    assert _crop_of(burst) == "Pine Tree"
+    assert _farming_action(Draw(burst, 0.3)) == "cookie burst of Pine Tree"
+    day = Offer("grow Pine Tree with cookies", "farming", {"pine": 1}, cookies=1)
+    assert _farming_action(Draw(day, 1.2)) == "2 cookie-boosted days of Pine Tree"
 
 
 # --- _efficiency_note -----------------------------------------------------

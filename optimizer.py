@@ -622,7 +622,12 @@ def _build_base(
             consumers.setdefault(material, []).append((item, quantity))
 
     problem = pulp.LpProblem("sourcing", pulp.LpMinimize)
-    usage = [pulp.LpVariable(f"x{i}", lowBound=0) for i in range(len(used))]
+    # ``max_units`` caps an offer's usage (the once-per-day cookie burst, which a
+    # plan cannot simply repeat back-to-back -- see :func:`sources.farming_offers`).
+    usage = [
+        pulp.LpVariable(f"x{i}", lowBound=0, upBound=o.max_units)
+        for i, o in enumerate(used)
+    ]
     craft = {item: pulp.LpVariable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
     opens = [pulp.LpVariable(f"o{i}", lowBound=0) for i in range(len(opened))]
     makespan = pulp.LpVariable("T", lowBound=0)

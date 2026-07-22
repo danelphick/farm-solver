@@ -2,7 +2,7 @@ from datetime import timedelta
 
 import pytest
 
-from crops import Crop, Farm
+from crops import COOKIE_WINDOW, Crop, Farm
 from exploring import (
     CiderModifiers,
     Exploring,
@@ -273,14 +273,25 @@ def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
         "grow Slow",
         "grow Slow without grape juice",
         "grow Slow with cookies",
+        "grow Slow with cookies (burst)",
     }
-    cookie = next(o for o in offers if o.cookies)
+    cookie = next(o for o in offers if o.name == "grow Slow with cookies")
     assert cookie.cookies == 1
     assert cookie.gj == 2  # a cookie day spends the day's Grape Juice allowance
     assert cookie.track == "farming"
     assert cookie.time_per_unit == timedelta(days=1)
+    assert cookie.max_units is None  # the whole day repeats freely (one per day)
     # A boosted day: (24 - 1) plain + 9*(1 natural + 2 grape-juice) boosted = 50.
     assert cookie.yields == {"slow": pytest.approx(50)}
+
+    # The once-per-day burst: the boost slice only -- 9*(1 natural + 2 grape-juice)
+    # = 27 -- at effectively no wait (the 5-minute window), capped at one use.
+    burst = next(o for o in offers if o.name.endswith("(burst)"))
+    assert burst.cookies == 1
+    assert burst.gj == 2
+    assert burst.max_units == 1
+    assert burst.time_per_unit == COOKIE_WINDOW
+    assert burst.yields == {"slow": pytest.approx(27)}
 
 
 def test_farming_offer_excludes_grape_juice_for_instant_crops():
@@ -538,7 +549,7 @@ def test_limited_seed_spend_covers_every_farming_offer_variant():
         grape_juices_per_day=11,
         cookie_time_threshold=timedelta(hours=1),
     )
-    blended, natural, cookie = farming_offers(farm, ground=True)
+    blended, natural, cookie, burst = farming_offers(farm, ground=True)
     # The blended and natural offers are one planting each: 10 rows x 4 plots.
     assert blended.consumes["mega beet seeds"] == pytest.approx(40.0)
     assert blended.consumes["grape juice"] == pytest.approx(11 / 12)
@@ -547,6 +558,11 @@ def test_limited_seed_spend_covers_every_farming_offer_variant():
     # (the window boosts yields, not plantings) -- at 40 seeds apiece.
     assert cookie.consumes["mega beet seeds"] == pytest.approx(480.0)
     assert cookie.consumes["grape juice"] == pytest.approx(11)
+    # The burst plants only its window harvests -- 1 natural + 11 Grape Juice -- so
+    # here (natural == in_window) the same 480 seeds, and the day's Grape Juice.
+    assert burst.name.endswith("(burst)")
+    assert burst.consumes["mega beet seeds"] == pytest.approx(480.0)
+    assert burst.consumes["grape juice"] == pytest.approx(11)
 
 
 def test_cider_offer_yields_drop_rate_times_zone_rates_and_consumes_stamina():

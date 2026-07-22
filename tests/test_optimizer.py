@@ -162,6 +162,18 @@ def test_minimize_credits_joint_production_across_needs():
     assert plan.remainder == {}
 
 
+def test_minimize_caps_usage_at_an_offers_max_units():
+    # An offer with max_units can supply at most that many units; the rest of the
+    # demand must come from a second (uncapped, slower) offer -- the once-per-day
+    # cookie burst modelled this way (see sources.farming_offers).
+    burst = Offer("grow It with cookies (burst)", "farming", {"it": 10}, max_units=1)
+    day = Offer("grow It", "farming", {"it": 1}, time_per_unit=timedelta(days=1))
+    plan = minimize([burst, day], {"It": 25})
+    draws = {d.offer.name: d.units for d in plan.draws}
+    assert draws["grow It with cookies (burst)"] == pytest.approx(1)  # capped at one
+    assert draws["grow It"] == pytest.approx(15)  # the 15 the burst cannot cover
+
+
 def test_minimize_leaves_unproducible_items_in_the_remainder():
     plan = minimize([FREE_FISH], {"It": 10, "Gold Bar": 4})
     assert plan.remainder == {"Gold Bar": 4}

@@ -141,7 +141,7 @@ frontier as before.
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
 | `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `non_mastery_goal_items` (items demanded only as a plain `-i` count -- trade-satisfiable, see AP trading below), `IGNORED_MATERIALS` |
-| `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`), `COOKIE_*`, `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
+| `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`, `cookie_day_yield`, `cookie_burst_yield`/`cookie_burst_plantings`/`dewstar_cookie_burst_bonus`), `COOKIE_*` (incl. `COOKIE_WINDOW`), `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
 | `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices` (folds AP-trade items in as gold-equivalents, see AP trading below), `arnold_palmer_prices` (the `[trading.ap]` section -> `{item: AP/unit}`; `enabled`/`allow`/`deny`, `enabled_override` for `--use-trading`/`--no-trading`), `current_tower_level`/`crafting_bonus_for`/`effective_grape_juices` (level-gated reward helpers, pure functions of `(cfg, level)` -- see "Tower-level gating" below) |
@@ -168,12 +168,14 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
 ## Core data types
 
 - **`sources.Offer(name, track, yields, consumes, ap, ln, cookies, gj,
-  time_per_unit)`** — one way to gather; `yields` is `{item: qty_or_rate}`.
+  time_per_unit, max_units)`** — one way to gather; `yields` is `{item: qty_or_rate}`.
   `consumes` is `{item: qty}` an activity **uses up** as an input (always grounded:
   an explore consumes an Arnold Palmer, a cider explore consumes stamina + part of
   an Apple Cider, a net a Large Net, a GJ grow a Grape Juice — real crafted / held /
   bought items). `track` is `FARMING/FISHING/EXPLORING/PASSIVE_TRACK/DRINKING_TRACK`.
-  Cost fields (`ap/ln/cookies/gj`) are per-unit tallies for reporting.
+  Cost fields (`ap/ln/cookies/gj`) are per-unit tallies for reporting. `max_units`
+  (default `None`) caps the offer's LP usage var (its `upBound`) — used only by the
+  once-per-day cookie burst (see the farming-offers bullet).
 - **`sources.Draw(offer, units)`** — an offer used at scale. Properties:
   `produced` (`rate*units` per item — **overproduces** fast passive items),
   `ap/ln/cookies/gj`, `time` (`time_per_unit*units`).
@@ -196,8 +198,25 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
 - **`sources.OpenFlow(name, consumes, yields)`** — opening a chest/bag: a free,
   instant multi-output LP flow.
 - **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
-  `takes_cookies`, `cookie_day_yield`. **`passive.PassiveProduction`** —
+  `takes_cookies`, `cookie_day_yield`, `cookie_burst_yield`. **`passive.PassiveProduction`** —
   `producers` list, `rate_per_minute`, storehouse cap.
+
+**Cookie farming — day vs burst** (`sources.farming_offers`): a slow-enough crop
+(`Farm.takes_cookies`) gets **two** cookie offers. `grow X with cookies` is a whole
+day (`time_per_unit=1 day`, yields `cookie_day_yield` = the day's natural harvests
+plus the 5-minute window's 9× boost); repeatable, so an N-day plan gets N daily
+bursts. `grow X with cookies (burst)` is the **once-per-day burst alone** — the
+boost slice only (`cookie_burst_yield` = `9·(in_window + grape_juices)`, the window
+crops + that day's Grape Juice instant grows, the best home for the daily GJ), at
+`time_per_unit=COOKIE_WINDOW` (~instant) and **`max_units=1`**. So a plan that needs
+just a sliver of a boosted crop takes it *now* for one cookie set instead of a
+fractional day (the old artifact: 0.02 of a day read as a spurious 29-minute
+"wait"); more bursts require waiting out further days via the whole-day offer, which
+preserves once-per-day. The day's *non*-boosted natural harvests remain the plain
+`grow X` offer's job. Grounded burst offers spend seeds for `cookie_burst_plantings`
+(window + GJ plantings) and the day's Grape Juice; Dewstar's burst bonus is
+`dewstar_cookie_burst_bonus`. Adding the instant burst reshapes the frontier for
+cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long wait).
 
 ## The LP and frontier (optimizer.py)
 
