@@ -16,8 +16,10 @@ wheels/
 web/staticfiles/*
 !web/staticfiles/.gitkeep
 
-# Node deps for web/'s Vitest suite (web/package.json)
-web/node_modules/
+# Node deps for web/'s Vitest suite (web/package.json), plus any stray
+# node_modules/Vite cache the IDE's test runner drops elsewhere in the tree.
+node_modules/
+.vite/
 
 # Playwright MCP session artifacts (screenshots/snapshots from manual verification)
 .playwright-mcp/
