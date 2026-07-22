@@ -604,7 +604,7 @@ def print_frontier(
     for i, plan in enumerate(plans):
         marker = ">" if i == selected else " "
         parts = [
-            passive.format_duration(plan.time),
+            passive.format_duration(_plan_makespan(plan)),
             f"{round(plan.arnold_palmers):,} AP",
             f"{round(plan.large_nets):,} LN",
         ]
@@ -705,7 +705,7 @@ def markdown_frontier(
     for i, plan in enumerate(plans):
         row = [
             str(i + 1),
-            passive.format_duration(plan.time),
+            passive.format_duration(_plan_makespan(plan)),
             f"{round(plan.arnold_palmers):,}",
             f"{round(plan.large_nets):,}",
         ]
@@ -810,6 +810,28 @@ def _pet_dominated_items(production: passive.PassiveProduction) -> set[str]:
     }
 
 
+def _farming_grow_time(plan: optimizer.SourcingPlan) -> timedelta:
+    """The farming track's time counted in *whole* grows.
+
+    A crop grows as an indivisible cycle -- you cannot harvest a field early --
+    so a fractional ``Draw.units`` (0.4 of a pine-tree grow) still costs a whole
+    grow of real time. The LP leaves ``units`` continuous, so raw ``Draw.time``
+    under-reports a farming-bound plan's real finish (a plan "waits 26 minutes"
+    for a grow that in truth takes the whole cycle); rounding each draw up to
+    whole grows -- the same ``math.ceil`` the action count already uses (see
+    :func:`_farming_action`) -- is the honest figure to quote. ``timedelta(0)``
+    when the plan grows nothing.
+    """
+    return sum(
+        (
+            d.offer.time_per_unit * math.ceil(d.units)
+            for d in plan.draws
+            if d.offer.track == sources.FARMING_TRACK
+        ),
+        timedelta(0),
+    )
+
+
 def _plan_makespan(plan: optimizer.SourcingPlan) -> timedelta:
     """The plan's real makespan: ``plan.time`` or the longest draw track.
 
@@ -819,8 +841,25 @@ def _plan_makespan(plan: optimizer.SourcingPlan) -> timedelta:
     frontier row and the per-item waits must all quote the same figure.
     Hand-built test plans with no cached time (``plan.time == 0``) still fall
     back to the draws' own times.
+
+    When farming is the plan's *own* bottleneck -- its continuous track time
+    strictly exceeds every other track (not merely co-maximal fill that another
+    track's wait forces, see :func:`_binding_crop_is_fill`) -- the farming
+    contribution is counted in whole grows (:func:`_farming_grow_time`), since a
+    fractional last grow cannot finish early. Co-maximal fill farming stays on
+    its continuous time, so rounding it up never wrongly pushes a
+    passive-bottlenecked plan past the boundary that really drives it.
     """
-    return max([plan.time, *plan.track_times().values()], default=timedelta(0))
+    times = plan.track_times()
+    farming = times.get(sources.FARMING_TRACK, timedelta(0))
+    others = max(
+        (t for track, t in times.items() if track != sources.FARMING_TRACK),
+        default=timedelta(0),
+    )
+    tolerance = max(timedelta(seconds=1), farming * _FARMING_COMAX_MARGIN)
+    if farming > others + tolerance:
+        farming = _farming_grow_time(plan)
+    return max(plan.time, others, farming)
 
 
 def _passive_wait(
@@ -968,7 +1007,11 @@ def _farming_drives(
     makespan = _plan_makespan(plan)
     if makespan <= timedelta(0):
         return False
-    farming_time = plan.track_times().get(sources.FARMING_TRACK, timedelta(0))
+    # Whole-grow farming time, matching what _plan_makespan quotes: comparing the
+    # continuous track time against a rounded-up makespan would read a
+    # farming-driven plan as "farming below makespan" and hand the driver to
+    # passive (see _plan_makespan / _farming_grow_time).
+    farming_time = _farming_grow_time(plan)
     if farming_time <= timedelta(0):
         return False  # no farming to drive the makespan (a sub-second tolerance on a
         # near-instant plan could otherwise round zero farming up to co-maximal)
@@ -1376,6 +1419,11 @@ def _print_surplus_value(
             f"  {round(count):>{width},}x {display.get(item, item)} = {round(gold):,} g"
         )
     print(f"  nominal value = {round(total):,} g")
+    print(
+        "  banked byproduct: what the plan produces past the goal (loot from the"
+        " exploring/passive it runs), already credited into its net gold on the"
+        " frontier -- not gold conjured on top of it."
+    )
 
 
 def markdown_surplus_value(
@@ -1404,6 +1452,11 @@ def markdown_surplus_value(
     ]
     doc.table(["Item", "Qty", "Gold"], table_rows, align=["left", "right", "right"])
     doc.para(f"Nominal value: {round(total):,} g")
+    doc.para(
+        "Banked byproduct: what the plan produces past the goal (loot from the "
+        "exploring/passive it runs), already credited into its net gold on the "
+        "frontier -- not gold conjured on top of it."
+    )
 
 
 @dataclasses.dataclass

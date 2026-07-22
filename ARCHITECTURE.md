@@ -396,7 +396,12 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   stockpile shows a large phantom credit and a misleadingly negative net gold). Only
   what executing the plan produces beyond all it consumes (passive, crafts, opens,
   gathering) is credited — the same figure the report's Surplus section now shows
-  (accumulated-only; the old inventory/accumulated split is gone).
+  (accumulated-only; the old inventory/accumulated split is gone). The Surplus
+  section (`_print_surplus_value`/`markdown_surplus_value`) closes with a caption
+  flagging it as **banked byproduct** already credited into net gold, not gold
+  conjured on top — so a big banked figure beside a big Buy line (a plan that buys
+  its ciders/OJ at full price and banks the explore loot, net-equivalent to
+  self-sourcing) doesn't read as free money.
 - **Stamina opportunity cost** (`price_stamina` option, default on): stamina an Apple
   Cider explore burns that arrived free — the banked `--current-stamina` (an inventory
   `held` credit) and the Farmhouse passive deposit — is otherwise a free resource, so a
@@ -1063,6 +1068,21 @@ concurrently; fishing/exploring are instant, so the makespan is a **farming** or
    top-up** is skipped: a pet supplying most of an item's *passive* rate yet a
    minority of its *total* need is a last resort, not a bottleneck, unless the
    pet is the item's primary source.
+
+**Whole-grow makespan** (`_farming_grow_time`, folded into `_plan_makespan`): a
+crop grows as an indivisible cycle, so a fractional `Draw.units` (0.4 of a pine
+grow) still costs a whole grow of real time — the LP leaves `units` continuous, so
+raw `Draw.time` under-reports a farming-bound plan ("waits 26 min" for a grow that
+truly takes 1h 5m). When farming **strictly** drives (its continuous track time
+exceeds every other track by more than `_FARMING_COMAX_MARGIN`, so it is not
+co-maximal fill), `_plan_makespan` substitutes the farming track's whole-grow time
+(`Σ time_per_unit·ceil(units)`, the same `ceil` `_farming_action` already shows).
+Report-layer only — `plan.time`/`cost`/the frontier's sort are untouched, so this
+never shifts which plans appear; it only lifts the **displayed** makespan (frontier
+row via `_plan_makespan`, plan header, `_farming_bottleneck`). `_farming_drives`
+compares on the same whole-grow time so the named driver stays consistent with the
+rounded figure. Co-maximal fill farming stays on its continuous time (rounding it
+up would wrongly push a passive-bottlenecked plan past its real driver).
 
 `_farming_drives` is shared by the critical-path line and the **Passive
 production** section's ordering (lead items = the critical ones) so they agree.

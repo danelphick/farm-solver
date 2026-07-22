@@ -11,17 +11,21 @@ kwargs, _efficiency_note, _ascii_plot and _svg_plot.
 
 from datetime import timedelta
 
+import passive
 from optimizer import GraphSeries, SourcingPlan
 from report import (
     MarkdownDoc,
     SectionedReporter,
     _ascii_plot,
     _efficiency_note,
+    _farming_grow_time,
     _net_gold_note,
+    _plan_makespan,
     _svg_plot,
     markdown_frontier,
     print_frontier,
 )
+from sources import Draw, Offer
 
 
 def test_net_gold_note_breaks_out_excluded_juice_cost():
@@ -39,6 +43,47 @@ PLANS = [
     SourcingPlan(time=timedelta(days=1), gold=100_000),
     SourcingPlan(time=timedelta(days=4), gold=0),
 ]
+
+
+# --- _plan_makespan / farming whole-grow round-up -------------------------
+
+_PINE = Offer("grow Pine Tree", "farming", {"pine": 1}, time_per_unit=timedelta(minutes=60))
+
+
+def test_farming_grow_time_rounds_each_draw_up_to_whole_grows():
+    # 3.4 grows at 60 min each cannot finish early -- a crop grows as a whole
+    # cycle -- so the honest farming time is 4 whole grows, not the continuous 204.
+    plan = SourcingPlan(time=timedelta(minutes=204), draws=[Draw(_PINE, 3.4)])
+    assert _farming_grow_time(plan) == timedelta(minutes=240)
+
+
+def test_plan_makespan_rounds_a_driving_farming_grow_up():
+    # Farming is the sole track and the driver, so the makespan is its whole-grow
+    # time (240), never the fractional 204 the LP left on plan.time.
+    plan = SourcingPlan(time=timedelta(minutes=204), draws=[Draw(_PINE, 3.4)])
+    assert _plan_makespan(plan) == timedelta(minutes=240)
+
+
+def test_plan_makespan_leaves_fill_farming_on_its_continuous_time():
+    # A short farming fill (0.4 grow = 24 min) beside a longer passive track (240)
+    # is not the driver: rounding it up would wrongly push the plan past the track
+    # that really caps it, so the makespan stays the passive 240.
+    passive_offer = Offer(
+        "passive", "passive", {"board": 1}, time_per_unit=timedelta(minutes=60)
+    )
+    plan = SourcingPlan(
+        time=timedelta(minutes=240),
+        draws=[Draw(_PINE, 0.4), Draw(passive_offer, 4.0)],
+    )
+    assert _plan_makespan(plan) == timedelta(minutes=240)
+
+
+def test_frontier_row_quotes_whole_grow_farming_time(capsys):
+    plan = SourcingPlan(time=timedelta(minutes=204), draws=[Draw(_PINE, 3.4)])
+    print_frontier([plan], selected=0, cheapest=0)
+    out = capsys.readouterr().out
+    assert passive.format_duration(timedelta(minutes=240)) in out
+    assert passive.format_duration(timedelta(minutes=204)) not in out
 
 
 # --- _efficiency_note -----------------------------------------------------

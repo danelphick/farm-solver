@@ -1659,6 +1659,10 @@ def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
     assert "Surplus (accumulates past the goal)" in out
     assert "500x Large Net = 5 g" in out
     assert "nominal value = 5 g" in out
+    # The surplus is byproduct already credited into net gold, not conjured on top:
+    # a caption says so, so a big banked figure does not read as free money.
+    assert "already credited into its net gold" in out
+    assert "not gold conjured on top of it" in out
 
     print_plan(plan, {}, Farm(), workshop, 1.0)  # no prices -> no surplus section
     assert "Surplus" not in capsys.readouterr().out
