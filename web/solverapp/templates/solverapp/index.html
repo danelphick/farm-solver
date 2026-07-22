@@ -167,6 +167,12 @@
         <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
       </div>
       <div class="field-row">
+        <label for="count-pumpkin-juice-gold">
+          <input id="count-pumpkin-juice-gold" type="checkbox" checked> Count Pumpkin Juice cost in net gold
+        </label>
+        <button type="button" class="help-icon" aria-label="Help" data-help="On (default): a juice's price counts in net gold like any buy. Off: the solver still only uses juice where it beats the alternative, but its cost is dropped from net gold, so plans compare on real gold spent with the juice as its own count — pair with Spread along Pumpkin Juice to read the gold each juice saves.">?</button>
+      </div>
+      <div class="field-row">
         <label>Calendar<button type="button" class="help-icon" aria-label="Help" data-help="How date-dependent sources (seasonal pets, Mechanical Heart grants) are handled: ignore them, average to a steady rate, or model the real calendar windows (uses Start date).">?</button></label>
         <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
         <label class="inline"><input type="radio" name="calendar" value="average"> average</label>

@@ -870,6 +870,11 @@ function readParams() {
     const cap = $("#pumpkin-juice-cap").value;
     params.use_pumpkin_juice = cap !== "" ? Number(cap) : -1;
   }
+  // Only sent when unchecked (off) -- the default (count juice in net gold) is
+  // left to the bundled config, so this stays a toggle like the other flags.
+  if (!$("#count-pumpkin-juice-gold").checked) {
+    params.count_pumpkin_juice_gold = false;
+  }
   const calendar = document.querySelector('input[name="calendar"]:checked').value;
   params.calendar = calendar;
   // The start date only means anything when the calendar is fully modelled
@@ -958,6 +963,8 @@ function applyParams(params) {
   $("#use-pumpkin-juice").checked = hasPj;
   $("#pumpkin-juice-cap").disabled = !hasPj;
   $("#pumpkin-juice-cap").value = hasPj && params.use_pumpkin_juice >= 0 ? params.use_pumpkin_juice : "";
+  // Absent means the default (count juice in net gold); only an explicit false unchecks.
+  $("#count-pumpkin-juice-gold").checked = params.count_pumpkin_juice_gold !== false;
 
   // "model" is the pre-enum wire value for "full"; a state saved before the
   // enum existed carries no calendar at all and gets the new default (ignore).

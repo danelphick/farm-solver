@@ -47,7 +47,7 @@ RESOLVE_FIELDS = (
     "target", "level", "mastery", "items", "use_pumpkin_juice",
     "current_stamina", "cookie_sets", "plans", "spread", "graph", "start_date",
     "model_calendar", "average_calendar", "ignore_calendar", "crafting_bonus",
-    "mastery_bonus", "override_inventory", "override",
+    "mastery_bonus", "override_inventory", "override", "price_pumpkin_juice",
 )
 
 # Args fields that only change how the cached frontier is displayed --
@@ -65,7 +65,7 @@ _KNOWN_PARAM_KEYS = frozenset({
     "use_pumpkin_juice", "max_gold", "cookie_sets", "current_stamina",
     "plans", "spread", "graph", "start_date", "calendar", "plan_select",
     "max_ap", "max_ln", "max_ac", "passive_limit", "overrides",
-    "crafting_bonus", "mastery_bonus", "breakdown",
+    "crafting_bonus", "mastery_bonus", "breakdown", "count_pumpkin_juice_gold",
     # Trading Values / Advanced config knobs -- exposed with their own web
     # controls but funnelled through args.override (see _CONFIG_PARAM_FLAGS).
     "price_orange_juice", "price_apple_cider", "price_arnold_palmer",
@@ -323,6 +323,8 @@ def args_to_command(
         add("--spread", text)
     if getattr(args, "graph", None) is not None:
         add("--graph", args.graph)
+    if getattr(args, "price_pumpkin_juice", None) is False:
+        tokens.append("--no-price-pumpkin-juice")
     for override in args.override or []:
         add("--override", override)
 
@@ -447,6 +449,11 @@ def params_to_args(params: dict) -> argparse.Namespace:
         args.mastery_bonus = float(params["mastery_bonus"])
     if "breakdown" in params:
         args.breakdown = bool(params["breakdown"])
+    if "count_pumpkin_juice_gold" in params:
+        value = params["count_pumpkin_juice_gold"]
+        # Whether juice's cost counts in net gold (see main.price_pumpkin_juice_
+        # enabled); the LP prices it either way. None -> config default.
+        args.price_pumpkin_juice = None if value is None else bool(value)
 
     calendar = params.get("calendar")
     if calendar in ("full", "model"):  # "model" = the pre-enum wire value

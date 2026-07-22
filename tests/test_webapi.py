@@ -378,6 +378,25 @@ def test_args_to_command_spread_without_range():
     assert "passive=" not in command  # no range appended
 
 
+def test_params_to_args_count_pumpkin_juice_gold_round_trip():
+    # Absent / true -> args.price_pumpkin_juice None (config default); explicit
+    # false -> off. (The param is named apart from the "price_pumpkin_juice" gold
+    # price, which funnels to trading.pumpkin_juice.)
+    assert webapi.params_to_args({}).price_pumpkin_juice is None
+    off = webapi.params_to_args({"count_pumpkin_juice_gold": False})
+    assert off.price_pumpkin_juice is False
+    on = webapi.params_to_args({"count_pumpkin_juice_gold": True})
+    assert on.price_pumpkin_juice is True
+
+
+def test_args_to_command_emits_no_price_pumpkin_juice_only_when_off():
+    off = webapi.params_to_args({"target": "tower", "count_pumpkin_juice_gold": False})
+    assert "--no-price-pumpkin-juice" in webapi.args_to_command(off)
+    # Default (counted) emits nothing -- the CLI default is on.
+    on = webapi.params_to_args({"target": "tower"})
+    assert "price-pumpkin-juice" not in webapi.args_to_command(on)
+
+
 def test_args_to_command_points_at_captured_files():
     args = webapi.params_to_args({"target": "tower"})
     command = webapi.args_to_command(
