@@ -53,6 +53,12 @@ FUNGUS_ACORN_PIE_FLAG = "fungus_processing+acorn_pie"
 # Explores one Acorn Pie covers, whether spent as Arnold Palmers or Apple Ciders.
 ACORN_PIE_EXPLORES = 450
 
+# The Sinking Swamp is locked behind holding the Swamp Puzzle: without it the
+# location cannot be explored at all, so it is dropped outright rather than given
+# an alternate drop table (see :func:`exploring_from_config`). Its fishing
+# counterpart is gated the same way -- see ``fishing.SWAMP_PUZZLE_ZONE``.
+SWAMP_PUZZLE_LOCATION = "Sinking Swamp"
+
 
 @dataclass
 class ExploringModifiers:
@@ -234,6 +240,7 @@ def exploring_from_config(
     config_section: dict,
     path: Path | None = None,
     have_fungus_processing: bool = False,
+    have_swamp_puzzle: bool = True,
 ) -> Exploring:
     """Build an :class:`Exploring` from an ``[exploring]`` config section.
 
@@ -244,6 +251,10 @@ def exploring_from_config(
     ``have_fungus_processing`` (resolved by the caller -- see
     ``main.resolve_fungus_processing``) activates the CSV's
     :data:`FUNGUS_PROCESSING_FLAG` rows, swapping Gary's Crushroom's drop table.
+    ``have_swamp_puzzle`` (likewise resolved by the caller -- see
+    ``main.resolve_swamp_puzzle``) is False when the player does not hold the
+    Swamp Puzzle, which drops :data:`SWAMP_PUZZLE_LOCATION` entirely: an
+    un-unlocked location cannot be explored, so it must not source anything.
     """
     section = config_section or {}
     modifiers = ExploringModifiers(
@@ -261,6 +272,8 @@ def exploring_from_config(
         for zone, value in (section.get("effectiveness") or {}).items()
     }
     exploring = load_exploring(path, modifiers, cider, effectiveness)
+    if not have_swamp_puzzle:
+        exploring.locations.pop(SWAMP_PUZZLE_LOCATION.lower(), None)
     active_flags = {FUNGUS_PROCESSING_FLAG} if have_fungus_processing else set()
     if active_flags:
         exploring.locations = {

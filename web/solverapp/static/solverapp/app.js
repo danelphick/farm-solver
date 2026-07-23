@@ -50,9 +50,11 @@ const PRICE_FIELDS = {
 //                checkbox left at its default sends nothing. For definite
 //                settings (perks the game state can't reveal).
 //   autobool  -> Auto-detect / On / Off <select>, for perks the solver
-//                auto-detects from mastery/inventory (Scythe of Dewstar,
-//                Dewstar's Journal). "Auto-detect" (the default) sends nothing,
-//                leaving the auto-detection in place; On/Off force a JSON boolean.
+//                auto-detects from mastery/inventory (Scythe of Dewstar and the
+//                Mechanical Heart from tower progress; Dewstar's Journal, Fungus
+//                Processing and the Swamp Puzzle from inventory). "Auto-detect"
+//                (the default) sends nothing, leaving the auto-detection in
+//                place; On/Off force a JSON boolean.
 
 const EXPLORING_ZONES = [
   "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
@@ -90,6 +92,20 @@ const CONFIG_FIELDS = {
       help: "Scythe of Dewstar perk: +4 bonus crops per row each harvest. Auto-detect infers it from your tower progress (level 250)." },
     { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool",
       help: "Dewstar's Journal: extends the Cookie boost to the Scythe's bonus crops. Auto-detect reads it from your inventory." },
+  ],
+  // Perks/unlocks changing what the exploring zones drop, or whether they can be
+  // entered at all. (Per-zone Exploring Effectiveness is its own pane.)
+  exploring: [
+    { key: "exploring.have_fungus_processing", label: "Fungus Processing and You", type: "autobool",
+      help: "Fungus Processing and You: Gary's Crushroom drops Mushroom Paste (plus rarer byproducts) instead of Mushroom. Auto-detect reads the artifact from your inventory." },
+    { key: "exploring.have_swamp_puzzle", label: "Swamp Puzzle", type: "autobool",
+      help: "Swamp Puzzle: unlocks the Sinking Swamp for both exploring AND fishing. Without it the zone is dropped, so nothing it alone drops (Scrap Cloth, and so the Basic Pillow tower level 301 needs) can be sourced. Auto-detect reads the item from your inventory." },
+  ],
+  // The Mechanical Heart's monthly grants are free consumable supply, so its
+  // control lives in Resources beside the Calendar mode that times them.
+  resources: [
+    { key: "exploring.have_mechanical_heart", label: "Mechanical Heart", type: "autobool",
+      help: "Mechanical Heart (the tower level 300 artifact): grants 3000 Apple Cider on the 7th and 2000 Arnold Palmer on the 14th of each month, added to passive production. Auto-detect infers it from your tower progress (level 300)." },
   ],
 };
 
@@ -400,7 +416,7 @@ function createConfigField(field) {
 // from init() before the blanket input wiring, so each generated control gets
 // its onAnyChange listener like a hand-written one.
 function buildConfigPanels() {
-  ["effectiveness", "farming"].forEach((name) => {
+  ["effectiveness", "farming", "exploring", "resources"].forEach((name) => {
     const container = document.querySelector(`.config-fields[data-config="${name}"]`);
     if (container) CONFIG_FIELDS[name].forEach((f) => container.appendChild(createConfigField(f)));
   });

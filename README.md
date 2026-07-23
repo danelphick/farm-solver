@@ -454,6 +454,8 @@ use_neigh = true                 # then ×0.8 stamina again (meal)
 
 # have_fungus_processing = true  # force Gary's Crushroom's drop table on/off;
                                   # unset auto-detects the artifact from inventory
+# have_swamp_puzzle = true       # force the Sinking Swamp (exploring AND fishing)
+                                  # open/locked; unset auto-detects from inventory
 # have_mechanical_heart = true     # force the T300 monthly cider/palmer grants
                                   # on/off; unset auto-detects from having T300
 
@@ -464,6 +466,19 @@ Forest = 136
 ```
 
 Each Apple Cider does `1000 + 10 × Effectiveness` explores in a zone (`1250 + 12.5 ×` with Cinnamon Sticks), each costing one stamina before the multiplicative Wanderer / Neigh Neigh / Neigh reductions. A zone with no configured Effectiveness gets no cider offer.
+
+#### Swamp Puzzle (the Sinking Swamp lock)
+
+The **Sinking Swamp** is locked until you hold the **Swamp Puzzle**: without it you can neither explore nor fish there, so the solver drops the zone from both channels entirely and anything it alone drops becomes unsourceable. That matters well past the swamp's own loot — Scrap Cloth is swamp-only, and so is the cloth chain behind the **Basic Pillow** that Tower level 301 needs, which caps the climb at level 300 for a player without the puzzle.
+
+The puzzle is a held item, so it is auto-detected from your inventory file (its own pieces drop nowhere the solver models, so there is nothing for a plan to craft its way to). Set it explicitly to plan for a state you're not in yet:
+
+```toml
+[exploring]
+# have_swamp_puzzle = true  # force the swamp open/locked; unset auto-detects
+                            # from inventory. Gates the FISHING zone too --
+                            # there is no [fishing] counterpart.
+```
 
 The `[farmhouse]` section is the passive stamina source. The building raises your natural stamina cap by one a day (two with the Mattress Pad perk), so the cap recorded on `registered_on` has grown that much per day since (worked out for the plan's start date, like the storehouse). Each day your actual stamina then rises by `8 × cap`, limited to 500,000 (1,000,000 with the Apple Pie Enthusiast perk) — an automatic daily deposit the plan draws on before eating Apples or drinking Orange Juice for the rest. Stamina is a stat, not a stored good, so the storehouse cap does not apply to it.
 
@@ -559,7 +574,8 @@ plan is expanded, without changing what needs solving — is answered from an
 in-process cache in a few milliseconds.
 
 Most of the `config.toml` settings have their own controls too, in collapsible
-panes: Exploring effectiveness, Farming, Pets, Buildings, Trading values, and a
+panes: Exploring (the Fungus Processing / Swamp Puzzle unlocks), Exploring
+effectiveness, Farming, Pets, Buildings, Trading values, and a
 **Material trading** pane listing every resource that can be traded for Arnold
 Palmers with a checkbox (trade it or not) and an editable price (the going-rate
 range shown greyed as a guide). Untick the ones you wouldn't realistically

@@ -42,6 +42,7 @@ from main import (
     resolve_monthly_grants,
     resolve_pumpkin_juice,
     resolve_scythe_of_dewstar,
+    resolve_swamp_puzzle,
     selected_plan,
     within_limits,
 )
@@ -1819,6 +1820,32 @@ def test_resolve_fungus_processing_config_override_wins():
         resolve_fungus_processing(
             {"exploring": {"have_fungus_processing": True}}, Inventory()
         )
+        is True
+    )
+
+
+def test_resolve_swamp_puzzle_checks_inventory_by_default():
+    held = Inventory(
+        items={"swamp puzzle": InventoryItem(name="Swamp Puzzle", quantity=1)}
+    )
+    assert resolve_swamp_puzzle({}, held) is True
+    assert resolve_swamp_puzzle({}, Inventory()) is False
+
+
+def test_resolve_swamp_puzzle_defaults_on_with_no_inventory():
+    # Unlike the other perks: no inventory to check (the --unobtainable report)
+    # means "assume unlocked", so the report does not call the swamp's own drops
+    # sourceless just because it read no inventory file.
+    assert resolve_swamp_puzzle({}) is True
+
+
+def test_resolve_swamp_puzzle_config_override_wins():
+    held = Inventory(
+        items={"swamp puzzle": InventoryItem(name="Swamp Puzzle", quantity=1)}
+    )
+    assert resolve_swamp_puzzle({"exploring": {"have_swamp_puzzle": False}}, held) is False
+    assert (
+        resolve_swamp_puzzle({"exploring": {"have_swamp_puzzle": True}}, Inventory())
         is True
     )
 

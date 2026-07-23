@@ -132,7 +132,7 @@ frontier as before.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
@@ -145,7 +145,7 @@ frontier as before.
 | `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
 | `config.py` | `config.toml` → producers/pets/storehouse/trading | `passive_production` (`monthly_grants` flag), `sawmill_outputs`/`hickory_omelette_mode` (the `[sawmill] hickory_omelette` = none/all/only_oak enum, boost built as offers not baked here), `PET_PRODUCER_PREFIX`, `MONTHLY_GRANTS`/`_monthly_grant_producers`, `is_smeared_producer`/`passive_quantizer` (deposit quantisation, see gotchas), `storehouse_size`, `trading_prices` (folds AP-trade items in as gold-equivalents, see AP trading below), `arnold_palmer_prices` (the `[trading.ap]` section -> `{item: AP/unit}`; `enabled`/`allow`/`deny`, `enabled_override` for `--use-trading`/`--no-trading`), `current_tower_level`/`crafting_bonus_for`/`effective_grape_juices` (level-gated reward helpers, pure functions of `(cfg, level)` -- see "Tower-level gating" below) |
-| `fishing.py`/`exploring.py` | LN/AP channels, modifiers | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config`, `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES` |
+| `fishing.py`/`exploring.py` | LN/AP channels, modifiers, zone unlocks | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config` (`have_fungus_processing`/`have_swamp_puzzle`), `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES`, `SWAMP_PUZZLE_ZONE`/`SWAMP_PUZZLE_LOCATION` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
 | `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.api_solve`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
@@ -1247,6 +1247,29 @@ this process's own stdout to a pager externally makes stdout a non-tty before
   `instant_grow_time` (~3s); GJ is never spent on them.
 - **Cookies**: full set = `COOKIE_SET_MULTIPLIER` (9×) yield in a 5-min window,
   used only with GJ, on crops ≥ `cookies_grow_time_threshold`.
+- **Swamp Puzzle** (`main.resolve_swamp_puzzle`, `exploring.SWAMP_PUZZLE_LOCATION`
+  / `fishing.SWAMP_PUZZLE_ZONE`): the **Sinking Swamp** is locked until the
+  player holds the Swamp Puzzle, and it locks *both* channels — so unlike Fungus
+  Processing (an alternate drop *table*) an un-owned puzzle **deletes the
+  location/zone outright** from `Exploring.locations` / `Fishing.zones`, in the
+  `*_from_config` builders (`have_swamp_puzzle`, defaulted **True** so every
+  pre-existing caller and test is byte-identical). Whatever the swamp alone
+  drops then has no source at all, which is the point: Scrap Cloth (and hence
+  the Basic Pillow tower level 301 needs) is swamp-only, so a puzzle-less
+  account cannot climb past level 300 — the ordinary
+  `report.UNREACHABLE_GOAL_MARK` path reports it. The puzzle IS a held item, so
+  it auto-detects from inventory like Fungus Processing / Dewstar's Journal,
+  overridden by **`[exploring] have_swamp_puzzle`** — one key gating both
+  channels (there is deliberately no `[fishing]` counterpart), the same
+  cross-section precedent `have_mechanical_heart` sets. Its pieces drop nowhere
+  the solver models, so the LP can never craft its way to one; inventory
+  presence really is the whole gate. **Unlike every sibling resolver it defaults
+  to *on* with no inventory to check** (the `--unobtainable` report, which reads
+  no inventory file): that report asks what the game data can source *at all*,
+  and defaulting off would silently call every swamp drop sourceless.
+  `main._build_channel_setup` resolves it **once** and passes the one bool to
+  both `fishing_from_config` and `exploring_from_config`; the `--unobtainable`
+  branch in `run` does the same (which is why it builds its own `fish`).
 - **Scythe of Dewstar**: an account perk, not a held item, so unlike Fungus
   Processing and You or Dewstar's Journal it has no inventory presence to
   auto-detect — `resolve_scythe_of_dewstar` instead falls back to
@@ -1519,7 +1542,8 @@ that imports it without going through `manage.py`.
   `npm install && npm test` from `web/`) convert a row list to/from the exact
   `"Item:Amount,Item:Amount"` string `readParams`/`applyParams` always sent,
   so the wire format and `webapi.params_to_args` are untouched. The **config
-  preference panes** (Exploring effectiveness, Farming, Pets, Buildings) are
+  preference panes** (Exploring, Exploring effectiveness, Farming, Pets,
+  Buildings, plus the Mechanical Heart row inside Resources) are
   *generated* from declarative schemas (`CONFIG_FIELDS`/`BUILDING_SECTIONS` +
   `EXPLORING_ZONES`/`PET_NAMES`) rather than hand-written markup:
   `buildConfigPanels` fills each template shell (`.config-fields[data-config=…]`)
@@ -1530,10 +1554,16 @@ that imports it without going through `manage.py`.
   They all funnel through `webapi`'s generic `config` override channel, so no
   per-field wiring exists server-side. Definite booleans are plain checkboxes
   initialised to the config default, only sent when toggled *away* from it;
-  perks the solver **auto-detects** from mastery/inventory (Scythe of Dewstar,
-  Dewstar's Journal -- the `autobool` type) instead get an Auto-detect / On /
-  Off `<select>`, where "Auto-detect" (the default) sends nothing and leaves
-  the auto-detection in place. Placeholders and the controls' initial states
+  perks the solver **auto-detects** from mastery/inventory (Scythe of Dewstar
+  and the Mechanical Heart from tower progress; Dewstar's Journal, Fungus
+  Processing and the Swamp Puzzle from inventory -- the `autobool` type) instead
+  get an Auto-detect / On / Off `<select>`, where "Auto-detect" (the default)
+  sends nothing and leaves the auto-detection in place. The three `[exploring]`
+  perks are split by *what they do*, not which config section they live in: the
+  two that change what a zone drops (or whether it can be entered) sit in the
+  **Exploring** pane, while `have_mechanical_heart` -- free consumable supply --
+  sits in **Resources**, immediately above the Calendar radios that decide how
+  its monthly grant days are counted. Placeholders and the controls' initial states
   come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
   the index view injects via `webapi.config_defaults` (from
   `web_default_config.toml`). Buildings groups its controls under `<h4>`

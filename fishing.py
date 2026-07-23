@@ -28,6 +28,12 @@ FISHING_TRAWL_BONUS = 100
 # The sea pincher multiplies the catch.
 SEA_PINCHER_MULTIPLIER = 1.1
 
+# The Sinking Swamp is locked behind holding the Swamp Puzzle: without it the
+# zone cannot be fished at all, so it is dropped outright (see
+# :func:`fishing_from_config`). Its exploring counterpart is gated the same way
+# -- see ``exploring.SWAMP_PUZZLE_LOCATION``.
+SWAMP_PUZZLE_ZONE = "Sinking Swamp"
+
 
 @dataclass
 class FishingModifiers:
@@ -117,11 +123,19 @@ def load_fishing(
     )
 
 
-def fishing_from_config(config_section: dict, path: Path | None = None) -> Fishing:
+def fishing_from_config(
+    config_section: dict,
+    path: Path | None = None,
+    have_swamp_puzzle: bool = True,
+) -> Fishing:
     """Build a :class:`Fishing` from a ``[fishing]`` config section.
 
     The section's boolean flags set the catch modifiers (see
     :class:`FishingModifiers`); zone data comes from the CSV.
+    ``have_swamp_puzzle`` (resolved by the caller -- see
+    ``main.resolve_swamp_puzzle``) is False when the player does not hold the
+    Swamp Puzzle, which drops :data:`SWAMP_PUZZLE_ZONE` entirely: an un-unlocked
+    zone cannot be fished, so it must not source anything.
     """
     section = config_section or {}
     modifiers = FishingModifiers(
@@ -129,4 +143,7 @@ def fishing_from_config(config_section: dict, path: Path | None = None) -> Fishi
         have_fishing_trawl=bool(section.get("have_fishing_trawl")),
         use_sea_pincher=bool(section.get("use_sea_pincher")),
     )
-    return load_fishing(path, modifiers)
+    fishing = load_fishing(path, modifiers)
+    if not have_swamp_puzzle:
+        fishing.zones.pop(SWAMP_PUZZLE_ZONE.lower(), None)
+    return fishing

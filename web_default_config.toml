@@ -98,6 +98,8 @@ have_sugar_boost_ii = true
 have_reinforced_netting = true
 have_fishing_trawl = true
 use_sea_pincher = true
+# The Sinking Swamp fishing zone is gated on the Swamp Puzzle, the same key that
+# gates the exploring location: [exploring] have_swamp_puzzle below.
 
 [exploring]
 have_lemon_squeezer = true
@@ -113,6 +115,12 @@ use_neigh = true
 # artifact is held. By default this is auto-detected from the inventory file;
 # uncomment to force it on/off instead.
 # have_fungus_processing = true
+# The Sinking Swamp -- both the exploring location and the FISHING zone -- is
+# locked until the "Swamp Puzzle" item is held; without it neither can source
+# anything (so no Scrap Cloth, and no Basic Pillow for tower level 301). It IS a
+# held item, so by default it is auto-detected from the inventory file; uncomment
+# to force it on/off instead.
+# have_swamp_puzzle = true
 # The Mechanical Heart (the tower level 300 artifact) grants a monthly bulk of
 # consumables (3000 Apple Cider on the 7th, 2000 Arnold Palmer on the 14th), added
 # to passive production spread over the plan. Like the Scythe of Dewstar it is an

@@ -235,6 +235,38 @@ def resolve_fungus_processing(
     return inventory.amount(FUNGUS_PROCESSING_ARTIFACT) > 0
 
 
+# The item unlocking the Sinking Swamp exploring location and fishing zone --
+# see exploring.SWAMP_PUZZLE_LOCATION / fishing.SWAMP_PUZZLE_ZONE.
+SWAMP_PUZZLE_ITEM = "Swamp Puzzle"
+
+
+def resolve_swamp_puzzle(
+    cfg: dict, inventory: farm_solver.Inventory | None = None
+) -> bool:
+    """Whether the Sinking Swamp's exploring location and fishing zone are open.
+
+    The swamp is locked until the Swamp Puzzle is held, and the puzzle's own
+    pieces drop nowhere the solver models, so a player without it can never
+    source anything the swamp is the only home for (Scrap Cloth, and so the
+    Basic Pillow tower level 301 needs). It IS a held item, so -- like Fungus
+    Processing and You -- it is auto-detected from the inventory file, with
+    ``exploring.have_swamp_puzzle`` in the config overriding the check either
+    way. That one key gates the fishing zone too; there is no ``[fishing]``
+    counterpart.
+
+    Unlike the other perks, with no inventory to check (the ``--unobtainable``
+    report, which reads no inventory file) and no override this defaults to
+    **on**: that report asks what the game data can source at all, and silently
+    deleting a zone from it would call the swamp's items unobtainable outright.
+    """
+    override = cfg.get("exploring", {}).get("have_swamp_puzzle")
+    if override is not None:
+        return bool(override)
+    if inventory is None:
+        return True
+    return inventory.amount(SWAMP_PUZZLE_ITEM) > 0
+
+
 # The artifact governing the Cookie interaction with Dewstar bonus crops -- see
 # crops.Farm.dewstar_cookie_bonus.
 DEWSTARS_JOURNAL_ARTIFACT = "Dewstar's Journal"
@@ -1458,7 +1490,12 @@ def _build_channel_setup(
     :func:`resolve_crafting_bonus` before any of this runs).
     """
     workshop = crafting.load_workshop()
-    fish = fishing.fishing_from_config(cfg.get("fishing", {}))
+    # Holding the Swamp Puzzle unlocks the Sinking Swamp for BOTH channels, so
+    # the one resolved flag gates the fishing zone and the exploring location.
+    have_swamp_puzzle = resolve_swamp_puzzle(cfg, state.inventory)
+    fish = fishing.fishing_from_config(
+        cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle
+    )
 
     # Loaded unconditionally (not just for a tower goal): reaching T250 auto-
     # detects the Scythe of Dewstar (see resolve_scythe_of_dewstar) regardless
@@ -1480,6 +1517,7 @@ def _build_channel_setup(
     explore = exploring.exploring_from_config(
         cfg.get("exploring", {}),
         have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
+        have_swamp_puzzle=have_swamp_puzzle,
     )
     # The T300 tower artifact grants a monthly bulk of Apple Cider / Arnold Palmer
     # (config.MONTHLY_GRANTS), auto-detected from the tower level like the Scythe;
@@ -2673,15 +2711,20 @@ def run(args: argparse.Namespace) -> int:
     if backend:
         optimizer.set_solver_backend(backend)
     workshop = crafting.load_workshop()
-    fish = fishing.fishing_from_config(cfg.get("fishing", {}))
     start = args.start_date or date.today()
 
     # A standalone report over the whole workshop; no solving needed. Use the
     # steady-state producers (no plan span) so every pet's items are counted.
-    # No inventory file is read for this report, so the Fungus Processing and
-    # Scythe of Dewstar / Dewstar's Journal checks fall back to config overrides
-    # only.
+    # No inventory file is read for this report, so the Fungus Processing,
+    # Swamp Puzzle and Scythe of Dewstar / Dewstar's Journal checks fall back to
+    # config overrides only (the Swamp Puzzle to *on*, so an un-owned puzzle does
+    # not report the whole swamp's drops as sourceless -- see
+    # resolve_swamp_puzzle).
     if args.unobtainable:
+        have_swamp_puzzle = resolve_swamp_puzzle(cfg)
+        fish = fishing.fishing_from_config(
+            cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle
+        )
         farm = crops.farm_from_config(
             cfg.get("farming", {}),
             have_scythe_of_dewstar=resolve_scythe_of_dewstar(cfg),
@@ -2690,6 +2733,7 @@ def run(args: argparse.Namespace) -> int:
         explore = exploring.exploring_from_config(
             cfg.get("exploring", {}),
             have_fungus_processing=resolve_fungus_processing(cfg),
+            have_swamp_puzzle=have_swamp_puzzle,
         )
         production = config.passive_production(
             cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)

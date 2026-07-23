@@ -172,6 +172,9 @@
         </label>
         <button type="button" class="help-icon" aria-label="Help" data-help="On (default): a juice's price counts in net gold like any buy. Off: the solver still only uses juice where it beats the alternative, but its cost is dropped from net gold, so plans compare on real gold spent with the juice as its own count — pair with Spread along Pumpkin Juice to read the gold each juice saves.">?</button>
       </div>
+      <!-- The Mechanical Heart's monthly grants; sits just above Calendar, which
+           decides how those grant days are counted. -->
+      <div class="config-fields" data-config="resources"></div>
       <div class="field-row">
         <label>Calendar<button type="button" class="help-icon" aria-label="Help" data-help="How date-dependent sources (seasonal pets, Mechanical Heart grants) are handled: ignore them, average to a steady rate, or model the real calendar windows (uses Start date).">?</button></label>
         <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
@@ -182,6 +185,15 @@
         <label for="start-date">Start date<button type="button" class="help-icon" aria-label="Help" data-help="The date the plan begins, used by the 'full' calendar model for seasonal windows.">?</button></label>
         <input id="start-date" type="date" disabled>
       </div>
+    </details>
+
+    <details id="exploring-details" class="pane">
+      <summary>Exploring</summary>
+      <p class="pane-hint">
+        Unlocks and perks changing what a zone drops, or whether you can enter
+        it at all. Auto-detect reads each from your pasted inventory.
+      </p>
+      <div class="config-fields" data-config="exploring"></div>
     </details>
 
     <details id="effectiveness-details" class="pane">

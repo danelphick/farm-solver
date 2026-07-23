@@ -5,6 +5,7 @@ from exploring import (
     DEFAULT_EXPLORING_CSV,
     FUNGUS_ACORN_PIE_FLAG,
     FUNGUS_PROCESSING_FLAG,
+    SWAMP_PUZZLE_LOCATION,
     CiderModifiers,
     Exploring,
     ExploringLocation,
@@ -142,6 +143,24 @@ def test_acorn_flag_is_the_fungus_pie_table_with_fungus_processing():
 def test_acorn_table_is_none_for_a_location_without_a_pie_table():
     exploring = exploring_from_config({})
     assert exploring.acorn_table(exploring.locations["forest"]) is None
+
+
+def test_without_the_swamp_puzzle_the_sinking_swamp_location_is_dropped():
+    exploring = exploring_from_config({}, have_swamp_puzzle=False)
+    assert exploring.location(SWAMP_PUZZLE_LOCATION) is None
+    # Only that location goes; the rest of the CSV is untouched.
+    assert exploring.location("Forest") is not None
+
+
+def test_with_the_swamp_puzzle_the_sinking_swamp_location_is_explorable():
+    # Defaulted on, so every caller predating the gate is unaffected.
+    assert exploring_from_config({}).location(SWAMP_PUZZLE_LOCATION) is not None
+    assert (
+        exploring_from_config({}, have_swamp_puzzle=True).location(
+            SWAMP_PUZZLE_LOCATION
+        )
+        is not None
+    )
 
 
 def test_explores_per_cider_without_cinnamon_is_ten_per_effectiveness():

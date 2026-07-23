@@ -1,5 +1,6 @@
 from fishing import (
     DEFAULT_FISHING_CSV,
+    SWAMP_PUZZLE_ZONE,
     Fishing,
     FishingModifiers,
     FishingZone,
@@ -78,3 +79,19 @@ def test_fishing_from_config_sets_modifiers_and_loads_zones():
 
 def test_the_bundled_fishing_csv_parses():
     assert read_zones(DEFAULT_FISHING_CSV)
+
+
+def test_without_the_swamp_puzzle_the_sinking_swamp_zone_is_dropped():
+    fishing = fishing_from_config({}, have_swamp_puzzle=False)
+    assert fishing.zone(SWAMP_PUZZLE_ZONE) is None
+    # Only that zone goes; the rest of the CSV is untouched.
+    assert fishing.zone("Small Pond") is not None
+
+
+def test_with_the_swamp_puzzle_the_sinking_swamp_zone_is_fishable():
+    # Defaulted on, so every caller predating the gate is unaffected.
+    assert fishing_from_config({}).zone(SWAMP_PUZZLE_ZONE) is not None
+    assert (
+        fishing_from_config({}, have_swamp_puzzle=True).zone(SWAMP_PUZZLE_ZONE)
+        is not None
+    )
