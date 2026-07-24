@@ -384,6 +384,34 @@ def test_cookie_day_yield_is_none_when_the_crop_does_not_qualify():
     assert farm.cookie_day_yield("Fast") is None
 
 
+def test_cookie_day_harvests_splits_natural_from_boosted():
+    # The reporting split for the same 1h crop: a cookie day takes all 24 natural
+    # harvests, of which the one in the window is boosted alongside the 2 Grape
+    # Juice grows -- so 23 plain Harvest Alls plus 3 boosted ones, NOT the window
+    # alone. Their sum (26) is the day's real Harvest All count, distinct from the
+    # boosted-equivalent *yield* multiple (23 + 9*3 = 50).
+    farm = Farm(
+        crops={"x": Crop("X", timedelta(hours=1), {"x": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_day_harvests("X") == pytest.approx((23, 3))
+    # Boosted count matches the burst's plantings; the yield multiple does not.
+    assert farm.cookie_burst_plantings("X") == pytest.approx(3)
+    assert farm.cookie_day_yield("X") == pytest.approx(50)
+
+
+def test_cookie_day_harvests_is_none_when_the_crop_does_not_qualify():
+    farm = Farm(
+        crops={"fast": Crop("Fast", timedelta(minutes=5), {"fast": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+    assert farm.cookie_day_harvests("Fast") is None
+
+
 def test_cookie_burst_yield_is_the_boosted_window_only():
     # Same 1h crop as the cookie-day test: the burst is the boost slice alone --
     # 9 * (1 natural in the window + 2 Grape Juice) = 27 -- with none of the day's

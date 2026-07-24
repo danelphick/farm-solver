@@ -358,6 +358,28 @@ class Farm:
             return None
         return harvests * per_harvest
 
+    def cookie_day_harvests(self, name: str) -> tuple[float, float] | None:
+        """Harvest Alls in one cookie day of ``name``, as ``(natural, boosted)``.
+
+        A cookie day is a *whole* day of farming, not just the boosted window: the
+        crop keeps regrowing all day and every one of those harvests is taken. Only
+        the one timed to the five-minute :data:`COOKIE_WINDOW` and that day's Grape
+        Juice instant grows come out at :data:`COOKIE_SET_MULTIPLIER` times the
+        yield (``boosted``, the same count as :meth:`cookie_burst_plantings`); the
+        day's other natural regrowths (``natural``) are ordinary harvests. Their
+        sum is the day's real Harvest All count -- contrast
+        :meth:`_cookie_boosted_harvests`, the *yield* multiple those harvests come
+        to. Reporting only; ``None`` when the crop does not qualify for cookies.
+        """
+        if not self.takes_cookies(name):
+            return None
+        grow_time = self.grow_time(name)
+        if grow_time is None:
+            return None
+        natural = timedelta(days=1) / grow_time
+        in_window = min(natural, 1 + math.floor(COOKIE_WINDOW / grow_time))
+        return natural - in_window, in_window + self.grape_juices_per_day
+
     def cookie_burst_plantings(self, name: str) -> float:
         """Full-field plantings one cookie burst harvests (window crops + Grape Juice).
 

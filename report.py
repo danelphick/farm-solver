@@ -1405,9 +1405,36 @@ def _passive_sources(
     return " (" + ", ".join(parts) + ")"
 
 
+def _cookie_harvest_note(draw: sources.Draw, farm: crops.Farm) -> str:
+    """Spell out what one unit of a cookie farming draw actually harvests.
+
+    A cookie *day* is a whole real day of farming, not just the boosted window:
+    the crop keeps regrowing all day and every one of those Harvest Alls is
+    taken, with only the five-minute :data:`crops.COOKIE_WINDOW` harvest and that
+    day's Grape Juice instant grows boosted
+    :data:`crops.COOKIE_SET_MULTIPLIER`-fold. Without this the action name reads
+    as if the boosted window were the whole activity and the rest of the day
+    looks skipped. The burst offer really *is* the window alone, so it says so.
+    Empty when the crop's split is unavailable (it does not take cookies).
+    """
+    crop = _crop_of(draw.offer)
+    split = farm.cookie_day_harvests(crop)
+    if split is None:
+        return ""
+    natural, boosted = split
+    juices = farm.grape_juices_for(crop)
+    juice_note = f", {round(juices):,} from Grape Juice" if round(juices) >= 1 else ""
+    boost = f"{round(boosted):,} boosted {crops.COOKIE_SET_MULTIPLIER}x"
+    if draw.offer.name.endswith("(burst)"):
+        window = passive.format_duration(crops.COOKIE_WINDOW)
+        return f"the {window} window only: {boost} Harvest Alls{juice_note}"
+    return f"each day: {round(natural):,} natural + {boost} Harvest Alls{juice_note}"
+
+
 def _print_cookie_farming(
     draw: sources.Draw,
     juices: float,
+    farm: crops.Farm,
     interesting: set[str],
     display: dict[str, str],
     width: int = 0,
@@ -1417,16 +1444,16 @@ def _print_cookie_farming(
     A cookie set covers a whole real day, boosting the day's Grape Juice
     allocation :data:`crops.COOKIE_SET_MULTIPLIER`-fold. Sets are a farm-wide
     daily resource shared across crops, so the whole-set count lives in the
-    Farming heading; each crop line just shows its span, juice and yield.
+    Farming heading; each crop line just shows its span, juice and yield, over
+    a :func:`_cookie_harvest_note` line breaking one unit into its harvests.
     """
-    crop = _crop_of(draw.offer)
-    line = f"  Cookie-boosted {crop} in {passive.format_duration(draw.time)}"
+    line = f"  {_farming_action(draw)} in {passive.format_duration(draw.time)}"
     if round(juices) >= 1:
-        line += (
-            f" using {round(juices):,} Grape Juice"
-            f" (yield {crops.COOKIE_SET_MULTIPLIER}x)"
-        )
+        line += f" using {round(juices):,} Grape Juice"
     print(f"{line}:")
+    note = _cookie_harvest_note(draw, farm)
+    if note:
+        print(f"    {note}")
     for key in sorted(k for k in draw.offer.yields if k in interesting):
         print(f"    {round(draw.produced[key]):>{width},}x {display.get(key, key)}")
 
@@ -1897,7 +1924,9 @@ def print_plan(
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             juices = draw.gj  # LP-tracked; zero for the without-grape-juice offer
             if draw.offer.cookies:
-                _print_cookie_farming(draw, juices, ctx.interesting, display, width)
+                _print_cookie_farming(
+                    draw, juices, farm, ctx.interesting, display, width
+                )
                 continue
             crop = _crop_of(draw.offer)
             line = (
@@ -2298,16 +2327,17 @@ def markdown_plan(
             crop = _crop_of(draw.offer)
             duration = passive.format_duration(draw.time)
             if draw.offer.cookies:
-                action = f"Cookie-boosted {crop}"
+                # A cookie day is a whole day of farming, not just its boosted
+                # window; the Detail column carries that split (see
+                # :func:`_cookie_harvest_note`).
+                action = _farming_action(draw)
                 if round(juices) >= 1:
-                    action += (
-                        f" using {round(juices):,} Grape Juice"
-                        f" (yield {crops.COOKIE_SET_MULTIPLIER}x)"
-                    )
+                    action += f" using {round(juices):,} Grape Juice"
+                note = _cookie_harvest_note(draw, farm)
                 for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
                     rows.append([
                         action, duration, display.get(key, key),
-                        f"{round(draw.produced[key]):,}", "",
+                        f"{round(draw.produced[key]):,}", note,
                     ])
                 continue
             action = f"{_harvest_alls(math.ceil(draw.units))} of {crop}"

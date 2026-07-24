@@ -1344,7 +1344,10 @@ def test_print_plan_reports_cookie_boosted_farming(capsys):
     print_plan(plan, demand, Farm(grape_juices_per_day=2), Workshop(), 1.0)
     out = capsys.readouterr().out
     assert "Farming (10d, 10 cookie sets):" in out
-    assert "Cookie-boosted Slow in 10d" in out
+    # The unit is a whole cookie *day*, and the line says so -- "Cookie-boosted
+    # Slow in 10d" read as if only the boosted window were farmed (issue: the
+    # rest of the day looked skipped).
+    assert "10 cookie-boosted days of Slow in 10d" in out
     assert "420x Slow" in out
     assert "20 Grape Juice" in out  # 2 a day over 10 days
 

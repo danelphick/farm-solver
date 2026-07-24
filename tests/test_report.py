@@ -12,11 +12,13 @@ kwargs, _efficiency_note, _ascii_plot and _svg_plot.
 from datetime import timedelta
 
 import passive
+from crops import Crop, Farm
 from optimizer import GraphSeries, SourcingPlan
 from report import (
     MarkdownDoc,
     SectionedReporter,
     _ascii_plot,
+    _cookie_harvest_note,
     _crop_of,
     _efficiency_note,
     _farming_action,
@@ -98,6 +100,41 @@ def test_farming_action_names_a_cookie_burst():
     assert _farming_action(Draw(burst, 0.3)) == "cookie burst of Pine Tree"
     day = Offer("grow Pine Tree with cookies", "farming", {"pine": 1}, cookies=1)
     assert _farming_action(Draw(day, 1.2)) == "2 cookie-boosted days of Pine Tree"
+
+
+def _cookie_farm() -> Farm:
+    return Farm(
+        crops={"pine tree": Crop("Pine Tree", timedelta(hours=1), {"pine": 1})},
+        rows=1,
+        grape_juices_per_day=2,
+        cookie_time_threshold=timedelta(minutes=18),
+    )
+
+
+def test_cookie_harvest_note_spells_out_the_whole_day():
+    # A cookie day farms the WHOLE day -- 23 unboosted Harvest Alls outside the
+    # window on top of the 3 boosted ones -- so the note has to say so; the action
+    # name alone read as if only the five-minute window were farmed.
+    day = Offer("grow Pine Tree with cookies", "farming", {"pine": 1}, cookies=1)
+    assert _cookie_harvest_note(Draw(day, 10), _cookie_farm()) == (
+        "each day: 23 natural + 3 boosted 9x Harvest Alls, 2 from Grape Juice"
+    )
+
+
+def test_cookie_harvest_note_marks_the_burst_as_window_only():
+    burst = Offer(
+        "grow Pine Tree with cookies (burst)", "farming", {"pine": 1}, cookies=1
+    )
+    assert _cookie_harvest_note(Draw(burst, 1), _cookie_farm()) == (
+        "the 5m window only: 3 boosted 9x Harvest Alls, 2 from Grape Juice"
+    )
+
+
+def test_cookie_harvest_note_empty_for_an_unknown_crop():
+    # A Farm with no crops (the bare-offer test fixtures) yields no split, and the
+    # note drops out rather than rendering a bogus "0 natural".
+    day = Offer("grow Pine Tree with cookies", "farming", {"pine": 1}, cookies=1)
+    assert _cookie_harvest_note(Draw(day, 10), Farm()) == ""
 
 
 # --- _efficiency_note -----------------------------------------------------
