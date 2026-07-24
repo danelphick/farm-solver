@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import csv
 import math
 import os
 import sys
@@ -2065,6 +2066,48 @@ def load_mastery_catalogue(path: Path | None = None) -> dict[str, str]:
     return {name.lower(): name for name in (line.strip() for line in lines) if name}
 
 
+UNMODELLED_PATH = Path(__file__).with_name("unmodelled.csv")
+
+# The three `source` values in unmodelled.csv that are not a game feature's
+# name; anything else renders as "<source> not modelled".
+_UNMODELLED_REASON_TEXT = {
+    "seasonal": "seasonal",
+    "unknown": "not modelled",
+    "none": "unobtainable",
+}
+
+
+def load_unmodelled_reasons(path: Path | None = None) -> dict[str, str]:
+    """``{lower-cased item: reason}`` for items the solver cannot source.
+
+    Reads :data:`UNMODELLED_PATH` (or ``path``), whose rows name the game
+    feature that really supplies each item -- cooking, the Wishing Well, mining
+    -- so the report can say *why* rather than a bare "unobtainable". Several
+    rows for one item are joined with "; " in file order (a seasonal item you
+    also have to cook reads "seasonal; Cooking not modelled"). ``#`` comment
+    lines and blanks are skipped; a missing file returns ``{}``, so the report
+    simply falls back to the old wording.
+    """
+    source = path if path is not None else UNMODELLED_PATH
+    try:
+        text = source.read_text()
+    except FileNotFoundError:
+        return {}
+    lines = [
+        line for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    reasons: dict[str, list[str]] = {}
+    for row in csv.DictReader(lines):
+        item = (row.get("item") or "").strip()
+        feature = (row.get("source") or "").strip()
+        if not item or not feature:
+            continue
+        text_for = _UNMODELLED_REASON_TEXT.get(feature, f"{feature} not modelled")
+        reasons.setdefault(item.lower(), []).append(text_for)
+    return {item: "; ".join(parts) for item, parts in reasons.items()}
+
+
 # The three mastery tiers, as (absolute progress threshold, short label), in
 # climbing order -- the targets --mastery-costs solves each remaining item to.
 _MASTERY_TIERS: tuple[tuple[int, str], ...] = (
@@ -2072,6 +2115,10 @@ _MASTERY_TIERS: tuple[tuple[int, str], ...] = (
     (ascension.GRANDMASTER_THRESHOLD, "GM"),
     (ascension.MEGA_THRESHOLD, "MM"),
 )
+
+# Spelled-out tier names, for the prose lines --mastery-costs writes about a
+# tier it could not reach (the table itself uses the short labels above).
+_MASTERY_TIER_NAMES = {"M": "Master", "GM": "Grandmaster", "MM": "Megamaster"}
 
 
 @dataclass(frozen=True)
@@ -2096,6 +2143,11 @@ class MasteryCostsResult:
     # Formatted "item needs ... (unobtainable)" chains for items no plan can
     # source at all (see unmasterable_chain); one per unmasterable item.
     unmasterable: list[str]
+    # Items that CAN be sourced but not in the quantity a tier needs -- a
+    # finitely-bounded supply (a limited-seed crop, an allow-list that keeps a
+    # material off the trading table) the LP calls infeasible rather than
+    # unobtainable. One line per item, naming the lowest tier it cannot reach.
+    limited: list[str] = field(default_factory=list)
 
 
 def _sorted_mastery_rows(
@@ -2156,6 +2208,7 @@ def unmasterable_chain(
     recipes: dict[str, dict[str, float]],
     available: set[str],
     display: dict[str, str],
+    reasons: dict[str, str] | None = None,
 ) -> str:
     """Explain why item ``key`` cannot be produced, as a dependency chain.
 
@@ -2168,10 +2221,22 @@ def unmasterable_chain(
     e.g. ``"A needs B (which needs C (unobtainable))"`` -- the top item takes
     "needs", nested craftable-but-stuck links take "(which needs ...)", and a
     material with no recipe of its own is a bare "(unobtainable)" leaf.
+
+    ``reasons`` (:func:`load_unmodelled_reasons`) replaces that bare wording
+    wherever it knows *why*: most of these items are perfectly obtainable in game
+    by a route the solver does not model, so "(Cooking not modelled)" is the
+    truth and "(unobtainable)" is not. A named item also **ends** the descent --
+    its reason is the explanation, so there is nothing to gain from unpicking a
+    recipe it does not really need (Magna Core is craftable on paper, but comes
+    from the Wishing Well).
     """
+    known = reasons or {}
 
     def describe(node: str, seen: frozenset[str], *, top: bool) -> str:
         name = display.get(node, node.title())
+        reason = known.get(node)
+        if reason is not None:
+            return f"{name} ({reason})"
         recipe = recipes.get(node)
         if recipe is None or node in seen:
             return f"{name} (unobtainable)"
@@ -2244,6 +2309,7 @@ def solve_mastery_costs(
         return recipe is not None and all(m in available for m in recipe)
 
     catalogue = load_mastery_catalogue()
+    reasons = load_unmodelled_reasons()
     # Display names: catalogue first, then every workshop item/material (recipe
     # flows are lower-cased, so the casing comes from the workshop model).
     display: dict[str, str] = dict(catalogue)
@@ -2254,32 +2320,52 @@ def solve_mastery_costs(
 
     rows: list[MasteryCostRow] = []
     unmasterable: list[str] = []
+    limited: list[str] = []
     for candidate in ascension.candidates(state, catalogue.values()):
         key = candidate.item
         mastery = state.mastery(key)
         name = display.get(key) or (mastery.item if mastery is not None else key.title())
         if not masterable(key):
-            unmasterable.append(unmasterable_chain(key, recipes, available, display))
+            unmasterable.append(
+                unmasterable_chain(key, recipes, available, display, reasons)
+            )
             continue
         progress = mastery.progress if mastery is not None else 0
         for threshold, label in _MASTERY_TIERS:
             if progress >= threshold:
                 continue
             demand = {name: (threshold - progress) / args.mastery_bonus}
-            plan = optimizer.fastest_endpoint(
-                offers, demand, recipes, args.crafting_bonus, prices=prices,
-                openables=open_flows, inventory=setup.inventory,
-                cookie_sets=setup.cookie_sets or 0.0, quantize=quantize,
-                ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(), no_buy=no_buy,
-            )
+            try:
+                plan = optimizer.fastest_endpoint(
+                    offers, demand, recipes, args.crafting_bonus, prices=prices,
+                    openables=open_flows, inventory=setup.inventory,
+                    cookie_sets=setup.cookie_sets or 0.0, quantize=quantize,
+                    ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
+                    no_buy=no_buy,
+                )
+            except ValueError:
+                # Sourceable, but not this many: a finitely-bounded supply (a
+                # limited-seed crop, or a material the AP allow-list keeps off
+                # the trading table) makes a large enough demand *infeasible*
+                # rather than unobtainable -- see optimizer._assert_optimal.
+                # Record the tier and stop climbing: every higher one needs
+                # strictly more of the same, so it is infeasible too. One bad
+                # tier must not abort the whole sweep.
+                limited.append(
+                    f"{name} cannot reach "
+                    f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
+                    "cannot supply that many"
+                )
+                break
             # Cost is the gold the plan actually spends buying (plan.gold), so
             # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
             # drop, not the market value of the tools it now self-sources instead.
             rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
 
     unmasterable.sort()
+    limited.sort()
     return MasteryCostsResult(rows=_sorted_mastery_rows(rows, args.sort),
-                             unmasterable=unmasterable)
+                             unmasterable=unmasterable, limited=limited)
 
 
 def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:

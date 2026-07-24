@@ -137,7 +137,35 @@ by `main.solve_mastery_costs` → `MasteryCostsResult`; conflicts with
 `--ascend`/`--unobtainable`/`--target`/`-m`/`-i` (checked before any file load or
 solve). `--sort time|gold` picks the primary rank axis, the other the tie-breaker
 (`_sorted_mastery_rows`). Report: `report.print_mastery_costs`/`markdown_*` via
-`Reporter.mastery_costs`.
+`Reporter.mastery_costs`. The web app surfaces the same mode on its own page —
+see "Web app (web/)" below; that path calls `solve_mastery_costs` directly, so
+the conflict check above (a `run`-branch concern) has no counterpart there.
+
+**Why, not just "unobtainable"**: most items the solver cannot source are
+perfectly obtainable in game by a route it does not model (cooking, the Wishing
+Well, mining, the Sugar Cane Mill), or only at certain times of year, so a bare
+"(unobtainable)" is misleading. `unmodelled.csv` (loaded by
+`main.load_unmodelled_reasons` → `{lower item: reason}`) names the real reason
+per item: a `source` column holding the game feature, rendered
+`"<source> not modelled"`, plus three special values —
+`seasonal`/`unknown`/`none` → "seasonal"/"not modelled"/"unobtainable"
+(`main._UNMODELLED_REASON_TEXT`). Several rows for one item join with "; " in
+file order. A named item also **ends** `unmasterable_chain`'s descent: the reason
+*is* the explanation, so unpicking a recipe the item does not really need would
+mislead (Magna Core is craftable on paper but comes from the Wishing Well).
+Unlisted items keep the old wording, so the file is additive — append a row when
+a new one shows up.
+
+Two distinct "cannot" outcomes, kept as separate lists on `MasteryCostsResult`
+because they have different causes and different fixes: `unmasterable` (no
+source at all — `unmasterable_chain` explains it) and `limited` (sourceable, but
+the LP calls a tier's *quantity* infeasible — a finitely bounded supply, e.g. a
+limited-seed crop or a material an AP allow-list keeps off the trading table).
+The per-tier `fastest_endpoint` call catches that `ValueError` (see
+`optimizer._assert_optimal`), records the tier and **stops climbing** that item —
+every higher tier needs strictly more of the same, so it is infeasible too. One
+bad tier must never abort the whole sweep, which is what it did before: on the
+web config, `Bouquet of Flowers` at Megamaster killed all 201 other rows.
 
 Mechanics: `_build_channel_setup` builds the goal-independent channels once, and
 production is **steady-state** (`config.passive_production` with no `start`/
@@ -173,9 +201,9 @@ save) because each per-item reachable subtree is small.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS` |
-| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade), `_mastery_costs_caption` |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
+| `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `_prepare` (the config-load/calendar-strip/crafting-bonus + `GameState`-from-text preamble both solve paths share), `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case); **mastery-costs**: `mastery_costs` → `MasteryCostsPayload` (structured rows, not rendered markdown — the client sorts and links per row), `mastery_costs_fingerprint`/`MASTERY_COST_FIELDS` (its own narrower, `"mc:"`-namespaced cache key: the goal/frontier fields never reach `solve_mastery_costs`, so editing a goal must not evict the table) |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -189,10 +217,12 @@ save) because each per-item reachable subtree is small.
 | `fishing.py`/`exploring.py` | LN/AP channels, modifiers, zone unlocks | `Fishing`/`Exploring` (`acorn_flag`/`acorn_table`), `CiderModifiers`, `*_from_config` (`have_fungus_processing`/`have_swamp_puzzle`), `ACORN_PIE_FLAG`/`FUNGUS_ACORN_PIE_FLAG`/`ACORN_PIE_EXPLORES`, `SWAMP_PUZZLE_ZONE`/`SWAMP_PUZZLE_LOCATION` |
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
-| `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.api_solve`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
+| `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.{index,masteries,api_solve,api_mastery_costs,_decode_request}`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
 
 Data lives in `*.csv` (crops, fishing, exploring, pets, openables, tower,
-seed_drops), `config.toml` and `mastery_items.txt` (the masterable-item
+seed_drops, plus `unmodelled.csv` — hand-maintained, `#`-commented, the only
+one describing what the solver *does not* model; see "Mastery-costs mode"),
+`config.toml` and `mastery_items.txt` (the masterable-item
 catalogue -- the ascension mode's candidate universe, generated by
 `scripts/generate_items.py`, which writes the web Mastery picker's static
 copy from the same set; regenerate with the script, never edit either by
@@ -1558,29 +1588,51 @@ that imports it without going through `manage.py`.
 - **`web/farmweb/`** — the Django project: `settings.py` (deliberately no
   `django.contrib.auth`/`admin`/`sessions`; `DATABASES = {}`, since there is
   nothing server-side to persist; `DEBUG`/`SECRET_KEY`/`ALLOWED_HOSTS` are
-  env-driven), `urls.py` (`/` → `index`, `/api/solve` → `api_solve`),
+  env-driven), `urls.py` (`/` → `index`, `/masteries` → `masteries`,
+  `/api/solve` → `api_solve`, `/api/mastery-costs` → `api_mastery_costs`),
   `wsgi.py`.
 - **`web/solverapp/`** — the one app: `apps.py` (`AppConfig.ready()` pins
   `optimizer.set_solver_backend("highs")` once at process startup -- never
   per-request, since `optimizer._backend` is a module global unsafe under
   concurrent solves in the same process -- and refuses to start without it),
-  `views.py` (`index`; `api_solve`, a `csrf_exempt` JSON POST -- no
-  session/cookie auth exists to forge), `cache.py` (`SessionCache`: an
-  in-process LRU(64)/TTL(30 min) `OrderedDict` of `webapi.SolveSession` keyed
-  by `webapi.fingerprint`; `SOLVE_SEMAPHORE`, one LP solve at a time per
+  `views.py` (`index`/`masteries`, the two pages; `api_solve` and
+  `api_mastery_costs`, `csrf_exempt` JSON POSTs -- no session/cookie auth
+  exists to forge -- sharing `_decode_request`, which turns the common
+  `{mastery_text, inventory_text, params}` body into `args` or the 400 to
+  return instead), `cache.py` (`SessionCache`: an in-process LRU(64)/TTL(30
+  min) `OrderedDict` holding **both** artefact kinds -- a
+  `webapi.SolveSession` keyed by `webapi.fingerprint` and a
+  `webapi.MasteryCostsPayload` keyed by `webapi.mastery_costs_fingerprint`,
+  whose `"mc:"` prefix keeps the key spaces apart; one cache, not two, since a
+  second `SessionCache` instance would share the module-level `_entries` dict
+  anyway. Each view narrows what it gets back with an `isinstance` check rather
+  than trusting the prefix. Plus `SOLVE_SEMAPHORE`, one LP solve at a time per
   process; `key_lock`, a per-fingerprint lock guarding against a dogpile of
   identical concurrent requests all missing the cache at once), `tests.py`
   (Django `SimpleTestCase` -- no DB to wrap in a transaction), `templates/`,
   `static/`.
-- **`api_solve`'s flow**: decode JSON → `webapi.params_to_args` (`ValueError`
-  → 400) → `webapi.fingerprint` → `cache.key_lock` (serialises same-fingerprint
-  requests) → cache lookup → `SOLVE_SEMAPHORE.acquire(timeout=20)` (else 503)
-  → `webapi.solve` on a miss (`ValueError` from an unparseable paste → 422) →
-  `webapi.render` → `cache.CACHE.put` → each `SolveResult.sections[...]`
+- **`api_solve`'s flow**: `_decode_request` → `webapi.params_to_args`
+  (`ValueError` → 400) → `webapi.fingerprint` → `cache.key_lock` (serialises
+  same-fingerprint requests) → cache lookup → `SOLVE_SEMAPHORE.acquire(timeout=20)`
+  (else 503) → `webapi.solve` on a miss (`ValueError` from an unparseable paste
+  → 422) → `webapi.render` → `cache.CACHE.put` → each `SolveResult.sections[...]`
   markdown rendered to HTML via `markdown.markdown(text,
   extensions=["tables"])` → JSON response (`cached`, `solved_ms`,
   `solution_html`, `notes`, `warnings`, `frontier.{html,plans}`,
   `plan.{index,html}`).
+- **`api_mastery_costs`'s flow**: the same shape, but keyed by
+  `webapi.mastery_costs_fingerprint`, solved by `webapi.mastery_costs`, with no
+  refilter step and **its own longer semaphore budget**
+  (`_MASTERY_SEMAPHORE_TIMEOUT_SECONDS = 60`): the sweep is one LP solve per
+  remaining (item, tier) pair -- ~1s on a well-progressed save but ~5s on an
+  empty one and slower on the deploy box, so `api_solve`'s 20s would spuriously
+  503 a request queued behind one. The response is `{cached, solved_ms, rows,
+  unmasterable}` with `rows` **structured** (`item`/`tier`/`time`/
+  `time_seconds`/`gold`), not markdown-rendered HTML like every other section:
+  the client sorts the rows itself and turns each into a link, both of which
+  need the item and tier as data. `unmasterable` and `limited` are the two
+  "cannot" lists (see "Mastery-costs mode" above), each rendered into its own
+  collapsed `<details>` on the page.
 - **`static/solverapp/app.js`** (vanilla JS, no build step): state
   (`{mastery_text, inventory_text, params}`, mirroring `POST /api/solve`'s
   body) round-trips through `localStorage["farm-solver.v1"]`, restored and
@@ -1633,11 +1685,12 @@ that imports it without going through `manage.py`.
   parameter** carries a `[?]` help icon (`.help-icon`, a `<button>` with its
   description in `data-help`) -- generated fields from each schema entry's
   `help` string (`createHelpIcon`, appended inside the label), hand-written
-  controls from an inline `data-help` in the template. `initHelpTooltips` wires
-  one delegated hover/focus listener set that shows a single shared floating
-  `.help-tooltip` (positioned in JS above the icon, flipped below near the top
-  edge, clamped to the viewport, hidden on scroll/Escape) -- no library, works
-  for keyboard focus too. The **Material trading pane** (`buildMaterialTradingPane`,
+  controls from an inline `data-help` in the template. `initHelpTooltips`
+  (in **`help.js`**, shared with the mastery-costs page) wires one delegated
+  hover/focus listener set that shows a single shared floating `.help-tooltip`
+  (positioned in JS above the icon, flipped below near the top edge, clamped to
+  the viewport, hidden on scroll/Escape) -- no library, works for keyboard focus
+  too. The **Material trading pane** (`buildMaterialTradingPane`,
   also run at the top of `init()` before the blanket wiring) is a checkbox + price +
   guide-range row per tradeable material, built from the injected config's
   `trading.ap` (`prices` is the item universe and default apk, `price_bounds` the
@@ -1711,6 +1764,37 @@ that imports it without going through `manage.py`.
   paragraph (Buy, Pumpkin Juice, Surplus). Groups matching none of the three
   (Passive production, From inventory, Sawmill boost) show no stat when
   collapsed -- per spec, only "if one exists".
+- **`static/solverapp/masteries.js`** — the mastery-costs page's client,
+  deliberately **not** an `app.js` import: `app.js` registers its
+  `DOMContentLoaded` → `init()` listener at module scope, so importing it would
+  run the solver page's whole wiring against markup that isn't there. Only two
+  small modules are shared instead: `help.js` (the `[?]` tooltip machinery
+  above) and `tiers.js` (`tierLabel`: the `M`/`GM`/`MM` ↔ Master/Grandmaster/
+  Megamaster mapping, mirroring `main._MASTERY_TIERS`); the handful of one-line
+  helpers (`$`, `escapeHtml`) are duplicated rather than given a module. The
+  page has no state of its own — it *reads* (never writes)
+  `localStorage["farm-solver.v1"]`, so both pages always agree on what "your
+  save" means, and adds a single `self_sourced` param on top. `sortRows` (the
+  JS mirror of `main._sorted_mastery_rows`, primary axis then the other as
+  tie-break) and `masteryHref` are the pure, unit-tested exports
+  (`masteries.test.js`). Rows are built in JS rather than markdown→HTML because
+  each `<tr>` has to carry its own item/tier to become a link. The sort toggle
+  reorders the loaded rows with no request; the self-sourced checkbox re-POSTs;
+  both persist under the shared `farm-solver.ui.v1` UI key.
+- **Drill-down is a plain navigation, not a third view**: a mastery-costs row
+  links to `/?mastery=<Item>:<TIER>` — the solver page itself, so the whole
+  existing frontier/plan/crafts UI is reused and the browser's Back button
+  returns to the list natively. `app.js`'s `parseSeededGoal` (exported, unit
+  tested; reuses `parseGoalSpec`'s grammar so a colon-bearing item name still
+  splits correctly) reads that goal off the query string and `applySeededGoal`
+  sets Target = "none" plus that single mastery row, on top of the restored
+  settings, revealing a `#seeded-banner`. It deliberately does **not**
+  `saveState()`: following a link must not overwrite the goal the user had
+  saved, though their first edit persists it as usual via `onAnyChange`. The
+  tier token survives as free text end to end (`parsing.parse_amount` reads
+  `M`/`GM`/`MM` as the absolute 10k/100k/1M threshold), which is exactly the
+  cumulative target the row was solved for -- so the drill-down reproduces its
+  own row.
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --

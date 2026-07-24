@@ -48,6 +48,25 @@ RESOLVE_FIELDS = (
     "current_stamina", "cookie_sets", "plans", "spread", "graph", "start_date",
     "model_calendar", "average_calendar", "ignore_calendar", "crafting_bonus",
     "mastery_bonus", "override_inventory", "override", "price_pumpkin_juice",
+    "self_sourced",
+)
+
+# The args fields a mastery-costs request depends on -- its own cache key (see
+# mastery_costs_fingerprint), deliberately NOT RESOLVE_FIELDS. main.
+# solve_mastery_costs solves its own per-item goals, so every goal/frontier
+# field (target, level, mastery, items, plans, spread, graph, the pumpkin-juice
+# knobs) is irrelevant to it: keying on those would throw the cached table away
+# every time the solver page's goal changed. What is left is what the channel
+# setup and the per-item solves actually read: the calendar trio + start_date
+# (which passive sources exist and when), the two bonuses, the resource seeds
+# _build_channel_setup folds in, the inventory overrides, every config override
+# (prices, preference panels, AP trading -- all funnelled through `override`),
+# and self_sourced (withholds the AP/LN/AC buys). `sort` is excluded on purpose:
+# the client re-sorts the same rows without a round trip.
+MASTERY_COST_FIELDS = (
+    "start_date", "model_calendar", "average_calendar", "ignore_calendar",
+    "crafting_bonus", "mastery_bonus", "current_stamina", "cookie_sets",
+    "override_inventory", "override", "self_sourced",
 )
 
 # Args fields that only change how the cached frontier is displayed --
@@ -66,6 +85,10 @@ _KNOWN_PARAM_KEYS = frozenset({
     "plans", "spread", "graph", "start_date", "calendar", "plan_select",
     "max_ap", "max_ln", "max_ac", "passive_limit", "overrides",
     "crafting_bonus", "mastery_bonus", "breakdown", "count_pumpkin_juice_gold",
+    # --self-sourced: don't buy Arnold Palmers / Large Nets / Apple Cider, make
+    # them instead. Sent by the mastery-costs page's own checkbox; accepted on
+    # /api/solve too, since it is a plain solve knob.
+    "self_sourced",
     # Trading Values / Advanced config knobs -- exposed with their own web
     # controls but funnelled through args.override (see _CONFIG_PARAM_FLAGS).
     "price_orange_juice", "price_apple_cider", "price_arnold_palmer",
@@ -325,6 +348,8 @@ def args_to_command(
         add("--graph", args.graph)
     if getattr(args, "price_pumpkin_juice", None) is False:
         tokens.append("--no-price-pumpkin-juice")
+    if getattr(args, "self_sourced", False):
+        tokens.append("--self-sourced")
     for override in args.override or []:
         add("--override", override)
 
@@ -449,6 +474,8 @@ def params_to_args(params: dict) -> argparse.Namespace:
         args.mastery_bonus = float(params["mastery_bonus"])
     if "breakdown" in params:
         args.breakdown = bool(params["breakdown"])
+    if "self_sourced" in params:
+        args.self_sourced = bool(params["self_sourced"])
     if "count_pumpkin_juice_gold" in params:
         value = params["count_pumpkin_juice_gold"]
         # Whether juice's cost counts in net gold (see main.price_pumpkin_juice_
@@ -527,22 +554,50 @@ def params_to_args(params: dict) -> argparse.Namespace:
     return args
 
 
+def _hash_state(
+    mastery_text: str,
+    inventory_text: str,
+    args: argparse.Namespace,
+    fields: tuple[str, ...],
+) -> str:
+    """sha256 of both pasted texts plus the named ``args`` fields.
+
+    ``start_date`` is special-cased to today's date when unset (rather than
+    hashing ``None``), so the *default* key doesn't quietly rot at midnight
+    between an initial solve and a same-day repeat request.
+    """
+    parts = [mastery_text, inventory_text]
+    for name in fields:
+        value = date.today().isoformat() if name == "start_date" and not args.start_date else getattr(args, name)
+        parts.append(repr(value))
+    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
+
+
 def fingerprint(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> str:
     """Session identity: a sha256 of both pasted texts plus every resolve field.
 
     Two requests that agree on this hash would produce the identical frontier,
     so a cache hit skips solving entirely; anything that only changes
     :data:`REFILTER_FIELDS` is deliberately excluded, so those requests keep
-    hitting the same cache entry. ``start_date`` is special-cased to today's
-    date when unset (rather than hashing ``None``), so the *default* key
-    doesn't quietly rot at midnight between an initial solve and a same-day
-    refilter.
+    hitting the same cache entry.
     """
-    parts = [mastery_text, inventory_text]
-    for name in RESOLVE_FIELDS:
-        value = date.today().isoformat() if name == "start_date" and not args.start_date else getattr(args, name)
-        parts.append(repr(value))
-    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
+    return _hash_state(mastery_text, inventory_text, args, RESOLVE_FIELDS)
+
+
+def mastery_costs_fingerprint(
+    mastery_text: str, inventory_text: str, args: argparse.Namespace
+) -> str:
+    """Cache key for a mastery-costs request (:data:`MASTERY_COST_FIELDS`).
+
+    Namespaced with an ``"mc:"`` prefix because both kinds of cached artefact
+    share one :class:`web.solverapp.cache.SessionCache`: without it a
+    mastery-costs payload and a :class:`SolveSession` could never actually
+    collide (their field sets differ), but the prefix makes that a property of
+    the key rather than of the hash, and keeps the two readable in a dump.
+    """
+    return "mc:" + _hash_state(
+        mastery_text, inventory_text, args, MASTERY_COST_FIELDS
+    )
 
 
 @dataclass
@@ -606,13 +661,15 @@ def _nothing_to_source_result(inputs: main.SolveInputs, resolved: bool) -> Solve
     )
 
 
-def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> SolveSession:
-    """Run a full (re-)solve from pasted text: the ~0.5-3s path (see ARCHITECTURE.md).
+def _prepare(
+    mastery_text: str, inventory_text: str, args: argparse.Namespace
+) -> tuple[dict, farm_solver.GameState]:
+    """The config + game state every solve path starts from.
 
-    Mirrors main.run's file-loading + override-inventory step (there:
-    load_state on the CLI's files; here: a GameState built directly from
-    request text) followed by the same three solve stages build_inputs /
-    solve_frontier / derive_report_inputs main.run itself drives.
+    Mirrors main.run's config-load / calendar-strip / crafting-bonus-resolve
+    preamble and its file-loading + override-inventory step (there: load_state
+    on the CLI's files; here: a GameState built directly from request text), so
+    :func:`solve` and :func:`mastery_costs` can never drift apart on it.
     """
     cfg = load_web_config()
     main.apply_overrides(cfg, args.override)
@@ -631,11 +688,63 @@ def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> S
         main.apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)
         )
+    return cfg, state
 
+
+def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> SolveSession:
+    """Run a full (re-)solve from pasted text: the ~0.5-3s path (see ARCHITECTURE.md).
+
+    The :func:`_prepare` preamble followed by the same three solve stages
+    build_inputs / solve_frontier / derive_report_inputs main.run itself drives.
+    """
+    cfg, state = _prepare(mastery_text, inventory_text, args)
     inputs = main.build_inputs(args, cfg, state)
     fr = main.solve_frontier(inputs, args, cfg)
     ctx = main.derive_report_inputs(inputs, fr, args) if fr.plans else _empty_plan_context()
     return SolveSession(inputs=inputs, frontier=fr, ctx=ctx, cfg=cfg)
+
+
+@dataclass
+class MasteryCostsPayload:
+    """The mastery-costs table, ready to serialise (see :func:`mastery_costs`)."""
+
+    rows: list[dict]
+    unmasterable: list[str]
+    limited: list[str]
+
+
+def mastery_costs(
+    mastery_text: str, inventory_text: str, args: argparse.Namespace
+) -> MasteryCostsPayload:
+    """Run --mastery-costs from pasted text: one fastest plan per (item, tier).
+
+    The :func:`_prepare` preamble, then :func:`main.solve_mastery_costs`, which
+    solves its own per-item goals and so ignores ``target``/``mastery``/
+    ``items`` entirely -- the CLI's ``--mastery-costs`` conflict check has no
+    counterpart here, since nothing on this path would read them.
+
+    Rows are returned **structured**, not as rendered markdown the way
+    :func:`render`'s sections are: the client sorts them itself (no round trip)
+    and turns each into a link to the solver page seeded with that goal, both of
+    which need the item and tier as data rather than as table cells. ``time`` is
+    carried twice -- preformatted for display and in seconds for that sort.
+    """
+    cfg, state = _prepare(mastery_text, inventory_text, args)
+    result = main.solve_mastery_costs(args, cfg, state)
+    return MasteryCostsPayload(
+        rows=[
+            {
+                "item": row.item,
+                "tier": row.tier,
+                "time": passive.format_duration(row.time),
+                "time_seconds": row.time.total_seconds(),
+                "gold": row.gold,
+            }
+            for row in result.rows
+        ],
+        unmasterable=list(result.unmasterable),
+        limited=list(result.limited),
+    )
 
 
 def render(

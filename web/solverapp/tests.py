@@ -146,6 +146,96 @@ class ApiSolveTests(SimpleTestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class ApiMasteryCostsTests(SimpleTestCase):
+    # No `databases` attribute: SimpleTestCase already defaults to none, and
+    # this project has no database at all (see farmweb/settings.py).
+
+    def setUp(self) -> None:
+        _entries.clear()
+        _key_locks.clear()
+
+    def _post(self, params: dict, mastery: str = MASTERY_TEXT, inventory: str = INVENTORY_TEXT):
+        return self.client.post(
+            "/api/mastery-costs",
+            data=json.dumps({
+                "mastery_text": mastery,
+                "inventory_text": inventory,
+                "params": params,
+            }),
+            content_type="application/json",
+        )
+
+    def test_returns_ranked_rows_and_unmasterable_chains(self):
+        response = self._post({})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["cached"])
+        self.assertTrue(body["rows"])
+        row = body["rows"][0]
+        self.assertEqual(
+            set(row), {"item", "tier", "time", "time_seconds", "gold"}
+        )
+        self.assertIn(row["tier"], {"M", "GM", "MM"})
+        self.assertIsInstance(body["unmasterable"], list)
+
+    def test_identical_repost_is_a_cache_hit(self):
+        self.assertFalse(self._post({}).json()["cached"])
+        second = self._post({})
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["cached"])
+
+    def test_a_goal_only_change_is_still_a_cache_hit(self):
+        # The goal fields never reach solve_mastery_costs, so they are not part
+        # of this endpoint's key (webapi.mastery_costs_fingerprint): editing the
+        # solver page's goal must not throw the table away.
+        self._post({})
+        response = self._post({"items": "Board:50000", "target": "150"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["cached"])
+
+    def test_self_sourced_change_is_a_cache_miss(self):
+        self._post({})
+        response = self._post({"self_sourced": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["cached"])
+
+    def test_a_solve_session_key_is_never_served_here(self):
+        # Both endpoints share one cache; the "mc:" key prefix keeps them apart.
+        self.client.post(
+            "/api/solve",
+            data=json.dumps({
+                "mastery_text": MASTERY_TEXT,
+                "inventory_text": INVENTORY_TEXT,
+                "params": {"items": "Board:50000", "plans": 2},
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual([key.startswith("mc:") for key in _entries], [False])
+        # ... so the mastery-costs request still misses, and lands beside it.
+        self.assertFalse(self._post({}).json()["cached"])
+        self.assertEqual(
+            sorted(key.startswith("mc:") for key in _entries), [False, True]
+        )
+
+    def test_garbage_paste_is_422(self):
+        response = self._post({}, mastery="not a valid paste at all", inventory="")
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("error", response.json())
+
+    def test_bad_param_is_400(self):
+        response = self._post({"bogus_field": 1})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("bogus_field", response.json()["error"])
+
+    def test_get_is_not_allowed(self):
+        self.assertEqual(self.client.get("/api/mastery-costs").status_code, 405)
+
+    def test_masteries_page_renders(self):
+        response = self.client.get("/masteries")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "masteries.js")
+
+
 class SessionCacheTests(SimpleTestCase):
     def setUp(self) -> None:
         _entries.clear()

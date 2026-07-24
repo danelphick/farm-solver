@@ -1,12 +1,19 @@
-"""In-process session cache + solve concurrency guards, per gunicorn worker.
+"""In-process solve cache + solve concurrency guards, per gunicorn worker.
 
-No state is shared across workers or processes: each fingerprint's
-``SolveSession`` lives only in the worker that computed it, so a request
-landing on a different worker (or after a restart/eviction) is simply a cache
-miss -- ``webapi.solve``/``render`` re-run in ~0.5-3s (see ARCHITECTURE.md's
+No state is shared across workers or processes: each fingerprint's cached
+artefact lives only in the worker that computed it, so a request landing on a
+different worker (or after a restart/eviction) is simply a cache miss --
+``webapi.solve``/``render`` re-run in ~0.5-3s (see ARCHITECTURE.md's
 "Concurrency" note). This is a deliberate simplicity trade-off for a small
 deployment: no sticky sessions, no shared cache to keep consistent -- a miss
 just costs one re-solve, never a wrong answer.
+
+One cache holds both kinds of artefact the app solves for -- a
+``webapi.SolveSession`` (keyed by ``webapi.fingerprint``) and a
+``webapi.MasteryCostsPayload`` (keyed by ``webapi.mastery_costs_fingerprint``,
+whose ``"mc:"`` prefix keeps the two key spaces apart) -- rather than two
+caches, since a second ``SessionCache`` instance would share this module's
+``_entries`` dict anyway.
 """
 
 from __future__ import annotations
@@ -20,16 +27,18 @@ import webapi
 MAX_ENTRIES = 64
 TTL_SECONDS = 30 * 60
 
-# Guards both _entries (the session cache) and _key_locks (below); every
+CachedArtefact = webapi.SolveSession | webapi.MasteryCostsPayload
+
+# Guards both _entries (the solve cache) and _key_locks (below); every
 # critical section under it is a plain dict operation, never a solve.
 _lock = threading.Lock()
-_entries: OrderedDict[str, tuple[webapi.SolveSession, float]] = OrderedDict()
+_entries: OrderedDict[str, tuple[CachedArtefact, float]] = OrderedDict()
 
 
 class SessionCache:
-    """A small LRU (``MAX_ENTRIES``) + TTL (``TTL_SECONDS``) SolveSession cache."""
+    """A small LRU (``MAX_ENTRIES``) + TTL (``TTL_SECONDS``) solve-artefact cache."""
 
-    def get(self, key: str) -> webapi.SolveSession | None:
+    def get(self, key: str) -> CachedArtefact | None:
         with _lock:
             entry = _entries.get(key)
             if entry is None:
@@ -41,7 +50,7 @@ class SessionCache:
             _entries.move_to_end(key)
             return session
 
-    def put(self, key: str, session: webapi.SolveSession) -> None:
+    def put(self, key: str, session: CachedArtefact) -> None:
         with _lock:
             _entries[key] = (session, time.monotonic() + TTL_SECONDS)
             _entries.move_to_end(key)

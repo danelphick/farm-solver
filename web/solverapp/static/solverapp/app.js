@@ -12,6 +12,9 @@
 // result); clicking a frontier row re-solves immediately with that plan
 // selected (a refilter, so it hits the cache and returns fast).
 
+import { createHelpIcon, initHelpTooltips } from "./help.js";
+import { tierLabel } from "./tiers.js";
+
 const STORAGE_KEY = "farm-solver.v1";
 // UI-only preferences (e.g. whether the paste pane is collapsed) live under
 // their own key: STORAGE_KEY's shape mirrors the POST /api/solve body.
@@ -242,88 +245,6 @@ function configDefault(key) {
 function autoboolDefaultValue(key) {
   const def = configDefault(key);
   return def == null ? "" : String(!!def);
-}
-
-// --- Help tooltips ----------------------------------------------------------
-//
-// Each parameter carries a `[?]` button (`.help-icon`) with its description in
-// `data-help`; hovering or keyboard-focusing one shows a single shared floating
-// tooltip, positioned above the icon (flipped below near the top edge, clamped
-// horizontally to the viewport). One delegated set of listeners on `document`
-// covers every icon, generated or hand-written in the template.
-
-let helpTooltipEl = null;
-
-function createHelpIcon(text) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "help-icon";
-  btn.textContent = "?";
-  btn.dataset.help = text;
-  btn.setAttribute("aria-label", text);  // read out for screen readers too
-  return btn;
-}
-
-function ensureHelpTooltip() {
-  if (!helpTooltipEl) {
-    helpTooltipEl = document.createElement("div");
-    helpTooltipEl.className = "help-tooltip";
-    helpTooltipEl.setAttribute("role", "tooltip");
-    helpTooltipEl.hidden = true;
-    document.body.appendChild(helpTooltipEl);
-  }
-  return helpTooltipEl;
-}
-
-function positionHelpTooltip(icon, tip) {
-  const r = icon.getBoundingClientRect();
-  const margin = 8;
-  const tw = tip.offsetWidth;
-  const th = tip.offsetHeight;
-  let top = r.top - th - margin;             // above the icon by default
-  if (top < margin) top = r.bottom + margin; // not enough room -> below
-  let left = r.left + r.width / 2 - tw / 2;   // centred on the icon
-  left = Math.max(margin, Math.min(left, window.innerWidth - tw - margin));
-  tip.style.left = `${left}px`;
-  tip.style.top = `${top}px`;
-}
-
-function showHelpTooltip(icon) {
-  const text = icon.dataset.help;
-  if (!text) return;
-  const tip = ensureHelpTooltip();
-  tip.textContent = text;
-  tip.hidden = false;
-  positionHelpTooltip(icon, tip);
-}
-
-function hideHelpTooltip() {
-  if (helpTooltipEl) helpTooltipEl.hidden = true;
-}
-
-function initHelpTooltips() {
-  const iconOf = (event) =>
-    event.target.closest && event.target.closest(".help-icon");
-  document.addEventListener("pointerover", (e) => {
-    const icon = iconOf(e);
-    if (icon) showHelpTooltip(icon);
-  });
-  document.addEventListener("pointerout", (e) => {
-    if (iconOf(e)) hideHelpTooltip();
-  });
-  document.addEventListener("focusin", (e) => {
-    const icon = iconOf(e);
-    if (icon) showHelpTooltip(icon);
-  });
-  document.addEventListener("focusout", (e) => {
-    if (iconOf(e)) hideHelpTooltip();
-  });
-  // The tooltip is viewport-positioned, so a scroll would strand it -- hide it
-  // (any capture-phase scroll, since panes/textarea can scroll). Escape too.
-  window.addEventListener("scroll", hideHelpTooltip, true);
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") hideHelpTooltip();
-  });
 }
 
 // --- Debug: equivalent CLI command ------------------------------------------
@@ -745,6 +666,19 @@ export function serializeGoalEntries(entries) {
     .filter((e) => e.item.trim() && e.amount.trim())
     .map((e) => `${e.item.trim()}:${e.amount.trim()}`)
     .join(",");
+}
+
+// The mastery-costs page links each row here as "/?mastery=Item:TIER" (see
+// masteries.js's masteryHref): read that goal off a query string, or null when
+// the page was opened normally. Reuses parseGoalSpec's grammar so a
+// colon-bearing item name ("Time: A Gift") still splits on the right colon, and
+// keeps the tier token (M/GM/MM) as free text the way every other amount is --
+// parsing.parse_amount turns it into the absolute threshold server-side.
+export function parseSeededGoal(search) {
+  const raw = new URLSearchParams(search || "").get("mastery");
+  if (!raw) return null;
+  const [goal] = parseGoalSpec(raw);
+  return goal && goal.item && goal.amount ? goal : null;
 }
 
 // --- Goal lists: DOM (row render/read/wire) ---------------------------------
@@ -1732,9 +1666,31 @@ function init() {
   updateSpreadRangeVisibility();
   initGraphTooltip();
 
-  if (restoreState()) {
+  const restored = restoreState();
+  // Arriving from the mastery-costs table ("/?mastery=Item:TIER"): keep every
+  // restored setting (prices, limits, panels) but replace the goal with that
+  // one mastery. Deliberately no saveState() -- merely following a link must
+  // not overwrite the goal the user had saved; their first edit persists this
+  // one as usual, via onAnyChange.
+  const seeded = applySeededGoal(parseSeededGoal(window.location.search));
+  if (restored || seeded) {
     solve();
   }
+}
+
+// Point the form at a single mastery goal and nothing else, and say so in the
+// header banner. Returns whether anything was seeded, so init() knows to solve
+// even when there was no saved state to restore.
+function applySeededGoal(goal) {
+  if (!goal) return false;
+  $("#target").value = "none";  // just this mastery, no tower goal
+  $("#level").hidden = true;
+  renderGoalRows("mastery-rows", [goal], GOAL_LISTS["mastery-rows"]);
+  renderGoalRows("items-rows", [], GOAL_LISTS["items-rows"]);
+  $("#seeded-goal").textContent = `${goal.item} → ${tierLabel(goal.amount)}`;
+  $("#seeded-banner").hidden = false;
+  updateGoalSummary();
+  return true;
 }
 
 document.addEventListener("DOMContentLoaded", init);

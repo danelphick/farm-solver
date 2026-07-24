@@ -908,3 +908,76 @@ details[open] > summary .summary-detail {
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
 }
+
+/* --- Cross-page navigation + the seeded-goal banner ----------------------- */
+
+/* The link between the two pages, sitting above each page's <h1>. */
+.page-nav {
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.page-nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.page-nav a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Shown on the solver page only when it was opened from a mastery-costs row
+   ("/?mastery=Item:TIER"), naming the goal it was seeded with. */
+.seeded-banner {
+  background: var(--row-selected);
+  border: 1px solid var(--accent);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* --- Mastery-costs page --------------------------------------------------- */
+
+/* Sort + self-source controls, side by side above the table (the page has no
+   preference panes, so these sit loose rather than inside a details.pane). */
+.mastery-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 2rem;
+}
+
+.mastery-controls .field-row {
+  margin: 0;
+}
+
+/* Right-aligned numeric columns (Time, Cost) -- the mastery-costs table is
+   built in JS, so it tags its own cells rather than relying on the markdown
+   tables' column alignment. */
+.report-section th.num,
+.report-section td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+#mastery-costs-section table tbody tr.clickable {
+  cursor: pointer;
+}
+
+#mastery-costs-section table tbody tr.clickable:hover {
+  background: var(--panel);
+}
+
+#unmasterable-list,
+#limited-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+
+#unmasterable-list li,
+#limited-list li {
+  margin-bottom: 0.2rem;
+}

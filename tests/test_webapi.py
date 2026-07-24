@@ -397,6 +397,15 @@ def test_args_to_command_emits_no_price_pumpkin_juice_only_when_off():
     assert "price-pumpkin-juice" not in webapi.args_to_command(on)
 
 
+def test_self_sourced_param_maps_onto_the_flag_and_the_command():
+    off = webapi.params_to_args({"target": "tower"})
+    assert off.self_sourced is False
+    assert "--self-sourced" not in webapi.args_to_command(off)
+    on = webapi.params_to_args({"target": "tower", "self_sourced": True})
+    assert on.self_sourced is True
+    assert "--self-sourced" in webapi.args_to_command(on)
+
+
 def test_args_to_command_points_at_captured_files():
     args = webapi.params_to_args({"target": "tower"})
     command = webapi.args_to_command(
@@ -507,6 +516,7 @@ def test_fingerprint_changes_with_every_resolve_field():
         "overrides": {"overrides": ["sawmill.use_hickory_omelette=false"]},
         "price_arnold_palmer": {"price_arnold_palmer": 55},
         "instant_grow_time": {"instant_grow_time": "5s"},
+        "self_sourced": {"self_sourced": True},
     }
     for name, params in variants.items():
         args = webapi.params_to_args(params)
@@ -529,6 +539,60 @@ def test_fingerprint_default_start_date_does_not_depend_on_wall_clock_identity()
     args2 = webapi.params_to_args({})
     assert args1.start_date is None and args2.start_date is None
     assert webapi.fingerprint("m", "i", args1) == webapi.fingerprint("m", "i", args2)
+
+
+# --- mastery_costs_fingerprint -----------------------------------------------
+
+
+def test_mastery_costs_fingerprint_is_namespaced_away_from_solve_keys():
+    # Both artefacts share one cache (web/solverapp/cache.py), so the two key
+    # spaces must not overlap.
+    args = webapi.params_to_args({})
+    key = webapi.mastery_costs_fingerprint("m", "i", args)
+    assert key.startswith("mc:")
+    assert key != webapi.fingerprint("m", "i", args)
+
+
+def test_mastery_costs_fingerprint_ignores_the_goal_and_frontier_fields():
+    # solve_mastery_costs solves its own per-item goals, so changing the solver
+    # page's goal must not throw the cached table away.
+    base = webapi.params_to_args({})
+    changed = webapi.params_to_args({
+        "target": "150", "mastery": "Gold Bar:100", "items": "Steel:100",
+        "plans": 9, "spread": "pj=0:10", "graph": "auto",
+        "use_pumpkin_juice": 5, "max_gold": "500",
+    })
+    assert webapi.mastery_costs_fingerprint(
+        "m", "i", base
+    ) == webapi.mastery_costs_fingerprint("m", "i", changed)
+
+
+def test_mastery_costs_fingerprint_changes_with_every_field_it_depends_on():
+    base_args = webapi.params_to_args({})
+    base = webapi.mastery_costs_fingerprint("m", "i", base_args)
+    variants = {
+        "start_date": {"start_date": "2026-01-01"},
+        "calendar": {"calendar": "average"},
+        "crafting_bonus": {"crafting_bonus": 2.0},
+        "mastery_bonus": {"mastery_bonus": 2.0},
+        "current_stamina": {"current_stamina": 500},
+        "cookie_sets": {"cookie_sets": 3},
+        "override_inventory": {"override_inventory": "Wood:100"},
+        "overrides": {"overrides": ["sawmill.use_hickory_omelette=false"]},
+        "price_arnold_palmer": {"price_arnold_palmer": 55},
+        "self_sourced": {"self_sourced": True},
+    }
+    for name, params in variants.items():
+        args = webapi.params_to_args(params)
+        fp = webapi.mastery_costs_fingerprint("m", "i", args)
+        assert fp != base, f"{name} did not change the mastery-costs fingerprint"
+
+
+def test_mastery_costs_fingerprint_pastes_are_part_of_the_key():
+    args = webapi.params_to_args({})
+    a = webapi.mastery_costs_fingerprint("mastery A", "inventory", args)
+    b = webapi.mastery_costs_fingerprint("mastery B", "inventory", args)
+    assert a != b
 
 
 # --- render: refilter vs. horizon-escalation --------------------------------
@@ -701,3 +765,46 @@ def test_solve_and_render_with_spread_and_graph_renders_the_impact_graph():
         # optimizer.spread_graph_series's own "auto" resolution).
         assert row["axis_value"] == row["pumpkin_juices"]
         assert row["secondary"] == row["net_gold"]
+
+
+# --- end-to-end mastery_costs() ----------------------------------------------
+
+
+def test_mastery_costs_end_to_end_on_synthetic_paste_text():
+    payload = webapi.mastery_costs(
+        _MASTERY_TEXT, _INVENTORY_TEXT, webapi.params_to_args({})
+    )
+    assert payload.rows
+    for row in payload.rows:
+        assert set(row) == {"item", "tier", "time", "time_seconds", "gold"}
+        assert row["tier"] in {"M", "GM", "MM"}
+        assert isinstance(row["time"], str)  # preformatted for display
+        assert isinstance(row["time_seconds"], float)  # and again, for sorting
+        assert row["gold"] >= 0
+    # Rows arrive in the default --sort time order (gold breaking ties), which
+    # is what masteries.js's own sortRows reproduces client-side.
+    keys = [(row["time_seconds"], row["gold"]) for row in payload.rows]
+    assert keys == sorted(keys)
+    # Every unmasterable entry is a formatted chain ending in a parenthesised
+    # reason -- "(unobtainable)" only where unmodelled.csv has nothing better to
+    # say, otherwise the real one ("(Cooking not modelled)", "(seasonal)").
+    assert payload.unmasterable
+    assert all(chain.endswith(")") for chain in payload.unmasterable)
+    assert any("not modelled" in chain for chain in payload.unmasterable)
+
+
+def test_mastery_costs_ignores_the_goal_params_it_is_handed():
+    # The mastery-costs page forwards the solver page's saved params verbatim;
+    # solve_mastery_costs solves its own per-item goals and never reads them, so
+    # the table must come out identical either way (the CLI's --mastery-costs
+    # conflict check has no counterpart on this path).
+    plain = webapi.mastery_costs(
+        _MASTERY_TEXT, _INVENTORY_TEXT, webapi.params_to_args({})
+    )
+    with_goals = webapi.mastery_costs(
+        _MASTERY_TEXT,
+        _INVENTORY_TEXT,
+        webapi.params_to_args({"target": "150", "items": "Board:50000"}),
+    )
+    assert with_goals.rows == plain.rows
+    assert with_goals.unmasterable == plain.unmasterable

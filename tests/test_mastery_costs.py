@@ -1,7 +1,11 @@
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
+import main
+import optimizer
+from farm_solver import GameState
 from main import (
     SELF_SOURCED_TOOLS,
     MasteryCostRow,
@@ -189,3 +193,175 @@ def test_mastery_costs_conflicts_raise_before_solving(extra):
     args = build_parser().parse_args(["--mastery-costs", *extra])
     with pytest.raises(ValueError, match="--mastery-costs conflicts with"):
         run(args)
+
+
+# --- infeasible tiers ("limited") --------------------------------------------
+
+
+def _solve_with_failing_tier(monkeypatch, fail_on_call: int):
+    """Run solve_mastery_costs over a one-item catalogue, failing one tier's LP.
+
+    An item can be perfectly sourceable and still not sourceable *in the
+    quantity* a tier needs -- a finitely bounded supply makes the LP infeasible
+    rather than unobtainable (see optimizer._assert_optimal). Simulated here by
+    making the Nth fastest_endpoint call raise, since it takes the real save's
+    particular config to hit naturally.
+    """
+    args = build_parser().parse_args(["--mastery-costs"])
+    cfg = main.load_config(Path("web_default_config.toml"))
+    main.resolve_crafting_bonus(args, cfg)
+
+    calls: list[dict] = []
+    real = optimizer.fastest_endpoint
+
+    def failing(offers, demand, *rest, **kwargs):
+        calls.append(demand)
+        if len(calls) == fail_on_call:
+            raise ValueError("no plan can satisfy the demand (solver status: Infeasible)")
+        return real(offers, demand, *rest, **kwargs)
+
+    monkeypatch.setattr(optimizer, "fastest_endpoint", failing)
+    monkeypatch.setattr(main, "load_mastery_catalogue", lambda: {"board": "Board"})
+    return main.solve_mastery_costs(args, cfg, GameState()), calls
+
+
+def test_an_infeasible_tier_is_reported_instead_of_aborting_the_sweep(monkeypatch):
+    # Master and Grandmaster solve; Megamaster is infeasible -> the rows already
+    # found survive and the failure becomes a `limited` line, rather than the
+    # ValueError escaping and killing every other item's row too.
+    result, _ = _solve_with_failing_tier(monkeypatch, fail_on_call=3)
+    assert [(r.item, r.tier) for r in result.rows] == [("Board", "M"), ("Board", "GM")]
+    assert result.limited == [
+        "Board cannot reach Megamaster: its sources cannot supply that many"
+    ]
+    assert result.unmasterable == []  # a different failure: this one HAS sources
+
+
+def test_an_infeasible_tier_stops_the_climb(monkeypatch):
+    # Master fails, so Grandmaster and Megamaster -- which need strictly more of
+    # the same item -- are not even attempted.
+    result, calls = _solve_with_failing_tier(monkeypatch, fail_on_call=1)
+    assert result.rows == []
+    assert len(calls) == 1
+    assert result.limited == [
+        "Board cannot reach Master: its sources cannot supply that many"
+    ]
+
+
+def test_print_mastery_costs_renders_the_limited_section(capsys):
+    line = (
+        "Bouquet of Flowers cannot reach Megamaster: "
+        "its sources cannot supply that many"
+    )
+    print_mastery_costs(
+        MasteryCostsResult(
+            rows=[_row("Valve", "GM", 2, 100.0)], unmasterable=[], limited=[line]
+        ),
+        "time",
+    )
+    out = capsys.readouterr().out
+    assert "Tiers that cannot be reached" in out
+    assert "Bouquet of Flowers cannot reach Megamaster" in out
+    assert "cannot be mastered" not in out  # the other list is empty
+
+
+def test_markdown_mastery_costs_renders_the_limited_section():
+    doc = MarkdownDoc()
+    markdown_mastery_costs(
+        doc,
+        MasteryCostsResult(rows=[], unmasterable=[], limited=["Board cannot reach Master"]),
+        "time",
+    )
+    rendered = doc.render()
+    assert "## Tiers that cannot be reached" in rendered
+    assert "Board cannot reach Master" in rendered
+
+
+def test_limited_defaults_to_empty_so_older_callers_still_construct():
+    assert MasteryCostsResult(rows=[], unmasterable=[]).limited == []
+
+
+# --- unmodelled reasons -------------------------------------------------------
+
+
+def _reasons_file(tmp_path, body):
+    path = tmp_path / "unmodelled.csv"
+    path.write_text(body)
+    return path
+
+
+def test_load_unmodelled_reasons_renders_a_feature_as_not_modelled(tmp_path):
+    path = _reasons_file(tmp_path, "item,source\nNeigh,Cooking\n")
+    assert main.load_unmodelled_reasons(path) == {"neigh": "Cooking not modelled"}
+
+
+def test_load_unmodelled_reasons_maps_the_three_special_sources(tmp_path):
+    path = _reasons_file(
+        tmp_path,
+        "item,source\nSnowman,seasonal\nGold Feed,unknown\nLobster,none\n",
+    )
+    assert main.load_unmodelled_reasons(path) == {
+        "snowman": "seasonal",
+        "gold feed": "not modelled",
+        "lobster": "unobtainable",
+    }
+
+
+def test_load_unmodelled_reasons_joins_several_rows_for_one_item(tmp_path):
+    # A seasonal item you also have to cook carries both reasons, in file order.
+    path = _reasons_file(
+        tmp_path, "item,source\nFestive Eggnog,Cooking\nFestive Eggnog,seasonal\n"
+    )
+    assert main.load_unmodelled_reasons(path) == {
+        "festive eggnog": "Cooking not modelled; seasonal"
+    }
+
+
+def test_load_unmodelled_reasons_skips_comments_blanks_and_partial_rows(tmp_path):
+    path = _reasons_file(
+        tmp_path,
+        "# a comment\n\nitem,source\nNeigh,Cooking\n\n# another\nBlank,\n,Cooking\n",
+    )
+    assert main.load_unmodelled_reasons(path) == {"neigh": "Cooking not modelled"}
+
+
+def test_load_unmodelled_reasons_missing_file_is_empty(tmp_path):
+    assert main.load_unmodelled_reasons(tmp_path / "nope.csv") == {}
+
+
+def test_the_shipped_reasons_file_parses_and_covers_the_named_features():
+    reasons = main.load_unmodelled_reasons()
+    assert reasons["neigh"] == "Cooking not modelled"
+    assert reasons["magna core"] == "Wishing Well not modelled"
+    assert reasons["white sugar"] == "Sugar Cane Mill not modelled"
+    assert reasons["stone shell"] == "Mining not modelled"
+    assert reasons["gold feed"] == "not modelled"
+    assert reasons["lobster"] == "unobtainable"
+    assert reasons["yule goat"] == "seasonal"
+
+
+def test_chain_reports_the_reason_instead_of_bare_unobtainable():
+    reasons = {"stone shell": "Mining not modelled"}
+    assert unmasterable_chain(
+        "sturdy pickaxe", RECIPES, {"board"}, DISPLAY, reasons
+    ) == "Sturdy Pickaxe needs Stone Shell (Mining not modelled)"
+
+
+def test_a_reason_ends_the_descent_into_that_items_recipe():
+    # Flarite has a recipe, but the reason IS the explanation -- unpicking a
+    # recipe it does not really need (Magna Core's Wishing Well case) would only
+    # mislead, so the chain stops there.
+    reasons = {"flarite": "Mining not modelled"}
+    assert unmasterable_chain("awl", RECIPES, {"steel wire"}, DISPLAY, reasons) == (
+        "Awl needs Flarite (Mining not modelled)"
+    )
+
+
+def test_an_item_with_no_reason_keeps_the_old_wording():
+    assert unmasterable_chain(
+        "sturdy pickaxe", RECIPES, {"board"}, DISPLAY, {"unrelated": "Cooking not modelled"}
+    ) == "Sturdy Pickaxe needs Stone Shell (unobtainable)"
+    # ... and omitting `reasons` entirely behaves exactly as before.
+    assert unmasterable_chain("sturdy pickaxe", RECIPES, {"board"}, DISPLAY) == (
+        "Sturdy Pickaxe needs Stone Shell (unobtainable)"
+    )

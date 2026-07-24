@@ -257,9 +257,10 @@ def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time")
     """The --mastery-costs table: fastest plan + gold to each remaining tier.
 
     One ``Item | Target | Time | Cost`` row per (item, tier), already sorted by
-    :func:`main.solve_mastery_costs`, followed by the items that cannot be
-    mastered at all with their unobtainable-material chains. Columns are aligned
-    (Item/Target left, Time/Cost right) so the table scans cleanly.
+    :func:`main.solve_mastery_costs`, then the two "cannot" lists it collects:
+    items with no source at all (with their unobtainable-material chains), and
+    items whose sources exist but cannot supply a tier's quantity. Columns are
+    aligned (Item/Target left, Time/Cost right) so the table scans cleanly.
     """
     print(f"\nMastery costs — {_mastery_costs_caption(sort_key)}")
     rows = result.rows
@@ -285,6 +286,10 @@ def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time")
         print("\nItems that cannot be mastered (a material has no source):")
         for chain in result.unmasterable:
             print(f"  {chain}")
+    if result.limited:
+        print("\nTiers that cannot be reached (sourceable, but not that many):")
+        for line in result.limited:
+            print(f"  {line}")
 
 
 def markdown_mastery_costs(
@@ -305,6 +310,10 @@ def markdown_mastery_costs(
         doc.heading("Items that cannot be mastered")
         doc.para("Each needs a material with no source:")
         doc.bullets(result.unmasterable)
+    if result.limited:
+        doc.heading("Tiers that cannot be reached")
+        doc.para("Sourceable, but no plan can supply the quantity that tier needs:")
+        doc.bullets(result.limited)
 
 
 def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:

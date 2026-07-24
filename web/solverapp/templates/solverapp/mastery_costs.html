@@ -1,0 +1,92 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mastery costs &middot; Farm Solver</title>
+<link rel="stylesheet" href="{% static 'solverapp/style.css' %}">
+</head>
+<body>
+<header>
+  <div class="page-nav"><a href="/">&larr; Solver</a></div>
+  <h1>Mastery costs</h1>
+  <p class="tagline">
+    What it takes to finish each mastery you have left: the fastest plan to
+    reach Master (10,000), Grandmaster (100,000) and Megamaster (1,000,000)
+    from your current progress, and what that plan spends in gold. Each row is
+    cumulative &mdash; a Grandmaster row includes the work Master needed.
+    Everything is read from the masteries, inventory and settings saved on the
+    <a href="/">solver page</a>; times assume the steady-state (yearly-average)
+    calendar. <strong>Click a row</strong> for that mastery's full plan.
+  </p>
+</header>
+
+<main>
+  <div id="mastery-controls" class="mastery-controls" hidden>
+    <div class="field-row">
+      <label for="sort-key">Sort by</label>
+      <select id="sort-key" class="narrow">
+        <option value="time">Time</option>
+        <option value="gold">Cost</option>
+      </select>
+      <button type="button" class="help-icon" aria-label="Help"
+        data-help="Which column ranks the table; the other breaks ties. Sorting is instant — it reorders the rows already loaded.">?</button>
+    </div>
+    <div class="field-row">
+      <label for="self-sourced">
+        <input id="self-sourced" type="checkbox"> Self-source tools
+      </label>
+      <button type="button" class="help-icon" aria-label="Help"
+        data-help="Never buy Arnold Palmers, Large Nets or Apple Cider — make them instead. Costs drop to what you really spend, but plans usually take longer.">?</button>
+    </div>
+  </div>
+
+  <p id="empty-state" class="pane-hint" hidden>
+    Nothing pasted yet. Paste your masteries and inventory on the
+    <a href="/">solver page</a> first &mdash; this page reads the same saved
+    state.
+  </p>
+
+  <div id="mastery-costs-section" class="report-section" hidden>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Target</th>
+          <th class="num">Time</th>
+          <th class="num">Cost</th>
+        </tr>
+      </thead>
+      <tbody id="mastery-costs-body"></tbody>
+    </table>
+  </div>
+
+  <details id="unmasterable-details" class="pane" hidden>
+    <summary>Cannot be mastered<span id="unmasterable-summary" class="summary-detail"></span></summary>
+    <p class="pane-hint">
+      Each of these needs something the solver cannot source, so no plan can
+      reach any tier. Most are not really unobtainable &mdash; they come from
+      something it does not model (cooking, the Wishing Well, mining) or are
+      only available at certain times of year, and the reason says which.
+    </p>
+    <ul id="unmasterable-list"></ul>
+  </details>
+
+  <details id="limited-details" class="pane" hidden>
+    <summary>Tiers that cannot be reached<span id="limited-summary" class="summary-detail"></span></summary>
+    <p class="pane-hint">
+      These items can be sourced, just not in the quantity the tier needs &mdash;
+      a finitely bounded supply (a limited-seed crop, or a material you have
+      unticked in Material trading) that no plan can stretch that far.
+    </p>
+    <ul id="limited-list"></ul>
+  </details>
+</main>
+
+<div id="bottom-bar">
+  <div id="status" class="status" role="status" aria-live="polite">Loading&hellip;</div>
+</div>
+
+<script type="module" src="{% static 'solverapp/masteries.js' %}"></script>
+</body>
+</html>

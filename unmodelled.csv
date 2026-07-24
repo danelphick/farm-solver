@@ -1,0 +1,129 @@
+# Why an item the solver calls unobtainable actually cannot be sourced.
+#
+# The solver models farming, fishing, exploring, the workshop, openables, pets
+# and trading. Plenty of items are perfectly obtainable in game by some *other*
+# route it does not model at all -- cooking, the Wishing Well, mining -- and a
+# bare "(unobtainable)" in the --mastery-costs report is misleading for those.
+# This file names the real reason instead, so the report can say "Cooking not
+# modelled" rather than implying the item can never be had.
+#
+# Columns: item,source. One row per reason; an item may have several (a seasonal
+# item you also have to cook), joined in file order. `source` is the game feature
+# that supplies it, rendered as "<source> not modelled", except for three special
+# values (see main._UNMODELLED_REASON_TEXT):
+#     seasonal   -> "seasonal"        only obtainable at certain times of year
+#     unknown    -> "not modelled"    route known, but not the numbers for it
+#     none       -> "unobtainable"    genuinely unobtainable, no route at all
+#
+# An item absent from this file keeps the plain "(unobtainable)" wording. Naming
+# an item here also stops the report descending into its recipe: the reason
+# replaces the dependency chain, which is the point for something like Magna
+# Core (craftable on paper, but really a Wishing Well drop).
+#
+# CHECK THE CALENDAR MODE BEFORE ADDING A ROW. These reasons are fixed text, but
+# what the solver can source is not: `--ignore-calendar` (the web page's default)
+# strips every seasonal source, so anything a seasonal pet supplies reads as
+# unobtainable under it and is perfectly sourceable under --average/--model.
+# Barnacle Shell, Sea Urchin and Ghost Jelly are the live example -- all three
+# come from the Shark (a June-July pet, see pets.py's SEASONAL_MONTHS), are in
+# pets.csv, and are deliberately NOT listed here: a row would lie in every
+# calendar mode but one.
+item,source
+Acorn Pie,Cooking
+Bone Broth,Cooking
+Breakfast Boost,Cooking
+Cabbage Stew,Cooking
+Cat's Meow,Cooking
+Concord Grape Pie,Cooking
+Crunchy Omelette,Cooking
+Festive Eggnog,Cooking
+Hickory Omelette,Cooking
+Mushroom Stew,Cooking
+Neigh,Cooking
+Onion Soup,Cooking
+Over The Moon,Cooking
+Quandary Chowder,Cooking
+Red Berry Pie,Cooking
+Red Velvet Cake,Cooking
+Sea Pincher Special,Cooking
+Shrimp-a-Plenty,Cooking
+Magna Core,Wishing Well
+Brown Sugar,Sugar Cane Mill
+Molasses,Sugar Cane Mill
+Unrefined Sugar,Sugar Cane Mill
+White Sugar,Sugar Cane Mill
+Fairy Crystal,Mining
+Lapis Lazuli,Mining
+Stone Shell,Mining
+Unpolished Flarite,Mining
+Gold Boot,Manual fishing
+Gold Slimeback,Manual fishing
+Gold Feed,unknown
+Lobster,none
+11th Leaf Centerpiece,seasonal
+Ant Apple,seasonal
+Apple Ant,seasonal
+Blue Milk,seasonal
+Candy Corn,seasonal
+Christmas Tree,seasonal
+Cicada,seasonal
+Cicada Shell,seasonal
+Festive Eggnog,seasonal
+Frozen Angelfish,seasonal
+Frozen Biter,seasonal
+Frozen Book,seasonal
+Frozen Cabbage,seasonal
+Frozen Coin,seasonal
+Frozen Dagger,seasonal
+Frozen Feather,seasonal
+Frozen Hops,seasonal
+Frozen Jelly,seasonal
+Frozen Lobster,seasonal
+Frozen Manta Ray,seasonal
+Frozen Shell,seasonal
+Frozen Skull,seasonal
+Frozen Spyfish,seasonal
+Frozen Starfish,seasonal
+Frozen Wheel,seasonal
+Fuzzy Trout,seasonal
+Glass Eyes,seasonal
+Green Top Hat,seasonal
+Heart Necklace,seasonal
+Holiday Wreath,seasonal
+Inferno Pepper,seasonal
+Jack-o-lantern,seasonal
+King Apple,seasonal
+Lucky Corn,seasonal
+Lucky Potato,seasonal
+Lucky Trout,seasonal
+Milk Carton,seasonal
+Pink Jelly,seasonal
+Piñata Whop Stick,seasonal
+Pumpkin Spiced Milk,seasonal
+QED Cell,seasonal
+Red Diamond Fish,seasonal
+Red Velvet Cake,seasonal
+Shamrock Milk,seasonal
+Snow Globe,seasonal
+Snowman,seasonal
+Spooky Scarecrow,seasonal
+Toilet Paper,seasonal
+Twilight Squid,seasonal
+Ugly Buddy Sweater,seasonal
+Unicorn Shell,seasonal
+Valentines Card,seasonal
+Witch's Brew,seasonal
+Witch's Broom,seasonal
+Yellow Watermelon,seasonal
+Yule Goat,seasonal
+Frozen Bones,seasonal
+Frozen Boot,seasonal
+Frozen Catfish,seasonal
+Frozen Corn,seasonal
+Frozen Crab Claw,seasonal
+Frozen Peas,seasonal
+Frozen Pine,seasonal
+Frozen Radish,seasonal
+Frozen Sheepshead,seasonal
+Frozen Squid,seasonal
+Frozen Tomato,seasonal

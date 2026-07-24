@@ -268,13 +268,41 @@ Mastery costs (Fastest plan to reach each remaining tier ... sorted by gold (the
 
 Many items master **instantly** (`0m`) when the fastest plan can just buy the Arnold Palmers and Large Nets a channel burns and explore/fish the item on the spot — there the whole cost is the gold. A non-zero time appears only where the item is gated on farming or passive production that no purchase can shorten (a slow crop, or a material only a building makes), which is exactly what you would have to wait out.
 
-Anything the solver **cannot** master — because the item, or a material it needs, has no source at all (not produced, fished, explored, farmed, fetched by a pet, nor buyable/tradeable) — is listed at the end with the dependency chain that explains why. When item A needs B which needs an unobtainable C, the whole chain is shown:
+Anything the solver **cannot** master — because the item, or a material it needs, has no source it models (not produced, fished, explored, farmed, fetched by a pet, nor buyable/tradeable) — is listed at the end with an explanation. When item A needs B which needs an unsourceable C, the whole chain is shown:
 
 ```text
 Items that cannot be mastered (a material has no source):
-  Crystal Pickaxe needs Lapis Lazuli (unobtainable)
-  Steel Pickaxe needs Flarite (which needs Unpolished Flarite (unobtainable))
-  Cicada (unobtainable)
+  Cicada (seasonal)
+  Compass needs Magna Core (Wishing Well not modelled)
+  Crystal Pickaxe needs Fairy Crystal (Mining not modelled), Lapis Lazuli (Mining not modelled)
+  Festive Eggnog (Cooking not modelled; seasonal)
+  Neigh (Cooking not modelled)
+  Steel Pickaxe needs Flarite (which needs Unpolished Flarite (Mining not modelled))
+```
+
+Most of these are not really unobtainable at all — they just come from something the solver does not model (cooking, the Wishing Well, mining, the Sugar Cane Mill) or are only available at certain times of year, and saying so is far more useful than a blanket "unobtainable". Those reasons live in [`unmodelled.csv`](unmodelled.csv), one `item,source` row per reason:
+
+```csv
+item,source
+Neigh,Cooking             # -> "Cooking not modelled"
+Magna Core,Wishing Well   # -> "Wishing Well not modelled"
+Yule Goat,seasonal        # -> "seasonal"
+Gold Feed,unknown         # -> "not modelled" (route known, numbers not)
+Lobster,none              # -> "unobtainable" (genuinely)
+```
+
+An item may have several rows (a seasonal item you also have to cook reads `seasonal; Cooking not modelled`). Naming an item there also stops the chain descending into its recipe — the reason *is* the explanation, and Magna Core's paper recipe is a red herring. Anything not listed keeps the plain `(unobtainable)`, so the file is purely additive: append a row when a new one turns up.
+
+A second, different failure gets its own list: an item whose sources exist but
+cannot supply the **quantity** a tier needs — a finitely bounded supply, like a
+crop limited by the seeds you hold, or a material you have excluded from
+[Arnold-Palmer trading](#trading-resources-for-arnold-palmers). Lower tiers of
+that item still appear in the table above; only the tier it cannot stretch to
+(and anything above it) is listed here:
+
+```text
+Tiers that cannot be reached (sourceable, but not that many):
+  Bouquet of Flowers cannot reach Megamaster: its sources cannot supply that many
 ```
 
 ```shell
@@ -625,6 +653,34 @@ range shown greyed as a guide). Untick the ones you wouldn't realistically
 trade; **Enable all** / **Disable all** / **Restore defaults** reset the list
 (Restore returns it to the server config's own allow/deny). Anything without its
 own control is still reachable via the Advanced panel's raw `--override` box.
+
+### Mastery costs page
+
+The **Mastery costs** link in the header opens `/masteries`, the browser face
+of [`--mastery-costs`](#mastery-costs): every mastery you have left, ranked by
+how long the fastest plan to finish it takes and what that plan spends. It
+reads the same pasted state and settings the solver page saved, so there is
+nothing to fill in — paste on the solver page first, then switch over.
+
+- **Sort by** Time or Cost (the other breaks ties). Sorting is instant: it
+  reorders the rows already loaded rather than re-solving.
+- **Self-source tools** is `--self-sourced`: never buy Arnold Palmers, Large
+  Nets or Apple Cider, make them instead. Costs drop to what you would really
+  spend; plans usually get longer.
+- **Cannot be mastered**, collapsed at the bottom, lists the items no plan can
+  reach, each with the reason — e.g. `Compass needs Magna Core (Wishing Well not
+  modelled)`, `Neigh (Cooking not modelled)`, `Yule Goat (seasonal)`. See
+  [`unmodelled.csv`](unmodelled.csv) above. **Tiers that cannot be reached** is
+  the second collapsed list: items that *can* be sourced, just not in the
+  quantity that tier needs.
+- **Clicking a row** opens the solver page for that one mastery, seeded exactly
+  as `-m <Item>:<tier>` would (no tower goal, every other setting kept), so you
+  get the full frontier and plan breakdown for it. The browser's Back button
+  returns to the list.
+
+Times use the steady-state (yearly-average) calendar, and each row is
+cumulative from where you are now — a Grandmaster row includes the work Master
+needed.
 
 ### Running it locally
 

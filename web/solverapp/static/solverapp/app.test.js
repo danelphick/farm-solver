@@ -3,6 +3,7 @@ import {
   computeApTradingParam,
   computeDefaultAllowed,
   parseGoalSpec,
+  parseSeededGoal,
   serializeGoalEntries,
 } from "./app.js";
 
@@ -65,6 +66,30 @@ describe("serializeGoalEntries", () => {
 
   test("empty entries list serializes to an empty string", () => {
     expect(serializeGoalEntries([])).toBe("");
+  });
+});
+
+describe("parseSeededGoal", () => {
+  // The mastery-costs page links each row here (masteries.js's masteryHref).
+  test("reads the goal a mastery-costs row links with", () => {
+    expect(parseSeededGoal("?mastery=Compass%3AGM")).toEqual({
+      item: "Compass",
+      amount: "GM",
+    });
+  });
+
+  test("splits on the last ':' so a colon-bearing item name survives", () => {
+    expect(parseSeededGoal("?mastery=Time%3A%20A%20Gift%3AM")).toEqual({
+      item: "Time: A Gift",
+      amount: "M",
+    });
+  });
+
+  test("ignores other query strings, and an incomplete goal", () => {
+    expect(parseSeededGoal("")).toBeNull();
+    expect(parseSeededGoal("?plan=3")).toBeNull();
+    expect(parseSeededGoal("?mastery=Compass")).toBeNull(); // no amount
+    expect(parseSeededGoal("?mastery=")).toBeNull();
   });
 });
 

@@ -1,4 +1,4 @@
-"""HTTP views: the index page and the JSON solve API.
+"""HTTP views: the two pages and their JSON solve APIs.
 
 All solving logic lives in :mod:`webapi` (framework-free, plain-pytest
 tested); this module is purely the HTTP <-> webapi bridge -- decoding the
@@ -8,6 +8,7 @@ markdown section to HTML, and shaping the JSON response.
 
 from __future__ import annotations
 
+import argparse
 import json
 import time
 
@@ -27,6 +28,13 @@ from .cache import CACHE, SOLVE_SEMAPHORE, key_lock
 # hanging a request indefinitely if something is stuck.
 _SEMAPHORE_TIMEOUT_SECONDS = 20
 
+# The mastery-costs sweep gets its own, longer budget: it is one LP solve per
+# remaining (item, tier) pair -- ~1s on a well-progressed save but ~5s locally
+# on an empty one (every catalogue item x 3 tiers), and slower again on the
+# deploy box. Queueing behind one of those would blow the 20s budget above and
+# 503 a request that was only ever going to be a little slow.
+_MASTERY_SEMAPHORE_TIMEOUT_SECONDS = 60
+
 
 def index(request: HttpRequest) -> HttpResponse:
     # Bundled config.toml values, so the preference panels can show each as a
@@ -38,6 +46,16 @@ def index(request: HttpRequest) -> HttpResponse:
         "solverapp/index.html",
         {"config_defaults": webapi.config_defaults(), "debug": settings.DEBUG},
     )
+
+
+def masteries(request: HttpRequest) -> HttpResponse:
+    """The mastery-costs page (`--mastery-costs` in the browser).
+
+    No context: unlike :func:`index` this page has no preference panels, so it
+    needs no ``config_defaults``. Its client reads the pasted state and every
+    parameter from the same ``localStorage`` the solver page writes.
+    """
+    return render(request, "solverapp/mastery_costs.html")
 
 
 def _section_html(text: str) -> str:
@@ -62,9 +80,16 @@ def _debug_command(args, mastery_text: str, inventory_text: str) -> str | None:
     )
 
 
-@csrf_exempt  # a JSON POST API with no session/cookie auth -- nothing to forge
-@require_POST
-def api_solve(request: HttpRequest) -> JsonResponse:
+def _decode_request(
+    request: HttpRequest,
+) -> tuple[str, str, argparse.Namespace] | JsonResponse:
+    """``(mastery_text, inventory_text, args)``, or the 400 to return instead.
+
+    Shared by both JSON endpoints: every solve request has the same
+    ``{mastery_text, inventory_text, params}`` body, and every way it can be
+    malformed is the client's fault (400) rather than an unparseable *paste*,
+    which only surfaces later, inside :mod:`webapi` (422).
+    """
     try:
         payload = json.loads(request.body)
     except json.JSONDecodeError:
@@ -73,8 +98,6 @@ def api_solve(request: HttpRequest) -> JsonResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"error": "request body must be a JSON object"}, status=400)
 
-    mastery_text = payload.get("mastery_text", "")
-    inventory_text = payload.get("inventory_text", "")
     params = payload.get("params", {})
     if not isinstance(params, dict):
         return JsonResponse({"error": "params must be a JSON object"}, status=400)
@@ -84,11 +107,27 @@ def api_solve(request: HttpRequest) -> JsonResponse:
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
 
+    return payload.get("mastery_text", ""), payload.get("inventory_text", ""), args
+
+
+@csrf_exempt  # a JSON POST API with no session/cookie auth -- nothing to forge
+@require_POST
+def api_solve(request: HttpRequest) -> JsonResponse:
+    decoded = _decode_request(request)
+    if isinstance(decoded, JsonResponse):
+        return decoded
+    mastery_text, inventory_text, args = decoded
+
     key = webapi.fingerprint(mastery_text, inventory_text, args)
     started = time.monotonic()
 
     with key_lock(key):
         session = CACHE.get(key)
+        # The cache also holds mastery-costs payloads, under their own "mc:"
+        # key prefix -- a fingerprint collision across the two is impossible,
+        # but narrow the type rather than assume it.
+        if not isinstance(session, webapi.SolveSession):
+            session = None
         cached = session is not None
         if not SOLVE_SEMAPHORE.acquire(timeout=_SEMAPHORE_TIMEOUT_SECONDS):
             return JsonResponse({"error": "solver busy, try again"}, status=503)
@@ -153,4 +192,55 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         # The pasted mastery/inventory are dumped to a local temp directory so
         # the command reproduces the exact solve (see webapi.capture_debug_state).
         "debug_command": _debug_command(args, mastery_text, inventory_text),
+    })
+
+
+@csrf_exempt  # same reasoning as api_solve: a JSON POST API with no auth
+@require_POST
+def api_mastery_costs(request: HttpRequest) -> JsonResponse:
+    """The mastery-costs table for one pasted state (`--mastery-costs`).
+
+    Same flow as :func:`api_solve` -- decode, key, dogpile lock, cache, solve
+    under the shared semaphore -- but with its own narrower cache key
+    (``webapi.mastery_costs_fingerprint``: the goal fields don't reach this
+    solve, so changing a goal on the solver page must not evict this table) and
+    its own longer semaphore budget. There is no refilter step: the rows are
+    returned structured and the client sorts them itself. The response carries
+    both "cannot" lists the sweep collects -- ``unmasterable`` (no source at
+    all) and ``limited`` (sourceable, but not in a tier's quantity).
+    """
+    decoded = _decode_request(request)
+    if isinstance(decoded, JsonResponse):
+        return decoded
+    mastery_text, inventory_text, args = decoded
+
+    key = webapi.mastery_costs_fingerprint(mastery_text, inventory_text, args)
+    started = time.monotonic()
+
+    with key_lock(key):
+        payload = CACHE.get(key)
+        if not isinstance(payload, webapi.MasteryCostsPayload):
+            payload = None
+        cached = payload is not None
+        if payload is None:
+            if not SOLVE_SEMAPHORE.acquire(
+                timeout=_MASTERY_SEMAPHORE_TIMEOUT_SECONDS
+            ):
+                return JsonResponse({"error": "solver busy, try again"}, status=503)
+            try:
+                payload = webapi.mastery_costs(mastery_text, inventory_text, args)
+            except ValueError as exc:
+                # As in api_solve: params were validated above, so the only
+                # ValueError left is an unparseable mastery/inventory paste.
+                return JsonResponse({"error": str(exc)}, status=422)
+            finally:
+                SOLVE_SEMAPHORE.release()
+            CACHE.put(key, payload)
+
+    return JsonResponse({
+        "cached": cached,
+        "solved_ms": round((time.monotonic() - started) * 1000),
+        "rows": payload.rows,
+        "unmasterable": payload.unmasterable,
+        "limited": payload.limited,
     })
