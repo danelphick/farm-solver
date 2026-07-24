@@ -33,6 +33,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--model-calendar | --average-calendar | --ignore-calendar] \
     [--solver highs|cbc|NAME] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
+    [--mastery-costs [--sort time|gold]] [--self-sourced] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
     [--empty-mastery] [--empty-inventory] [--override-inventory item:amount] \
     [--format text|markdown] [--pager]
@@ -249,6 +250,48 @@ Pass `--unobtainable` to list every workshop material that currently has no know
 ```shell
 python main.py --unobtainable
 ```
+
+## Mastery costs
+
+Pass `--mastery-costs` to see, for **every** item you have not finished mastering, how much effort each remaining tier still takes. For each masterable item and each tier it has not yet reached — **Master** (10,000 mastery), **Grandmaster** (100,000) and **Megamaster** (1,000,000) — the solver finds the single *fastest* plan to get there from your current progress and reports that plan's makespan and the **gold it spends buying** (the consumables it purchases at the [trading](#trading-gold-prices) exchange rates; a tier it self-sources entirely — a farmed crop, say — costs no gold). Each tier is measured cumulatively from where the item stands now, so a Grandmaster row already includes the work Master needed. It reads your mastery and inventory files like a normal run (the catalogue supplies every masterable item, so items you have never touched appear at progress 0), but solves its own per-item goals instead of the tower/`-m`/`-i` demand, and so conflicts with `--ascend`, `--unobtainable`, `--target`, `-m` and `-i`.
+
+The rows are ranked by `--sort time` (the default) or `--sort gold`, each falling back to the other as a tie-breaker:
+
+```text
+Mastery costs (Fastest plan to reach each remaining tier ... sorted by gold (then time).)
+  Item                Target   Time         Cost
+  Ship in a Bottle    M          5d          10 g
+  Valve               GM         2d         100 g
+  Ship in a Bottle    GM        50d         105 g
+  ...
+```
+
+Many items master **instantly** (`0m`) when the fastest plan can just buy the Arnold Palmers and Large Nets a channel burns and explore/fish the item on the spot — there the whole cost is the gold. A non-zero time appears only where the item is gated on farming or passive production that no purchase can shorten (a slow crop, or a material only a building makes), which is exactly what you would have to wait out.
+
+Anything the solver **cannot** master — because the item, or a material it needs, has no source at all (not produced, fished, explored, farmed, fetched by a pet, nor buyable/tradeable) — is listed at the end with the dependency chain that explains why. When item A needs B which needs an unobtainable C, the whole chain is shown:
+
+```text
+Items that cannot be mastered (a material has no source):
+  Crystal Pickaxe needs Lapis Lazuli (unobtainable)
+  Steel Pickaxe needs Flarite (which needs Unpolished Flarite (unobtainable))
+  Cicada (unobtainable)
+```
+
+```shell
+python main.py --mastery-costs                 # fastest-first
+python main.py --mastery-costs --sort gold      # cheapest-first
+python main.py --mastery-costs --self-sourced   # never buy AP/LN/AC (see below)
+```
+
+### Self-sourcing the tools (`--self-sourced`)
+
+By default the fastest plan buys the Arnold Palmers, Large Nets and Apple Cider a channel burns whenever that finishes sooner. Pass `--self-sourced` to forbid buying those three **tools** — the solver must craft or gather them from your own economy instead, which usually costs time (so the makespan grows) and drops the gold you spend on them to zero. Everything else stays buyable (Orange Juice, cookie sets, and [Arnold-Palmer trades](#trading-resources-for-arnold-palmers) for raw materials), so a plan can still lean on those; where a tier is capped by farming anyway, forbidding the direct tool buy can even push the spend onto a pricier substitute (buying Orange Juice to self-make cider, say), so the flag is "don't buy these tools", not "minimise gold". It applies to the normal frontier too, not just `--mastery-costs`:
+
+```shell
+python main.py -m "Butter:1000000" --self-sourced   # climb without buying AP/LN/AC
+```
+
+Buying an item never earns its own mastery, so a tier's cost is always the cost of *producing* the item (gathering it, or crafting it from materials that may themselves be bought or traded) — the same rule the sourcing plans follow. The report models the yearly-average calendar (seasonal pets and the Mechanical Heart grants smeared to their steady share), so a single run covers every item quickly regardless of the date.
 
 ## Openables
 

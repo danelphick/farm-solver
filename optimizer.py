@@ -502,6 +502,7 @@ def _build_base(
     *,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    no_buy: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
     price_pumpkin_juice: bool = True,
 ) -> _Base:
@@ -663,11 +664,16 @@ def _build_base(
     # Buy variables: a buyable consumable can be bought (free, instant supply) for
     # gold instead of self-sourced (which costs makespan). Only reachable, priced
     # ones get a variable (a *present* price, even 0 -- free); cookie sets are
-    # bought by lifting their cap below.
+    # bought by lifting their cap below. An item in ``no_buy`` (the ``--self-sourced``
+    # tools -- Arnold Palmer / Large Net / Apple Cider) gets no buy variable, so its
+    # balance must be met by self-sourcing it; it stays in ``buyable`` above (still
+    # obtainable, and channels grounded in it still usable) -- only the purchase is
+    # withheld. Its price stays in ``prices``, valuing it in ``spend_value`` as
+    # before, but ``gold`` (below) never charges it since there is no buy var.
     buy = {
         item: pulp.LpVariable(f"b{i}", lowBound=0)
         for i, item in enumerate(sorted(items & purchasable))
-        if item in prices
+        if item in prices and item not in no_buy
     }
     price_cookie = prices.get("cookie set", 0.0)
     buy_cookie = (
@@ -1747,6 +1753,7 @@ def minimize(
     quantize: Callable[[str, float], timedelta | None] | None = None,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    no_buy: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
     price_pumpkin_juice: bool = True,
 ) -> SourcingPlan:
@@ -1822,7 +1829,7 @@ def minimize(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-        ascension=ascension, price_pumpkin_juice=price_pumpkin_juice,
+        no_buy=no_buy, ascension=ascension, price_pumpkin_juice=price_pumpkin_juice,
     )
     plan = _solve_configured(
         base, gold_weight=gold_weight, time_cap=time_cap, favour_passive=favour_passive,
@@ -2108,6 +2115,7 @@ def fastest_endpoint(
     quantize: Callable[[str, float], timedelta | None] | None = None,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    no_buy: frozenset[str] = frozenset(),
     price_pumpkin_juice: bool = True,
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
@@ -2135,7 +2143,7 @@ def fastest_endpoint(
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
         cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         quantize=quantize, ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-        price_pumpkin_juice=price_pumpkin_juice,
+        no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
     )
 
 
@@ -2832,6 +2840,7 @@ def frontier(
     quantize: Callable[[str, float], timedelta | None] | None = None,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
+    no_buy: frozenset[str] = frozenset(),
     spread: SpreadSpec | None = None,
     price_pumpkin_juice: bool = True,
 ) -> list[SourcingPlan]:
@@ -2885,7 +2894,7 @@ def frontier(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-        price_pumpkin_juice=price_pumpkin_juice,
+        no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
     )
     fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, pj_integer=False)
     cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, pj_integer=False)
@@ -2939,7 +2948,7 @@ def frontier(
                 probe_offers, demand, recipes, crafting_bonus, openables, inventory,
                 cookie_sets, prices, pj_gain, pj_price, pj_limit,
                 ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-                price_pumpkin_juice=price_pumpkin_juice,
+                no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
             )
             try:
                 probe = _solve_configured(
@@ -2987,7 +2996,7 @@ def frontier(
             offers, demand, recipes, crafting_bonus, openables, inventory,
             cookie_sets, prices, pj_gain, pj_price, pj_limit,
             ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-            price_pumpkin_juice=price_pumpkin_juice,
+            no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
         )
         probe = _solve_configured(base_passive, favour_passive=True, pj_integer=False)
         nonpet = _passive_completion_caps(

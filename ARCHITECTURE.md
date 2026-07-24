@@ -128,13 +128,54 @@ and breaks on its own convergence check. Any limit or explicit `--plan` can sele
 a different plan than the fastest, so that case falls back to iterating the full
 frontier as before.
 
+## Mastery-costs mode (`--mastery-costs`)
+
+A standalone report dispatched from its own `run` branch (like `--unobtainable`,
+but it *does* read the mastery/inventory state): for every remaining masterable
+item, the fastest plan to reach each unfinished tier and that plan's gold. Driven
+by `main.solve_mastery_costs` → `MasteryCostsResult`; conflicts with
+`--ascend`/`--unobtainable`/`--target`/`-m`/`-i` (checked before any file load or
+solve). `--sort time|gold` picks the primary rank axis, the other the tie-breaker
+(`_sorted_mastery_rows`). Report: `report.print_mastery_costs`/`markdown_*` via
+`Reporter.mastery_costs`.
+
+Mechanics: `_build_channel_setup` builds the goal-independent channels once, and
+production is **steady-state** (`config.passive_production` with no `start`/
+`horizon` — the yearly-average calendar), so each item is a single
+`optimizer.fastest_endpoint` solve rather than a per-item seasonal fixed point.
+The candidate universe is `ascension.candidates(state, catalogue)` (the same
+`mastery_items.txt` catalogue the ascension mode uses, so progress-0 items are
+included and fully-mega'd ones drop out). For each candidate: `sourceable_items`
+(an obtainability oracle over `optimizer._obtainable`) plus a one-layer
+producible-direct check decides **masterability** — the item's own mastery must be
+*produced* (gathered/opened, or crafted from sourceable materials), never merely
+bought/held, mirroring the LP's `buy ≤ derived` floor. `sourceable_items` seeds
+`_obtainable` with **exactly** what `_build_base` does (priced `BUYABLE |
+ap_tradeable`, and held items an *offer consumes*), so masterability agrees with a
+real `-m Item:tier` solve's remainder. The held seed is the load-bearing subtlety:
+it is **not** all of inventory — a material merely *held* is a finite hoard, not a
+renewable source, so an item craftable only from held-but-unproduced materials
+(e.g. Compass ← Magna Core ← Seeing Stone) is correctly unmasterable, not a free
+row. A non-masterable item is explained by `unmasterable_chain` (a recursive walk
+over `crafting.recipe_flows`, descending only materials **not** in the sourceable
+set, with a cycle guard) as e.g. `A needs B (which needs C (unobtainable))`. A
+masterable item gets one row per tier not yet reached (`_MASTERY_TIERS`), demand
+`(threshold − progress) / mastery_bonus` (cumulative from current progress, so a
+GM row includes the M work), `non_mastery_goals` empty so the buy-floor forces
+production; time is `plan.time`, cost is `plan.gold` (the gold the plan actually
+*spends buying*, not `plan_gold`'s market value of everything spent — so a
+self-sourced/farmed tier reads 0 g, and `--self-sourced` shows the real drop).
+`--self-sourced` (`main.self_sourced_tools` → `optimizer` `no_buy`) forbids buying
+Arnold Palmer / Large Net / Apple Cider here too. Fast in practice (~1s on a real
+save) because each per-item reachable subtree is small.
+
 ## Module map
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas` |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS` |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait` |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade), `_mastery_costs_caption` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -248,6 +289,14 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
     consumable is crafted/gathered. `_obtainable` seeds the `buyable` set (a buyable
     is always obtainable), so a channel grounded in one is usable even where nothing
     crafts it; `_reachable` walks from a wanted drop into the consumables it burns.
+    A **`no_buy`** frozenset (`_build_base`/`minimize`/`frontier`/`fastest_endpoint`,
+    default empty → byte-identical) drops the `buy` var for its items so they must be
+    self-sourced — the `--self-sourced` flag (`main.self_sourced_tools` = AP/LN/cider).
+    They stay in `buyable` (still obtainable, channels grounded in them still usable)
+    and in `prices` (still valued in `spend_value`); only the purchase is withheld, so
+    `gold` never charges them. A time-capped plan may then substitute a *pricier*
+    allowed buy (Orange Juice to self-make cider), so `no_buy` forbids three buys, it
+    does not minimise gold.
   - **Arnold-Palmer trading** (`ap_tradeable`/`non_mastery_goals` params on
     `_build_base`/`minimize`/`frontier`/`fastest_endpoint`, both defaulting empty →
     every existing path byte-identical): resources tradeable for AP (from

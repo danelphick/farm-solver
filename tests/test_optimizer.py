@@ -151,6 +151,27 @@ def test_minimize_buys_when_gold_is_cheap():
     assert [d.offer.name for d in plan.draws] == ["fish It"]
 
 
+def test_minimize_no_buy_withholds_the_purchase():
+    # Cheap gold would buy 100 nets and fish instantly (as above), but no_buy on
+    # "large net" forbids the purchase, so the plan self-sources by growing instead
+    # -- 100 minutes, no gold, no nets bought.
+    plan = minimize([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD,
+                    gold_weight=BUY_FREELY, no_buy=frozenset({"large net"}))
+    assert plan.gold == 0
+    assert plan.bought == {}
+    assert plan.time == timedelta(minutes=100)
+    assert [d.offer.name for d in plan.draws] == ["grow It"]
+
+
+def test_minimize_no_buy_leaves_other_buys_alone():
+    # no_buy is item-specific: forbidding Apple Cider does not stop the Large Net
+    # purchase that finishes this plan instantly.
+    plan = minimize([FARM_ITEM, FISH_ITEM], {"It": 100}, prices=GOLD,
+                    gold_weight=BUY_FREELY, no_buy=frozenset({"apple cider"}))
+    assert plan.bought.get("large net") == pytest.approx(100)
+    assert plan.time == timedelta(0)
+
+
 def test_minimize_credits_joint_production_across_needs():
     # One net yields 2 "a" and 1 "b"; covering 10 a (5 nets) also makes 5 b,
     # covering the 3 b needed for free -- a single draw.

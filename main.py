@@ -809,6 +809,39 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--mastery-costs",
+        action="store_true",
+        help=(
+            "mastery-costs mode: for every remaining masterable item, find the "
+            "fastest plan to reach each unfinished tier (Master 10k / Grandmaster "
+            "100k / Megamaster 1M, cumulative from current progress) and rank them "
+            "by time and gold, then list items that cannot be mastered with their "
+            "unobtainable-material chains. Reads the mastery/inventory files like a "
+            "normal run; conflicts with --ascend/--unobtainable/--target/-m/-i"
+        ),
+    )
+    parser.add_argument(
+        "--sort",
+        choices=["time", "gold"],
+        default="time",
+        help=(
+            "sort key for the --mastery-costs table: 'time' (default) or 'gold', "
+            "each falling back to the other as a tie-breaker. Ignored outside "
+            "--mastery-costs"
+        ),
+    )
+    parser.add_argument(
+        "--self-sourced",
+        action="store_true",
+        help=(
+            "never buy Arnold Palmers, Large Nets or Apple Cider -- self-source "
+            "those tools from your own economy (costing time) instead. Other buys "
+            "(Orange Juice, cookie sets, Arnold-Palmer trades) are unaffected. "
+            "Applies to the normal frontier and to --mastery-costs (where it makes "
+            "each plan's time reflect actually crafting/gathering the tools)"
+        ),
+    )
+    parser.add_argument(
         "--max-gold",
         type=parse_gold_budget,
         default=None,
@@ -1437,6 +1470,9 @@ class SolveInputs:
     # Per-unit Arnold Palmer trade prices (see _ChannelSetup.ap_prices). Defaulted
     # likewise; empty means no AP-trading.
     ap_prices: dict[str, float] = field(default_factory=dict)
+    # Consumables the solver may not buy (--self-sourced: Arnold Palmer / Large Net
+    # / Apple Cider), forcing them to be self-sourced. Empty by default (buy freely).
+    no_buy: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -1471,6 +1507,18 @@ class _ChannelSetup:
     # and for deriving the ``ap_tradeable`` buyable set passed to the optimiser.
     # Defaulted so hand-built test _ChannelSetups need not supply it.
     ap_prices: dict[str, float] = field(default_factory=dict)
+
+
+# The consumable tools --self-sourced withholds from buying, so the solver must
+# craft/gather them (costing time) rather than pay gold: Arnold Palmer (exploring),
+# Large Net (fishing), Apple Cider (cider exploring). Orange Juice, cookie sets and
+# Arnold-Palmer trades stay buyable -- only these three tools are forced.
+SELF_SOURCED_TOOLS = frozenset({"arnold palmer", "large net", "apple cider"})
+
+
+def self_sourced_tools(args: argparse.Namespace) -> frozenset[str]:
+    """The consumables ``--self-sourced`` forbids buying, else an empty set."""
+    return SELF_SOURCED_TOOLS if getattr(args, "self_sourced", False) else frozenset()
 
 
 def _build_channel_setup(
@@ -1686,6 +1734,7 @@ def build_inputs(
         cookie_sets=setup.cookie_sets,
         prices=setup.prices,
         ap_prices=setup.ap_prices,
+        no_buy=self_sourced_tools(args),
         boost_offers=setup.boost_offers,
         pj_gain=pj_gain,
         pj_price=pj_price,
@@ -1738,6 +1787,7 @@ def solve_frontier(
     prices = inputs.prices
     ap_tradeable = frozenset(inputs.ap_prices)
     non_mastery_goals = inputs.non_mastery_goals
+    no_buy = inputs.no_buy
     pj_gain = inputs.pj_gain
     pj_price = inputs.pj_price
     pj_limit = inputs.pj_limit
@@ -1785,7 +1835,8 @@ def solve_frontier(
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
                 pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
                 quantize=quantize, ap_tradeable=ap_tradeable,
-                non_mastery_goals=non_mastery_goals, price_pumpkin_juice=price_pj,
+                non_mastery_goals=non_mastery_goals, no_buy=no_buy,
+                price_pumpkin_juice=price_pj,
             )
             if not fast.draws and not fast.crafts:  # nothing to source
                 break
@@ -1807,7 +1858,7 @@ def solve_frontier(
             inventory, cookie_sets, report._pet_dominated_items(production),
             prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
             quantize=quantize, ap_tradeable=ap_tradeable,
-            non_mastery_goals=non_mastery_goals, spread=spread,
+            non_mastery_goals=non_mastery_goals, no_buy=no_buy, spread=spread,
             price_pumpkin_juice=price_pj,
         )
         if not plans:
@@ -2012,6 +2063,223 @@ def load_mastery_catalogue(path: Path | None = None) -> dict[str, str]:
     except FileNotFoundError:
         return {}
     return {name.lower(): name for name in (line.strip() for line in lines) if name}
+
+
+# The three mastery tiers, as (absolute progress threshold, short label), in
+# climbing order -- the targets --mastery-costs solves each remaining item to.
+_MASTERY_TIERS: tuple[tuple[int, str], ...] = (
+    (ascension.MASTER_THRESHOLD, "M"),
+    (ascension.GRANDMASTER_THRESHOLD, "GM"),
+    (ascension.MEGA_THRESHOLD, "MM"),
+)
+
+
+@dataclass(frozen=True)
+class MasteryCostRow:
+    """One (item, tier) row of the --mastery-costs table.
+
+    ``time`` is the fastest plan's makespan to reach ``tier``'s absolute
+    threshold from the item's current progress (cumulative -- a GM row includes
+    the work Master needed); ``gold`` is that plan's cost at the [trading]
+    exchange rates (0.0 when nothing is priced).
+    """
+
+    item: str  # display name
+    tier: str  # "M" / "GM" / "MM"
+    time: timedelta
+    gold: float
+
+
+@dataclass
+class MasteryCostsResult:
+    rows: list[MasteryCostRow]
+    # Formatted "item needs ... (unobtainable)" chains for items no plan can
+    # source at all (see unmasterable_chain); one per unmasterable item.
+    unmasterable: list[str]
+
+
+def _sorted_mastery_rows(
+    rows: list[MasteryCostRow], sort_key: str
+) -> list[MasteryCostRow]:
+    """Rank --mastery-costs rows by the requested axis, the other as tie-breaker.
+
+    ``sort_key`` ``"gold"`` sorts by gold then time; anything else (``"time"``,
+    the default) by time then gold. Ties beyond both axes keep input order
+    (Python's sort is stable), which is item-name order from
+    :func:`solve_mastery_costs`.
+    """
+    if sort_key == "gold":
+        return sorted(rows, key=lambda r: (r.gold, r.time.total_seconds()))
+    return sorted(rows, key=lambda r: (r.time.total_seconds(), r.gold))
+
+
+def sourceable_items(
+    offers: list[sources.Offer],
+    recipes: dict[str, dict[str, float]],
+    open_flows: list[sources.OpenFlow],
+    prices: dict[str, float] | None,
+    ap_tradeable: frozenset[str],
+    inventory: dict[str, float],
+) -> set[str]:
+    """Every item that can be sourced, matching :func:`optimizer._build_base`'s seed.
+
+    So --mastery-costs' masterability agrees with a real ``-m Item:tier`` solve's
+    remainder. Two seeds, exactly as ``_build_base`` builds them:
+
+    - **buyable/tradeable consumables** (:data:`optimizer.BUYABLE` plus
+      ``ap_tradeable``, keeping only priced ones): a material can be bought or
+      traded for even though the target item's own mastery cannot (the buy-floor in
+      :func:`optimizer.fastest_endpoint` enforces that).
+    - **held items an offer CONSUMES** (e.g. an Acorn Pie the exploring channel
+      burns), which ground that channel. Deliberately **not** all of inventory: a
+      material merely sitting in stock is a finite hoard, not a renewable source, so
+      a mastery goal that must *produce* many copies cannot lean on it. Counting all
+      inventory here wrongly called an item like Compass -- craftable only from held
+      materials nothing produces -- masterable, while ``-m Compass:GM`` correctly
+      drops it to the remainder.
+    """
+    priced = prices or {}
+    buyable = {item for item in (optimizer.BUYABLE | set(ap_tradeable)) if item in priced}
+    offer_inputs_held = {
+        item
+        for offer in offers
+        for item in offer.consumes
+        if inventory.get(item, 0.0) > 0
+    }
+    return optimizer._obtainable(
+        offers, recipes, open_flows, buyable=buyable, held=offer_inputs_held
+    )
+
+
+def unmasterable_chain(
+    key: str,
+    recipes: dict[str, dict[str, float]],
+    available: set[str],
+    display: dict[str, str],
+) -> str:
+    """Explain why item ``key`` cannot be produced, as a dependency chain.
+
+    ``available`` is the set of lower-cased items that *can* be sourced (gathered,
+    crafted, opened, bought or traded -- :func:`optimizer._obtainable` with the
+    buyable/held seed): a material in it is not a blocker, since you could buy or
+    make it. ``key`` itself is assumed already known unsourceable-for-mastery by
+    the caller. Descends ``recipes`` (``crafting.recipe_flows``) through only the
+    materials **not** in ``available``, with a ``seen`` cycle guard, producing
+    e.g. ``"A needs B (which needs C (unobtainable))"`` -- the top item takes
+    "needs", nested craftable-but-stuck links take "(which needs ...)", and a
+    material with no recipe of its own is a bare "(unobtainable)" leaf.
+    """
+
+    def describe(node: str, seen: frozenset[str], *, top: bool) -> str:
+        name = display.get(node, node.title())
+        recipe = recipes.get(node)
+        if recipe is None or node in seen:
+            return f"{name} (unobtainable)"
+        blockers = [m for m in recipe if m not in available]
+        if not blockers:
+            # Shouldn't happen (an all-available recipe is itself available),
+            # but degrade gracefully rather than emit an empty "needs".
+            return f"{name} (unobtainable)"
+        parts = [describe(m, seen | {node}, top=False) for m in blockers]
+        joined = ", ".join(parts)
+        return f"{name} needs {joined}" if top else f"{name} (which needs {joined})"
+
+    return describe(key, frozenset(), top=True)
+
+
+def solve_mastery_costs(
+    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+) -> MasteryCostsResult:
+    """The --mastery-costs mode: fastest plan + gold to each remaining tier.
+
+    For every masterable item (the catalogue unioned with the paste's progress,
+    via :func:`ascension.candidates`) and every tier it has not yet reached, one
+    :func:`optimizer.fastest_endpoint` solve gives the fastest plan to that
+    tier's absolute threshold from current progress; its makespan and ``plan.gold``
+    (the gold it actually spends buying) become a row. Items no plan can source are
+    collected as :func:`unmasterable_chain` explanations instead. The channel
+    setup and the offers are built once (steady-state passive production, i.e.
+    the yearly-average calendar) and reused across every per-item solve, which is
+    cheap because each item's reachable craft subtree is small.
+    """
+    start = args.start_date or date.today()
+    setup = _build_channel_setup(args, cfg, state, start, args.crafting_bonus)
+    # Steady-state production (no start/horizon): the yearly-average calendar, so
+    # each item is one solve rather than a per-item seasonal fixed point.
+    production = config.passive_production(
+        cfg, today=start, monthly_grants=setup.monthly_grants
+    )
+    quantize = config.passive_quantizer(production)
+    offers = optimizer.all_offers(
+        production, setup.fish, setup.explore, setup.farm, setup.boost_offers
+    )
+    recipes = setup.recipes
+    open_flows = setup.open_flows
+    prices = setup.prices
+    ap_tradeable = frozenset(setup.ap_prices)
+    no_buy = self_sourced_tools(args)
+
+    # What can be *sourced*, computed with the SAME seed optimizer._build_base uses
+    # for a real solve's remainder, so masterability here matches `-m Item:tier`.
+    available = sourceable_items(
+        offers, recipes, open_flows, prices, ap_tradeable, setup.inventory
+    )
+    # Items a *usable* offer or openable yields directly (production, not buying):
+    # these are masterable by gathering/opening even with no recipe.
+    producible_direct: set[str] = set()
+    for offer in offers:
+        if all(c in available for c in offer.consumes):
+            producible_direct |= set(offer.yields)
+    for flow in open_flows:
+        if all(c in available for c in flow.consumes):
+            producible_direct |= set(flow.yields)
+
+    def masterable(item_key: str) -> bool:
+        # Producible (so its mastery can be earned) iff gathered/opened directly,
+        # or crafted from materials that are themselves all obtainable. Being
+        # merely buyable/held does NOT count -- you cannot buy an item's mastery.
+        if item_key in producible_direct:
+            return True
+        recipe = recipes.get(item_key)
+        return recipe is not None and all(m in available for m in recipe)
+
+    catalogue = load_mastery_catalogue()
+    # Display names: catalogue first, then every workshop item/material (recipe
+    # flows are lower-cased, so the casing comes from the workshop model).
+    display: dict[str, str] = dict(catalogue)
+    for rkey, recipe in setup.workshop.recipes.items():
+        display.setdefault(rkey, recipe.name)
+        for material in recipe.materials:
+            display.setdefault(material.lower(), material)
+
+    rows: list[MasteryCostRow] = []
+    unmasterable: list[str] = []
+    for candidate in ascension.candidates(state, catalogue.values()):
+        key = candidate.item
+        mastery = state.mastery(key)
+        name = display.get(key) or (mastery.item if mastery is not None else key.title())
+        if not masterable(key):
+            unmasterable.append(unmasterable_chain(key, recipes, available, display))
+            continue
+        progress = mastery.progress if mastery is not None else 0
+        for threshold, label in _MASTERY_TIERS:
+            if progress >= threshold:
+                continue
+            demand = {name: (threshold - progress) / args.mastery_bonus}
+            plan = optimizer.fastest_endpoint(
+                offers, demand, recipes, args.crafting_bonus, prices=prices,
+                openables=open_flows, inventory=setup.inventory,
+                cookie_sets=setup.cookie_sets or 0.0, quantize=quantize,
+                ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(), no_buy=no_buy,
+            )
+            # Cost is the gold the plan actually spends buying (plan.gold), so
+            # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
+            # drop, not the market value of the tools it now self-sources instead.
+            rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+
+    unmasterable.sort()
+    return MasteryCostsResult(rows=_sorted_mastery_rows(rows, args.sort),
+                             unmasterable=unmasterable)
 
 
 def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:
@@ -2699,6 +2967,38 @@ def run(args: argparse.Namespace) -> int:
         reporter.ascension_plan(
             result, selected, current, target, starting_ak, args.start_date or date.today()
         )
+        reporter.finish()
+        return 0
+
+    if args.mastery_costs:
+        # Mastery-costs mode: rank the fastest plan + gold to each remaining
+        # mastery tier for every masterable item, then list what cannot be
+        # mastered. Reads the mastery/inventory state like a normal run, but
+        # solves its own per-item goals rather than the tower/-m/-i demand.
+        conflicts = [
+            flag for flag, present in (
+                ("--unobtainable", args.unobtainable),
+                ("--target", args.target is not None),
+                ("-m/--mastery", args.mastery is not None),
+                ("-i/--items", args.items is not None),
+            ) if present
+        ]
+        if conflicts:
+            raise ValueError(
+                "--mastery-costs conflicts with " + ", ".join(conflicts)
+            )
+        resolve_crafting_bonus(args, cfg)
+        backend = args.solver or cfg.get("solver", {}).get("backend")
+        if backend:
+            optimizer.set_solver_backend(backend)
+        mastery_file, inventory_file = resolve_files(args, cfg)
+        state = load_state(mastery_file, inventory_file)
+        if args.override_inventory is not None:
+            apply_inventory_overrides(
+                state.inventory, parsing.parse_item_amounts(args.override_inventory)
+            )
+        result = solve_mastery_costs(args, cfg, state)
+        reporter.mastery_costs(result, args.sort)
         reporter.finish()
         return 0
 

@@ -243,6 +243,70 @@ def markdown_unobtainable(doc: MarkdownDoc, materials: list[str]) -> None:
     doc.bullets(materials)
 
 
+def _mastery_costs_caption(sort_key: str) -> str:
+    primary = "gold" if sort_key == "gold" else "time"
+    other = "time" if sort_key == "gold" else "gold"
+    return (
+        "Fastest plan to reach each remaining tier (Master 10k / Grandmaster "
+        f"100k / Megamaster 1M) from current progress, sorted by {primary} "
+        f"(then {other})."
+    )
+
+
+def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time") -> None:
+    """The --mastery-costs table: fastest plan + gold to each remaining tier.
+
+    One ``Item | Target | Time | Cost`` row per (item, tier), already sorted by
+    :func:`main.solve_mastery_costs`, followed by the items that cannot be
+    mastered at all with their unobtainable-material chains. Columns are aligned
+    (Item/Target left, Time/Cost right) so the table scans cleanly.
+    """
+    print(f"\nMastery costs — {_mastery_costs_caption(sort_key)}")
+    rows = result.rows
+    if not rows:
+        print("  (nothing left to master)")
+    else:
+        times = [passive.format_duration(r.time) for r in rows]
+        costs = [f"{round(r.gold):,} g" for r in rows]
+        item_w = max(len("Item"), *(len(r.item) for r in rows))
+        tier_w = max(len("Target"), *(len(r.tier) for r in rows))
+        time_w = max(len("Time"), *(len(t) for t in times))
+        cost_w = max(len("Cost"), *(len(c) for c in costs))
+        print(
+            f"  {'Item':<{item_w}}  {'Target':<{tier_w}}  "
+            f"{'Time':>{time_w}}  {'Cost':>{cost_w}}"
+        )
+        for r, t, c in zip(rows, times, costs):
+            print(
+                f"  {r.item:<{item_w}}  {r.tier:<{tier_w}}  "
+                f"{t:>{time_w}}  {c:>{cost_w}}"
+            )
+    if result.unmasterable:
+        print("\nItems that cannot be mastered (a material has no source):")
+        for chain in result.unmasterable:
+            print(f"  {chain}")
+
+
+def markdown_mastery_costs(
+    doc: MarkdownDoc, result: main.MasteryCostsResult, sort_key: str = "time"
+) -> None:
+    """Markdown counterpart to :func:`print_mastery_costs`."""
+    doc.heading("Mastery costs")
+    doc.para(_mastery_costs_caption(sort_key))
+    if result.rows:
+        rows = [
+            [r.item, r.tier, passive.format_duration(r.time), f"{round(r.gold):,} g"]
+            for r in result.rows
+        ]
+        doc.table(["Item", "Target", "Time", "Cost"], rows)
+    else:
+        doc.para("(nothing left to master)")
+    if result.unmasterable:
+        doc.heading("Items that cannot be mastered")
+        doc.para("Each needs a material with no source:")
+        doc.bullets(result.unmasterable)
+
+
 def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:
     """Whole cookie sets a plan spends — partial sets aren't usable, so round up.
 
@@ -2885,6 +2949,11 @@ class Reporter:
     def unobtainable(self, materials: list[str]) -> None:
         raise NotImplementedError
 
+    def mastery_costs(
+        self, result: main.MasteryCostsResult, sort_key: str = "time"
+    ) -> None:
+        raise NotImplementedError
+
     def note(self, text: str) -> None:
         raise NotImplementedError
 
@@ -2971,6 +3040,9 @@ class TextReporter(Reporter):
     def unobtainable(self, materials: list[str]) -> None:
         print_unobtainable(materials)
 
+    def mastery_costs(self, *args, **kwargs) -> None:
+        print_mastery_costs(*args, **kwargs)
+
     def note(self, text: str) -> None:
         print(f"\n{text}")
 
@@ -3041,6 +3113,9 @@ class MarkdownReporter(Reporter):
 
     def unobtainable(self, materials: list[str]) -> None:
         markdown_unobtainable(self.doc, materials)
+
+    def mastery_costs(self, *args, **kwargs) -> None:
+        markdown_mastery_costs(self.doc, *args, **kwargs)
 
     def note(self, text: str) -> None:
         self.doc.para(text)
