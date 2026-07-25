@@ -17,21 +17,13 @@
     cumulative &mdash; a Grandmaster row includes the work Master needed.
     Everything is read from the masteries, inventory and settings saved on the
     <a href="/">solver page</a>; times assume the steady-state (yearly-average)
-    calendar. <strong>Click a row</strong> for that mastery's full plan.
+    calendar. <strong>Click a row</strong> for that mastery's full plan, or a
+    column's sort button to reorder the table.
   </p>
 </header>
 
 <main>
   <div id="mastery-controls" class="mastery-controls" hidden>
-    <div class="field-row">
-      <label for="sort-key">Sort by</label>
-      <select id="sort-key" class="narrow">
-        <option value="time">Time</option>
-        <option value="gold">Cost</option>
-      </select>
-      <button type="button" class="help-icon" aria-label="Help"
-        data-help="Which column ranks the table; the other breaks ties. Sorting is instant — it reorders the rows already loaded.">?</button>
-    </div>
     <div class="field-row">
       <label for="self-sourced">
         <input id="self-sourced" type="checkbox"> Self-source tools
@@ -50,11 +42,25 @@
   <div id="mastery-costs-section" class="report-section" hidden>
     <table>
       <thead>
-        <tr>
-          <th>Item</th>
-          <th>Target</th>
-          <th class="num">Time</th>
-          <th class="num">Cost</th>
+        <!-- Every column sorts, via the button beside its label; the arrow
+             glyph and the th's aria-sort are set by masteries.js. -->
+        <tr id="mastery-costs-head">
+          <th scope="col">Item
+            <button type="button" class="sort-btn" data-sort="item"
+              aria-label="Sort by item"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col">Target
+            <button type="button" class="sort-btn" data-sort="tier"
+              aria-label="Sort by target tier"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Time
+            <button type="button" class="sort-btn" data-sort="time"
+              aria-label="Sort by time"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Cost
+            <button type="button" class="sort-btn" data-sort="gold"
+              aria-label="Sort by cost"><span class="sort-arrow">&#8597;</span></button>
+          </th>
         </tr>
       </thead>
       <tbody id="mastery-costs-body"></tbody>

@@ -940,6 +940,42 @@ details[open] > summary .summary-detail {
 
 /* --- Mastery-costs page --------------------------------------------------- */
 
+/* Per-column sort button, sitting just after its header label (sizing borrowed
+   from .help-icon, so the two read as the same family of inline affordances).
+   The arrow glyph -- neutral, up or down -- is set by masteries.js; only the
+   active column's button takes the accent. */
+.sort-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: 0.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.sort-btn:hover,
+.sort-btn:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.sort-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 /* Sort + self-source controls, side by side above the table (the page has no
    preference panes, so these sit loose rather than inside a details.pane). */
 .mastery-controls {

@@ -1770,17 +1770,25 @@ that imports it without going through `manage.py`.
   run the solver page's whole wiring against markup that isn't there. Only two
   small modules are shared instead: `help.js` (the `[?]` tooltip machinery
   above) and `tiers.js` (`tierLabel`: the `M`/`GM`/`MM` ↔ Master/Grandmaster/
-  Megamaster mapping, mirroring `main._MASTERY_TIERS`); the handful of one-line
-  helpers (`$`, `escapeHtml`) are duplicated rather than given a module. The
-  page has no state of its own — it *reads* (never writes)
-  `localStorage["farm-solver.v1"]`, so both pages always agree on what "your
-  save" means, and adds a single `self_sourced` param on top. `sortRows` (the
-  JS mirror of `main._sorted_mastery_rows`, primary axis then the other as
-  tie-break) and `masteryHref` are the pure, unit-tested exports
-  (`masteries.test.js`). Rows are built in JS rather than markdown→HTML because
-  each `<tr>` has to carry its own item/tier to become a link. The sort toggle
-  reorders the loaded rows with no request; the self-sourced checkbox re-POSTs;
-  both persist under the shared `farm-solver.ui.v1` UI key.
+  Megamaster mapping, mirroring `main._MASTERY_TIERS`; plus `tierRank`, the
+  M<GM<MM sort order the Target column uses — never alphabetical, a plain amount
+  ranks last); the handful of one-line helpers (`$`, `escapeHtml`) are
+  duplicated rather than given a module. The page has no state of its own — it
+  *reads* (never writes) `localStorage["farm-solver.v1"]`, so both pages always
+  agree on what "your save" means, and adds a single `self_sourced` param on
+  top. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
+  unit-tested exports (`masteries.test.js`); `SORT_COLUMNS`/`SORT_KEYS` name the
+  four sortable columns and the value tuple each ranks on (primary then
+  tie-breaks — the two numeric axes still break on each other like the CLI's
+  `main._sorted_mastery_rows`, the two label axes on each other). **Every column
+  header carries a sort button** (`#mastery-costs-head`, one delegated click
+  listener): clicking a column sorts ascending, clicking the active column again
+  flips it (arrow glyph + `aria-sort` via `renderSortIndicators`). Rows are built
+  in JS rather than markdown→HTML because each `<tr>` has to carry its own
+  item/tier to become a link. Sorting reorders the loaded rows with no request;
+  the self-sourced checkbox re-POSTs; the sort key + direction
+  (`mastery_sort`/`mastery_sort_dir`) and the checkbox all persist under the
+  shared `farm-solver.ui.v1` UI key.
 - **Drill-down is a plain navigation, not a third view**: a mastery-costs row
   links to `/?mastery=<Item>:<TIER>` — the solver page itself, so the whole
   existing frontier/plan/crafts UI is reused and the browser's Back button

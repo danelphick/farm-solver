@@ -16,7 +16,7 @@
 // applied client-side over the rows already loaded, so toggling it is instant.
 
 import { initHelpTooltips } from "./help.js";
-import { tierLabel } from "./tiers.js";
+import { tierLabel, tierRank } from "./tiers.js";
 
 // The solver page's state, read (never written) here.
 const STORAGE_KEY = "farm-solver.v1";
@@ -35,23 +35,47 @@ function escapeHtml(text) {
 
 // --- Pure helpers (exported for app.test.js's sibling, masteries.test.js) ----
 
-// Rank rows by the requested axis with the other as tie-breaker -- the JS
-// mirror of main._sorted_mastery_rows, so the page and `--mastery-costs --sort`
-// order the same table the same way. Returns a new array; the input is the
-// server's response order, which is left untouched so re-sorting is stable.
-export function sortRows(rows, key) {
-  const by =
-    key === "gold"
-      ? (r) => [r.gold, r.time_seconds]
-      : (r) => [r.time_seconds, r.gold];
+// Every column sorts, keyed by the header button's data-sort. Each key names
+// the values a row is ranked on, primary first and the rest as tie-breakers:
+// the two numeric axes still break on each other (the JS mirror of
+// main._sorted_mastery_rows, so the page and `--mastery-costs --sort` order the
+// table the same way), and the two label columns break on each other so a
+// same-item / same-tier run stays readable. Targets rank M < GM < MM, never
+// alphabetically -- see tiers.tierRank.
+const SORT_KEYS = {
+  item: (r) => [r.item.toLowerCase(), tierRank(r.tier)],
+  tier: (r) => [tierRank(r.tier), r.item.toLowerCase()],
+  time: (r) => [r.time_seconds, r.gold],
+  gold: (r) => [r.gold, r.time_seconds],
+};
+
+export const SORT_COLUMNS = Object.keys(SORT_KEYS);
+
+function compare(a, b) {
+  if (typeof a === "string" || typeof b === "string") {
+    return String(a).localeCompare(String(b));
+  }
+  return a - b;
+}
+
+// Returns a new array; the input is the server's response order, which is left
+// untouched so re-sorting is stable. `direction` is "asc" (the default) or
+// "desc", which reverses the whole ranking -- but never the final index
+// tie-break, so rows equal on every axis keep the server's order (item-name
+// order from main.solve_mastery_costs) either way, matching Python's stable sort.
+export function sortRows(rows, key, direction = "asc") {
+  const by = SORT_KEYS[key] || SORT_KEYS.time;
+  const sign = direction === "desc" ? -1 : 1;
   return rows
     .map((row, i) => ({ row, i }))
     .sort((a, b) => {
-      const [a1, a2] = by(a.row);
-      const [b1, b2] = by(b.row);
-      // Ties beyond both axes keep the server's order (item-name order from
-      // main.solve_mastery_costs), matching Python's stable sort.
-      return a1 - b1 || a2 - b2 || a.i - b.i;
+      const left = by(a.row);
+      const right = by(b.row);
+      for (let axis = 0; axis < left.length; axis += 1) {
+        const order = compare(left[axis], right[axis]);
+        if (order) return sign * order;
+      }
+      return a.i - b.i;
     })
     .map((entry) => entry.row);
 }
@@ -91,8 +115,34 @@ function setStatus(text, kind) {
 
 let loadedRows = [];
 
+// The active sort, restored from the UI key in init() and flipped by the
+// header buttons. Purely display state: the rows are already loaded.
+let sortKey = "time";
+let sortDirection = "asc";
+
+const SORT_ARROWS = { asc: "▲", desc: "▼", none: "↕" };
+
+// Point each header button's arrow at the current sort (and tell a screen
+// reader the same thing through the th's aria-sort).
+function renderSortIndicators() {
+  document.querySelectorAll("#mastery-costs-head th").forEach((th) => {
+    const button = th.querySelector(".sort-btn");
+    if (!button) return;
+    const active = button.dataset.sort === sortKey;
+    th.setAttribute(
+      "aria-sort",
+      active ? (sortDirection === "desc" ? "descending" : "ascending") : "none"
+    );
+    button.classList.toggle("active", active);
+    button.querySelector(".sort-arrow").textContent = active
+      ? SORT_ARROWS[sortDirection]
+      : SORT_ARROWS.none;
+  });
+}
+
 function renderTable() {
-  const rows = sortRows(loadedRows, $("#sort-key").value);
+  renderSortIndicators();
+  const rows = sortRows(loadedRows, sortKey, sortDirection);
   // Built in JS, not markdown->HTML like the solver page's report sections:
   // each <tr> has to carry its own item/tier to become a link, which reading
   // them back out of rendered table cells would make fragile.
@@ -218,12 +268,24 @@ function init() {
   initHelpTooltips();
 
   const ui = readUi();
-  if (ui.mastery_sort) $("#sort-key").value = ui.mastery_sort;
+  if (SORT_COLUMNS.includes(ui.mastery_sort)) sortKey = ui.mastery_sort;
+  if (ui.mastery_sort_dir === "desc") sortDirection = "desc";
   if (ui.mastery_self_sourced) $("#self-sourced").checked = true;
+  renderSortIndicators();
 
   // Sorting is pure display: reorder what is already loaded, no request.
-  $("#sort-key").addEventListener("change", () => {
-    writeUi({ mastery_sort: $("#sort-key").value });
+  // Delegated on the header row, so every column's button is one listener.
+  $("#mastery-costs-head").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-sort]");
+    if (!button) return;
+    // Clicking the column already sorted on flips it; any other column starts
+    // ascending (A-Z, M before MM, fastest/cheapest first).
+    sortDirection =
+      button.dataset.sort === sortKey && sortDirection === "asc"
+        ? "desc"
+        : "asc";
+    sortKey = button.dataset.sort;
+    writeUi({ mastery_sort: sortKey, mastery_sort_dir: sortDirection });
     renderTable();
   });
   // Self-sourcing changes what gets solved, so it re-requests.

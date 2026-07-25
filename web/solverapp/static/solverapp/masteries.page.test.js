@@ -65,9 +65,11 @@ function setSavedState(state) {
 // attached and fires again against the current DOM. Harmless (they all render
 // the same payload into the same nodes), but it means a "did this action
 // request again?" assertion has to count from this baseline rather than from 0.
-async function loadPage({ state, payload = PAYLOAD } = {}) {
+async function loadPage({ state, payload = PAYLOAD, ui } = {}) {
   document.body.innerHTML = templateBody();
   setSavedState(state);
+  // After setSavedState, which clears storage -- the UI key is a separate one.
+  if (ui) localStorage.setItem("farm-solver.ui.v1", JSON.stringify(ui));
   fetchMock = vi.fn(async () => ({
     ok: true,
     status: 200,
@@ -153,11 +155,14 @@ describe("mastery-costs page", () => {
     expect(assign).toHaveBeenCalledWith("/?mastery=Fast%20Dear%3AGM");
   });
 
-  test("the sort toggle reorders without re-requesting", async () => {
+  const clickSort = (key) =>
+    document
+      .querySelector(`#mastery-costs-head button[data-sort="${key}"]`)
+      .dispatchEvent(new Event("click", { bubbles: true }));
+
+  test("a column's sort button reorders without re-requesting", async () => {
     const requests = await loadPage({ state: SAVED });
-    const select = document.querySelector("#sort-key");
-    select.value = "gold";
-    select.dispatchEvent(new Event("change"));
+    clickSort("gold");
 
     expect(rowText().map((cells) => cells[0])).toEqual([
       "Slow",        // 10 g
@@ -165,6 +170,71 @@ describe("mastery-costs page", () => {
       "Fast Dear",   // 900 g
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(requests);  // sorting is display-only
+  });
+
+  test("clicking the active column again reverses it", async () => {
+    await loadPage({ state: SAVED });
+    clickSort("gold");
+    clickSort("gold");
+
+    expect(rowText().map((cells) => cells[0])).toEqual([
+      "Fast Dear",
+      "Fast Cheap",
+      "Slow",
+    ]);
+    // A different column starts ascending again rather than staying reversed.
+    clickSort("item");
+    expect(rowText().map((cells) => cells[0])).toEqual([
+      "Fast Cheap",
+      "Fast Dear",
+      "Slow",
+    ]);
+  });
+
+  test("Target sorts M before GM before MM, not alphabetically", async () => {
+    await loadPage({ state: SAVED });
+    clickSort("tier");
+    expect(rowText().map((cells) => cells[1])).toEqual(["M", "GM", "MM"]);
+    clickSort("tier");
+    expect(rowText().map((cells) => cells[1])).toEqual(["MM", "GM", "M"]);
+  });
+
+  test("the active column shows its direction and is remembered", async () => {
+    await loadPage({ state: SAVED });
+    clickSort("item");
+
+    const headers = [...document.querySelectorAll("#mastery-costs-head th")];
+    expect(headers.map((th) => th.getAttribute("aria-sort"))).toEqual([
+      "ascending",
+      "none",
+      "none",
+      "none",
+    ]);
+    expect(
+      document.querySelector('button[data-sort="item"] .sort-arrow').textContent
+    ).toBe("▲");
+
+    clickSort("item");
+    expect(headers[0].getAttribute("aria-sort")).toBe("descending");
+    expect(
+      document.querySelector('button[data-sort="item"] .sort-arrow').textContent
+    ).toBe("▼");
+    expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+      mastery_sort: "item",
+      mastery_sort_dir: "desc",
+    });
+  });
+
+  test("a saved sort is restored on the next visit", async () => {
+    await loadPage({
+      state: SAVED,
+      ui: { mastery_sort: "gold", mastery_sort_dir: "desc" },
+    });
+    expect(rowText().map((cells) => cells[0])).toEqual([
+      "Fast Dear",
+      "Fast Cheap",
+      "Slow",
+    ]);
   });
 
   test("the self-sourced checkbox re-requests with the flag set", async () => {

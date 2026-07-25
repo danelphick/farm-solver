@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { masteryHref, sortRows } from "./masteries.js";
-import { tierLabel } from "./tiers.js";
+import { masteryHref, sortRows, SORT_COLUMNS } from "./masteries.js";
+import { tierLabel, tierRank } from "./tiers.js";
 
 const row = (item, tier, seconds, gold) => ({
   item,
@@ -49,6 +49,80 @@ describe("sortRows", () => {
     sortRows(rows, "time");
     expect(rows.map((r) => r.item)).toEqual(["Slow", "Fast"]);
   });
+
+  test("by item, case-insensitively, breaking ties on tier order", () => {
+    const rows = [
+      row("banjo", "MM", 100, 10),
+      row("Awl", "M", 500, 90),
+      row("Banjo", "M", 900, 20),
+    ];
+    // "banjo" and "Banjo" tie on the item axis, so the tier order splits them.
+    expect(sortRows(rows, "item").map((r) => `${r.item}:${r.tier}`)).toEqual([
+      "Awl:M",
+      "Banjo:M",
+      "banjo:MM",
+    ]);
+  });
+
+  test("by target, M before GM before MM, never alphabetically", () => {
+    const rows = [
+      row("Zed", "MM", 100, 10),
+      row("Alpha", "GM", 100, 10),
+      row("Mid", "M", 100, 10),
+    ];
+    // Alphabetically this would be GM, M, MM -- the tier order is the point.
+    expect(sortRows(rows, "tier").map((r) => r.tier)).toEqual(["M", "GM", "MM"]);
+  });
+
+  test("by target, breaking ties on item name", () => {
+    const rows = [
+      row("Zed", "M", 100, 10),
+      row("Alpha", "MM", 100, 10),
+      row("Beta", "M", 100, 10),
+    ];
+    expect(sortRows(rows, "tier").map((r) => r.item)).toEqual([
+      "Beta",
+      "Zed",
+      "Alpha",
+    ]);
+  });
+
+  test("descending reverses the whole ranking", () => {
+    const rows = [
+      row("Slow", "M", 500, 10),
+      row("FastDear", "M", 100, 900),
+      row("FastCheap", "M", 100, 100),
+    ];
+    expect(sortRows(rows, "time", "desc").map((r) => r.item)).toEqual([
+      "Slow",
+      "FastDear",  // the gold tie-break reverses too
+      "FastCheap",
+    ]);
+  });
+
+  test("rows equal on every axis keep the server's order in both directions", () => {
+    const rows = [row("Same", "M", 60, 5), row("Same", "M", 60, 5)];
+    rows[0].id = "first";
+    rows[1].id = "second";
+    for (const direction of ["asc", "desc"]) {
+      expect(sortRows(rows, "item", direction).map((r) => r.id)).toEqual([
+        "first",
+        "second",
+      ]);
+    }
+  });
+
+  test("an unknown key falls back to time", () => {
+    const rows = [row("Slow", "M", 500, 10), row("Fast", "M", 100, 10)];
+    expect(sortRows(rows, "nonsense").map((r) => r.item)).toEqual([
+      "Fast",
+      "Slow",
+    ]);
+  });
+
+  test("SORT_COLUMNS names every sortable column", () => {
+    expect(SORT_COLUMNS).toEqual(["item", "tier", "time", "gold"]);
+  });
 });
 
 describe("masteryHref", () => {
@@ -74,5 +148,16 @@ describe("tierLabel", () => {
 
   test("leaves a plain amount alone", () => {
     expect(tierLabel("50000")).toBe("50000");
+  });
+});
+
+describe("tierRank", () => {
+  test("ranks the tiers by work, not alphabetically", () => {
+    expect(tierRank("M")).toBeLessThan(tierRank("GM"));
+    expect(tierRank("GM")).toBeLessThan(tierRank("MM"));
+  });
+
+  test("a plain amount ranks after every tier", () => {
+    expect(tierRank("50000")).toBeGreaterThan(tierRank("MM"));
   });
 });

@@ -10,3 +10,13 @@ const TIER_NAMES = { M: "Master", GM: "Grandmaster", MM: "Megamaster" };
 export function tierLabel(tier) {
   return TIER_NAMES[String(tier).toUpperCase()] || tier;
 }
+
+// Sort order for the Target column: the tiers rank by how much work they are
+// (M < GM < MM), never alphabetically. A token that isn't one of the three (a
+// plain amount) ranks after all of them rather than throwing off the order.
+const TIER_RANKS = { M: 0, GM: 1, MM: 2 };
+
+export function tierRank(tier) {
+  const rank = TIER_RANKS[String(tier).toUpperCase()];
+  return rank === undefined ? TIER_RANKS.MM + 1 : rank;
+}
