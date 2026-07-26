@@ -1,12 +1,11 @@
+import argparse
 from datetime import timedelta
+
+import pytest
+from rich.console import Console
 
 from crafting import Workshop, WorkshopRecipe
 from crops import Farm
-from rich.console import Console
-import pytest
-
-import argparse
-
 from farm_solver import (
     GameState,
     Inventory,
@@ -21,8 +20,6 @@ from main import (
     MONTHLY_GRANT_TOWER_LEVEL,
     _parse_spread,
     _should_model_calendar,
-    resolve_calendar_mode,
-    strip_dated_sources,
     apply_inventory_overrides,
     build_parser,
     cheapest_plan,
@@ -34,6 +31,7 @@ from main import (
     price_stamina_enabled,
     pumpkin_juice_gains,
     pumpkin_juice_schedule,
+    resolve_calendar_mode,
     resolve_crafting_bonus,
     resolve_dewstars_journal,
     resolve_frontier_graph,
@@ -44,8 +42,11 @@ from main import (
     resolve_scythe_of_dewstar,
     resolve_swamp_puzzle,
     selected_plan,
+    strip_dated_sources,
     within_limits,
 )
+from optimizer import SourcingPlan, SpreadSpec
+from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from report import (
     UNREACHABLE_GOAL_MARK,
     MarkdownDoc,
@@ -61,8 +62,6 @@ from report import (
     print_plan,
     print_solution,
 )
-from optimizer import SourcingPlan, SpreadSpec
-from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from sources import Draw, Offer, OpenFlow
 
 PLANS = [

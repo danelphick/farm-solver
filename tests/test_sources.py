@@ -15,6 +15,9 @@ from passive import DAILY, HOURLY, PassiveProducer, PassiveProduction
 from sources import (
     CIDER_DROP_RATE,
     DRINKING_TRACK,
+    HICKORY_OMELETTE,
+    HICKORY_OMELETTE_FRACTION,
+    SAWMILL_BOOST_TRACK,
     Draw,
     Offer,
     aggregate,
@@ -26,11 +29,6 @@ from sources import (
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
-)
-from sources import (
-    HICKORY_OMELETTE,
-    HICKORY_OMELETTE_FRACTION,
-    SAWMILL_BOOST_TRACK,
 )
 
 

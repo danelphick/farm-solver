@@ -10,6 +10,37 @@ dependencies = [
     "rich>=15.0.0",
 ]
 
+[tool.ruff]
+# Agent worktrees under .claude/ are whole copies of the tree; linting them
+# double-reports every finding, against a stale branch's code.
+extend-exclude = [".claude"]
+# web/ is a second import root (farmweb/, solverapp/): without it isort files
+# the web app's own modules under third-party, next to django.
+src = [".", "web"]
+
+[tool.ruff.lint]
+# Ruff's default rule set, plus two rules whose `# noqa`s we rely on (scripts/
+# import repo modules only after putting the root on sys.path; tests use
+# one-line lambda predicates), minus rules that fight deliberate choices here.
+# Ruff's defaults move between releases -- when `uvx ruff check .` starts
+# reporting something new, decide it here rather than per-site.
+extend-select = [
+    "E402",  # module-level import not at top of file
+    "E731",  # lambda assigned to a name
+]
+ignore = [
+    # A plan is keyed to the player's *local* calendar day: config.start_date
+    # defaults to date.today(), reports say what to do "today", and the debug
+    # capture stamps local filenames. A tz-aware UTC reading would silently
+    # shift the day for anyone west of UTC.
+    "DTZ005",  # datetime.now() without tz
+    "DTZ011",  # date.today()
+    # ValueError is this project's contract for bad *input*: webapi raises it
+    # for malformed request params and solverapp.views catches ValueError to
+    # return a 400. Raising TypeError instead would escape as a 500.
+    "TRY004",  # prefer TypeError for invalid type
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 filterwarnings = [

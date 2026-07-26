@@ -28,7 +28,6 @@ from ascension import (
 )
 from farm_solver import GameState, Mastery
 
-
 # --- ak_cost -----------------------------------------------------------
 
 

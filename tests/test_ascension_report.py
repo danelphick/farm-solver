@@ -133,8 +133,8 @@ def _render(result: main.AscensionFrontierResult, current: int, target: int,
     start = date(2026, 1, 1)
 
     text_reporter = report.build_reporter("text")
-    import io
     import contextlib
+    import io
 
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -197,7 +197,7 @@ def test_todo_list_dedupes_master_and_grandmaster(monkeypatch):
     overlap = set(outcome0.masters) & set(outcome0.grandmasters)
     assert overlap, "scenario should grandmaster (and thus also master) >=1 widget"
 
-    masters, grandmasters, megas = report._ascension_todo(chosen.stages[0])
+    masters, grandmasters, _megas = report._ascension_todo(chosen.stages[0])
     for item in overlap:
         assert item not in masters
         assert item in grandmasters

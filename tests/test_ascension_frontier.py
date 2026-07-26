@@ -13,6 +13,7 @@ than a single minimize() call.
 """
 
 from datetime import timedelta
+from itertools import pairwise
 
 import pytest
 
@@ -145,7 +146,7 @@ def test_ascension_frontier_spans_distinct_endpoints_with_a_gold_tradeoff(monkey
     assert times == sorted(times)  # fastest first
     net_golds = [p.cost[1] for p in result.plans]
     # Net gold is non-increasing along the (ascending-time) frontier.
-    assert all(a >= b - 1e-6 for a, b in zip(net_golds, net_golds[1:]))
+    assert all(a >= b - 1e-6 for a, b in pairwise(net_golds))
     # The two ends are genuinely distinct: buying freely finishes in about the
     # ~91 explore-minutes; buying nothing waits on ~91 self-sourced APs at
     # 1000 min each (a two-orders-of-magnitude gap).
@@ -247,7 +248,7 @@ def test_validate_ascend_now_allows_targets_past_100_with_enough_mega_candidates
     # (megas_required_by(101) == 1).
     parser = main.build_parser()
     state = GameState(masteries={"gizmo": Mastery("gizmo", progress=500_000, required=1_000_000)})
-    current, target, starting_ak = main._validate_ascend(
+    current, target, _starting_ak = main._validate_ascend(
         parser.parse_args(["--ascend", "101"]), {}, state
     )
     assert (current, target) == (0, 101)

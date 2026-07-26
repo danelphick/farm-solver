@@ -51,6 +51,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
+from itertools import pairwise
 from typing import NamedTuple
 
 import pulp
@@ -281,7 +282,7 @@ class SourcingPlan:
     # cheap continuous relaxation (see there). ``None`` on hand-built plans (tests) and
     # never read except by the finish step. ``repr=False``/``compare=False`` so it does
     # not clutter reprs or perturb equality, and excluded from ``cost``-based ranking.
-    _origin: tuple["_Base", dict] | None = field(
+    _origin: tuple[_Base, dict] | None = field(
         default=None, repr=False, compare=False
     )
 
@@ -3075,7 +3076,7 @@ def frontier(
         distinct = len({_juice_count(p) for p in thinned})
         if count >= 3 and len(thinned) >= 2 and distinct < count:
             extra: list[SourcingPlan] = []
-            for lo, hi in zip(thinned, thinned[1:]):
+            for lo, hi in pairwise(thinned):
                 lo_pj, hi_pj = _juice_count(lo), _juice_count(hi)
                 if lo_pj - hi_pj >= 2:
                     fill = _pumpkin_gap_fill(

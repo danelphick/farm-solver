@@ -144,7 +144,7 @@ class ExploringLocation:
         """Expected count of each item from a palmer yielding ``palmer_yield``."""
         return {item: rate * palmer_yield for item, rate in self.drop_rates.items()}
 
-    def with_flags(self, active: set[str]) -> "ExploringLocation":
+    def with_flags(self, active: set[str]) -> ExploringLocation:
         """A copy with ``drop_rates`` swapped for an active flag's table, if any.
 
         Later flags in ``active`` win if more than one applies to this location

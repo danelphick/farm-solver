@@ -10,6 +10,7 @@ transaction for (see farmweb/settings.py's ``DATABASES = {}``).
 import json
 import textwrap
 from datetime import date
+from typing import ClassVar
 
 from django.test import SimpleTestCase
 
@@ -48,7 +49,7 @@ INVENTORY_TEXT = textwrap.dedent(
 
 
 class ApiSolveTests(SimpleTestCase):
-    databases = set()  # no database in this project at all
+    databases: ClassVar[set[str]] = set()  # no database in this project at all
 
     def setUp(self) -> None:
         # Every test gets a clean cache/lock table, so cache-hit assertions

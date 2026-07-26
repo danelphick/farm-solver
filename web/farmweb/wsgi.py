@@ -15,6 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "farmweb.settings")
 
-from django.core.wsgi import get_wsgi_application  # noqa: E402
+from django.core.wsgi import get_wsgi_application
 
 application = get_wsgi_application()
