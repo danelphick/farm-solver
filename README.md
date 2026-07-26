@@ -636,16 +636,22 @@ These grants join passive production as free supply of those consumables, spread
 The same solver is also available as a small Django web app (`web/`) — paste
 your masteries and inventory into two boxes in a browser instead of files on
 disk, adjust the same goal/limit/pumpkin-juice/calendar controls the CLI
-flags expose, and get back the frontier table and a plan breakdown. There are
-no accounts and nothing is stored server-side: your pasted text and parameter
-choices live in the browser's `localStorage` only, resent with every request.
+flags expose, and get back the frontier table and a plan breakdown. Everything
+except the **Goal** lives behind the **⚙ Settings** button in the top-right
+corner: the paste boxes, the limits and every preference pane. Edits there
+take effect when you press **Save** (**Cancel**, **Escape** or a click outside
+discards them), so pasting a save or retyping a handful of prices costs one
+solve rather than one per keystroke; the Goal itself still re-solves as you
+type. There are no accounts and nothing is stored server-side: your pasted text
+and parameter choices live in the browser's `localStorage` only, resent with
+every request.
 A solve takes roughly the same ~0.5s a CLI run does on capable hardware (see
 "Server hardware reality" below); a *refilter* — changing a limit or which
 plan is expanded, without changing what needs solving — is answered from an
 in-process cache in a few milliseconds.
 
 Most of the `config.toml` settings have their own controls too, in collapsible
-panes: Exploring (the Fungus Processing / Swamp Puzzle unlocks), Exploring
+panes inside that Settings popover: Exploring (the Fungus Processing / Swamp Puzzle unlocks), Exploring
 effectiveness, Farming, Pets, Buildings, Trading values, and a
 **Material trading** pane listing every resource that can be traded for Arnold
 Palmers with a checkbox (trade it or not) and an editable price (the going-rate
@@ -659,8 +665,10 @@ own control is still reachable via the Advanced panel's raw `--override` box.
 The **Mastery costs** link in the header opens `/masteries`, the browser face
 of [`--mastery-costs`](#mastery-costs): every mastery you have left, ranked by
 how long the fastest plan to finish it takes and what that plan spends. It
-reads the same pasted state and settings the solver page saved, so there is
-nothing to fill in — paste on the solver page first, then switch over.
+reads the same saved state the solver page uses, and carries the same **⚙
+Settings** popover — so you can paste there and change any setting without
+leaving the page; saving re-solves the table and the solver page picks the same
+settings up (your goal there is left alone).
 
 - **Sort by** Time or Cost (the other breaks ties). Sorting is instant: it
   reorders the rows already loaded rather than re-solving.

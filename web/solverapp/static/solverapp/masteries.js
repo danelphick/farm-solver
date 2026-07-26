@@ -3,25 +3,33 @@
 // Deliberately self-contained rather than an app.js import: app.js registers a
 // DOMContentLoaded -> init() listener at module scope, so importing it here
 // would run the solver page's whole wiring against markup that isn't on this
-// page. Only the help tooltips are shared (help.js), being big enough to be
-// worth a module; the handful of one-line helpers below are duplicated instead.
+// page. What *is* shared lives in modules that register nothing: the settings
+// popover (settings.js), the help tooltips (help.js) and the tier labels
+// (tiers.js). The handful of one-line helpers below are duplicated instead.
 //
-// It has no state of its own to solve from: the pasted masteries/inventory and
-// every parameter (prices, preference panels, AP trading, ...) come from the
-// same localStorage the solver page writes, so the two pages always agree on
-// what "your save" means. The only thing this page adds is `self_sourced`.
+// It has no goal of its own to solve for: the pasted masteries/inventory and
+// every parameter (prices, preference panels, AP trading, ...) live in the
+// settings popover this page shares with the solver page (settings.js, wired
+// over the same localStorage), so the two always agree on what "your save"
+// means. Saving the popover here writes that shared state -- keeping the solver
+// page's goal, which the popover does not show (mergeSettingsIntoState) -- and
+// re-requests. The only thing this page adds is `self_sourced`.
 //
 // One request per (state, self-sourced) pair -- the server caches the sweep
 // under its own key (webapi.mastery_costs_fingerprint) -- and the sort is
 // applied client-side over the rows already loaded, so toggling it is instant.
 
 import { initHelpTooltips } from "./help.js";
+import {
+  STORAGE_KEY,
+  initSettings,
+  applySettingsState,
+  mergeSettingsIntoState,
+  readSettingsState,
+  readUi,
+  writeUi,
+} from "./settings.js";
 import { tierLabel, tierRank } from "./tiers.js";
-
-// The solver page's state, read (never written) here.
-const STORAGE_KEY = "farm-solver.v1";
-// UI-only preferences, shared with the solver page's pane open/closed states.
-const UI_STORAGE_KEY = "farm-solver.ui.v1";
 
 function $(selector) {
   return document.querySelector(selector);
@@ -85,24 +93,6 @@ export function sortRows(rows, key, direction = "asc") {
 // threshold, which is exactly the cumulative target this row was solved for.
 export function masteryHref(row) {
   return "/?mastery=" + encodeURIComponent(`${row.item}:${row.tier}`);
-}
-
-// --- UI preferences ---------------------------------------------------------
-
-function readUi() {
-  try {
-    return JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}") || {};
-  } catch (err) {
-    return {}; // corrupt/unavailable storage: fall back to the markup defaults
-  }
-}
-
-function writeUi(patch) {
-  try {
-    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ ...readUi(), ...patch }));
-  } catch (err) {
-    // Private browsing / quota exceeded -- persistence is a convenience.
-  }
 }
 
 // --- Rendering --------------------------------------------------------------
@@ -191,6 +181,33 @@ function renderResult(data) {
   }
 }
 
+// --- Saved state ------------------------------------------------------------
+
+// The state the settings popover and the solver page share. Read on every load
+// (it is the source of truth for what to solve) and written back on a popover
+// save.
+function readSavedState() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+  } catch (err) {
+    return null; // corrupt/unavailable storage: as good as nothing pasted
+  }
+}
+
+// A popover save: fold the panel's values into the saved state, keeping the
+// goal the solver page owns (mergeSettingsIntoState), then re-request off the
+// stored state like any other load.
+function saveSettings() {
+  const state = mergeSettingsIntoState(readSavedState(), readSettingsState());
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (err) {
+    // Private browsing / quota exceeded: the panel's values are still live in
+    // the DOM, so this load still reflects them -- they just won't outlast it.
+  }
+  load();
+}
+
 // --- Loading ----------------------------------------------------------------
 
 // Bumped per request so a slow response that a newer one has since superseded
@@ -198,12 +215,7 @@ function renderResult(data) {
 let sequence = 0;
 
 async function load() {
-  let saved = null;
-  try {
-    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-  } catch (err) {
-    saved = null;
-  }
+  const saved = readSavedState();
   const masteryText = (saved && saved.mastery_text) || "";
   const inventoryText = (saved && saved.inventory_text) || "";
   if (!masteryText.trim() && !inventoryText.trim()) {
@@ -218,10 +230,10 @@ async function load() {
   const body = JSON.stringify({
     mastery_text: masteryText,
     inventory_text: inventoryText,
-    // The solver page's own params, plus this page's one extra knob. Its
-    // goal/frontier fields (target, mastery, items, plans, ...) are carried
-    // along harmlessly: main.solve_mastery_costs solves its own per-item goals
-    // and never reads them, and they are not part of this endpoint's cache key.
+    // The shared settings, plus this page's one extra knob. The goal/frontier
+    // fields (target, mastery, items, plans, ...) are carried along harmlessly:
+    // main.solve_mastery_costs solves its own per-item goals and never reads
+    // them, and they are not part of this endpoint's cache key.
     params: {
       ...((saved && saved.params) || {}),
       self_sourced: $("#self-sourced").checked,
@@ -265,6 +277,11 @@ async function load() {
 // --- Wiring -----------------------------------------------------------------
 
 function init() {
+  // The popover builds its generated panels here, so applySettingsState below
+  // has controls to restore the saved settings into -- without that, opening it
+  // would show bundled defaults and saving would wipe the real settings.
+  initSettings({ onSave: saveSettings });
+  applySettingsState(readSavedState());
   initHelpTooltips();
 
   const ui = readUi();
@@ -304,4 +321,8 @@ function init() {
   load();
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// `once`: init() wires the page exactly one time. DOMContentLoaded only fires
+// once in a browser anyway, but the page tests re-import this module against a
+// rebuilt DOM and dispatch the event again -- without this, every earlier
+// import's init() would run again too, wiring the new page a second time.
+document.addEventListener("DOMContentLoaded", init, { once: true });

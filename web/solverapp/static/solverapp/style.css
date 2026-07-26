@@ -55,6 +55,9 @@ body {
 header {
   max-width: 60rem;
   margin: 0 auto 1.5rem;
+  /* Keeps the tagline clear of the fixed settings cog on narrow viewports,
+     where the header spans the full width. */
+  padding-right: 2.5rem;
 }
 
 h1 {
@@ -173,6 +176,115 @@ h1 {
   margin: 0;
 }
 
+/* The settings cog, pinned top-right the way #bottom-bar is pinned
+   bottom-right, and its popover hanging below it. Both pages include the same
+   markup (templates/solverapp/_settings.html). */
+#settings-btn {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1.2;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+#settings-btn:hover,
+#settings-btn[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* A tall panel: the head and the Cancel/Save actions stay put while the panes
+   scroll between them, so Save is always reachable however much is expanded. */
+#settings-popover {
+  position: fixed;
+  top: 3.5rem;
+  right: 1rem;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4.5rem);
+  padding: 0.6rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+/* `display: flex` above would otherwise beat the attribute. */
+#settings-popover[hidden] {
+  display: none;
+}
+
+#settings-popover:focus {
+  outline: none;
+}
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+#settings-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+#settings-close:hover {
+  color: var(--error);
+}
+
+.settings-body {
+  overflow-y: auto;
+  /* Room for the panes' own focus rings and the scrollbar. */
+  padding: 0.1rem 0.4rem 0.1rem 0.1rem;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.settings-actions .pane-hint {
+  margin: 0;
+  margin-right: auto;
+}
+
+/* Save is the primary action of the only modal-ish surface in the app. */
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+}
+
 .status-pending {
   color: var(--muted);
 }
@@ -242,17 +354,11 @@ details[open] > summary .summary-detail {
   gap: 1rem;
 }
 
-/* Two independent column stacks (Goal + Limits left, Resources right), not
-   one grid of panes: grid rows size to the tallest cell, so a collapsed Goal
-   next to an expanded Resources would leave a gap before Limits. */
-.controls-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: start;
-}
-
-.controls-col {
+/* The settings popover's own pane stack: one column, since the popover is
+   narrower than the page and a .field-row's label already takes 11rem. The
+   panes come from _settings.html in display order, so no explicit ordering is
+   needed (the page itself now holds only the Goal pane). */
+.settings-panes {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -261,56 +367,6 @@ details[open] > summary .summary-detail {
 @media (max-width: 55rem) {
   .paste-fields {
     grid-template-columns: 1fr;
-  }
-
-  /* One column: dissolve the stacks and order the panes explicitly, rather
-     than letting the whole left stack come first then the whole right one.
-     Every pane needs an order (an unset one defaults to 0 and would jump ahead
-     of these); Advanced is deliberately last. The two-column split (which pane
-     sits in which .controls-col) is independent of this order and is balanced
-     by hand -- keep it ~even (currently 5 left / 4 right) when adding panes. */
-  .controls-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .controls-col {
-    display: contents;
-  }
-
-  #goal-details {
-    order: 1;
-  }
-
-  #resources-details {
-    order: 2;
-  }
-
-  #effectiveness-details {
-    order: 3;
-  }
-
-  #limits-details {
-    order: 4;
-  }
-
-  #farming-details {
-    order: 5;
-  }
-
-  #pets-details {
-    order: 6;
-  }
-
-  #buildings-details {
-    order: 7;
-  }
-
-  #trading-details {
-    order: 8;
-  }
-
-  #advanced-details {
-    order: 9;
   }
 }
 

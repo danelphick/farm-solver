@@ -2,250 +2,33 @@
 //
 // State model: everything the user can set lives in one `state` shape
 // ({mastery_text, inventory_text, params}) that mirrors POST /api/solve's
-// body. It is saved to localStorage (debounced) on every change and
-// restored (+ auto-solved) on load, so a reload picks up where you left
-// off -- nothing is stored server-side (see ARCHITECTURE.md's web section).
+// body. It is saved to localStorage and restored (+ auto-solved) on load, so a
+// reload picks up where you left off -- nothing is stored server-side (see
+// ARCHITECTURE.md's web section).
 //
-// Two request cadences: any control or paste-box edit debounces 400ms then
-// re-solves (a monotonic sequence number drops a response that arrives after
-// a newer request has since been sent -- typing fast never shows a stale
-// result); clicking a frontier row re-solves immediately with that plan
-// selected (a refilter, so it hits the cache and returns fast).
+// This module owns only the **Goal** pane and the results; every other
+// parameter (the pasted game state, the limits, the preference panes) lives in
+// the settings popover, which settings.js owns and the mastery-costs page
+// shares. readParams/applyParams stitch the two halves back together.
+//
+// Three request cadences: a Goal edit debounces 400ms then re-solves (a
+// monotonic sequence number drops a response that arrives after a newer
+// request has since been sent -- typing fast never shows a stale result);
+// saving the settings popover re-solves once, on Save (settings.js stages the
+// edits until then); clicking a frontier row re-solves immediately with that
+// plan selected (a refilter, so it hits the cache and returns fast).
 
-import { createHelpIcon, initHelpTooltips } from "./help.js";
+import { initHelpTooltips } from "./help.js";
+import {
+  STORAGE_KEY,
+  applySettingsParams,
+  initSettings,
+  readSettingsParams,
+} from "./settings.js";
 import { tierLabel } from "./tiers.js";
 
-const STORAGE_KEY = "farm-solver.v1";
-// UI-only preferences (e.g. whether the paste pane is collapsed) live under
-// their own key: STORAGE_KEY's shape mirrors the POST /api/solve body.
-const UI_STORAGE_KEY = "farm-solver.ui.v1";
 const DEBOUNCE_MS = 400;
 
-// Trading-value price params (each maps to a config override server-side) and
-// the input they read from. Sent only when non-empty; blank means "use the
-// bundled default". See webapi._CONFIG_PARAM_FLAGS.
-const PRICE_FIELDS = {
-  price_arnold_palmer: "#price-arnold-palmer",
-  price_apple_cider: "#price-apple-cider",
-  price_orange_juice: "#price-orange-juice",
-  price_large_net: "#price-large-net",
-  price_cookie_set: "#price-cookie-set",
-  price_pumpkin_juice: "#price-pumpkin-juice",
-  price_hickory_omelette: "#price-hickory-omelette",
-};
-
-// --- Config preference panels -----------------------------------------------
-//
-// The Exploring effectiveness / Farming / Pets / Buildings panes are generated
-// from these declarative schemas rather than hand-written markup: each field
-// maps to one config `section.flag` override, and they all funnel through the
-// single `config` request param (a {dotted key: value} object -- see
-// webapi.params_to_args / _config_override_line), the structured sibling of the
-// free-text overrides box. A blank/"Default" control sends nothing, so the
-// server falls back to config.toml; the field's placeholder shows that default
-// (window-injected via the #config-defaults <script>, read by configDefault).
-//
-// `type` drives both the control and how its value is (de)serialised:
-//   int/float -> <input type=number>, sent as a JSON number
-//   text/date -> <input type=text|date>, sent as a JSON string
-//   bool      -> <input type=checkbox>, initialised to the config default and
-//                sent (as a JSON boolean) only when toggled away from it -- so a
-//                checkbox left at its default sends nothing. For definite
-//                settings (perks the game state can't reveal).
-//   autobool  -> Auto-detect / On / Off <select>, for perks the solver
-//                auto-detects from mastery/inventory (Scythe of Dewstar and the
-//                Mechanical Heart from tower progress; Dewstar's Journal, Fungus
-//                Processing and the Swamp Puzzle from inventory). "Auto-detect"
-//                (the default) sends nothing, leaving the auto-detection in
-//                place; On/Off force a JSON boolean.
-
-const EXPLORING_ZONES = [
-  "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
-  "Misty Forest", "Black Rock Canyon", "Mount Banon", "Ember Lagoon",
-  "Whispering Creek", "Jundland Desert", "Gary's Crushroom", "Sinking Swamp",
-];
-
-const PET_NAMES = [
-  "Cat", "Wolf", "Owl", "Dog", "Squirrel", "Swine", "Snake", "Lemur", "Baboon",
-  "Frog", "Hedgehog", "Fox", "Armadillo", "Spider", "Pet Rock", "Bird",
-  "Penguin", "Green Dragon", "Red Dragon", "Blue Dragon", "Bear", "Capybara",
-  "Strange Onion", "Seal", "Skunk", "Polar Bear", "Hummingbird", "Shark",
-];
-
-// Flat field lists (one control each), keyed by the container's data-config
-// attribute in the template.
-const CONFIG_FIELDS = {
-  effectiveness: EXPLORING_ZONES.map((zone) => ({
-    key: `exploring.effectiveness.${zone}`, label: zone, type: "int",
-  })),
-  farming: [
-    { key: "farming.rows", label: "Rows", type: "int",
-      help: "How many crop rows you farm. More rows means more plots harvested per crop cycle." },
-    { key: "farming.double_crop_chance", label: "Double crop chance (%)", type: "int",
-      help: "Percent chance a harvested seed drops a second crop." },
-    { key: "farming.speed_reduction", label: "Speed reduction (%)", type: "int",
-      help: "Percent faster every crop grows — your total grow-speed reduction from perks." },
-    { key: "farming.corn_speed_reduction", label: "Corn speed reduction (%)", type: "int",
-      help: "Extra percent grow-speed reduction that applies to Corn on top of the general one." },
-    { key: "farming.grape_juices_per_day", label: "Grape Juices / day", type: "int",
-      help: "How many Grape Juices you can press per day; bounds GJ-boosted growing." },
-    { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text",
-      help: "Minimum base grow time a crop needs before a Cookie set is worth spending on it (e.g. 18m)." },
-    { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "autobool",
-      help: "Scythe of Dewstar perk: +4 bonus crops per row each harvest. Auto-detect infers it from your tower progress (level 250)." },
-    { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool",
-      help: "Dewstar's Journal: extends the Cookie boost to the Scythe's bonus crops. Auto-detect reads it from your inventory." },
-  ],
-  // Perks/unlocks changing what the exploring zones drop, or whether they can be
-  // entered at all. (Per-zone Exploring Effectiveness is its own pane.)
-  exploring: [
-    { key: "exploring.have_fungus_processing", label: "Fungus Processing and You", type: "autobool",
-      help: "Fungus Processing and You: Gary's Crushroom drops Mushroom Paste (plus rarer byproducts) instead of Mushroom. Auto-detect reads the artifact from your inventory." },
-    { key: "exploring.have_swamp_puzzle", label: "Swamp Puzzle", type: "autobool",
-      help: "Swamp Puzzle: unlocks the Sinking Swamp for both exploring AND fishing. Without it the zone is dropped, so nothing it alone drops (Scrap Cloth, and so the Basic Pillow tower level 301 needs) can be sourced. Auto-detect reads the item from your inventory." },
-  ],
-  // The Mechanical Heart's monthly grants are free consumable supply, so its
-  // control lives in Resources beside the Calendar mode that times them.
-  resources: [
-    { key: "exploring.have_mechanical_heart", label: "Mechanical Heart", type: "autobool",
-      help: "Mechanical Heart (the tower level 300 artifact): grants 3000 Apple Cider on the 7th and 2000 Arnold Palmer on the 14th of each month, added to passive production. Auto-detect infers it from your tower progress (level 300)." },
-  ],
-};
-
-// The Buildings pane groups its fields into <h4> sub-sections; the mills share
-// one section (few parameters each) per the spec.
-const BUILDING_SECTIONS = [
-  { title: "Storehouse", fields: [
-    { key: "storehouse.inventory", label: "Inventory", type: "int",
-      help: "Storehouse capacity on the 'Updated on' date; it caps how much passive production banks at once." },
-    { key: "storehouse.growth", label: "Growth / day", type: "int",
-      help: "How much larger the storehouse gets each day since the 'Updated on' date." },
-    { key: "storehouse.updated_on", label: "Updated on", type: "date",
-      help: "The date the Inventory figure was accurate; capacity is projected forward from here." },
-  ] },
-  { title: "Farmhouse", fields: [
-    { key: "farmhouse.stamina_cap", label: "Stamina cap", type: "int",
-      help: "Your natural maximum stamina on the 'Registered on' date (the Farmhouse raises it over time)." },
-    { key: "farmhouse.registered_on", label: "Registered on", type: "date",
-      help: "The date the Stamina cap figure was accurate; the cap grows daily from here." },
-    { key: "farmhouse.have_mattress_pad", label: "Mattress Pad", type: "bool",
-      help: "Mattress Pad perk: the stamina cap grows +2/day instead of +1." },
-    { key: "farmhouse.have_apple_pie_enthusiast", label: "Apple Pie Enthusiast", type: "bool",
-      help: "Apple Pie Enthusiast perk: daily stamina gain is capped at 1M instead of 500k." },
-  ] },
-  { title: "Sawmill", fields: [
-    { key: "sawmill.wood", label: "Wood / hr", type: "int",
-      help: "Wood the sawmill produces per hour." },
-    { key: "sawmill.board", label: "Board / hr", type: "int",
-      help: "Board the sawmill produces per hour." },
-    { key: "sawmill.oak", label: "Oak / hr", type: "int",
-      help: "Oak the sawmill produces per hour (only with the Sturdy Saw)." },
-    { key: "sawmill.have_pine_boost", label: "Pine Boost", type: "bool",
-      help: "Pine Boost: the sawmill makes 2 pine board per minute instead of 1." },
-    { key: "sawmill.have_sturdy_saw", label: "Sturdy Saw", type: "bool",
-      help: "Sturdy Saw: enables the sawmill's Oak output. (The Hickory Omelette boost is set under Resources.)" },
-  ] },
-  { title: "Chicken coop", fields: [
-    { key: "chicken_coop.produces", label: "Produces / day", type: "int",
-      help: "Eggs the coop produces per day." },
-    { key: "chicken_coop.completed_starmap", label: "Completed starmap", type: "bool",
-      help: "Completed Starmap: the coop also yields feathers alongside eggs." },
-  ] },
-  { title: "Cow pasture", fields: [
-    { key: "cow_pasture.milk", label: "Milk / day", type: "int",
-      help: "Milk the pasture produces per day." },
-  ] },
-  { title: "Worm habitat", fields: [
-    { key: "worm_habitat.worms", label: "Worms / hr", type: "int",
-      help: "Worms the habitat produces per hour." },
-    { key: "worm_habitat.gummy_worms", label: "Gummy Worms / hr", type: "int",
-      help: "Gummy Worms produced per hour." },
-    { key: "worm_habitat.mealworms", label: "Mealworms / hr", type: "int",
-      help: "Mealworms produced per hour." },
-  ] },
-  { title: "Orchard", fields: [
-    { key: "orchard.apple_trees", label: "Apple trees", type: "int",
-      help: "Number of apple trees; each yields apples daily." },
-    { key: "orchard.orange_trees", label: "Orange trees", type: "int",
-      help: "Number of orange trees; each yields oranges daily." },
-    { key: "orchard.lemon_trees", label: "Lemon trees", type: "int",
-      help: "Number of lemon trees; each yields lemons daily." },
-    { key: "orchard.bonus", label: "Bonus multiplier", type: "float",
-      help: "Orchard yield multiplier from perks (e.g. 1.3 = +30% fruit)." },
-    { key: "orchard.have_tree_shaker", label: "Tree Shaker", type: "bool",
-      help: "Tree Shaker perk: an extra daily harvest with its own storehouse-cap window." },
-  ] },
-  { title: "Raptor pen", fields: [
-    { key: "raptor_pen.antlers", label: "Antlers / day", type: "int",
-      help: "Antlers the raptor pen produces per day." },
-    { key: "raptor_pen.have_antler_snare", label: "Antler Snare", type: "bool",
-      help: "Antler Snare: a second daily antler deposit with its own cap window." },
-  ] },
-  { title: "Trout bait farm", fields: [
-    { key: "trout_bait_farm.trout", label: "Trout / day", type: "int",
-      help: "Trout produced per day." },
-    { key: "trout_bait_farm.grubs", label: "Grubs / hr", type: "int",
-      help: "Grubs produced per hour." },
-    { key: "trout_bait_farm.minnows", label: "Minnows / hr", type: "int",
-      help: "Minnows produced per hour." },
-  ] },
-  { title: "Vineyard", fields: [
-    { key: "vineyard.grapes", label: "Grapes / day", type: "int",
-      help: "Grapes the vineyard produces per day (pressed into Grape Juice)." },
-  ] },
-  { title: "Steelworks", fields: [
-    { key: "steelworks.steel", label: "Steel / hr", type: "int",
-      help: "Steel produced per hour; also yields steel wire at a third of this rate." },
-  ] },
-  { title: "Hayfield", fields: [
-    { key: "hay_field.hay", label: "Straw / 10 min", type: "int",
-      help: "Straw produced every ten minutes." },
-  ] },
-  { title: "Quarry", fields: [
-    { key: "quarry.stone", label: "Stone / 10 min", type: "int",
-      help: "Stone produced every ten minutes." },
-    { key: "quarry.coal", label: "Coal / hr", type: "int",
-      help: "Coal produced per hour." },
-  ] },
-  { title: "Mills", fields: [
-    { key: "flour_mill.have_flour_power", label: "Flour Power", type: "bool",
-      help: "Flour Power: the flour mill makes 2 flour/min instead of 1." },
-    { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool",
-      help: "Feed Boost: the feed mill makes 2 feed/min instead of 1." },
-    { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool",
-      help: "Sugar Boost I: doubles the sugar cane mill's output." },
-    { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool",
-      help: "Sugar Boost II: doubles the sugar cane mill's output again (needs Sugar Boost I)." },
-  ] },
-];
-
-// Bundled config.toml values injected by the index view (see views.index).
-let CONFIG_DEFAULTS = {};
-
-function readConfigDefaults() {
-  const el = document.getElementById("config-defaults");
-  if (!el) return;
-  try {
-    CONFIG_DEFAULTS = JSON.parse(el.textContent) || {};
-  } catch (err) {
-    CONFIG_DEFAULTS = {};
-  }
-}
-
-// Walk a dotted config key ("exploring.effectiveness.Forest") into the injected
-// defaults; undefined if the section/flag isn't in the bundled config.
-function configDefault(key) {
-  return key.split(".").reduce(
-    (node, part) => (node == null ? undefined : node[part]), CONFIG_DEFAULTS
-  );
-}
-
-// The initial value of an autobool <select>: "" (Auto-detect) unless the config
-// pins the perk on/off, in which case it starts at "true"/"false".
-function autoboolDefaultValue(key) {
-  const def = configDefault(key);
-  return def == null ? "" : String(!!def);
-}
 
 // --- Debug: equivalent CLI command ------------------------------------------
 //
@@ -291,308 +74,6 @@ function initDebugCommand() {
   });
 }
 
-// One config control: a `.field-row` (or `.field-compact` in a grid) whose
-// input/select carries data-config-key/-type for readConfigParams/applyConfigParams.
-function createConfigField(field) {
-  const row = document.createElement("div");
-  row.className = field.compact ? "field-compact" : "field-row";
-  const label = document.createElement("label");
-  label.textContent = field.label;
-  if (field.help) label.appendChild(createHelpIcon(field.help));
-  row.appendChild(label);
-
-  const def = configDefault(field.key);
-  let input;
-  if (field.type === "bool") {
-    input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = !!def;  // start at the config default; only a toggle is sent
-  } else if (field.type === "autobool") {
-    input = document.createElement("select");
-    input.add(new Option("Auto-detect", ""));
-    input.add(new Option("On", "true"));
-    input.add(new Option("Off", "false"));
-    input.classList.add("narrow");
-    input.value = autoboolDefaultValue(field.key);  // "" (auto) unless config forces it
-  } else if (field.type === "date") {
-    input = document.createElement("input");
-    input.type = "date";
-    // Not `.narrow`: a date field needs room for dd/mm/yyyy + the picker button.
-    input.classList.add("date-field");
-  } else {
-    input = document.createElement("input");
-    input.type = field.type === "text" ? "text" : "number";
-    if (field.type === "float") input.step = "any";
-    if (field.type === "int") input.min = "0";
-    if (def !== undefined && def !== null) input.placeholder = String(def);
-    input.classList.add("narrow");
-  }
-  input.dataset.configKey = field.key;
-  input.dataset.configType = field.type;
-  row.appendChild(input);
-  return row;
-}
-
-// Fill the pane content divs (data-config="...") from the schemas above. Called
-// from init() before the blanket input wiring, so each generated control gets
-// its onAnyChange listener like a hand-written one.
-function buildConfigPanels() {
-  ["effectiveness", "farming", "exploring", "resources"].forEach((name) => {
-    const container = document.querySelector(`.config-fields[data-config="${name}"]`);
-    if (container) CONFIG_FIELDS[name].forEach((f) => container.appendChild(createConfigField(f)));
-  });
-
-  const pets = document.querySelector('.config-fields[data-config="pets"]');
-  if (pets) {
-    pets.appendChild(createConfigField({
-      key: "pets.use_crunchy_omelette", label: "Crunchy Omelette (1.5x)", type: "bool",
-      help: "Crunchy Omelette: a 1.5x multiplier on every pet's item retrieval.",
-    }));
-    const grid = document.createElement("div");
-    grid.className = "pet-grid";
-    PET_NAMES.forEach((name) => grid.appendChild(createConfigField({
-      key: `pets.${name}`, label: name, type: "int", compact: true,
-    })));
-    pets.appendChild(grid);
-  }
-
-  const buildings = document.querySelector('.config-fields[data-config="buildings"]');
-  if (buildings) {
-    BUILDING_SECTIONS.forEach((section) => {
-      const wrap = document.createElement("div");
-      wrap.className = "config-section";
-      const heading = document.createElement("h4");
-      heading.textContent = section.title;
-      wrap.appendChild(heading);
-      section.fields.forEach((f) => wrap.appendChild(createConfigField(f)));
-      buildings.appendChild(wrap);
-    });
-  }
-}
-
-// Read every generated config control into a {dotted key: value} object, sent
-// as the `config` param. A blank input / "Default" select is omitted, so the
-// server uses config.toml.
-function readConfigParams() {
-  const config = {};
-  document.querySelectorAll("[data-config-key]").forEach((el) => {
-    const key = el.dataset.configKey;
-    const type = el.dataset.configType;
-    if (type === "bool") {
-      // Only a checkbox toggled away from its default is an override.
-      if (el.checked !== !!configDefault(key)) config[key] = el.checked;
-      return;
-    }
-    const raw = el.value;
-    if (raw === "" || raw == null) return;  // "" autobool = Auto-detect, no override
-    if (type === "autobool") config[key] = raw === "true";
-    else if (type === "int") config[key] = parseInt(raw, 10);
-    else if (type === "float") config[key] = parseFloat(raw);
-    else config[key] = raw; // text / date -> string
-  });
-  return config;
-}
-
-function applyConfigParams(config) {
-  config = config || {};
-  document.querySelectorAll("[data-config-key]").forEach((el) => {
-    const key = el.dataset.configKey;
-    const type = el.dataset.configType;
-    if (type === "bool") {
-      el.checked = key in config ? !!config[key] : !!configDefault(key);
-    } else if (type === "autobool") {
-      el.value = key in config ? String(!!config[key]) : autoboolDefaultValue(key);
-    } else {
-      el.value = key in config ? config[key] : "";
-    }
-  });
-}
-
-// --- Material trading pane --------------------------------------------------
-//
-// Which raw materials the plan may trade for Arnold Palmers, and at what price.
-// Everything comes from the injected config's `[trading.ap]` section: `prices`
-// (item -> default apk) is the item universe, `price_bounds` (item -> [low,high])
-// is the greyed guide range, and `enabled`/`allow`/`deny` give the default
-// checkbox state. The pane always emits an ALLOW list (never a deny list -- see
-// webapi._ap_trading_override_lines), sent as the `ap_trading` param only when it
-// deviates from those defaults, so an untouched pane adds nothing to the request.
-
-function apTradingConfig() {
-  return (CONFIG_DEFAULTS.trading && CONFIG_DEFAULTS.trading.ap) || {};
-}
-
-// Every tradeable item, sorted -- the keys of [trading.ap.prices].
-function apTradingItems() {
-  return Object.keys(apTradingConfig().prices || {}).sort();
-}
-
-function apDefaultPrice(item) {
-  return (apTradingConfig().prices || {})[item];
-}
-
-// [low, high] guide bounds for an item, or undefined.
-function apPriceBounds(item) {
-  return (apTradingConfig().price_bounds || {})[item];
-}
-
-// Normalise a config allow/deny entry the way config._normalise_item does, so a
-// TOML key written with underscores matches the spaced item name.
-function normaliseItem(name) {
-  return String(name).replace(/_/g, " ").trim().toLowerCase();
-}
-
-// The set of items tradeable by default, given a `[trading.ap]` config table and
-// the item universe -- what "Restore defaults" resets to (mirrors
-// config.arnold_palmer_prices). Pure, so it can be unit-tested.
-export function computeDefaultAllowed(ap, items) {
-  ap = ap || {};
-  if (ap.enabled === false) return new Set();
-  if (Array.isArray(ap.allow)) {
-    const keep = new Set(ap.allow.map(normaliseItem));
-    return new Set(items.filter((i) => keep.has(normaliseItem(i))));
-  }
-  if (Array.isArray(ap.deny)) {
-    const drop = new Set(ap.deny.map(normaliseItem));
-    return new Set(items.filter((i) => !drop.has(normaliseItem(i))));
-  }
-  return new Set(items); // enabled, no filter -> everything
-}
-
-function defaultAllowedItems() {
-  return computeDefaultAllowed(apTradingConfig(), apTradingItems());
-}
-
-// Core of readMaterialTrading, pure for testing: given the checked items, the
-// map of items whose price was edited, the default allow set, and a
-// default-price lookup, return the `ap_trading` param -- or null when nothing
-// deviates from the config default. `prices` is included only when a price was
-// edited, and then carries every allowed item so it can replace the whole table.
-export function computeApTradingParam(allowed, edited, defaultAllowed, defaultPriceOf) {
-  const sameAllow =
-    allowed.length === defaultAllowed.size && allowed.every((i) => defaultAllowed.has(i));
-  const anyEdited = Object.keys(edited).length > 0;
-  if (sameAllow && !anyEdited) return null;
-
-  const result = { allow: allowed };
-  if (anyEdited) {
-    const prices = {};
-    allowed.forEach((item) => {
-      prices[item] = item in edited ? edited[item] : defaultPriceOf(item);
-    });
-    result.prices = prices;
-  }
-  return result;
-}
-
-function titleCaseItem(name) {
-  return name.replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-// Build one checkbox + price + bounds row per tradeable item, checked to the
-// config default. Called from init() before the blanket input wiring, so each
-// checkbox/price input gets its onAnyChange listener like a hand-written one.
-function buildMaterialTradingPane() {
-  const list = document.getElementById("material-trading-list");
-  if (!list) return;
-  const defaults = defaultAllowedItems();
-  apTradingItems().forEach((item) => {
-    const row = document.createElement("div");
-    row.className = "material-row";
-    row.dataset.item = item;
-
-    const label = document.createElement("label");
-    label.className = "material-check";
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.dataset.apItem = item;
-    check.checked = defaults.has(item);
-    const name = document.createElement("span");
-    name.className = "material-name";
-    name.textContent = titleCaseItem(item);
-    label.append(check, name);
-
-    const price = document.createElement("input");
-    price.type = "number";
-    price.min = "0";
-    price.step = "any";
-    price.className = "material-price narrow";
-    price.dataset.apPrice = item;
-    const def = apDefaultPrice(item);
-    if (def !== undefined) price.placeholder = String(def);
-
-    const bounds = document.createElement("span");
-    bounds.className = "material-bounds";
-    const range = apPriceBounds(item);
-    if (Array.isArray(range)) {
-      bounds.textContent = range[0] === range[1] ? String(range[0]) : `${range[0]}–${range[1]}`;
-    }
-
-    row.append(label, price, bounds);
-    list.appendChild(row);
-  });
-}
-
-// Read the pane into an `ap_trading` param, or null when it matches the config
-// default (so an untouched pane sends nothing). `prices` is included only when a
-// price was actually edited, and then carries EVERY allowed item (edited value or
-// default) because the override replaces the whole [trading.ap.prices] table.
-function readMaterialTrading() {
-  const rows = document.querySelectorAll("#material-trading-list .material-row");
-  if (!rows.length) return null;
-  const allowed = [];
-  const edited = {};
-  rows.forEach((row) => {
-    const item = row.dataset.item;
-    if (!row.querySelector("[data-ap-item]").checked) return;
-    allowed.push(item);
-    const raw = row.querySelector("[data-ap-price]").value;
-    if (raw !== "") edited[item] = Number(raw);
-  });
-  return computeApTradingParam(allowed, edited, defaultAllowedItems(), apDefaultPrice);
-}
-
-// Restore the pane from a saved `ap_trading` param (or the config default when
-// absent/null). A custom price fills its input; a price equal to the default is
-// left as an empty placeholder, so the round-trip doesn't turn every default into
-// a phantom "edit".
-function applyMaterialTrading(apTrading) {
-  const rows = document.querySelectorAll("#material-trading-list .material-row");
-  if (!rows.length) return;
-  const hasOverride = apTrading && Array.isArray(apTrading.allow);
-  const allowedSet = hasOverride ? new Set(apTrading.allow) : defaultAllowedItems();
-  const prices = (hasOverride && apTrading.prices) || {};
-  rows.forEach((row) => {
-    const item = row.dataset.item;
-    row.querySelector("[data-ap-item]").checked = allowedSet.has(item);
-    const priceInput = row.querySelector("[data-ap-price]");
-    priceInput.value =
-      item in prices && Number(prices[item]) !== Number(apDefaultPrice(item))
-        ? prices[item]
-        : "";
-  });
-}
-
-function setAllMaterials(on) {
-  document
-    .querySelectorAll("#material-trading-list [data-ap-item]")
-    .forEach((cb) => { cb.checked = on; });
-  onAnyChange();
-}
-
-function restoreMaterialDefaults() {
-  applyMaterialTrading(null);
-  onAnyChange();
-}
-
-// Filter the visible rows by name substring (UI-only; never re-solves).
-function filterMaterialRows() {
-  const q = ($("#material-trading-filter").value || "").trim().toLowerCase();
-  document.querySelectorAll("#material-trading-list .material-row").forEach((row) => {
-    row.hidden = q !== "" && !row.dataset.item.includes(q);
-  });
-}
-
 // The two goal lists: each maps its row-container id to the <datalist> id
 // backing its item picker. Mastery goals only ever suggest from the user's
 // own masterable-item catalogue (mastery_items.txt); item goals suggest from
@@ -623,12 +104,6 @@ function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
-}
-
-function todayISO() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 // --- Goal lists: "Item:Amount,Item:Amount" <-> row entries -----------------
@@ -773,19 +248,11 @@ async function loadCatalogue(url, datalistId) {
   }
 }
 
-// The start date defaults to "today" without being a real setting: the input
-// always shows a date, but until the user picks one it shows today muted,
-// placeholder-style, and nothing is sent (the solver defaults to today
-// server-side). Picking today (or clearing) returns it to that implicit state.
-function setStartDateDisplay(value) {
-  const el = $("#start-date");
-  const implicit = !value || value === todayISO();
-  el.value = implicit ? todayISO() : value;
-  el.classList.toggle("implicit-date", implicit);
-}
-
 // --- Reading/writing the form <-> a {mastery_text, inventory_text, params} state ---
 
+// The Goal pane's params (this module's half) plus the settings popover's
+// (settings.js's). Split exactly the way the state is: everything here is a
+// goal or a per-request display choice, everything there describes the farm.
 function readParams() {
   const params = {};
 
@@ -807,79 +274,13 @@ function readParams() {
   const items = serializeGoalEntries(readGoalRows("items-rows"));
   if (items) params.items = items;
 
-  if ($("#current-stamina").value) {
-    params.current_stamina = Number($("#current-stamina").value);
-  }
-  if ($("#cookie-sets").value !== "") {
-    params.cookie_sets = Number($("#cookie-sets").value);
-  }
-  // Always sent (a config override, so the UI select is authoritative over the
-  // bundled config.toml default); "none" means no sawmill boost.
-  params.hickory_omelette = $("#hickory-omelette").value;
-  if ($("#use-pumpkin-juice").checked) {
-    const cap = $("#pumpkin-juice-cap").value;
-    params.use_pumpkin_juice = cap !== "" ? Number(cap) : -1;
-  }
-  // Only sent when unchecked (off) -- the default (count juice in net gold) is
-  // left to the bundled config, so this stays a toggle like the other flags.
-  if (!$("#count-pumpkin-juice-gold").checked) {
-    params.count_pumpkin_juice_gold = false;
-  }
-  const calendar = document.querySelector('input[name="calendar"]:checked').value;
-  params.calendar = calendar;
-  // The start date only means anything when the calendar is fully modelled
-  // (the input is disabled otherwise, but its value lingers -- don't send it),
-  // and an implicit "today" (see setStartDateDisplay) is never sent either.
-  if (calendar === "full" && !$("#start-date").classList.contains("implicit-date")) {
-    const startDate = $("#start-date").value;
-    if (startDate) params.start_date = startDate;
-  }
-
-  const maxGold = $("#max-gold").value.trim();
-  if (maxGold) params.max_gold = maxGold;
-  if ($("#max-ap").value !== "") params.max_ap = Number($("#max-ap").value);
-  if ($("#max-ln").value !== "") params.max_ln = Number($("#max-ln").value);
-  if ($("#max-ac").value !== "") params.max_ac = Number($("#max-ac").value);
-  const passiveLimit = $("#passive-limit").value.trim();
-  if (passiveLimit) params.passive_limit = passiveLimit;
-  if ($("#plans").value) params.plans = Number($("#plans").value);
-
-  const spreadAxis = $("#spread-axis").value;
-  if (spreadAxis) {
-    // AXIS[=LO:HI] -- the same grammar --spread/webapi's "spread" param parses
-    // (main._parse_spread); a blank lo/hi leaves that axis's own default range.
-    const lo = $("#spread-lo").value.trim();
-    const hi = $("#spread-hi").value.trim();
-    params.spread = lo !== "" && hi !== "" ? `${spreadAxis}=${lo}:${hi}` : spreadAxis;
-  }
-  const graphMetric = $("#graph-metric").value;
-  if (graphMetric) params.graph = graphMetric;
-
   // The craft breakdown renders into its own collapsible pane, so it is
   // always requested (a refilter field -- asking costs no extra solve).
   params.breakdown = true;
 
-  for (const [key, sel] of Object.entries(PRICE_FIELDS)) {
-    if ($(sel).value !== "") params[key] = Number($(sel).value);
-  }
-  const instantGrow = $("#instant-grow-time").value.trim();
-  if (instantGrow) params.instant_grow_time = instantGrow;
-
-  const overrides = $("#overrides").value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (overrides.length) params.overrides = overrides;
-
-  const config = readConfigParams();
-  if (Object.keys(config).length) params.config = config;
-
-  const apTrading = readMaterialTrading();
-  if (apTrading) params.ap_trading = apTrading;
-
   if (planSelect) params.plan_select = planSelect;
 
-  return params;
+  return { ...params, ...readSettingsParams() };
 }
 
 function applyParams(params) {
@@ -905,59 +306,8 @@ function applyParams(params) {
   }
   renderGoalRows("mastery-rows", parseGoalSpec(params.mastery || ""), GOAL_LISTS["mastery-rows"]);
   renderGoalRows("items-rows", parseGoalSpec(params.items || ""), GOAL_LISTS["items-rows"]);
-  $("#current-stamina").value = params.current_stamina ?? 0;
-  $("#cookie-sets").value = params.cookie_sets ?? "";
-  $("#hickory-omelette").value = params.hickory_omelette ?? "none";
-
-  const hasPj = params.use_pumpkin_juice !== undefined && params.use_pumpkin_juice !== null;
-  $("#use-pumpkin-juice").checked = hasPj;
-  $("#pumpkin-juice-cap").disabled = !hasPj;
-  $("#pumpkin-juice-cap").value = hasPj && params.use_pumpkin_juice >= 0 ? params.use_pumpkin_juice : "";
-  // Absent means the default (count juice in net gold); only an explicit false unchecks.
-  $("#count-pumpkin-juice-gold").checked = params.count_pumpkin_juice_gold !== false;
-
-  // "model" is the pre-enum wire value for "full"; a state saved before the
-  // enum existed carries no calendar at all and gets the new default (ignore).
-  const calendarValue =
-    params.calendar === "model" ? "full" : params.calendar || "ignore";
-  document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
-    radio.checked = radio.value === calendarValue;
-  });
-  setStartDateDisplay(params.start_date);
-  $("#start-date").disabled = calendarValue !== "full";
-
-  $("#max-gold").value = params.max_gold || "";
-  $("#max-ap").value = params.max_ap ?? "";
-  $("#max-ln").value = params.max_ln ?? "";
-  $("#max-ac").value = params.max_ac ?? "";
-  $("#passive-limit").value = params.passive_limit || "";
-  $("#plans").value = params.plans || 5;
-
-  const spreadSpec = params.spread || "";
-  const [spreadAxisValue, spreadRange] = spreadSpec.split("=");
-  $("#spread-axis").value = spreadAxisValue || "";
-  const [spreadLo, spreadHi] = spreadRange ? spreadRange.split(":") : ["", ""];
-  $("#spread-lo").value = spreadLo || "";
-  $("#spread-hi").value = spreadHi || "";
-  updateSpreadRangeVisibility();
-  $("#graph-metric").value = params.graph || "";
-
-  for (const [key, sel] of Object.entries(PRICE_FIELDS)) {
-    $(sel).value = params[key] ?? "";
-  }
-  $("#instant-grow-time").value = params.instant_grow_time || "";
-  $("#overrides").value = (params.overrides || []).join("\n");
-  applyConfigParams(params.config);
-  applyMaterialTrading(params.ap_trading);
+  applySettingsParams(params);
   updateGoalSummary();
-}
-
-// The lo/hi range only means anything for an axis actually sampling a range
-// (pumpkin-juice/time/gold); "passive" enumerates its own breakpoints and the
-// default "" (no spread) has no range either, so the row stays hidden for both.
-function updateSpreadRangeVisibility() {
-  const axis = $("#spread-axis").value;
-  $("#spread-range-row").hidden = axis === "" || axis === "passive";
 }
 
 // --- The Goal pane's collapsed-state summary --------------------------------
@@ -1074,7 +424,7 @@ async function solve() {
   const masteryText = $("#mastery-text").value;
   const inventoryText = $("#inventory-text").value;
   if (!masteryText.trim() && !inventoryText.trim()) {
-    setStatus("Paste your data to begin.");
+    setStatus("Paste your data under ⚙ Settings to begin.");
     hideResults();
     return;
   }
@@ -1559,67 +909,44 @@ function onAnyChange() {
 }
 
 function init() {
-  // Build the generated preference panels (Exploring effectiveness / Farming /
-  // Pets / Buildings) first, so their controls exist before the blanket input
-  // wiring below attaches onAnyChange and before restoreState/applyParams runs.
-  readConfigDefaults();
-  buildConfigPanels();
-  buildMaterialTradingPane();
+  // The settings popover first: it builds the generated preference panels and
+  // the material-trading rows, so every control a saved state applies to exists
+  // before restoreState() below runs. Its Save is this page's second request
+  // cadence -- the staged edits land in one solve, not one per keystroke.
+  initSettings({
+    onSave: () => {
+      planSelect = null;
+      saveState();
+      solve();
+    },
+  });
   initHelpTooltips();
   initDebugCommand();
 
-  $("#material-trading-enable-all").addEventListener("click", () => setAllMaterials(true));
-  $("#material-trading-disable-all").addEventListener("click", () => setAllMaterials(false));
-  $("#material-trading-restore").addEventListener("click", restoreMaterialDefaults);
-  $("#material-trading-filter").addEventListener("input", filterMaterialRows);
-
   $("#expand-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(true));
   $("#collapse-all-groups").addEventListener("click", () => setAllPlanGroupsOpen(false));
+
+  // The Goal pane is the only live-solving part of the page (everything else is
+  // staged behind the popover's Save), so its handful of controls are wired
+  // one by one rather than by a blanket sweep: the target dropdown, the level
+  // it reveals, and the two goal lists (delegated, see wireGoalList).
   $("#target").addEventListener("change", () => {
     $("#level").hidden = $("#target").value !== "level";
     onAnyChange();
   });
-  $("#use-pumpkin-juice").addEventListener("change", () => {
-    $("#pumpkin-juice-cap").disabled = !$("#use-pumpkin-juice").checked;
-    onAnyChange();
-  });
-  document.querySelectorAll('input[name="calendar"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      $("#start-date").disabled = radio.value !== "full";
-      onAnyChange();
-    });
-  });
-  $("#start-date").addEventListener("change", () => {
-    setStartDateDisplay($("#start-date").value);
-    onAnyChange();
-  });
-  $("#spread-axis").addEventListener("change", () => {
-    updateSpreadRangeVisibility();
-    onAnyChange();
-  });
-
-  document.querySelectorAll("input, textarea, select").forEach((el) => {
-    if (el.id === "target" || el.id === "use-pumpkin-juice") return; // wired above
-    if (el.name === "calendar" || el.id === "start-date") return; // wired above
-    if (el.id === "spread-axis") return; // wired above
-    if (el.id === "material-trading-filter") return; // a UI-only row filter, no re-solve
-    const changeEvent =
-      el.tagName === "SELECT" || el.type === "checkbox" || el.type === "radio" || el.type === "date";
-    el.addEventListener(changeEvent ? "change" : "input", onAnyChange);
-  });
+  $("#level").addEventListener("input", onAnyChange);
 
   // Goal lists (Mastery/Item goals): rows are built dynamically, so they're
   // wired via event delegation on their (stable) container -- see
-  // wireGoalList -- rather than the blanket per-input wiring above. Render
-  // the default single blank row first; restoreState() below replaces it
-  // with saved entries, if any.
+  // wireGoalList. Render the default single blank row first; restoreState()
+  // below replaces it with saved entries, if any.
   Object.entries(GOAL_LISTS).forEach(([containerId, datalistId]) => {
     renderGoalRows(containerId, [], datalistId);
     wireGoalList(containerId);
   });
   // Only the goal-list "+ Add" buttons carry data-goal; other .btn-add buttons
-  // (Enable/Disable/Restore in the trading pane, Expand/Collapse, debug Copy)
-  // have their own handlers and must not get the append-row one.
+  // (the popover's Save/Cancel and material buttons, Expand/Collapse, debug
+  // Copy) have their own handlers and must not get the append-row one.
   document.querySelectorAll(".btn-add[data-goal]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const containerId = btn.dataset.goal;
@@ -1631,39 +958,8 @@ function init() {
     loadCatalogue(url, datalistId);
   });
 
-  // Collapsing a pane is a UI preference, not solver state: persist each
-  // pane's state separately and never trigger a re-solve on toggle. Each
-  // pane's default open/closed state comes from the markup's `open`
-  // attribute (limits & crafts start collapsed).
-  let ui = {};
-  try {
-    ui = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
-  } catch (err) {
-    // Corrupt/unavailable storage: keep the markup defaults.
-  }
-  if (!ui.panes) ui.panes = {};
-  if (ui.paste_collapsed !== undefined) {
-    // Migrate the pre-panes shape.
-    ui.panes["paste-details"] = !!ui.paste_collapsed;
-    delete ui.paste_collapsed;
-  }
-  document.querySelectorAll("details.pane").forEach((pane) => {
-    if (ui.panes[pane.id] !== undefined) pane.open = !ui.panes[pane.id];
-    pane.addEventListener("toggle", () => {
-      ui.panes[pane.id] = !pane.open;
-      try {
-        localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(ui));
-      } catch (err) {
-        // Persistence is a convenience; ignore storage failures.
-      }
-    });
-  });
-
-  // A brand-new session never runs applyParams, so seed the implicit today,
-  // the Goal pane's summary, and the spread-range row's initial visibility.
-  setStartDateDisplay("");
+  // A brand-new session never runs applyParams, so seed the Goal pane's summary.
   updateGoalSummary();
-  updateSpreadRangeVisibility();
   initGraphTooltip();
 
   const restored = restoreState();
@@ -1693,4 +989,8 @@ function applySeededGoal(goal) {
   return true;
 }
 
-document.addEventListener("DOMContentLoaded", init);
+// `once`: init() wires the page exactly one time. DOMContentLoaded only fires
+// once in a browser anyway, but the page tests re-import this module against a
+// rebuilt DOM and dispatch the event again -- without this, every earlier
+// import's init() would run again too, wiring the new page a second time.
+document.addEventListener("DOMContentLoaded", init, { once: true });

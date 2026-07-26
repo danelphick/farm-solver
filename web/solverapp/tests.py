@@ -235,6 +235,10 @@ class ApiMasteryCostsTests(SimpleTestCase):
         response = self.client.get("/masteries")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "masteries.js")
+        # The shared settings popover, and the config defaults its generated
+        # preference panels are built from (this page needs both now).
+        self.assertContains(response, 'id="settings-btn"')
+        self.assertContains(response, 'id="config-defaults"')
 
 
 class SessionCacheTests(SimpleTestCase):

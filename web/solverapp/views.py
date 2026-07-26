@@ -51,11 +51,17 @@ def index(request: HttpRequest) -> HttpResponse:
 def masteries(request: HttpRequest) -> HttpResponse:
     """The mastery-costs page (`--mastery-costs` in the browser).
 
-    No context: unlike :func:`index` this page has no preference panels, so it
-    needs no ``config_defaults``. Its client reads the pasted state and every
-    parameter from the same ``localStorage`` the solver page writes.
+    Same ``config_defaults`` as :func:`index`: this page includes the very same
+    settings popover (``_settings.html``), whose preference panels and
+    material-trading list are generated from those defaults. Its client reads
+    (and, on a popover save, writes) the pasted state and every parameter in the
+    same ``localStorage`` the solver page uses.
     """
-    return render(request, "solverapp/mastery_costs.html")
+    return render(
+        request,
+        "solverapp/mastery_costs.html",
+        {"config_defaults": webapi.config_defaults()},
+    )
 
 
 def _section_html(text: str) -> str:

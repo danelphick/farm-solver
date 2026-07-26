@@ -17,270 +17,42 @@
     &middot; <a href="/masteries">&larr; back to mastery costs</a>
   </p>
   <p class="tagline">
-    Paste your masteries and inventory from FarmRPG; nothing you paste leaves
-    your browser except in the solve request itself, and nothing is stored on
-    the server -- your state and settings are saved to this browser's
-    <code>localStorage</code> only.
+    Paste your masteries and inventory from FarmRPG under the
+    <strong>&#9881; Settings</strong> button, top right; everything else about
+    your farm is set there too. Nothing you paste leaves your browser except in
+    the solve request itself, and nothing is stored on the server -- your state
+    and settings are saved to this browser's <code>localStorage</code> only.
   </p>
 </header>
 
+{% include "solverapp/_settings.html" %}
+
 <main>
-  <details id="paste-details" class="pane" open>
-    <summary>Game state (masteries &amp; inventory)</summary>
-    <div class="paste-fields">
-      <div class="field">
-        <label for="mastery-text">Masteries (paste from FarmRPG)</label>
-        <textarea id="mastery-text" rows="10" spellcheck="false"
-          placeholder="Mastery In-Progress...&#10;Item Name&#10;12,345 / 100,000 Progress&#10;..."></textarea>
-      </div>
-      <div class="field">
-        <label for="inventory-text">Inventory (paste from FarmRPG)</label>
-        <textarea id="inventory-text" rows="10" spellcheck="false"
-          placeholder="Category chevron_down&#10;Item Name&#10;description&#10;1,234&#10;..."></textarea>
-      </div>
+  <details id="goal-details" class="pane" open>
+    <summary>Goal<span id="goal-summary" class="summary-detail"></span></summary>
+    <div class="field-row">
+      <label for="target">Target<button type="button" class="help-icon" aria-label="Help" data-help="What to solve for: the highest tower level you can reach, a specific tower level, or no tower (just the goals below).">?</button></label>
+      <select id="target">
+        <option value="">Tower (highest reachable)</option>
+        <option value="level">Specific tower level</option>
+        <option value="none">No Tower</option>
+      </select>
+      <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
     </div>
+    <div class="field goal-field">
+      <label>Mastery goal(s)<button type="button" class="help-icon" aria-label="Help" data-help="Extra mastery targets to hit on top of (or instead of) the tower — one item and the mastery amount per row.">?</button></label>
+      <div id="mastery-rows" class="goal-rows"></div>
+      <button type="button" class="btn-add" data-goal="mastery-rows">+ Add</button>
+    </div>
+    <div class="field goal-field">
+      <label>Item goal(s)<button type="button" class="help-icon" aria-label="Help" data-help="Plain item quantities you want left in inventory when the plan finishes, regardless of mastery.">?</button></label>
+      <div id="items-rows" class="goal-rows"></div>
+      <button type="button" class="btn-add" data-goal="items-rows">+ Add</button>
+    </div>
+    <datalist id="mastery-catalogue"></datalist>
+    <datalist id="item-catalogue"></datalist>
   </details>
 
-  <div class="controls-grid">
-    <div class="controls-col">
-    <details id="goal-details" class="pane" open>
-      <summary>Goal<span id="goal-summary" class="summary-detail"></span></summary>
-      <div class="field-row">
-        <label for="target">Target<button type="button" class="help-icon" aria-label="Help" data-help="What to solve for: the highest tower level you can reach, a specific tower level, or no tower (just the goals below).">?</button></label>
-        <select id="target">
-          <option value="">Tower (highest reachable)</option>
-          <option value="level">Specific tower level</option>
-          <option value="none">No Tower</option>
-        </select>
-        <input id="level" type="number" min="1" placeholder="level #" class="narrow" hidden>
-      </div>
-      <div class="field goal-field">
-        <label>Mastery goal(s)<button type="button" class="help-icon" aria-label="Help" data-help="Extra mastery targets to hit on top of (or instead of) the tower — one item and the mastery amount per row.">?</button></label>
-        <div id="mastery-rows" class="goal-rows"></div>
-        <button type="button" class="btn-add" data-goal="mastery-rows">+ Add</button>
-      </div>
-      <div class="field goal-field">
-        <label>Item goal(s)<button type="button" class="help-icon" aria-label="Help" data-help="Plain item quantities you want left in inventory when the plan finishes, regardless of mastery.">?</button></label>
-        <div id="items-rows" class="goal-rows"></div>
-        <button type="button" class="btn-add" data-goal="items-rows">+ Add</button>
-      </div>
-      <datalist id="mastery-catalogue"></datalist>
-      <datalist id="item-catalogue"></datalist>
-    </details>
-
-    <details id="limits-details" class="pane">
-      <summary>Limits</summary>
-      <div class="field-row">
-        <label for="max-gold">Max gold<button type="button" class="help-icon" aria-label="Help" data-help="Cap on gold spent buying consumables. 'unlimited' buys freely (fastest); 'inventory' or 0 self-sources everything; a number caps the spend.">?</button></label>
-        <input id="max-gold" type="text" placeholder="unlimited">
-      </div>
-      <div class="field-row">
-        <label for="max-ap">Max Arnold Palmers<button type="button" class="help-icon" aria-label="Help" data-help="Upper bound on Arnold Palmers the plan may spend (the exploring tool). Blank = no limit.">?</button></label>
-        <input id="max-ap" type="number" min="0" placeholder="none">
-      </div>
-      <div class="field-row">
-        <label for="max-ln">Max Large Nets<button type="button" class="help-icon" aria-label="Help" data-help="Upper bound on Large Nets the plan may spend (the fishing tool). Blank = no limit.">?</button></label>
-        <input id="max-ln" type="number" min="0" placeholder="none">
-      </div>
-      <div class="field-row">
-        <label for="max-ac">Max Apple Ciders<button type="button" class="help-icon" aria-label="Help" data-help="Upper bound on Apple Ciders the plan may spend (cider exploring). Blank = no limit.">?</button></label>
-        <input id="max-ac" type="number" min="0" placeholder="none">
-      </div>
-      <div class="field-row">
-        <label for="passive-limit">Max plan duration<button type="button" class="help-icon" aria-label="Help" data-help="Only show plans finishing within this long, e.g. 5d or 1d6h. Blank = no limit.">?</button></label>
-        <input id="passive-limit" type="text" placeholder="e.g. 5d, 1d6h">
-      </div>
-      <div class="field-row">
-        <label for="plans">Plans across frontier<button type="button" class="help-icon" aria-label="Help" data-help="How many plans to list along the time-vs-gold frontier.">?</button></label>
-        <input id="plans" type="number" min="1" value="5">
-      </div>
-      <div class="field-row">
-        <label for="spread-axis">Spread along<button type="button" class="help-icon" aria-label="Help" data-help="Spread the shown plans linearly along this axis instead of the default time-thin — e.g. see the impact of spending 0..10 Pumpkin Juice, or the marginal cost of buying more speed.">?</button></label>
-        <select id="spread-axis">
-          <option value="">Time (default)</option>
-          <option value="pumpkin-juice">Pumpkin Juice</option>
-          <option value="time">Time</option>
-          <option value="gold">Gold</option>
-          <option value="passive">Passive completion</option>
-        </select>
-      </div>
-      <div class="field-row" id="spread-range-row" hidden>
-        <label for="spread-lo">Range<button type="button" class="help-icon" aria-label="Help" data-help="Optional lo:hi range to sample the spread axis across. Blank uses that axis's own natural default (the fast/cheap endpoints, or the feasible max for Pumpkin Juice).">?</button></label>
-        <input id="spread-lo" type="number" step="any" placeholder="lo" class="narrow">
-        <input id="spread-hi" type="number" step="any" placeholder="hi" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="graph-metric">Impact graph<button type="button" class="help-icon" aria-label="Help" data-help="Plot a secondary metric against the spread axis alongside the frontier table (an SVG, hover a point for details).">?</button></label>
-        <select id="graph-metric">
-          <option value="">Off</option>
-          <option value="auto">Auto</option>
-          <option value="gold">Gold</option>
-          <option value="time">Time</option>
-        </select>
-      </div>
-    </details>
-
-    <details id="farming-details" class="pane">
-      <summary>Farming</summary>
-      <div class="config-fields" data-config="farming"></div>
-      <div class="field-row">
-        <label for="instant-grow-time">Instant grow time<button type="button" class="help-icon" aria-label="Help" data-help="Effective grow time for crops whose base growth is 5 minutes or less when using Breakfast Boost — models the real time it takes to click the plant and harvest buttons (e.g. 3s).">?</button></label>
-        <input id="instant-grow-time" type="text" placeholder="3s" class="narrow">
-      </div>
-    </details>
-
-    <details id="buildings-details" class="pane">
-      <summary>Buildings</summary>
-      <p class="pane-hint">
-        Passive-production buildings. Blank uses the bundled default.
-      </p>
-      <div class="config-fields" data-config="buildings"></div>
-    </details>
-
-    <details id="advanced-details" class="pane">
-      <summary>Advanced</summary>
-      <div class="field">
-        <label for="overrides">Config overrides (one <code>section.flag=value</code> per line)<button type="button" class="help-icon" aria-label="Help" data-help="Raw config overrides, one section.flag=value per line — for any setting without its own control above.">?</button></label>
-        <textarea id="overrides" rows="3" spellcheck="false"
-          placeholder="sawmill.have_pine_boost=false"></textarea>
-      </div>
-    </details>
-    </div>
-
-    <div class="controls-col">
-    <details id="resources-details" class="pane" open>
-      <summary>Resources</summary>
-      <div class="field-row">
-        <label for="current-stamina">Current stamina<button type="button" class="help-icon" aria-label="Help" data-help="Stamina you already hold, seeding the Apple Cider channel before any more is gained.">?</button></label>
-        <input id="current-stamina" type="number" min="0" value="0">
-      </div>
-      <div class="field-row">
-        <label for="cookie-sets">Cookie sets<button type="button" class="help-icon" aria-label="Help" data-help="Cookie sets available for cookie-boosted farming. Blank = take the count from your inventory.">?</button></label>
-        <input id="cookie-sets" type="number" min="0" placeholder="from inventory">
-      </div>
-      <div class="field-row">
-        <label for="hickory-omelette">Hickory Omelette<button type="button" class="help-icon" aria-label="Help" data-help="How the sawmill's +20% boost meal is used: None, All outputs, or only Oak (the scarce output).">?</button></label>
-        <select id="hickory-omelette" class="narrow">
-          <option value="none">None</option>
-          <option value="all">All</option>
-          <option value="only_oak">Only Oak</option>
-        </select>
-      </div>
-      <div class="field-row">
-        <label for="use-pumpkin-juice">
-          <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
-        </label>
-        <button type="button" class="help-icon" aria-label="Help" data-help="Let the solver buy Pumpkin Juice to instantly boost a mastery goal; the box caps how many it may use.">?</button>
-        <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
-      </div>
-      <div class="field-row">
-        <label for="count-pumpkin-juice-gold">
-          <input id="count-pumpkin-juice-gold" type="checkbox" checked> Count Pumpkin Juice cost in net gold
-        </label>
-        <button type="button" class="help-icon" aria-label="Help" data-help="On (default): a juice's price counts in net gold like any buy. Off: the solver still only uses juice where it beats the alternative, but its cost is dropped from net gold, so plans compare on real gold spent with the juice as its own count — pair with Spread along Pumpkin Juice to read the gold each juice saves.">?</button>
-      </div>
-      <!-- The Mechanical Heart's monthly grants; sits just above Calendar, which
-           decides how those grant days are counted. -->
-      <div class="config-fields" data-config="resources"></div>
-      <div class="field-row">
-        <label>Calendar<button type="button" class="help-icon" aria-label="Help" data-help="How date-dependent sources (seasonal pets, Mechanical Heart grants) are handled: ignore them, average to a steady rate, or model the real calendar windows (uses Start date).">?</button></label>
-        <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
-        <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
-        <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
-      </div>
-      <div class="field-row">
-        <label for="start-date">Start date<button type="button" class="help-icon" aria-label="Help" data-help="The date the plan begins, used by the 'full' calendar model for seasonal windows.">?</button></label>
-        <input id="start-date" type="date" disabled>
-      </div>
-    </details>
-
-    <details id="exploring-details" class="pane">
-      <summary>Exploring</summary>
-      <p class="pane-hint">
-        Unlocks and perks changing what a zone drops, or whether you can enter
-        it at all. Auto-detect reads each from your pasted inventory.
-      </p>
-      <div class="config-fields" data-config="exploring"></div>
-    </details>
-
-    <details id="effectiveness-details" class="pane">
-      <summary>Exploring effectiveness</summary>
-      <p class="pane-hint">
-        Per-zone Exploring Effectiveness driving how many explores one Apple
-        Cider does. Blank uses the bundled default.
-      </p>
-      <div class="config-fields" data-config="effectiveness"></div>
-    </details>
-
-    <details id="pets-details" class="pane">
-      <summary>Pets</summary>
-      <p class="pane-hint">
-        Each pet's current level (tier items come from the game data). Blank uses
-        the bundled default.
-      </p>
-      <div class="config-fields" data-config="pets"></div>
-    </details>
-
-    <details id="trading-details" class="pane">
-      <summary>Trading values</summary>
-      <p class="pane-hint">
-        Gold trade prices used to rank plans by real cost. Arnold Palmer, Apple
-        Cider, Orange Juice, Large Net and Hickory Omelette are priced per 1,000
-        units; Cookie Set and Pumpkin Juice are gold each. Blank uses the bundled
-        default.
-      </p>
-      <div class="field-row">
-        <label for="price-arnold-palmer">Arnold Palmer /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Arnold Palmers, in gold per 1,000 units. Used to score plans by real gold cost.">?</button></label>
-        <input id="price-arnold-palmer" type="number" min="0" step="any" placeholder="60" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-apple-cider">Apple Cider /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Apple Cider, in gold per 1,000 units.">?</button></label>
-        <input id="price-apple-cider" type="number" min="0" step="any" placeholder="20" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-orange-juice">Orange Juice /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Orange Juice, in gold per 1,000 units.">?</button></label>
-        <input id="price-orange-juice" type="number" min="0" step="any" placeholder="8" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-large-net">Large Net /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Large Nets, in gold per 1,000 units.">?</button></label>
-        <input id="price-large-net" type="number" min="0" step="any" placeholder="10" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-cookie-set">Cookie Set each<button type="button" class="help-icon" aria-label="Help" data-help="Price of one Cookie Set, in gold each (not per 1,000).">?</button></label>
-        <input id="price-cookie-set" type="number" min="0" step="any" placeholder="20" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-pumpkin-juice">Pumpkin Juice each<button type="button" class="help-icon" aria-label="Help" data-help="Nominal gold cost of one Pumpkin Juice (used when Allow Pumpkin Juice is on).">?</button></label>
-        <input id="price-pumpkin-juice" type="number" min="0" step="any" placeholder="230" class="narrow">
-      </div>
-      <div class="field-row">
-        <label for="price-hickory-omelette">Hickory Omelette /1k<button type="button" class="help-icon" aria-label="Help" data-help="Price of Hickory Omelettes, in gold per 1,000 units (the sawmill boost meal).">?</button></label>
-        <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow">
-      </div>
-    </details>
-
-    <details id="material-trading-details" class="pane">
-      <summary>Material trading</summary>
-      <p class="pane-hint">
-        Which raw materials the plan may trade for (buy with) Arnold Palmers, and
-        the price it assumes. Untick anything you would not actually trade — a
-        material nobody spare-trades, or one you would only ever buy at a price
-        not worth your time — so plans lean only on trades you would really make.
-        Prices are in AP per 1,000 units; the greyed range is the going rate as a
-        guide, but you can enter any price.
-      </p>
-      <div class="material-trading-toolbar">
-        <input type="search" id="material-trading-filter" placeholder="Filter materials…" aria-label="Filter materials">
-        <div class="material-trading-buttons">
-          <button type="button" id="material-trading-enable-all" class="btn-add">Enable all</button>
-          <button type="button" id="material-trading-disable-all" class="btn-add">Disable all</button>
-          <button type="button" id="material-trading-restore" class="btn-add">Restore defaults</button>
-        </div>
-      </div>
-      <div id="material-trading-list" class="material-trading-list"></div>
-    </details>
-    </div>
-  </div>
 </main>
 
 <section id="results" hidden>

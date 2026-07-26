@@ -10,17 +10,17 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-// Vite's `?raw` rather than fs: it resolves relative to this file at transform
-// time, so the test doesn't depend on the working directory (which the IDE's
-// Vitest runner and `npm test` disagree about -- see vitest.config.js).
-import TEMPLATE from "../../templates/solverapp/mastery_costs.html?raw";
+// The real template, settings include expanded -- see template-fixture.js.
+import { pageBody } from "./template-fixture.js";
 
-// The template's <body> contents, with `{% ... %}` tags stripped (the only
-// Django syntax it uses; the two <script>/<link> tags they sit in are dropped
-// along with the rest of <head>).
-function templateBody() {
-  const html = TEMPLATE.replace(/\{%.*?%\}/g, "");
-  return html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
+// The page markup plus the config the view injects (webapi.config_defaults),
+// which the popover's generated preference panels and material-trading rows are
+// built from; an empty object is enough for everything these tests assert.
+function buildPage() {
+  return (
+    pageBody("mastery_costs") +
+    '<script id="config-defaults" type="application/json">{}</script>'
+  );
 }
 
 const ROWS = [
@@ -59,14 +59,12 @@ function setSavedState(state) {
 
 // Build the page, stub the API, import the module and let it initialise.
 //
-// Returns how many requests the initial load made. Normally one -- but each
-// test re-imports the module (resetModules) and `document` is shared across the
-// whole file, so every earlier import's DOMContentLoaded listener is still
-// attached and fires again against the current DOM. Harmless (they all render
-// the same payload into the same nodes), but it means a "did this action
-// request again?" assertion has to count from this baseline rather than from 0.
+// Returns how many requests the initial load made, which the "did this action
+// request again?" assertions count from. (One: masteries.js registers its
+// DOMContentLoaded listener `{ once: true }`, so an earlier test's import
+// cannot initialise this page a second time.)
 async function loadPage({ state, payload = PAYLOAD, ui } = {}) {
-  document.body.innerHTML = templateBody();
+  document.body.innerHTML = buildPage();
   setSavedState(state);
   // After setSavedState, which clears storage -- the UI key is a separate one.
   if (ui) localStorage.setItem("farm-solver.ui.v1", JSON.stringify(ui));
@@ -95,7 +93,7 @@ const rowText = () =>
 const SAVED = {
   mastery_text: "Mastery In-Progress",
   inventory_text: "Items chevron_down",
-  params: { calendar: "ignore", target: "tower" },
+  params: { calendar: "ignore", target: "tower", mastery: "Gold Bar:5000" },
 };
 
 describe("mastery-costs page", () => {
@@ -116,6 +114,7 @@ describe("mastery-costs page", () => {
     expect(body.params).toEqual({
       calendar: "ignore",
       target: "tower",
+      mastery: "Gold Bar:5000",
       self_sourced: false,
     });
 
@@ -277,7 +276,7 @@ describe("mastery-costs page", () => {
   });
 
   test("nothing pasted yet shows the empty state and never requests", async () => {
-    document.body.innerHTML = templateBody();
+    document.body.innerHTML = buildPage();
     setSavedState(null);
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -289,5 +288,64 @@ describe("mastery-costs page", () => {
     expect(document.querySelector("#empty-state").hidden).toBe(false);
     expect(document.querySelector("#mastery-controls").hidden).toBe(true);
     expect(document.querySelector("#status").textContent).toBe("Nothing pasted yet.");
+  });
+});
+
+// This page's side of the shared settings popover (settings.page.test.js covers
+// the staging cadence itself, on the solver page). What is specific here: a save
+// has to WRITE the state both pages read -- keeping the solver page's goal,
+// which the popover never shows -- and then re-request off it.
+describe("mastery-costs settings popover", () => {
+  test("saving the popover keeps the solver page's goal and re-requests", async () => {
+    const requests = await loadPage({ state: SAVED });
+
+    document.querySelector("#settings-btn").click();
+    const stamina = document.querySelector("#current-stamina");
+    stamina.value = "4321";
+    stamina.dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector("#settings-save").click();
+
+    await vi.waitFor(() =>
+      expect(fetchMock.mock.calls.length).toBe(requests + 1)
+    );
+    const body = JSON.parse(fetchMock.mock.calls.at(-1)[1].body);
+    expect(body.params.current_stamina).toBe(4321);
+
+    const stored = JSON.parse(localStorage.getItem("farm-solver.v1"));
+    expect(stored.params.current_stamina).toBe(4321);
+    expect(stored.params.target).toBe("tower");
+    expect(stored.params.mastery).toBe("Gold Bar:5000");
+  });
+
+  test("a paste made here is enough to load the table", async () => {
+    // Nothing saved at all: the empty state, until the popover supplies the
+    // masteries/inventory this page used to have to borrow from the solver page.
+    document.body.innerHTML = buildPage();
+    setSavedState(null);
+    fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => PAYLOAD,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.resetModules();
+    await import("./masteries.js");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    expect(document.querySelector("#empty-state").hidden).toBe(false);
+
+    document.querySelector("#settings-btn").click();
+    const mastery = document.querySelector("#mastery-text");
+    mastery.value = "Mastery In-Progress";
+    mastery.dispatchEvent(new Event("input", { bubbles: true }));
+    document.querySelector("#settings-save").click();
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls.at(-1)[1].body).mastery_text).toBe(
+      "Mastery In-Progress"
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector("#empty-state").hidden).toBe(true)
+    );
+    expect(document.querySelector("#mastery-controls").hidden).toBe(false);
   });
 });

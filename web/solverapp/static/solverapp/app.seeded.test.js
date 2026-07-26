@@ -9,19 +9,14 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import TEMPLATE from "../../templates/solverapp/index.html?raw";
-
-function templateBody() {
-  const html = TEMPLATE.replace(/\{%.*?%\}/g, "").replace(/\{\{.*?\}\}/g, "");
-  return html.slice(html.indexOf("<body>") + 6, html.indexOf("</body>"));
-}
+import { pageBody } from "./template-fixture.js";
 
 // init() reads the config the index view injects (webapi.config_defaults) and
 // fetches the two datalist catalogues; an empty config and empty catalogues are
 // enough for everything this test asserts.
 function buildPage(search) {
   document.body.innerHTML =
-    templateBody() +
+    pageBody("index") +
     '<script id="config-defaults" type="application/json">{}</script>';
   window.history.replaceState({}, "", search || "/");
 }
@@ -66,11 +61,8 @@ async function loadPage({ search, saved } = {}) {
   return store;
 }
 
-// Each test re-imports app.js (resetModules) while `document` is shared across
-// the file, so every earlier import's DOMContentLoaded listener fires again and
-// solves too -- they all send the identical body, so assertions read the first
-// call and only ever check that *some* solve happened. See the same note in
-// masteries.page.test.js.
+// The datalist catalogues are fetched through the same stub, so the solves have
+// to be picked out by URL.
 const solveCalls = () =>
   fetchMock.mock.calls.filter(([url]) => url === "/api/solve");
 

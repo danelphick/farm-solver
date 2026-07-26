@@ -1580,7 +1580,8 @@ needed to consume it.
 A Django server-side wrapper over the same solver (`webapi.py` bridges the
 two -- see its module-map entry above), for a browser UI: no accounts, no
 server DB, browser `localStorage` holds each user's pasted state and
-parameter choices. `web/manage.py` inserts the repo root onto `sys.path` (the
+parameter choices -- one saved state, written by whichever page's settings
+popover the user edits. `web/manage.py` inserts the repo root onto `sys.path` (the
 solver package is not installed, just imported directly) before delegating
 to Django; `web/farmweb/wsgi.py` does the same for a production WSGI server
 that imports it without going through `manage.py`.
@@ -1609,7 +1610,8 @@ that imports it without going through `manage.py`.
   than trusting the prefix. Plus `SOLVE_SEMAPHORE`, one LP solve at a time per
   process; `key_lock`, a per-fingerprint lock guarding against a dogpile of
   identical concurrent requests all missing the cache at once), `tests.py`
-  (Django `SimpleTestCase` -- no DB to wrap in a transaction), `templates/`,
+  (Django `SimpleTestCase` -- no DB to wrap in a transaction), `templates/`
+  (the two pages plus `_settings.html`, the settings popover both include),
   `static/`.
 - **`api_solve`'s flow**: `_decode_request` → `webapi.params_to_args`
   (`ValueError` → 400) → `webapi.fingerprint` → `cache.key_lock` (serialises
@@ -1636,9 +1638,14 @@ that imports it without going through `manage.py`.
 - **`static/solverapp/app.js`** (vanilla JS, no build step): state
   (`{mastery_text, inventory_text, params}`, mirroring `POST /api/solve`'s
   body) round-trips through `localStorage["farm-solver.v1"]`, restored and
-  auto-solved on load. Any control/paste edit debounces 400ms then re-solves;
-  a monotonic sequence number drops a response superseded by a newer
-  request. The frontier table's rows are zipped with the response's
+  auto-solved on load. It owns only the **Goal** pane and the results -- every
+  other parameter lives in the settings popover (`settings.js` below), so
+  `readParams`/`applyParams` are each two halves: the goal block here, plus
+  `readSettingsParams`/`applySettingsParams` there. Three request cadences: a
+  Goal edit debounces 400ms then re-solves; a popover **Save** re-solves once
+  (its edits are staged until then); a frontier row click re-solves
+  immediately. A monotonic sequence number drops a response superseded by a
+  newer request. The frontier table's rows are zipped with the response's
   `frontier.plans` JSON array by index for selected/cheapest styling and
   click-to-select (sets `plan_select` and re-POSTs immediately, no debounce
   -- a refilter, so it is cache-hit fast); any other change resets the
@@ -1649,65 +1656,12 @@ that imports it without going through `manage.py`.
   bound to a `<datalist>` catalogue so it suggests known items while still
   accepting free text. `parseGoalSpec`/`serializeGoalEntries` (the only
   exports; pure, unit-tested in `app.test.js` via `web/`'s Vitest setup --
-  `npm install && npm test` from `web/`) convert a row list to/from the exact
+  `npm install && npm test` from `web/`; the page-level tests build their DOM
+  from the **real** templates through `template-fixture.js`, which expands the
+  `_settings.html` include before stripping the Django tags) convert a row list
+  to/from the exact
   `"Item:Amount,Item:Amount"` string `readParams`/`applyParams` always sent,
-  so the wire format and `webapi.params_to_args` are untouched. The **config
-  preference panes** (Exploring, Exploring effectiveness, Farming, Pets,
-  Buildings, plus the Mechanical Heart row inside Resources) are
-  *generated* from declarative schemas (`CONFIG_FIELDS`/`BUILDING_SECTIONS` +
-  `EXPLORING_ZONES`/`PET_NAMES`) rather than hand-written markup:
-  `buildConfigPanels` fills each template shell (`.config-fields[data-config=…]`)
-  with `createConfigField` controls, each carrying `data-config-key` (a config
-  dotted key) / `data-config-type` (int/float/text/date/bool). `readConfigParams`
-  collects every set control into one `{dotted key: value}` object sent as the
-  `config` param (blank/"Default" omitted); `applyConfigParams` restores them.
-  They all funnel through `webapi`'s generic `config` override channel, so no
-  per-field wiring exists server-side. Definite booleans are plain checkboxes
-  initialised to the config default, only sent when toggled *away* from it;
-  perks the solver **auto-detects** from mastery/inventory (Scythe of Dewstar
-  and the Mechanical Heart from tower progress; Dewstar's Journal, Fungus
-  Processing and the Swamp Puzzle from inventory -- the `autobool` type) instead
-  get an Auto-detect / On / Off `<select>`, where "Auto-detect" (the default)
-  sends nothing and leaves the auto-detection in place. The three `[exploring]`
-  perks are split by *what they do*, not which config section they live in: the
-  two that change what a zone drops (or whether it can be entered) sit in the
-  **Exploring** pane, while `have_mechanical_heart` -- free consumable supply --
-  sits in **Resources**, immediately above the Calendar radios that decide how
-  its monthly grant days are counted. Placeholders and the controls' initial states
-  come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
-  the index view injects via `webapi.config_defaults` (from
-  `web_default_config.toml`). Buildings groups its controls under `<h4>`
-  sub-sections (mills combined); Pets renders a compact `.pet-grid`; Instant
-  grow time moved from Advanced into the Farming pane (still its own
-  `instant_grow_time` param, not the generic channel). `buildConfigPanels` runs
-  at the top of `init()`, before the blanket input wiring, so each generated
-  control gets its `onAnyChange` listener like a hand-written one. **Every
-  parameter** carries a `[?]` help icon (`.help-icon`, a `<button>` with its
-  description in `data-help`) -- generated fields from each schema entry's
-  `help` string (`createHelpIcon`, appended inside the label), hand-written
-  controls from an inline `data-help` in the template. `initHelpTooltips`
-  (in **`help.js`**, shared with the mastery-costs page) wires one delegated
-  hover/focus listener set that shows a single shared floating `.help-tooltip`
-  (positioned in JS above the icon, flipped below near the top edge, clamped to
-  the viewport, hidden on scroll/Escape) -- no library, works for keyboard focus
-  too. The **Material trading pane** (`buildMaterialTradingPane`,
-  also run at the top of `init()` before the blanket wiring) is a checkbox + price +
-  guide-range row per tradeable material, built from the injected config's
-  `trading.ap` (`prices` is the item universe and default apk, `price_bounds` the
-  greyed `low–high` guide, `enabled`/`allow`/`deny` the default checkbox state via
-  `computeDefaultAllowed`). It always emits an **allow** list, never a deny list:
-  `readMaterialTrading` → `computeApTradingParam` (both exported, unit-tested) sends
-  the `ap_trading` param **only when the pane deviates** from the config default (a
-  narrowed allow set, or an edited price), so an untouched pane adds nothing to the
-  request; `prices` is included only once a price is actually edited, and then
-  carries every allowed item (edited value or default) because the server-side
-  override *replaces* the whole `[trading.ap.prices]` table (see
-  `webapi._ap_trading_override_lines`). Enable-all / Disable-all / Restore-defaults
-  buttons and a UI-only name filter (`filterMaterialRows`, excluded from the blanket
-  `onAnyChange` wiring so it never re-solves) sit above the list; "Restore defaults"
-  resets to `computeDefaultAllowed` and clears price edits. (The pane's buttons carry
-  `.btn-add` for styling but no `data-goal`, so the goal-list append wiring is scoped
-  to `.btn-add[data-goal]`.) **DEBUG-only CLI command** (`initDebugCommand`): when
+  so the wire format and `webapi.params_to_args` are untouched. **DEBUG-only CLI command** (`initDebugCommand`): when
   Django's `DEBUG` is on, `views.index` renders a `[</>]` button into the fixed
   `#bottom-bar` (just left of the status box) and a `#debug-popup`; each solve
   response carries a `debug_command` (`webapi.args_to_command`, `None` in
@@ -1764,19 +1718,102 @@ that imports it without going through `manage.py`.
   paragraph (Buy, Pumpkin Juice, Surplus). Groups matching none of the three
   (Passive production, From inventory, Sawmill boost) show no stat when
   collapsed -- per spec, only "if one exists".
+- **`static/solverapp/settings.js` + `templates/solverapp/_settings.html`** —
+  the **settings popover**, shared verbatim by both pages (each template
+  `{% include %}`s the partial and injects `config_defaults`). A cog button
+  fixed top-right (`#settings-btn`) toggles a panel holding every parameter
+  except the solver page's Goal: the pasted game state, the frontier Limits,
+  and all the preference panes. Unlike `app.js` this module registers nothing
+  at module scope, which is what lets the mastery-costs page import it.
+  **Edits in it are staged**: opening snapshots `readSettingsState()`, Save
+  closes and calls the page's `onSave`, and Cancel/Escape/the x/an outside
+  click re-apply the snapshot -- so pasting a save costs one solve, not one per
+  keystroke, and no control inside the panel gets a change listener that
+  solves (only the UI-only side effects: the juice cap's enable, the calendar's
+  `#start-date` enable, the spread range row, the material filter/bulk
+  buttons). `readSettingsParams`/`applySettingsParams` are exact inverses (both
+  run on every page load), which is what makes Cancel a one-liner.
+  `GOAL_PARAM_KEYS` names what the panel does *not* own and
+  `mergeSettingsIntoState` (pure, unit-tested) is how a page folds a Save back
+  into the saved state: the goal keys are kept, every other key is **dropped
+  and replaced**, so a field the user blanked really goes away. The module also
+  owns the shared `STORAGE_KEY`/`UI_STORAGE_KEY` constants, `readUi`/`writeUi`,
+  and `restorePaneStates` (each `details.pane`'s open/closed state under the UI
+  key -- never a re-solve, and document-wide so it covers each page's own panes
+  too).
+
+  The **config preference panes** (Exploring, Exploring effectiveness, Farming, Pets,
+  Buildings, plus the Mechanical Heart row inside Resources) are
+  *generated* from declarative schemas (`CONFIG_FIELDS`/`BUILDING_SECTIONS` +
+  `EXPLORING_ZONES`/`PET_NAMES`) rather than hand-written markup:
+  `buildConfigPanels` fills each template shell (`.config-fields[data-config=…]`)
+  with `createConfigField` controls, each carrying `data-config-key` (a config
+  dotted key) / `data-config-type` (int/float/text/date/bool). `readConfigParams`
+  collects every set control into one `{dotted key: value}` object sent as the
+  `config` param (blank/"Default" omitted); `applyConfigParams` restores them.
+  They all funnel through `webapi`'s generic `config` override channel, so no
+  per-field wiring exists server-side. Definite booleans are plain checkboxes
+  initialised to the config default, only sent when toggled *away* from it;
+  perks the solver **auto-detects** from mastery/inventory (Scythe of Dewstar
+  and the Mechanical Heart from tower progress; Dewstar's Journal, Fungus
+  Processing and the Swamp Puzzle from inventory -- the `autobool` type) instead
+  get an Auto-detect / On / Off `<select>`, where "Auto-detect" (the default)
+  sends nothing and leaves the auto-detection in place. The three `[exploring]`
+  perks are split by *what they do*, not which config section they live in: the
+  two that change what a zone drops (or whether it can be entered) sit in the
+  **Exploring** pane, while `have_mechanical_heart` -- free consumable supply --
+  sits in **Resources**, immediately above the Calendar radios that decide how
+  its monthly grant days are counted. Placeholders and the controls' initial states
+  come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
+  both views inject via `webapi.config_defaults` (from
+  `web_default_config.toml`). Buildings groups its controls under `<h4>`
+  sub-sections (mills combined); Pets renders a compact `.pet-grid`; Instant
+  grow time moved from Advanced into the Farming pane (still its own
+  `instant_grow_time` param, not the generic channel). `buildConfigPanels` runs
+  at the top of `initSettings()`, so every generated control exists before a
+  saved state is applied into it. **Every
+  parameter** carries a `[?]` help icon (`.help-icon`, a `<button>` with its
+  description in `data-help`) -- generated fields from each schema entry's
+  `help` string (`createHelpIcon`, appended inside the label), hand-written
+  controls from an inline `data-help` in the template. `initHelpTooltips`
+  (in **`help.js`**, shared with the mastery-costs page) wires one delegated
+  hover/focus listener set that shows a single shared floating `.help-tooltip`
+  (positioned in JS above the icon, flipped below near the top edge, clamped to
+  the viewport, hidden on scroll/Escape) -- no library, works for keyboard focus
+  too. The **Material trading pane** (`buildMaterialTradingPane`,
+  also run from `initSettings()`) is a checkbox + price +
+  guide-range row per tradeable material, built from the injected config's
+  `trading.ap` (`prices` is the item universe and default apk, `price_bounds` the
+  greyed `low–high` guide, `enabled`/`allow`/`deny` the default checkbox state via
+  `computeDefaultAllowed`). It always emits an **allow** list, never a deny list:
+  `readMaterialTrading` → `computeApTradingParam` (both exported, unit-tested) sends
+  the `ap_trading` param **only when the pane deviates** from the config default (a
+  narrowed allow set, or an edited price), so an untouched pane adds nothing to the
+  request; `prices` is included only once a price is actually edited, and then
+  carries every allowed item (edited value or default) because the server-side
+  override *replaces* the whole `[trading.ap.prices]` table (see
+  `webapi._ap_trading_override_lines`). Enable-all / Disable-all / Restore-defaults
+  buttons and a UI-only name filter (`filterMaterialRows`, which never becomes part
+  of the state) sit above the list; "Restore defaults"
+  resets to `computeDefaultAllowed` and clears price edits. (The pane's buttons carry
+  `.btn-add` for styling but no `data-goal`, so the goal-list append wiring is scoped
+  to `.btn-add[data-goal]`.)
 - **`static/solverapp/masteries.js`** — the mastery-costs page's client,
   deliberately **not** an `app.js` import: `app.js` registers its
   `DOMContentLoaded` → `init()` listener at module scope, so importing it would
-  run the solver page's whole wiring against markup that isn't there. Only two
-  small modules are shared instead: `help.js` (the `[?]` tooltip machinery
-  above) and `tiers.js` (`tierLabel`: the `M`/`GM`/`MM` ↔ Master/Grandmaster/
-  Megamaster mapping, mirroring `main._MASTERY_TIERS`; plus `tierRank`, the
-  M<GM<MM sort order the Target column uses — never alphabetical, a plain amount
-  ranks last); the handful of one-line helpers (`$`, `escapeHtml`) are
-  duplicated rather than given a module. The page has no state of its own — it
-  *reads* (never writes) `localStorage["farm-solver.v1"]`, so both pages always
-  agree on what "your save" means, and adds a single `self_sourced` param on
-  top. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
+  run the solver page's whole wiring against markup that isn't there. What is
+  shared instead are the modules that register nothing: `settings.js` (the
+  popover above), `help.js` (the `[?]` tooltip machinery) and `tiers.js`
+  (`tierLabel`: the `M`/`GM`/`MM` ↔ Master/Grandmaster/Megamaster mapping,
+  mirroring `main._MASTERY_TIERS`; plus `tierRank`, the M<GM<MM sort order the
+  Target column uses — never alphabetical, a plain amount ranks last); the
+  handful of one-line helpers (`$`, `escapeHtml`) are duplicated rather than
+  given a module. The page has no *goal* of its own: it reads
+  `localStorage["farm-solver.v1"]` for what to solve (adding a single
+  `self_sourced` param on top) and, on a popover save, **writes** it back
+  through `mergeSettingsIntoState` -- keeping the solver page's goal, which the
+  popover never shows -- then re-requests. So both pages always agree on what
+  "your save" means, and either can edit it. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
   unit-tested exports (`masteries.test.js`); `SORT_COLUMNS`/`SORT_KEYS` name the
   four sortable columns and the value tuple each ranks on (primary then
   tie-breaks — the two numeric axes still break on each other like the CLI's

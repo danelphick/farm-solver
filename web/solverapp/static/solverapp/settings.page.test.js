@@ -1,0 +1,184 @@
+// The settings popover's staging cadence, on the solver page, driven against
+// the real template (with its `{% include %}` expanded -- see
+// template-fixture.js). The mastery-costs page's side of the same popover is
+// covered in masteries.page.test.js: one page module per test file, since each
+// import's DOMContentLoaded listener keeps firing on later loads (see below),
+// and two different pages' listeners would then run against one page's markup.
+//
+// The one behaviour worth pinning: an edit inside the popover changes nothing
+// until Save. Everywhere else in the app a control edit debounces into a solve,
+// so it would be easy to reintroduce that here by wiring a stray listener --
+// these tests fail if anyone does. The mirror image matters too: Save must both
+// persist and re-request, and Cancel must put the panel back.
+
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+import { pageBody } from "./template-fixture.js";
+
+// jsdom ships no Storage implementation here; see masteries.page.test.js.
+function installLocalStorage(saved) {
+  const store = new Map();
+  if (saved) store.set("farm-solver.v1", JSON.stringify(saved));
+  vi.stubGlobal("localStorage", {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+    clear: () => store.clear(),
+  });
+  return store;
+}
+
+const SAVED = {
+  mastery_text: "Mastery In-Progress",
+  inventory_text: "Items chevron_down",
+  params: {
+    target: "tower",
+    mastery: "Gold Bar:5000",
+    max_gold: "500",
+    price_cookie_set: 20,
+  },
+};
+
+const SOLVE_RESPONSE = {
+  cached: false, solved_ms: 1, tower_max_level: 300,
+  solution_html: "", notes: [], warnings: [],
+  frontier: { html: "", plans: [] },
+  graph: { html: "" },
+  plan: { index: 0, html: "" },
+  crafts: { html: "" },
+  debug_command: null,
+};
+
+let fetchMock;
+
+// Build the page (config defaults injected as the views do), stub the API and
+// storage, then import the page module and let it initialise.
+//
+// Like the other page tests, every earlier import's DOMContentLoaded listener
+// fires again against the current DOM, so request assertions count from the
+// baseline this returns rather than from zero.
+async function loadPage({ saved = SAVED } = {}) {
+  document.body.innerHTML =
+    pageBody("index") +
+    '<script id="config-defaults" type="application/json">{}</script>';
+  window.history.replaceState({}, "", "/");
+  const store = installLocalStorage(saved);
+  fetchMock = vi.fn(async (url) =>
+    url === "/api/solve"
+      ? { ok: true, status: 200, json: async () => SOLVE_RESPONSE }
+      : { ok: true, status: 200, text: async () => "" }  // a datalist catalogue
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  vi.resetModules();
+  await import("./app.js");
+  document.dispatchEvent(new Event("DOMContentLoaded"));
+  await vi.waitFor(() => expect(solveCalls().length).toBeGreaterThan(0));
+  return { store, baseline: solveCalls().length };
+}
+
+const solveCalls = () =>
+  fetchMock.mock.calls.filter(([url]) => url === "/api/solve");
+
+const $ = (selector) => document.querySelector(selector);
+const click = (selector) => $(selector).click();
+
+function edit(selector, value) {
+  const el = $(selector);
+  el.value = value;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// Long enough for app.js's 400ms debounce to have fired, had anything armed it.
+const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
+
+describe("settings popover", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("the cog opens the popover and restores the saved settings into it", async () => {
+    await loadPage();
+    expect($("#settings-popover").hidden).toBe(true);
+
+    click("#settings-btn");
+    expect($("#settings-popover").hidden).toBe(false);
+    expect($("#settings-btn").getAttribute("aria-expanded")).toBe("true");
+    // Not the markup default -- the saved state, which both pages apply.
+    expect($("#max-gold").value).toBe("500");
+    expect($("#mastery-text").value).toBe("Mastery In-Progress");
+  });
+
+  test("editing inside the popover neither solves nor saves", async () => {
+    const { store, baseline } = await loadPage();
+
+    click("#settings-btn");
+    edit("#price-cookie-set", "99");
+    edit("#current-stamina", "1234");
+    await settle();
+
+    expect(solveCalls().length).toBe(baseline);
+    expect(JSON.parse(store.get("farm-solver.v1")).params.price_cookie_set).toBe(20);
+  });
+
+  test("Save persists the staged edit and re-solves once", async () => {
+    const { store, baseline } = await loadPage();
+
+    click("#settings-btn");
+    edit("#price-cookie-set", "99");
+    click("#settings-save");
+
+    expect($("#settings-popover").hidden).toBe(true);
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    const body = JSON.parse(solveCalls().at(-1)[1].body);
+    expect(body.params.price_cookie_set).toBe(99);
+    // Persisted too, and the goal the popover never showed is still there.
+    const stored = JSON.parse(store.get("farm-solver.v1"));
+    expect(stored.params.price_cookie_set).toBe(99);
+    expect(stored.params.mastery).toBe("Gold Bar:5000");
+    expect(stored.params.target).toBe("tower");
+  });
+
+  test("Cancel reverts the staged edits and requests nothing", async () => {
+    const { store, baseline } = await loadPage();
+
+    click("#settings-btn");
+    edit("#price-cookie-set", "99");
+    edit("#mastery-text", "pasted something else");
+    click("#settings-cancel");
+
+    expect($("#settings-popover").hidden).toBe(true);
+    expect($("#price-cookie-set").value).toBe("20");
+    expect($("#mastery-text").value).toBe("Mastery In-Progress");
+    await settle();
+    expect(solveCalls().length).toBe(baseline);
+    expect(JSON.parse(store.get("farm-solver.v1")).params.price_cookie_set).toBe(20);
+  });
+
+  test("Escape closes and reverts, like Cancel", async () => {
+    await loadPage();
+
+    click("#settings-btn");
+    edit("#price-cookie-set", "99");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+    expect($("#settings-popover").hidden).toBe(true);
+    expect($("#price-cookie-set").value).toBe("20");
+  });
+
+  test("a click outside reverts; a click inside does not", async () => {
+    await loadPage();
+
+    click("#settings-btn");
+    edit("#price-cookie-set", "99");
+    $("#price-cookie-set").dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true })
+    );
+    expect($("#settings-popover").hidden).toBe(false);
+    expect($("#price-cookie-set").value).toBe("99");
+
+    document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect($("#settings-popover").hidden).toBe(true);
+    expect($("#price-cookie-set").value).toBe("20");
+  });
+});

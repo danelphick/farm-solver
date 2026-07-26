@@ -15,12 +15,15 @@
     reach Master (10,000), Grandmaster (100,000) and Megamaster (1,000,000)
     from your current progress, and what that plan spends in gold. Each row is
     cumulative &mdash; a Grandmaster row includes the work Master needed.
-    Everything is read from the masteries, inventory and settings saved on the
-    <a href="/">solver page</a>; times assume the steady-state (yearly-average)
-    calendar. <strong>Click a row</strong> for that mastery's full plan, or a
-    column's sort button to reorder the table.
+    Everything is read from the masteries, inventory and settings you share
+    with the <a href="/">solver page</a> &mdash; edit any of them under
+    <strong>&#9881; Settings</strong>, top right; times assume the steady-state
+    (yearly-average) calendar. <strong>Click a row</strong> for that mastery's
+    full plan, or a column's sort button to reorder the table.
   </p>
 </header>
+
+{% include "solverapp/_settings.html" %}
 
 <main>
   <div id="mastery-controls" class="mastery-controls" hidden>
@@ -34,9 +37,9 @@
   </div>
 
   <p id="empty-state" class="pane-hint" hidden>
-    Nothing pasted yet. Paste your masteries and inventory on the
-    <a href="/">solver page</a> first &mdash; this page reads the same saved
-    state.
+    Nothing pasted yet. Open <strong>&#9881; Settings</strong> (top right) and
+    paste your masteries and inventory &mdash; the same saved state the
+    <a href="/">solver page</a> uses.
   </p>
 
   <div id="mastery-costs-section" class="report-section" hidden>
@@ -93,6 +96,7 @@
   <div id="status" class="status" role="status" aria-live="polite">Loading&hellip;</div>
 </div>
 
+{{ config_defaults|json_script:"config-defaults" }}
 <script type="module" src="{% static 'solverapp/masteries.js' %}"></script>
 </body>
 </html>
