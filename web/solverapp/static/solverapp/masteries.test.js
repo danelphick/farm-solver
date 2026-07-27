@@ -74,16 +74,34 @@ describe("sortRows", () => {
     expect(sortRows(rows, "tier").map((r) => r.tier)).toEqual(["M", "GM", "MM"]);
   });
 
-  test("by target, breaking ties on item name", () => {
+  test("by target, breaking ties on time then gold", () => {
     const rows = [
-      row("Zed", "M", 100, 10),
-      row("Alpha", "MM", 100, 10),
-      row("Beta", "M", 100, 10),
+      row("SlowM", "M", 500, 10),
+      row("Mega", "MM", 100, 10),
+      row("FastDearM", "M", 100, 900),
+      row("FastCheapM", "M", 100, 100),
     ];
     expect(sortRows(rows, "tier").map((r) => r.item)).toEqual([
-      "Beta",
-      "Zed",
-      "Alpha",
+      "FastCheapM",
+      "FastDearM",
+      "SlowM",
+      "Mega",
+    ]);
+  });
+
+  test("descending by target keeps time and gold ascending within a target", () => {
+    const rows = [
+      row("SlowM", "M", 500, 10),
+      row("Mega", "MM", 100, 10),
+      row("FastDearM", "M", 100, 900),
+      row("FastCheapM", "M", 100, 100),
+    ];
+    // MM/GM/M, but each target's own rows stay cheapest-first.
+    expect(sortRows(rows, "tier", "desc").map((r) => r.item)).toEqual([
+      "Mega",
+      "FastCheapM",
+      "FastDearM",
+      "SlowM",
     ]);
   });
 

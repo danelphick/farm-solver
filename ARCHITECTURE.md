@@ -1817,7 +1817,10 @@ that imports it without going through `manage.py`.
   unit-tested exports (`masteries.test.js`); `SORT_COLUMNS`/`SORT_KEYS` name the
   four sortable columns and the value tuple each ranks on (primary then
   tie-breaks — the two numeric axes still break on each other like the CLI's
-  `main._sorted_mastery_rows`, the two label axes on each other). **Every column
+  `main._sorted_mastery_rows`, Item on the target). A key may also carry `fixed`
+  tie-breaks, which are compared **ascending whichever direction the primary
+  sorts**: Target breaks on time then gold, so flipping it to MM/GM/M reorders the
+  target groups while each group stays cheapest-first. **Every column
   header carries a sort button** (`#mastery-costs-head`, one delegated click
   listener): clicking a column sorts ascending, clicking the active column again
   flips it (arrow glyph + `aria-sort` via `renderSortIndicators`). Rows are built

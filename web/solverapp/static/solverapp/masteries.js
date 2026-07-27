@@ -43,18 +43,24 @@ function escapeHtml(text) {
 
 // --- Pure helpers (exported for app.test.js's sibling, masteries.test.js) ----
 
-// Every column sorts, keyed by the header button's data-sort. Each key names
-// the values a row is ranked on, primary first and the rest as tie-breakers:
-// the two numeric axes still break on each other (the JS mirror of
+// Every column sorts, keyed by the header button's data-sort. `ranked` names the
+// values a row is ranked on, primary first and the rest as tie-breakers: the two
+// numeric axes still break on each other (the JS mirror of
 // main._sorted_mastery_rows, so the page and `--mastery-costs --sort` order the
-// table the same way), and the two label columns break on each other so a
-// same-item / same-tier run stays readable. Targets rank M < GM < MM, never
-// alphabetically -- see tiers.tierRank.
+// table the same way), and Item breaks on the target so a same-item run stays
+// readable. Targets rank M < GM < MM, never alphabetically -- see tiers.tierRank.
+//
+// `fixed` axes (only Target has any) are tie-breakers that ignore the sort
+// direction: within one target the rows always read cheapest-first, so flipping
+// Target to MM/GM/M reorders the groups without shuffling the rows inside them.
 const SORT_KEYS = {
-  item: (r) => [r.item.toLowerCase(), tierRank(r.tier)],
-  tier: (r) => [tierRank(r.tier), r.item.toLowerCase()],
-  time: (r) => [r.time_seconds, r.gold],
-  gold: (r) => [r.gold, r.time_seconds],
+  item: { ranked: (r) => [r.item.toLowerCase(), tierRank(r.tier)] },
+  tier: {
+    ranked: (r) => [tierRank(r.tier)],
+    fixed: (r) => [r.time_seconds, r.gold],
+  },
+  time: { ranked: (r) => [r.time_seconds, r.gold] },
+  gold: { ranked: (r) => [r.gold, r.time_seconds] },
 };
 
 export const SORT_COLUMNS = Object.keys(SORT_KEYS);
@@ -66,22 +72,31 @@ function compare(a, b) {
   return a - b;
 }
 
+function compareAxes(left, right) {
+  for (let axis = 0; axis < left.length; axis += 1) {
+    const order = compare(left[axis], right[axis]);
+    if (order) return order;
+  }
+  return 0;
+}
+
 // Returns a new array; the input is the server's response order, which is left
 // untouched so re-sorting is stable. `direction` is "asc" (the default) or
-// "desc", which reverses the whole ranking -- but never the final index
-// tie-break, so rows equal on every axis keep the server's order (item-name
-// order from main.solve_mastery_costs) either way, matching Python's stable sort.
+// "desc", which reverses the `ranked` axes -- but never the `fixed` ones or the
+// final index tie-break, so rows equal on every axis keep the server's order
+// (item-name order from main.solve_mastery_costs) either way, matching Python's
+// stable sort.
 export function sortRows(rows, key, direction = "asc") {
-  const by = SORT_KEYS[key] || SORT_KEYS.time;
+  const spec = SORT_KEYS[key] || SORT_KEYS.time;
   const sign = direction === "desc" ? -1 : 1;
   return rows
     .map((row, i) => ({ row, i }))
     .sort((a, b) => {
-      const left = by(a.row);
-      const right = by(b.row);
-      for (let axis = 0; axis < left.length; axis += 1) {
-        const order = compare(left[axis], right[axis]);
-        if (order) return sign * order;
+      const order = compareAxes(spec.ranked(a.row), spec.ranked(b.row));
+      if (order) return sign * order;
+      if (spec.fixed) {
+        const tie = compareAxes(spec.fixed(a.row), spec.fixed(b.row));
+        if (tie) return tie;
       }
       return a.i - b.i;
     })
