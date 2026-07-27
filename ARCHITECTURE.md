@@ -1742,6 +1742,22 @@ that imports it without going through `manage.py`.
   key -- never a re-solve, and document-wide so it covers each page's own panes
   too).
 
+  **Pane layout (`style.css`)**: every pane in the popover wraps its content in a
+  `.pane-body` div, which is an `auto-fit`/`minmax` grid -- so the field rows flow
+  into two columns on a desktop window (the popover is `min(52rem, 100vw - 2rem)`)
+  and one on a phone, with no media query. Two details make it work: the grid has
+  to be that wrapper rather than the `<details>` itself (a `<details>` renders its
+  non-summary children inside a `::details-content` box, so gridding the
+  `<details>` lays out only summary + that box), and the generated wrappers
+  (`.config-fields`, `.config-section`) are `display: contents` so their rows
+  become cells of the pane grid instead of stacking inside one. Anything that
+  reads across the pane spans `1 / -1`: hints, textarea `.field`s, Buildings'
+  `<h4>` sub-headings, the nested grids (`.paste-fields`, `.pet-grid`, the
+  material list), and rows tagged `.field-row.wide` -- the Calendar radios and the
+  spread `lo:hi` pair, which carry more than one control after their label. The
+  track minimum (21.5rem) is the widest row that must not wrap: an 11rem label
+  plus a 10rem date field.
+
   The **config preference panes** (Exploring, Exploring effectiveness, Farming, Pets,
   Buildings, plus the Mechanical Heart row inside Resources) are
   *generated* from declarative schemas (`CONFIG_FIELDS`/`BUILDING_SECTIONS` +
@@ -1767,7 +1783,8 @@ that imports it without going through `manage.py`.
   come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
   both views inject via `webapi.config_defaults` (from
   `web_default_config.toml`). Buildings groups its controls under `<h4>`
-  sub-sections (mills combined); Pets renders a compact `.pet-grid`; Instant
+  sub-sections (mills combined); Pets renders a compact `.pet-grid` (three
+  columns of name + level across the open popover, one on a phone); Instant
   grow time moved from Advanced into the Farming pane (still its own
   `instant_grow_time` param, not the generic channel). `buildConfigPanels` runs
   at the top of `initSettings()`, so every generated control exists before a

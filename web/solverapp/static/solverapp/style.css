@@ -210,7 +210,9 @@ h1 {
   z-index: 101;
   display: flex;
   flex-direction: column;
-  width: min(46rem, calc(100vw - 2rem));
+  /* Wide enough for two field columns (see .pane-body) on a desktop window, and
+     never wider than the viewport on a phone. */
+  width: min(52rem, calc(100vw - 2rem));
   max-height: calc(100vh - 4.5rem);
   padding: 0.6rem;
   border-radius: 0.5rem;
@@ -348,26 +350,73 @@ details[open] > summary .summary-detail {
   color: var(--muted);
 }
 
+/* The two paste boxes sit side by side while each still gets a readable ~18rem,
+   and stack below that -- keyed to the popover's width, not the viewport's. */
 .paste-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
   gap: 1rem;
 }
 
-/* The settings popover's own pane stack: one column, since the popover is
-   narrower than the page and a .field-row's label already takes 11rem. The
-   panes come from _settings.html in display order, so no explicit ordering is
-   needed (the page itself now holds only the Goal pane). */
+/* The settings popover's own pane stack: one full-width pane per row. The panes
+   come from _settings.html in display order, so no explicit ordering is needed
+   (the page itself now holds only the Goal pane). */
 .settings-panes {
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-@media (max-width: 55rem) {
-  .paste-fields {
-    grid-template-columns: 1fr;
-  }
+/* Inside a pane, the field rows flow into as many columns as fit. The track
+   minimum is the widest row that must not wrap: an 11rem label, the 0.5rem gap
+   and a 10rem date field (Registered on / Updated on) -- give it less and those
+   controls drop under their label. Two of those fit the popover at its full
+   52rem; a squeezed one (narrow window / phone) falls back to a single column
+   with no media query.
+   The grid is the pane's own `.pane-body` wrapper, not the <details> itself:
+   a <details>' non-summary children are rendered inside a ::details-content box,
+   so gridding the <details> only lays out summary + that one box, leaving the
+   rows stacked inside it. */
+.settings-panes .pane-body {
+  display: grid;
+  /* min(…, 100%) so the single column of a popover narrower than one track
+     shrinks to fit instead of overflowing it. */
+  grid-template-columns: repeat(auto-fit, minmax(min(21.5rem, 100%), 1fr));
+  align-content: start;
+  column-gap: 0.9rem;
+}
+
+/* The generated wrappers are grouping-only: dissolving them lets their field
+   rows sit in the pane's grid instead of stacking inside one cell. */
+.settings-panes .config-fields,
+.settings-panes .config-section {
+  display: contents;
+}
+
+/* Everything that reads across the whole pane rather than as one field: the
+   blurb, the labelled textareas, the sub-section headings, and the blocks that
+   are grids of their own (paste boxes, pet levels, material list). Direct
+   children only, so a nested grid's own cells are left alone. */
+.settings-panes .pane-body > .pane-hint,
+.settings-panes .pane-body > .field,
+.settings-panes .pane-body > .paste-fields,
+.settings-panes .pane-body > .material-trading-toolbar,
+.settings-panes .pane-body > .material-trading-list,
+/* Rows carrying more than one control after their label, which need the whole
+   width: the three calendar radios, and the spread lo:hi pair (whose
+   label-gutter indent already eats 11.5rem before its two inputs). */
+.settings-panes .pane-body > .field-row.wide,
+/* These two sit under a display: contents wrapper, so they are grid items of the
+   pane body without being its DOM children. */
+.settings-panes .config-section h4,
+.settings-panes .pet-grid {
+  grid-column: 1 / -1;
+}
+
+/* display: contents drops the wrapper's own margin, so the heading carries the
+   gap between building sub-sections itself. */
+.settings-panes .config-section h4 {
+  margin-top: 0.9rem;
 }
 
 .field {
@@ -479,10 +528,12 @@ details[open] > summary .summary-detail {
   padding-bottom: 0.2rem;
 }
 
-/* Pet levels: a compact 2-column grid rather than 28 full-width rows. */
+/* Pet levels: a compact grid rather than 28 full-width rows. A name + level box
+   needs ~12rem, so this is three columns across the open popover and one on a
+   phone -- where the old fixed two columns were cramped. */
 .pet-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   gap: 0.35rem 0.9rem;
   margin-top: 0.5rem;
 }
