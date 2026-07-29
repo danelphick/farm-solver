@@ -20,3 +20,14 @@ export function tierRank(tier) {
   const rank = TIER_RANKS[String(tier).toUpperCase()];
   return rank === undefined ? TIER_RANKS.MM + 1 : rank;
 }
+
+// The tier an absolute progress figure has already reached: "MM"/"GM"/"M", or
+// "" below Master. The thresholds themselves live in history.TIER_THRESHOLDS
+// (the timeline chart draws them as reference lines); this is the lookup the
+// timeline's Tier column wants, and it belongs beside the other tier knowledge.
+export function tierForProgress(progress) {
+  if (progress >= 1_000_000) return "MM";
+  if (progress >= 100_000) return "GM";
+  if (progress >= 10_000) return "M";
+  return "";
+}

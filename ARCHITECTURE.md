@@ -1581,7 +1581,8 @@ A Django server-side wrapper over the same solver (`webapi.py` bridges the
 two -- see its module-map entry above), for a browser UI: no accounts, no
 server DB, browser `localStorage` holds each user's pasted state and
 parameter choices -- one saved state, written by whichever page's settings
-popover the user edits. `web/manage.py` inserts the repo root onto `sys.path` (the
+popover the user edits (plus browser **IndexedDB** for the dated mastery
+snapshots the timeline page charts; see "Mastery history" below). `web/manage.py` inserts the repo root onto `sys.path` (the
 solver package is not installed, just imported directly) before delegating
 to Django; `web/farmweb/wsgi.py` does the same for a production WSGI server
 that imports it without going through `manage.py`.
@@ -1590,8 +1591,8 @@ that imports it without going through `manage.py`.
   `django.contrib.auth`/`admin`/`sessions`; `DATABASES = {}`, since there is
   nothing server-side to persist; `DEBUG`/`SECRET_KEY`/`ALLOWED_HOSTS` are
   env-driven), `urls.py` (`/` → `index`, `/masteries` → `masteries`,
-  `/api/solve` → `api_solve`, `/api/mastery-costs` → `api_mastery_costs`),
-  `wsgi.py`.
+  `/timeline` → `timeline`, `/api/solve` → `api_solve`, `/api/mastery-costs` →
+  `api_mastery_costs`), `wsgi.py`.
 - **`web/solverapp/`** — the one app: `apps.py` (`AppConfig.ready()` pins
   `optimizer.set_solver_backend("highs")` once at process startup -- never
   per-request, since `optimizer._backend` is a module global unsafe under
@@ -1611,8 +1612,11 @@ that imports it without going through `manage.py`.
   process; `key_lock`, a per-fingerprint lock guarding against a dogpile of
   identical concurrent requests all missing the cache at once), `tests.py`
   (Django `SimpleTestCase` -- no DB to wrap in a transaction), `templates/`
-  (the two pages plus `_settings.html`, the settings popover both include),
-  `static/`.
+  (the three pages plus `_settings.html`, the settings popover they all
+  include), `static/`. `views.timeline` is the odd one out: it renders
+  `timeline.html` (plus `config_defaults`, which the popover needs) and does
+  nothing else -- that page has no API and never solves, because everything it
+  charts lives in the browser (see "Mastery history" below).
 - **`api_solve`'s flow**: `_decode_request` → `webapi.params_to_args`
   (`ValueError` → 400) → `webapi.fingerprint` → `cache.key_lock` (serialises
   same-fingerprint requests) → cache lookup → `SOLVE_SEMAPHORE.acquire(timeout=20)`
@@ -1860,6 +1864,85 @@ that imports it without going through `manage.py`.
   `M`/`GM`/`MM` as the absolute 10k/100k/1M threshold), which is exactly the
   cumulative target the row was solved for -- so the drill-down reproduces its
   own row.
+- **Mastery history (`static/solverapp/history.js`) and the timeline page** —
+  the one feature with **no server side at all**. The settings popover's
+  **"Save dated snapshot"** button (in the `#paste-details` pane, under the
+  mastery textarea) parses the mastery box and records it in this browser's
+  **IndexedDB**; `/timeline?item=X` charts one item across those snapshots.
+  Nothing is sent to or stored on the server, and history is neither exported
+  nor backed up.
+  - **Why IndexedDB, not the `localStorage` everything else uses**: one
+    snapshot of a well-progressed save is ~15 KB of JSON and history
+    accumulates, which would eat the ~5 MB budget the solver state lives in.
+  - **`parseMasteryText`** is a JS mirror of `parsing.parse_masteries` /
+    `_parse_mastery_block` (same block splitting, same `<n> / <total|∞>
+    Progress` line, same "throw rather than silently drop items" contract, the
+    client-side twin of the 422 an unreadable paste gets from `/api/solve`) --
+    so saving a snapshot and drawing a timeline need no round trip. It is one
+    of the tested mirrors, like `tiers.js` and `masteries.js`'s `sortRows`.
+  - **Store**: database `farm-solver-history`, object store
+    `mastery_snapshots`, `keyPath: "taken_at"` (an ISO timestamp, so key order
+    *is* chronological order) with a `date` index. One record is `{taken_at,
+    date, items}`, where `date` is the **local** calendar day (`localDateKey`,
+    never `toISOString().slice(0, 10)`, which files an evening paste under
+    tomorrow east of UTC) and `items` maps item name → progress. Progress only:
+    the tiers are fixed 10k/100k/1M thresholds (`TIER_THRESHOLDS`,
+    `tiers.tierForProgress`), so they are derived, not stored.
+  - **Retention** (`keysToPrune`, pure and unit-tested; run inside each save's
+    own transaction, deletes issued synchronously from the index cursor's final
+    `onsuccess` so the transaction cannot auto-commit in between): every
+    snapshot of the last 7 days is kept -- **several a day is the point**, not
+    an accident -- and each older day is thinned to its **last** snapshot. The
+    window is measured from the day being saved.
+  - **The button is the only unstaged control in the popover**: it writes the
+    moment it is clicked and so survives Cancel (a snapshot is history, not a
+    setting). It neither solves nor touches `farm-solver.v1`.
+  - **`static/solverapp/timeline.js`** follows `masteries.js`'s shape (shares
+    `settings.js`/`help.js`/`tiers.js`/`catalogue.js`/`history.js`, imports no
+    `app.js`, duplicates the one-line helpers). With no `?item=` it renders the
+    index of everything with history (`history.historyIndex`); with one it draws
+    `chartSvg` plus `deltaRows` (per snapshot: progress, gain since the previous
+    snapshot *that mentions the item*, gain/day -- suppressed under an hour's
+    gap -- and tier). Picking an item `replaceState`s the query string rather
+    than reloading. **Both tables sort per column** the way the mastery-costs
+    table does (`sortIndexRows`/`sortSeriesRows` over the `INDEX_SORTS`/
+    `SERIES_SORTS` axis maps, one delegated listener per header row, with the
+    arrow glyph and `aria-sort` set by `renderSortIndicators`), persisting under the shared
+    `farm-solver.ui.v1` key (`timeline_index_sort`/`timeline_sort`, each with a
+    `_dir`); a sort click redraws only its own table, never the chart. Two rules
+    differ from that table: **Tier ranks on the progress it was derived from**,
+    not the M/GM/MM label, so sorting by Tier reads exactly like sorting by the
+    mastery and rows inside a tier stay in progress order; and a **missing
+    figure is not a small one** (the oldest row's gain, a rate over too short a
+    gap -- both "—"), so it stays at the bottom whichever way a column points.
+    A snapshot that lacks the item is a **gap, not a zero**
+    (`history.seriesFor` skips it): a paste lists what you have started, so a 0
+    would draw a cliff that never happened.
+  - **`chartSvg`** is the client-side counterpart of `report._svg_plot` and
+    copies its conventions (self-contained inline SVG, `--mg-*` custom
+    properties re-themed by one `prefers-color-scheme: dark` block, a native
+    `<title>` per point, no JS needed once rendered). X is time-proportional
+    from the timestamps, so two snapshots an hour apart sit together and a
+    fortnight's gap reads as one. Y comes from **`chartRange`**: 0 → the next
+    tier above the best progress, *unless* the series moves less than 20% of
+    that (a week of real progress is ~1% of a tier, which from zero is a flat
+    line), in which case it zooms to the padded data and keeps only the tier
+    lines that fall inside it -- a lone snapshot always keeps the full range,
+    having no shape to show. `axisLabel` spells figures out in full on a zoomed
+    (<10k wide) axis, where every tick would otherwise round to the same "339k".
+  - **`static/solverapp/catalogue.js`** holds `loadCatalogue` and the two
+    catalogue URLs, factored out of `app.js` so the timeline's item picker and
+    the solver's goal rows share one loader.
+  - Entry points: a `Timeline →` link in each page's `.page-nav`, and a
+    `.timeline-link` in every mastery-costs row's Item cell (that table's
+    delegated row-click handler bails on `event.target.closest("a")`, so the
+    anchor navigates instead of the row's plan link).
+  - Tests: `history.test.js` and `timeline.test.js` (pure), plus
+    `timeline.page.test.js` and the snapshot-button cases in
+    `settings.page.test.js`, all driven against **fake-indexeddb** -- jsdom
+    ships no IndexedDB, and `openHistoryDb` resolves `null` when there is none
+    (the same shrug `readUi()` gives unusable `localStorage`). Note fake
+    timers deadlock fake-indexeddb's queue: page tests wait with `vi.waitFor`.
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --
@@ -1879,9 +1962,10 @@ that imports it without going through `manage.py`.
   `--plans N`, `--cookie-sets N`.
 - Web app: `uv sync --group web`, then `uv run --group web python
   web/manage.py runserver`; its own tests via `uv run --group web python
-  web/manage.py test solverapp` (see "Web app (web/)" above). JS unit tests
-  (the goal-list parse/serialize logic): `cd web && npm install && npm test`
-  (Vitest). Regenerate the goal pickers' item catalogues after mastery/
+  web/manage.py test solverapp` (see "Web app (web/)" above). JS unit and
+  page tests (goal-list parse/serialize, the mastery-costs sort, the settings
+  popover's staging, the mastery-history store and the timeline chart): `cd web
+  && npm install && npm test` (Vitest, jsdom + fake-indexeddb). Regenerate the goal pickers' item catalogues after mastery/
   inventory data or game-content data files change: `python
   scripts/generate_items.py` (writes `mastery_items.txt`/`items.txt` under
   `web/solverapp/static/solverapp/`).

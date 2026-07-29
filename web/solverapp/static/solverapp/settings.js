@@ -18,6 +18,7 @@
 // panel save back into its saved state without touching those.
 
 import { createHelpIcon } from "./help.js";
+import { getSnapshots, parseMasteryText, putSnapshot } from "./history.js";
 
 // Solver state ({mastery_text, inventory_text, params}, mirroring POST
 // /api/solve's body) and, under its own key, UI-only preferences (which panes
@@ -829,10 +830,86 @@ function saveSettings() {
   if (onSaveCallback) onSaveCallback();
 }
 
+// --- Mastery snapshots -------------------------------------------------------
+//
+// "Save dated snapshot" is the one control in this panel that is NOT staged: it
+// writes the mastery box into this browser's IndexedDB history the moment it is
+// clicked, and so survives a Cancel. That is deliberate -- a snapshot is
+// history, not a setting, and staging it behind Save would mean the panel's
+// revert quietly threw away a recorded day. The help text says as much.
+//
+// Everything here degrades to a no-op when there is no IndexedDB (jsdom in the
+// page tests, a locked-down private mode): openHistoryDb resolves null and
+// putSnapshot returns null, the same way readUi() shrugs off unusable
+// localStorage.
+
+function setSnapshotStatus(text, kind) {
+  const el = $("#snapshot-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = kind ? "status-" + kind : "";
+}
+
+// "Last snapshot: 2026-07-24 21:03 (712 items) · 19 kept" -- shown on init and
+// restated after each save, so a second save the same day visibly adds a
+// snapshot instead of looking like it did nothing.
+async function showSnapshotSummary() {
+  try {
+    const snapshots = await getSnapshots();
+    if (!snapshots.length) {
+      setSnapshotStatus("No snapshots saved yet.");
+      return;
+    }
+    const latest = snapshots[snapshots.length - 1];
+    const when = new Date(latest.taken_at);
+    const items = Object.keys(latest.items || {}).length;
+    setSnapshotStatus(
+      `Last snapshot: ${latest.date} ${String(when.getHours()).padStart(2, "0")}:` +
+        `${String(when.getMinutes()).padStart(2, "0")} ` +
+        `(${items.toLocaleString()} items) · ${snapshots.length} kept`
+    );
+  } catch (err) {
+    setSnapshotStatus(""); // history unavailable: say nothing rather than alarm
+  }
+}
+
+async function saveSnapshot() {
+  const text = $("#mastery-text").value;
+  if (!text.trim()) {
+    setSnapshotStatus("Paste your masteries first.", "error");
+    return;
+  }
+  let items;
+  try {
+    // Throws on a block it cannot read, exactly as parsing.parse_masteries
+    // does server-side -- the same paste would 422 a solve.
+    items = parseMasteryText(text);
+  } catch (err) {
+    setSnapshotStatus("Could not read the paste: " + err.message, "error");
+    return;
+  }
+  if (!Object.keys(items).length) {
+    setSnapshotStatus("No masteries found in the paste.", "error");
+    return;
+  }
+  try {
+    const record = await putSnapshot(items);
+    if (!record) {
+      setSnapshotStatus("This browser cannot store history.", "error");
+      return;
+    }
+  } catch (err) {
+    setSnapshotStatus("Could not save: " + err.message, "error");
+    return;
+  }
+  await showSnapshotSummary();
+}
+
 // The controls whose only job is to update the panel itself: enabling a
 // dependent input, or showing a row. None of them save or solve -- that is
 // Save's job -- so unlike the goal controls in app.js they get no onAnyChange.
 function wireSettingsControls() {
+  $("#save-snapshot").addEventListener("click", saveSnapshot);
   $("#use-pumpkin-juice").addEventListener("change", () => {
     $("#pumpkin-juice-cap").disabled = !$("#use-pumpkin-juice").checked;
   });
@@ -896,4 +973,7 @@ export function initSettings({ onSave } = {}) {
   // today and the spread-range row's initial visibility.
   setStartDateDisplay("");
   updateSpreadRangeVisibility();
+  // Not awaited: the history summary is a hint beside a button, so it fills in
+  // whenever IndexedDB gets round to it rather than holding up the page wiring.
+  showSnapshotSummary();
 }

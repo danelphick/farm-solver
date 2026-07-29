@@ -13,11 +13,13 @@
 
 import INDEX from "../../templates/solverapp/index.html?raw";
 import MASTERY_COSTS from "../../templates/solverapp/mastery_costs.html?raw";
+import TIMELINE from "../../templates/solverapp/timeline.html?raw";
 import SETTINGS from "../../templates/solverapp/_settings.html?raw";
 
 const TEMPLATES = {
   index: INDEX,
   mastery_costs: MASTERY_COSTS,
+  timeline: TIMELINE,
 };
 
 const INCLUDE_RE = /\{%\s*include\s+"solverapp\/_settings\.html"\s*%\}/g;

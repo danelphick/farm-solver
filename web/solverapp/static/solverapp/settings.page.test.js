@@ -12,6 +12,7 @@
 // persist and re-request, and Cancel must put the panel back.
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { IDBFactory } from "fake-indexeddb";
 
 import { pageBody } from "./template-fixture.js";
 
@@ -69,6 +70,9 @@ async function loadPage({ saved = SAVED } = {}) {
       : { ok: true, status: 200, text: async () => "" }  // a datalist catalogue
   );
   vi.stubGlobal("fetch", fetchMock);
+  // The popover's snapshot button writes to IndexedDB, which jsdom does not
+  // implement; a fresh factory per load keeps each test's history to itself.
+  vi.stubGlobal("indexedDB", new IDBFactory());
   vi.resetModules();
   await import("./app.js");
   document.dispatchEvent(new Event("DOMContentLoaded"));
@@ -180,5 +184,72 @@ describe("settings popover", () => {
     document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     expect($("#settings-popover").hidden).toBe(true);
     expect($("#price-cookie-set").value).toBe("20");
+  });
+});
+
+// The snapshot button is the one control in the panel that is NOT staged: it
+// records the mastery box into this browser's history the moment it is clicked.
+// These tests are the guard on that exception staying deliberate.
+describe("the mastery snapshot button", () => {
+  const PASTE = "Tomato\n992,332 / 1,000,000 Progress\n99.2332% Stop\n";
+
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function storedSnapshots() {
+    // The same module instance the page is wired to (loadPage resetModules'd
+    // before importing app.js, so this import returns that instance).
+    const history = await import("./history.js");
+    return history.getSnapshots();
+  }
+
+  test("records the pasted masteries, and says what it saved", async () => {
+    await loadPage();
+    click("#settings-btn");
+    edit("#mastery-text", PASTE);
+    click("#save-snapshot");
+
+    await vi.waitFor(async () => expect(await storedSnapshots()).toHaveLength(1));
+    const [snapshot] = await storedSnapshots();
+    expect(snapshot.items).toEqual({ Tomato: 992332 });
+    expect($("#snapshot-status").textContent).toMatch(/Last snapshot: .*1 items.*1 kept/);
+  });
+
+  test("a snapshot survives Cancel, unlike every staged edit beside it", async () => {
+    await loadPage();
+    click("#settings-btn");
+    edit("#mastery-text", PASTE);
+    click("#save-snapshot");
+    await vi.waitFor(async () => expect(await storedSnapshots()).toHaveLength(1));
+
+    click("#settings-cancel");
+    expect($("#mastery-text").value).toBe("Mastery In-Progress"); // reverted
+    expect(await storedSnapshots()).toHaveLength(1); // but the history is kept
+  });
+
+  test("reports an unreadable paste instead of storing it", async () => {
+    await loadPage();
+    click("#settings-btn");
+    edit("#mastery-text", "Tomato\nnot a progress line\n");
+    click("#save-snapshot");
+
+    await vi.waitFor(() =>
+      expect($("#snapshot-status").textContent).toMatch(/Could not read the paste/)
+    );
+    expect(await storedSnapshots()).toEqual([]);
+  });
+
+  test("does not solve or persist the solver state", async () => {
+    const { store, baseline } = await loadPage();
+    click("#settings-btn");
+    edit("#mastery-text", PASTE);
+    click("#save-snapshot");
+    await settle();
+
+    expect(solveCalls().length).toBe(baseline);
+    expect(JSON.parse(store.get("farm-solver.v1")).mastery_text).toBe(
+      "Mastery In-Progress"
+    );
   });
 });

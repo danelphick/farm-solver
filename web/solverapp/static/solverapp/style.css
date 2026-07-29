@@ -1029,6 +1029,12 @@ details[open] > summary .summary-detail {
   text-decoration: none;
 }
 
+/* Pages carry more than one cross-link now, so they need space between them --
+   the markup's single space alone reads as one run-on link. */
+.page-nav a + a {
+  margin-left: 1rem;
+}
+
 .page-nav a:hover {
   color: var(--accent);
   text-decoration: underline;
@@ -1049,8 +1055,9 @@ details[open] > summary .summary-detail {
 
 /* Per-column sort button, sitting just after its header label (sizing borrowed
    from .help-icon, so the two read as the same family of inline affordances).
-   The arrow glyph -- neutral, up or down -- is set by masteries.js; only the
-   active column's button takes the accent. */
+   The arrow glyph -- neutral, up or down -- is set by masteries.js for this
+   page's table and by timeline.js for the timeline page's two; only the active
+   column's button takes the accent. */
 .sort-btn {
   flex: none;
   display: inline-flex;
@@ -1123,4 +1130,67 @@ details[open] > summary .summary-detail {
 #unmasterable-list li,
 #limited-list li {
   margin-bottom: 0.2rem;
+}
+
+/* --- Mastery history + timeline ------------------------------------------- */
+
+/* The "Save dated snapshot" row under the mastery paste box, and the summary of
+   what is stored beside it. Not a .pane-hint: it sits inline in a flex row, so
+   it carries no bottom margin of its own. */
+.snapshot-row {
+  margin: 0.5rem 0 0;
+}
+
+#snapshot-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* An error here (an unreadable paste, a browser that won't store) is worth
+   colouring, but it is a hint beside a button -- no box, unlike .status-error. */
+#snapshot-status.status-error {
+  color: var(--error);
+  background: none;
+}
+
+/* The timeline's progress chart: an inline SVG built client-side by
+   timeline.js's chartSvg, sized exactly like the solver page's impact graph
+   (the container scrolls rather than squashing the fixed viewBox). */
+.timeline-chart {
+  margin: 0.5rem 0 1rem;
+  overflow-x: auto;
+}
+
+.timeline-chart svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+#timeline-index table tbody tr.clickable {
+  cursor: pointer;
+}
+
+#timeline-index table tbody tr.clickable:hover {
+  background: var(--panel);
+}
+
+/* The per-item timeline link in each mastery-costs row's Item cell. Quiet by
+   default so it doesn't compete with the item name, and marked out on hover --
+   the row's own click still goes to that mastery's plan. */
+.timeline-link {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.timeline-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* The tier name beside its token in the timeline table ("GM (Grandmaster)"). */
+.muted-inline {
+  color: var(--muted);
 }

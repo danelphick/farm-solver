@@ -85,9 +85,19 @@ async function loadPage({ state, payload = PAYLOAD, ui } = {}) {
   return fetchMock.mock.calls.length;
 }
 
+// A row's cells as plain text. Only each cell's own text nodes, so the Item
+// cell reads as the item name alone -- the "timeline" link it also carries is
+// asserted on separately, and isn't part of any of these tables' values.
+const cellText = (td) =>
+  [...td.childNodes]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join("")
+    .trim();
+
 const rowText = () =>
   [...document.querySelectorAll("#mastery-costs-body tr")].map((tr) =>
-    [...tr.children].map((td) => td.textContent)
+    [...tr.children].map(cellText)
   );
 
 const SAVED = {
@@ -152,6 +162,31 @@ describe("mastery-costs page", () => {
       .querySelector("td")
       .dispatchEvent(new Event("click", { bubbles: true }));
     expect(assign).toHaveBeenCalledWith("/?mastery=Fast%20Dear%3AGM");
+  });
+
+  test("each row's Item cell links to that item's mastery timeline", async () => {
+    await loadPage({ state: SAVED });
+    const links = [...document.querySelectorAll("#mastery-costs-body .timeline-link")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      "/timeline?item=Fast%20Cheap",
+      "/timeline?item=Fast%20Dear",
+      "/timeline?item=Slow",
+    ]);
+  });
+
+  // The row's own click handler must leave the anchor alone, or the timeline
+  // link would navigate to the row's plan instead.
+  test("clicking the timeline link does not hijack the row's navigation", async () => {
+    await loadPage({ state: SAVED });
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { set href(value) { assign(value); } },
+    });
+    document
+      .querySelectorAll("#mastery-costs-body .timeline-link")[1]
+      .dispatchEvent(new Event("click", { bubbles: true }));
+    expect(assign).not.toHaveBeenCalled();
   });
 
   const clickSort = (key) =>

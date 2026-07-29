@@ -18,6 +18,7 @@
 // edits until then); clicking a frontier row re-solves immediately with that
 // plan selected (a refilter, so it hits the cache and returns fast).
 
+import { ITEM_CATALOGUE, MASTERY_CATALOGUE, loadCatalogue } from "./catalogue.js";
 import { initHelpTooltips } from "./help.js";
 import {
   STORAGE_KEY,
@@ -84,8 +85,8 @@ const GOAL_LISTS = {
   "items-rows": "item-catalogue",
 };
 const GOAL_CATALOGUES = {
-  "mastery-catalogue": "/static/solverapp/mastery_items.txt",
-  "item-catalogue": "/static/solverapp/items.txt",
+  "mastery-catalogue": MASTERY_CATALOGUE,
+  "item-catalogue": ITEM_CATALOGUE,
 };
 
 function $(selector) {
@@ -223,29 +224,6 @@ function wireGoalList(containerId) {
     }
     onAnyChange();
   });
-}
-
-async function loadCatalogue(url, datalistId) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return;
-    const text = await response.text();
-    const datalist = $(`#${datalistId}`);
-    const fragment = document.createDocumentFragment();
-    text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .forEach((name) => {
-        const option = document.createElement("option");
-        option.value = name;
-        fragment.appendChild(option);
-      });
-    datalist.appendChild(fragment);
-  } catch (err) {
-    // No network / no static file yet -- free-typing still works, just
-    // without suggestions, same as any other best-effort enhancement here.
-  }
 }
 
 // --- Reading/writing the form <-> a {mastery_text, inventory_text, params} state ---

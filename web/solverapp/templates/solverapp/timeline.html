@@ -1,0 +1,120 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mastery timeline &middot; Farm Solver</title>
+<link rel="stylesheet" href="{% static 'solverapp/style.css' %}">
+</head>
+<body>
+<header>
+  <div class="page-nav"><a href="/">&larr; Solver</a> <a href="/masteries">Mastery costs &rarr;</a></div>
+  <h1>Mastery timeline</h1>
+  <p class="tagline">
+    How one mastery has moved over time, from the dated snapshots you save under
+    <strong>&#9881; Settings</strong> (top right): paste your masteries, then
+    press <strong>Save dated snapshot</strong>. Every snapshot from the last week
+    is kept and older days are thinned to one a day. This history lives in
+    <em>this browser only</em> &mdash; it is never sent to the server, and is not
+    backed up or exported, so clearing site data loses it.
+  </p>
+</header>
+
+{% include "solverapp/_settings.html" %}
+
+<main>
+  <div id="timeline-controls" class="mastery-controls">
+    <div class="field-row">
+      <label for="timeline-item">Item</label>
+      <input id="timeline-item" type="text" list="mastery-catalogue"
+        placeholder="Item name" autocomplete="off">
+      <datalist id="mastery-catalogue"></datalist>
+      <button type="button" class="help-icon" aria-label="Help"
+        data-help="Which mastery to chart. Only items that appear in your saved snapshots have any history to show.">?</button>
+    </div>
+  </div>
+
+  <p id="timeline-empty" class="pane-hint" hidden>
+    No snapshots saved yet. Open <strong>&#9881; Settings</strong> (top right),
+    paste your masteries, and press <strong>Save dated snapshot</strong>. Come
+    back after a few days and this page will show what moved.
+  </p>
+
+  <!-- The chart is a self-contained inline <svg> built client-side by
+       timeline.js (chartSvg) -- unlike the solver page's impact graph, which
+       the server renders, because the history it plots never leaves the
+       browser. -->
+  <div id="timeline-chart" class="timeline-chart" hidden></div>
+
+  <div id="timeline-section" class="report-section" hidden>
+    <table>
+      <thead>
+        <!-- Every column sorts, via the button beside its label; the arrow
+             glyph and the th's aria-sort are set by timeline.js. Tier sorts on
+             the progress behind it, so it agrees with the Progress column. -->
+        <tr id="timeline-head">
+          <th scope="col">Date
+            <button type="button" class="sort-btn" data-sort="date"
+              aria-label="Sort by date"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Progress
+            <button type="button" class="sort-btn" data-sort="progress"
+              aria-label="Sort by progress"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Gain
+            <button type="button" class="sort-btn" data-sort="gain"
+              aria-label="Sort by gain"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Gain/day
+            <button type="button" class="sort-btn" data-sort="perday"
+              aria-label="Sort by gain per day"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col">Tier
+            <button type="button" class="sort-btn" data-sort="tier"
+              aria-label="Sort by tier"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="timeline-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Shown instead of the chart/table when no ?item= was given: everything
+       with history, item-name order until a column is sorted on, each row a
+       link to its own timeline. -->
+  <div id="timeline-index" class="report-section" hidden>
+    <h2>Items with history</h2>
+    <table>
+      <thead>
+        <tr id="timeline-index-head">
+          <th scope="col">Item
+            <button type="button" class="sort-btn" data-sort="item"
+              aria-label="Sort by item"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col">Tier
+            <button type="button" class="sort-btn" data-sort="tier"
+              aria-label="Sort by tier"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Latest
+            <button type="button" class="sort-btn" data-sort="latest"
+              aria-label="Sort by latest progress"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Change
+            <button type="button" class="sort-btn" data-sort="change"
+              aria-label="Sort by change"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="timeline-index-body"></tbody>
+    </table>
+  </div>
+</main>
+
+<div id="bottom-bar">
+  <div id="status" class="status" role="status" aria-live="polite">Loading&hellip;</div>
+</div>
+
+{{ config_defaults|json_script:"config-defaults" }}
+<script type="module" src="{% static 'solverapp/timeline.js' %}"></script>
+</body>
+</html>

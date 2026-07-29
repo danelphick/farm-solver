@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { masteryHref, sortRows, SORT_COLUMNS } from "./masteries.js";
-import { tierLabel, tierRank } from "./tiers.js";
+import { masteryHref, sortRows, timelineHref, SORT_COLUMNS } from "./masteries.js";
+import { tierForProgress, tierLabel, tierRank } from "./tiers.js";
 
 const row = (item, tier, seconds, gold) => ({
   item,
@@ -157,6 +157,13 @@ describe("masteryHref", () => {
   });
 });
 
+describe("timelineHref", () => {
+  test("links to that item's mastery timeline", () => {
+    expect(timelineHref("Compass")).toBe("/timeline?item=Compass");
+    expect(timelineHref("Oak Table")).toBe("/timeline?item=Oak%20Table");
+  });
+});
+
 describe("tierLabel", () => {
   test("spells out the three tier tokens", () => {
     expect(tierLabel("M")).toBe("Master");
@@ -177,5 +184,17 @@ describe("tierRank", () => {
 
   test("a plain amount ranks after every tier", () => {
     expect(tierRank("50000")).toBeGreaterThan(tierRank("MM"));
+  });
+});
+
+describe("tierForProgress", () => {
+  test("names the tier an absolute progress has reached", () => {
+    expect(tierForProgress(0)).toBe("");
+    expect(tierForProgress(9_999)).toBe("");
+    expect(tierForProgress(10_000)).toBe("M");
+    expect(tierForProgress(99_999)).toBe("M");
+    expect(tierForProgress(100_000)).toBe("GM");
+    expect(tierForProgress(1_000_000)).toBe("MM");
+    expect(tierForProgress(893_793_719)).toBe("MM");
   });
 });

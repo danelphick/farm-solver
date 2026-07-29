@@ -110,6 +110,13 @@ export function masteryHref(row) {
   return "/?mastery=" + encodeURIComponent(`${row.item}:${row.tier}`);
 }
 
+// This item's mastery timeline (the /timeline page's own link format). Rendered
+// as a small link inside the Item cell rather than as the row's destination:
+// the row itself still goes to the plan, which is what this table is about.
+export function timelineHref(item) {
+  return "/timeline?item=" + encodeURIComponent(item);
+}
+
 // --- Rendering --------------------------------------------------------------
 
 function setStatus(text, kind) {
@@ -155,7 +162,9 @@ function renderTable() {
     .map(
       (row) => `<tr class="clickable" data-href="${escapeHtml(masteryHref(row))}"` +
         ` title="Plan for ${escapeHtml(row.item)} → ${escapeHtml(tierLabel(row.tier))}">` +
-        `<td>${escapeHtml(row.item)}</td>` +
+        `<td>${escapeHtml(row.item)}` +
+        ` <a class="timeline-link" href="${escapeHtml(timelineHref(row.item))}"` +
+        ` title="Mastery timeline for ${escapeHtml(row.item)}">timeline</a></td>` +
         `<td>${escapeHtml(row.tier)}</td>` +
         `<td class="num">${escapeHtml(row.time)}</td>` +
         `<td class="num">${Math.round(row.gold).toLocaleString()} g</td>` +
@@ -329,6 +338,9 @@ function init() {
   // Delegated on the (stable) tbody, which renderTable replaces wholesale.
   // A plain navigation, so the browser's Back button returns to this list.
   $("#mastery-costs-body").addEventListener("click", (event) => {
+    // The Item cell carries its own "timeline" link; let the anchor navigate
+    // rather than hijacking the click for the row's plan destination.
+    if (event.target.closest("a")) return;
     const row = event.target.closest("tr[data-href]");
     if (row) window.location.href = row.dataset.href;
   });

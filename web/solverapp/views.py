@@ -64,6 +64,22 @@ def masteries(request: HttpRequest) -> HttpResponse:
     )
 
 
+def timeline(request: HttpRequest) -> HttpResponse:
+    """The mastery-history timeline page (`/timeline?item=X`).
+
+    Has no API of its own and never solves: every byte it charts comes from the
+    dated mastery snapshots the browser holds in IndexedDB (see
+    ``static/solverapp/history.js``), which never reach the server. The view
+    exists only to serve the page -- and, like :func:`masteries`, the same
+    ``config_defaults`` the shared settings popover's generated panels need.
+    """
+    return render(
+        request,
+        "solverapp/timeline.html",
+        {"config_defaults": webapi.config_defaults()},
+    )
+
+
 def _section_html(text: str) -> str:
     """Render one SectionedReporter markdown section to HTML."""
     return markdown.markdown(text, extensions=["tables"])

@@ -241,6 +241,31 @@ class ApiMasteryCostsTests(SimpleTestCase):
         self.assertContains(response, 'id="config-defaults"')
 
 
+class TimelinePageTests(SimpleTestCase):
+    """The mastery-timeline page, which has no API of its own.
+
+    Everything it charts comes from the dated snapshots the browser keeps in
+    IndexedDB (static/solverapp/history.js), so there is nothing server-side to
+    test beyond the route rendering with what the shared popover needs.
+    """
+
+    def test_timeline_page_renders(self):
+        response = self.client.get("/timeline")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "timeline.js")
+        # The shared settings popover (which carries the snapshot button) and
+        # the config defaults its generated preference panels are built from.
+        self.assertContains(response, 'id="settings-btn"')
+        self.assertContains(response, 'id="save-snapshot"')
+        self.assertContains(response, 'id="config-defaults"')
+
+    def test_item_query_is_client_side_only(self):
+        # ?item= is read by the page's JS; the view neither needs nor rejects
+        # it, and no solve happens either way.
+        response = self.client.get("/timeline", {"item": "Oak Table"})
+        self.assertEqual(response.status_code, 200)
+
+
 class SessionCacheTests(SimpleTestCase):
     def setUp(self) -> None:
         _entries.clear()

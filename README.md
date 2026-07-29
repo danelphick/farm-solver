@@ -644,7 +644,9 @@ discards them), so pasting a save or retyping a handful of prices costs one
 solve rather than one per keystroke; the Goal itself still re-solves as you
 type. There are no accounts and nothing is stored server-side: your pasted text
 and parameter choices live in the browser's `localStorage` only, resent with
-every request.
+every request (and the dated mastery snapshots behind the
+[timeline page](#mastery-timeline-page) live in the same browser's IndexedDB,
+never leaving it at all).
 A solve takes roughly the same ~0.5s a CLI run does on capable hardware (see
 "Server hardware reality" below); a *refilter* — changing a limit or which
 plan is expanded, without changing what needs solving — is answered from an
@@ -685,10 +687,42 @@ settings up (your goal there is left alone).
   as `-m <Item>:<tier>` would (no tower goal, every other setting kept), so you
   get the full frontier and plan breakdown for it. The browser's Back button
   returns to the list.
+- The small **timeline** link beside each item name opens that item's
+  [mastery timeline](#mastery-timeline-page) instead.
 
 Times use the steady-state (yearly-average) calendar, and each row is
 cumulative from where you are now — a Grandmaster row includes the work Master
 needed.
+
+### Mastery timeline page
+
+The mastery costs page answers "what is left"; the **Timeline** page answers
+"how fast am I actually going". Under the Masteries box in **⚙ Settings**
+there is a **Save dated snapshot** button: press it whenever you paste a fresh
+mastery list, and the app records that list — item by item — in this browser.
+`/timeline?item=<Item>` then charts one item across those snapshots, with the
+Master / Grandmaster / Megamaster thresholds marked as dotted lines, above a
+table of each snapshot's progress, its gain since the one before, and what that
+works out at per day. Open `/timeline` with no item (the **Timeline** link in
+the header) for the list of everything you have history for.
+
+- **Snapshots are per day, but not one per day.** Every snapshot from the last
+  7 days is kept, so saving twice in an evening records both; days older than
+  that are thinned to their last snapshot, so a year of history stays small.
+- **The button saves immediately.** Unlike every other control in the popover,
+  it does not wait for **Save** and is not undone by **Cancel** — a snapshot is
+  history, not a setting. It does not re-solve anything either.
+- **The chart's scale follows the data.** A week's real progress is around 1% of
+  a tier, which drawn from zero would be a flat line, so when the movement is
+  small the chart zooms to it and shows only the tier lines that fall inside.
+  The axis labels always give the real figures, and the table has the exact
+  numbers.
+- **Gaps are gaps, not zeroes.** A snapshot taken before you started an item
+  simply has no point for it, rather than a drop to zero.
+- **This history lives in your browser only** (in IndexedDB, not the
+  `localStorage` the pasted state uses — snapshots are far too big for that).
+  It is never sent to the server, is not backed up or exported, and clearing
+  the site's data loses it. A different browser or machine starts empty.
 
 ### Running it locally
 
