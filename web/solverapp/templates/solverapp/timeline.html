@@ -34,6 +34,48 @@
     </div>
   </div>
 
+  <!-- Filters for the index below; hidden while one item is charted, which the
+       filters do not apply to. A details.pane, so its open/closed state
+       persists document-wide like every other one (settings.restorePaneStates). -->
+  <details id="filter-details" class="pane" open hidden>
+    <summary>Filters<span id="filter-summary" class="summary-detail"></span></summary>
+    <div class="pane-body">
+      <div class="field-row wide">
+        <label>Tier</label>
+        <label class="check"><input id="tier-none" type="checkbox" checked> Not mastered</label>
+        <label class="check"><input id="tier-m" type="checkbox" checked> M</label>
+        <label class="check"><input id="tier-gm" type="checkbox" checked> GM</label>
+        <!-- Off by default: a Megamastered item is finished, so it is noise in
+             a list you are reading to decide what to work on next. -->
+        <label class="check"><input id="tier-mm" type="checkbox"> MM</label>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="Which mastery tiers to list, going by where each item stands now. Megamastered items are hidden by default — they are finished.">?</button>
+      </div>
+
+      <div class="field-row wide">
+        <label for="material-input">Made from</label>
+        <input id="material-input" type="text" list="material-catalogue"
+          placeholder="Item name" autocomplete="off">
+        <datalist id="material-catalogue"></datalist>
+        <button type="button" id="material-add" class="btn-add">+ Add</button>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="List only what your materials can end up as. Following the recipes all the way through, so Straw brings in Twine and everything made from Twine, then Rope and everything made from Rope, and so on. Add as many as you like — anything reachable from any of them is listed.">?</button>
+      </div>
+
+      <div class="field-row wide">
+        <label for="zone-select">Add a zone's drops</label>
+        <select id="zone-select"><option value="">Choose a zone…</option></select>
+        <button type="button" id="zone-add" class="btn-add">+ Add</button>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="Fill the materials above with everything that zone drops (the ones that are a material for something), to see what a trip there could turn into.">?</button>
+      </div>
+
+      <div id="material-chips" class="material-chips" hidden>
+        <button type="button" id="material-clear" class="btn-add">Clear all</button>
+      </div>
+    </div>
+  </details>
+
   <p id="timeline-empty" class="pane-hint" hidden>
     No snapshots saved yet. Open <strong>&#9881; Settings</strong> (top right),
     paste your masteries, and press <strong>Save dated snapshot</strong>. Come

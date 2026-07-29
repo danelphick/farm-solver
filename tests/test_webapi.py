@@ -807,3 +807,59 @@ def test_mastery_costs_ignores_the_goal_params_it_is_handed():
     )
     assert with_goals.rows == plain.rows
     assert with_goals.unmasterable == plain.unmasterable
+
+
+def test_crafting_catalogue_inverts_the_recipe_graph():
+    catalogue = webapi.crafting_catalogue()
+
+    # `uses` answers "what consumes this?", the direction the timeline page's
+    # filter walks -- Straw is a material of Twine, not the other way about.
+    assert "twine" in catalogue["uses"]["straw"]
+    assert "straw" not in catalogue["uses"].get("twine", [])
+    # One step further along the same chain, which is what makes the client's
+    # transitive walk (Straw -> Twine -> Rope) worth doing.
+    assert "rope" in catalogue["uses"]["twine"]
+
+    # Every key and every consumer is lower-cased, like the rest of the model,
+    # with the display spelling carried separately.
+    assert all(key == key.lower() for key in catalogue["uses"])
+    assert all(
+        item == item.lower()
+        for consumers in catalogue["uses"].values()
+        for item in consumers
+    )
+    assert catalogue["names"]["straw"] == "Straw"
+
+
+def test_crafting_catalogue_keeps_the_free_materials():
+    # crafting.IGNORED_MATERIALS are free to the solver, but a player asking
+    # what their Iron could become still wants an answer.
+    assert webapi.crafting_catalogue()["uses"]["iron"]
+
+
+def test_crafting_catalogue_lists_every_zone_with_its_drops():
+    zones = webapi.crafting_catalogue()["zones"]
+
+    keyed = {(zone["kind"], zone["name"]): zone for zone in zones}
+    assert keyed[("exploring", "Small Cave")]["items"][0] == "wood"
+    assert "drum" in keyed[("fishing", "Small Pond")]["items"]
+
+    # Listed once per (kind, name), however many rows the CSV files them under
+    # (a zone with flagged alternate drop rates repeats its items).
+    assert len(keyed) == len(zones)
+    assert all(len(set(zone["items"])) == len(zone["items"]) for zone in zones)
+
+    # A name can be BOTH an exploring location and a fishing zone, with
+    # different drops -- so a zone is identified by kind and name together,
+    # never by name alone.
+    swamps = [zone for zone in zones if zone["name"] == "Sinking Swamp"]
+    assert {zone["kind"] for zone in swamps} == {"exploring", "fishing"}
+    assert swamps[0]["items"] != swamps[1]["items"]
+
+
+def test_crafting_catalogue_names_everything_it_mentions():
+    catalogue = webapi.crafting_catalogue()
+    mentioned = set(catalogue["uses"])
+    mentioned.update(item for items in catalogue["uses"].values() for item in items)
+    mentioned.update(item for zone in catalogue["zones"] for item in zone["items"])
+    assert not mentioned - set(catalogue["names"])

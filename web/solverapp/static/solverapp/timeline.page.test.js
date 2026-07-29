@@ -50,7 +50,39 @@ const NOW = new Date(2026, 6, 16, 6, 0);
 // The seeding goes through history.js itself (after resetModules, so it is the
 // same module instance timeline.js will import) rather than poking at the raw
 // database -- that keeps the fixture honest about the shape actually stored.
-async function loadPage({ url = "/timeline", snapshots = SNAPSHOTS, ui, now = NOW } = {}) {
+// What GET /api/catalogue serves (webapi.crafting_catalogue's shape): the
+// inverted recipe graph, display names, and each zone's drops.
+const CATALOGUE = {
+  uses: {
+    straw: ["twine"],
+    twine: ["rope"],
+    rope: ["fishing net"],
+    wood: ["board"],
+  },
+  names: {
+    straw: "Straw",
+    twine: "Twine",
+    rope: "Rope",
+    wood: "Wood",
+    "fishing net": "Fishing Net",
+    board: "Board",
+    "wooden mask": "Wooden Mask",
+  },
+  zones: [
+    // Wooden Mask is a drop that no recipe uses -- adding this zone must not
+    // put a chip there that could never match anything.
+    { kind: "exploring", name: "Small Cave", items: ["wood", "wooden mask"] },
+    { kind: "fishing", name: "Small Pond", items: ["straw"] },
+  ],
+};
+
+async function loadPage({
+  url = "/timeline",
+  snapshots = SNAPSHOTS,
+  ui,
+  now = NOW,
+  catalogue = CATALOGUE,
+} = {}) {
   // Only Date is faked: faking the timers themselves deadlocks
   // fake-indexeddb's queue (and the debounce test below needs real ones).
   vi.useFakeTimers({ toFake: ["Date"], now });
@@ -58,9 +90,17 @@ async function loadPage({ url = "/timeline", snapshots = SNAPSHOTS, ui, now = NO
   installLocalStorage();
   // The per-table sort each page load restores from (settings.readUi).
   if (ui) localStorage.setItem("farm-solver.ui.v1", JSON.stringify(ui));
-  // The item <datalist> is fetched; it is best-effort in the page, but stub it
-  // so a test never depends on jsdom's networking.
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => "" })));
+  // Two things are fetched: the item <datalist> (a plain text catalogue) and
+  // the recipe graph the "made from" filter walks. Both are best-effort in the
+  // page, but stub them so no test depends on jsdom's networking.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url) =>
+      url === "/api/catalogue"
+        ? { ok: true, json: async () => catalogue }
+        : { ok: true, text: async () => "" }
+    )
+  );
   vi.resetModules();
 
   const history = await import("./history.js");
@@ -285,5 +325,186 @@ describe("the timeline page", () => {
     await loadPage();
     expect(document.querySelector("#settings-popover")).not.toBeNull();
     expect(document.querySelector("#save-snapshot")).not.toBeNull();
+  });
+});
+
+// The index's filters: which tiers to list, and what the items could be made
+// from. Both belong to the index, so neither appears while one item is charted.
+describe("the index filters", () => {
+  // Rope is Megamastered, so the default filters hide it; the rest are spread
+  // across the other three tiers.
+  const CRAFTED = [
+    {
+      when: new Date(2026, 6, 15, 12, 0),
+      items: {
+        Twine: 400_000, // GM, made from Straw
+        Rope: 1_400_000, // MM, made from Twine
+        "Fishing Net": 20_000, // M, made from Rope
+        Board: 500, // not mastered, made from Wood
+      },
+    },
+  ];
+
+  const items = () =>
+    [...document.querySelectorAll("#timeline-index-body tr td:first-child")].map(
+      (td) => td.textContent.trim()
+    );
+  const chips = () =>
+    [...document.querySelectorAll("#material-chips .chip")].map((chip) =>
+      chip.textContent.replace("×", "").trim()
+    );
+  const $$ = (selector) => document.querySelector(selector);
+
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  test("hides Megamastered items until MM is ticked", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    expect($$("#tier-mm").checked).toBe(false);
+    expect(items()).toEqual(["Board", "Fishing Net", "Twine"]);
+
+    $$("#tier-mm").checked = true;
+    $$("#tier-mm").dispatchEvent(new Event("change"));
+    expect(items()).toEqual(["Board", "Fishing Net", "Rope", "Twine"]);
+  });
+
+  test("unticking a tier drops its rows", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#tier-none").checked = false;
+    $$("#tier-none").dispatchEvent(new Event("change"));
+    expect(items()).toEqual(["Fishing Net", "Twine"]); // Board was the only one
+  });
+
+  // The point of the whole filter: Straw reaches Twine, then Rope, then
+  // Fishing Net -- not just the recipes that name Straw itself.
+  test('"made from" follows the recipes all the way down', async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#tier-mm").checked = true;
+    $$("#tier-mm").dispatchEvent(new Event("change"));
+
+    $$("#material-input").value = "Straw";
+    $$("#material-add").click();
+
+    expect(chips()).toEqual(["Straw"]);
+    expect(items()).toEqual(["Fishing Net", "Rope", "Twine"]); // no Board
+  });
+
+  test("a material can be added by pressing Enter", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#material-input").value = "Wood";
+    $$("#material-input").dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    );
+    expect(chips()).toEqual(["Wood"]);
+    expect($$("#material-input").value).toBe(""); // and the box is cleared
+    expect(items()).toEqual(["Board"]);
+  });
+
+  test("materials union rather than narrowing each other", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#material-input").value = "Straw";
+    $$("#material-add").click();
+    $$("#material-input").value = "Wood";
+    $$("#material-add").click();
+
+    expect(chips()).toEqual(["Straw", "Wood"]);
+    expect(items()).toEqual(["Board", "Fishing Net", "Twine"]);
+  });
+
+  test("an item no recipe uses is not accepted as a material", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#material-input").value = "Fishing Net"; // nothing is made from it
+    $$("#material-add").click();
+    expect(chips()).toEqual([]);
+  });
+
+  test("a zone fills in the drops that are actually materials", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#zone-select").value = "0"; // Small Cave: Wood + Wooden Mask
+    $$("#zone-add").click();
+
+    // Wooden Mask is a drop, but no recipe uses it, so it never becomes a chip.
+    expect(chips()).toEqual(["Wood"]);
+    expect(items()).toEqual(["Board"]);
+  });
+
+  test("the same zone name can be either an exploring or a fishing one", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    const options = [...document.querySelectorAll("#zone-select optgroup")].map(
+      (group) => [group.label, [...group.children].map((o) => o.textContent)]
+    );
+    expect(options).toEqual([
+      ["Exploring", ["Small Cave"]],
+      ["Fishing", ["Small Pond"]],
+    ]);
+    // Zones are picked by index, not name, so the two are never confused.
+    $$("#zone-select").value = "1";
+    $$("#zone-add").click();
+    expect(chips()).toEqual(["Straw"]);
+  });
+
+  test("a chip's × removes it and Clear all empties the filter", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#material-input").value = "Straw";
+    $$("#material-add").click();
+    $$("#material-input").value = "Wood";
+    $$("#material-add").click();
+
+    document.querySelector('#material-chips button[data-material="straw"]').click();
+    expect(chips()).toEqual(["Wood"]);
+
+    $$("#material-clear").click();
+    expect(chips()).toEqual([]);
+    expect($$("#material-chips").hidden).toBe(true);
+    expect(items()).toEqual(["Board", "Fishing Net", "Twine"]); // unfiltered again
+  });
+
+  test("the filters are remembered for the next visit", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    $$("#tier-mm").checked = true;
+    $$("#tier-mm").dispatchEvent(new Event("change"));
+    $$("#material-input").value = "Straw";
+    $$("#material-add").click();
+
+    expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+      timeline_tier_MM: true,
+      timeline_materials: ["straw"],
+    });
+
+    await loadPage({
+      snapshots: CRAFTED,
+      ui: { timeline_tier_MM: true, timeline_materials: ["straw"] },
+    });
+    expect($$("#tier-mm").checked).toBe(true);
+    expect(chips()).toEqual(["Straw"]);
+    expect(items()).toEqual(["Fishing Net", "Rope", "Twine"]);
+  });
+
+  test("says so when the filters leave nothing, without hiding them", async () => {
+    await loadPage({ snapshots: CRAFTED });
+    ["#tier-none", "#tier-m", "#tier-gm"].forEach((selector) => {
+      $$(selector).checked = false;
+      $$(selector).dispatchEvent(new Event("change"));
+    });
+    expect(items()).toEqual([]);
+    expect($$("#status").textContent).toMatch(/Nothing matches these filters/);
+    expect($$("#filter-details").hidden).toBe(false);
+  });
+
+  test("are hidden while one item is charted", async () => {
+    await loadPage({ url: "/timeline?item=Twine", snapshots: CRAFTED });
+    expect($$("#filter-details").hidden).toBe(true);
+  });
+
+  // The graph is a nicety: without it the tier filter and the rest of the page
+  // must still work.
+  test("survive a catalogue that never arrives", async () => {
+    await loadPage({ snapshots: CRAFTED, catalogue: null });
+    expect(items()).toEqual(["Board", "Fishing Net", "Twine"]);
+    $$("#material-input").value = "Straw";
+    $$("#material-add").click();
+    expect(chips()).toEqual([]); // nothing to check it against, so nothing added
   });
 });

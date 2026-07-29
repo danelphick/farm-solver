@@ -24,6 +24,7 @@ edge case documented on :func:`render`.
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import shlex
@@ -33,6 +34,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import config
+import crafting
 import farm_solver
 import main
 import optimizer
@@ -367,6 +369,83 @@ def config_defaults() -> dict:
     cfg = load_web_config()
     cfg.pop("solver", None)
     return cfg
+
+
+# Where a zone's drops come from: the same two CSVs the exploring and fishing
+# channels read. Only the item *names* are wanted here (not the drop rates the
+# solver models), so the columns are read straight rather than through
+# exploring.read_locations / fishing.read_zones, whose models lower-case the
+# names and split the flagged alternate tables out -- a "what drops here" list
+# wants every row's item, spelled as the data file spells it.
+_ZONE_SOURCES = (
+    ("exploring", Path(__file__).with_name("exploring.csv"), "Location"),
+    ("fishing", Path(__file__).with_name("fishing.csv"), "Zone"),
+)
+
+
+def _zone_drops() -> list[dict]:
+    """``[{kind, name, items}]`` -- every exploring location and fishing zone."""
+    zones: list[dict] = []
+    for kind, path, column in _ZONE_SOURCES:
+        if not path.exists():
+            continue
+        by_name: dict[str, dict] = {}
+        with path.open(newline="") as fh:
+            for row in csv.DictReader(fh):
+                name = (row.get(column) or "").strip()
+                item = (row.get("Item") or "").strip()
+                if not name or not item:
+                    continue
+                zone = by_name.setdefault(
+                    name, {"kind": kind, "name": name, "items": []}
+                )
+                if item not in zone["items"]:
+                    zone["items"].append(item)
+        zones.extend(by_name.values())
+    return zones
+
+
+def crafting_catalogue() -> dict:
+    """Reference data for the timeline page's "made from" filter.
+
+    Static game content -- the workshop's recipe graph and what each zone
+    drops -- with no player state in it at all, which is why it is a plain
+    cacheable GET (see ``views.api_catalogue``) rather than one of the two
+    solve POSTs. The page uses it to answer "if I have a pile of Straw, what
+    could I be crafting?".
+
+    ``uses`` is the graph **inverted**: material -> the items whose recipe
+    consumes it directly, keyed lower-cased like the rest of the model. The
+    client walks it transitively (Straw -> Twine -> Rope -> ...), which is
+    cheaper to ship and lets it union several materials without a round trip.
+    Materials the game supplies free (:data:`crafting.IGNORED_MATERIALS`) are
+    left in: they are still real inputs, and a player asking what their Iron
+    could become deserves an answer.
+
+    ``names`` maps every lower-cased key here (recipe, material or zone drop)
+    to its display spelling, so the client can show and suggest names without a
+    second catalogue.
+    """
+    workshop = crafting.load_workshop()
+    uses: dict[str, list[str]] = {}
+    names: dict[str, str] = {}
+
+    for recipe in workshop.recipes.values():
+        names.setdefault(recipe.name.lower(), recipe.name)
+        for material in recipe.materials:
+            key = material.lower()
+            names.setdefault(key, material)
+            consumers = uses.setdefault(key, [])
+            if recipe.name.lower() not in consumers:
+                consumers.append(recipe.name.lower())
+
+    zones = _zone_drops()
+    for zone in zones:
+        for item in zone["items"]:
+            names.setdefault(item.lower(), item)
+        zone["items"] = [item.lower() for item in zone["items"]]
+
+    return {"uses": uses, "names": names, "zones": zones}
 
 
 def _wrap_argument_error(fn, value):

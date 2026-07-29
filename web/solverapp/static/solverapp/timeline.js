@@ -472,13 +472,142 @@ export function indexRows(snapshots, now = new Date()) {
   });
 }
 
+// --- Filters -----------------------------------------------------------------
+//
+// Two of them, both over the index only (a chart of one item has nothing to
+// filter): which tiers to list, and -- the interesting one -- "made from".
+//
+// The catalogue's `uses` maps a material to the items whose recipe consumes it
+// DIRECTLY. Walking it transitively is what makes the filter useful: a pile of
+// Straw is not just Twine and Brooms, it is Rope (via Twine), and Fishing Nets
+// (via Rope), and so on down the chain. Several materials union, so a zone's
+// whole drop list answers "what could a trip there turn into?".
+
+// Every item reachable from `seeds` by following `uses`, as a Set of
+// lower-cased names. Breadth-first with a seen set, so a recipe graph with a
+// cycle in it (there is none today, but nothing here guarantees that) still
+// terminates. The seeds themselves are only included if something makes them
+// out of another seed.
+export function transitiveConsumers(uses, seeds) {
+  const reachable = new Set();
+  const queue = [...seeds];
+  while (queue.length) {
+    const material = queue.shift();
+    for (const consumer of uses[material] || []) {
+      if (reachable.has(consumer)) continue;
+      reachable.add(consumer);
+      queue.push(consumer);
+    }
+  }
+  return reachable;
+}
+
+// `tiers` is the set of tier tokens to keep ("" being not-yet-Master);
+// `allowed` is null when no material filter is on, else the reachable set.
+export function filterIndexRows(rows, { tiers, allowed }) {
+  return rows.filter(
+    (row) =>
+      tiers.has(row.tier) &&
+      (allowed === null || allowed.has(row.item.toLowerCase()))
+  );
+}
+
+// The recipe graph and zone drops (GET /api/catalogue), or an empty catalogue
+// while it is still loading -- or for good, if it fails. The tier filter and
+// everything else on the page work without it; only "made from" needs it.
+let catalogue = { uses: {}, names: {}, zones: [] };
+
+// The materials the filter is seeded with, lower-cased, in the order added.
+let materials = [];
+
+const TIER_BOXES = [
+  { selector: "#tier-none", tier: "" },
+  { selector: "#tier-m", tier: "M" },
+  { selector: "#tier-gm", tier: "GM" },
+  { selector: "#tier-mm", tier: "MM" },
+];
+
+function tierFilter() {
+  return new Set(
+    TIER_BOXES.filter((box) => $(box.selector).checked).map((box) => box.tier)
+  );
+}
+
+function displayName(key) {
+  return catalogue.names[key] || key;
+}
+
+// One removable chip per material, plus the Clear all button the markup keeps
+// inside the same box (so the row disappears with them).
+function renderChips() {
+  const holder = $("#material-chips");
+  holder.querySelectorAll(".chip").forEach((chip) => chip.remove());
+  const clear = $("#material-clear");
+  materials.forEach((key) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = displayName(key);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn-delete";
+    remove.dataset.material = key;
+    remove.title = `Remove ${displayName(key)}`;
+    remove.setAttribute("aria-label", `Remove ${displayName(key)}`);
+    remove.textContent = "×";
+    chip.appendChild(remove);
+    holder.insertBefore(chip, clear);
+  });
+  holder.hidden = materials.length === 0;
+}
+
+// What the pane says about itself while collapsed.
+function renderFilterSummary(shown, total) {
+  const parts = [];
+  if (shown !== total) parts.push(`${shown.toLocaleString()} of ${total.toLocaleString()}`);
+  if (materials.length) {
+    parts.push(
+      materials.length === 1
+        ? `from ${displayName(materials[0])}`
+        : `from ${materials.length} materials`
+    );
+  }
+  $("#filter-summary").textContent = parts.length ? ` (${parts.join(", ")})` : "";
+}
+
+function setMaterials(next) {
+  materials = next;
+  renderChips();
+  writeUi({ timeline_materials: materials });
+  render();
+}
+
+function addMaterials(keys) {
+  const known = new Set(materials);
+  // Only materials the recipe graph knows: anything else could never bring a
+  // row in, so a chip for it would be a filter that silently does nothing.
+  // (Which is most of a zone's drop list -- chest items, fish, gemstones.)
+  const additions = keys
+    .map((key) => key.trim().toLowerCase())
+    .filter((key) => key && catalogue.uses[key] && !known.has(key));
+  if (!additions.length) return false;
+  setMaterials([...materials, ...new Set(additions)]);
+  return true;
+}
+
 function renderIndex(snapshots) {
   renderSortIndicators("#timeline-index-head", indexSort);
+  const all = indexRows(snapshots);
   const entries = sortIndexRows(
-    indexRows(snapshots),
+    filterIndexRows(all, {
+      tiers: tierFilter(),
+      allowed: materials.length
+        ? transitiveConsumers(catalogue.uses, materials)
+        : null,
+    }),
     indexSort.key,
     indexSort.direction
   );
+  renderFilterSummary(entries.length, all.length);
   $("#timeline-index-body").innerHTML = entries
     .map(
       (entry) => `<tr class="clickable" data-href="${escapeHtml(timelineHref(entry.item))}"` +
@@ -493,6 +622,7 @@ function renderIndex(snapshots) {
     )
     .join("");
   $("#timeline-index").hidden = entries.length === 0;
+  return { shown: entries.length, total: all.length };
 }
 
 // --- Page state --------------------------------------------------------------
@@ -516,6 +646,7 @@ function hideAll() {
   $("#timeline-chart").hidden = true;
   $("#timeline-section").hidden = true;
   $("#timeline-index").hidden = true;
+  $("#filter-details").hidden = true;
 }
 
 function render() {
@@ -533,8 +664,21 @@ function render() {
   const kept = `${snapshots.length.toLocaleString()} snapshot${snapshots.length === 1 ? "" : "s"}`;
 
   if (!item) {
-    renderIndex(snapshots);
-    setStatus(`${kept} · ${span} · pick an item to chart it`, "ok");
+    // The filters belong to the index, so they appear with it -- and stay put
+    // even when they have filtered every row away, or there would be no way to
+    // relax them again.
+    $("#filter-details").hidden = false;
+    const { shown, total } = renderIndex(snapshots);
+    const listed =
+      shown === total
+        ? `${total.toLocaleString()} items`
+        : `${shown.toLocaleString()} of ${total.toLocaleString()} items`;
+    setStatus(
+      shown
+        ? `${listed} · ${kept} · ${span} · pick one to chart it`
+        : `Nothing matches these filters · ${total.toLocaleString()} items with history`,
+      shown ? "ok" : "error"
+    );
     return;
   }
 
@@ -605,6 +749,102 @@ function saveSettings() {
 
 // --- Wiring ------------------------------------------------------------------
 
+// Fill the "made from" picker and the zone list from the fetched catalogue.
+// Zones are grouped by kind and identified by their INDEX, not their name: one
+// name can be both an exploring location and a fishing zone with different
+// drops (Sinking Swamp), so a name alone does not identify one.
+function renderCatalogueControls() {
+  const datalist = $("#material-catalogue");
+  const fragment = document.createDocumentFragment();
+  Object.keys(catalogue.uses)
+    .map(displayName)
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((name) => {
+      const option = document.createElement("option");
+      option.value = name;
+      fragment.appendChild(option);
+    });
+  datalist.appendChild(fragment);
+
+  const select = $("#zone-select");
+  const groups = new Map();
+  catalogue.zones.forEach((zone, index) => {
+    if (!groups.has(zone.kind)) {
+      const group = document.createElement("optgroup");
+      group.label = zone.kind === "fishing" ? "Fishing" : "Exploring";
+      groups.set(zone.kind, group);
+      select.appendChild(group);
+    }
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = zone.name;
+    groups.get(zone.kind).appendChild(option);
+  });
+}
+
+async function loadCraftingCatalogue() {
+  try {
+    const response = await fetch("/api/catalogue");
+    if (!response.ok) return;
+    const payload = await response.json();
+    // Keep the empty catalogue unless the response really is one: a page whose
+    // filter is a nicety must not break on a truncated or unexpected body.
+    if (!payload || typeof payload.uses !== "object") return;
+    catalogue = {
+      uses: payload.uses || {},
+      names: payload.names || {},
+      zones: payload.zones || [],
+    };
+  } catch (err) {
+    return; // best-effort: the tier filter and the rest of the page still work
+  }
+  renderCatalogueControls();
+  // Materials restored from a previous visit could not be checked against the
+  // graph (or shown by their display name) until now.
+  const restored = materials;
+  materials = [];
+  addMaterials(restored.map(displayName));
+  renderChips();
+}
+
+function wireFilters() {
+  const saved = readUi();
+  TIER_BOXES.forEach((box) => {
+    if (typeof saved[`timeline_tier_${box.tier || "none"}`] === "boolean") {
+      $(box.selector).checked = saved[`timeline_tier_${box.tier || "none"}`];
+    }
+    $(box.selector).addEventListener("change", () => {
+      writeUi({ [`timeline_tier_${box.tier || "none"}`]: $(box.selector).checked });
+      render();
+    });
+  });
+  if (Array.isArray(saved.timeline_materials)) materials = saved.timeline_materials;
+
+  const addTyped = () => {
+    if (addMaterials([$("#material-input").value])) $("#material-input").value = "";
+  };
+  $("#material-add").addEventListener("click", addTyped);
+  // Enter in the box adds, rather than doing nothing (there is no form here).
+  $("#material-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addTyped();
+    }
+  });
+
+  $("#zone-add").addEventListener("click", () => {
+    const zone = catalogue.zones[Number($("#zone-select").value)];
+    if (zone) addMaterials(zone.items);
+  });
+
+  $("#material-clear").addEventListener("click", () => setMaterials([]));
+  // Delegated on the (stable) chip box, which renderChips refills.
+  $("#material-chips").addEventListener("click", (event) => {
+    const remove = event.target.closest("button[data-material]");
+    if (remove) setMaterials(materials.filter((key) => key !== remove.dataset.material));
+  });
+}
+
 // Sorting is pure display: reorder rows already drawn from history already
 // loaded, so a click redraws that one table and nothing else. Delegated on the
 // header row, so every column's button is one listener.
@@ -639,6 +879,12 @@ function init() {
 
   const onItemChange = debounce(() => selectItem($("#timeline-item").value.trim()), DEBOUNCE_MS);
   $("#timeline-item").addEventListener("input", onItemChange);
+
+  // Wired before the catalogue arrives (it restores the saved materials, which
+  // loadCraftingCatalogue then re-checks against the graph); the fetch is not
+  // awaited, so history still renders immediately if the request is slow.
+  wireFilters();
+  loadCraftingCatalogue().then(render);
 
   wireSort(
     "#timeline-index-head",

@@ -1194,3 +1194,64 @@ details[open] > summary .summary-detail {
 .muted-inline {
   color: var(--muted);
 }
+
+/* A checkbox and its own label sitting inline in a filter row -- unlike
+   `.field-row label`, which is the row's 11rem label gutter. */
+.field-row label.check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+/* The filter row's controls grow to fill the pane otherwise, which leaves an
+   item-name box the width of the page. */
+#material-input,
+#zone-select {
+  max-width: 18rem;
+  flex: 1 1 12rem;
+}
+
+/* The chosen "made from" materials, one removable chip each, with Clear all
+   riding along at the end of the same wrapping row. */
+.material-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.material-chips[hidden] {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem 0.3rem 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel);
+  font-size: 0.8rem;
+}
+
+/* The shared .btn-delete is a 1.8rem bordered square -- inside a pill that
+   makes a box within a box, taller than the pill has room for. Here it is just
+   the glyph, sized to the text it sits beside. */
+.chip .btn-delete {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  font-size: 0.85rem;
+}
+
+.chip .btn-delete:hover {
+  background: var(--bg);
+  color: var(--error);
+}

@@ -712,6 +712,16 @@ where it stands now, and what it gained over the last week and the last day.
   it stood when the window opened. A dash means the window has no answer —
   nothing recorded since it opened, or no earlier snapshot to measure from —
   rather than no progress.
+- **Filters** sit above that list. **Tier** picks which of Not mastered / M /
+  GM / MM to show; MM is off by default, since those are finished.
+  **Made from** answers "I have a pile of this — what could it become?": add
+  Straw and the list narrows to everything Straw can end up as, following the
+  recipes the whole way (Twine, then Rope and everything made from Rope, and
+  so on). Add as many materials as you like — anything reachable from any of
+  them is listed — and **Add a zone's drops** fills them in from an exploring
+  location or fishing zone in one go, so you can see what a trip there could
+  turn into. Only drops that are a material for something are added. **Clear
+  all** empties the list, and both filters are remembered for your next visit.
 
 - **Snapshots are per day, but not one per day.** Every snapshot from the last
   7 days is kept, so saving twice in an evening records both; days older than

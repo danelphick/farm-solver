@@ -11,13 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from functools import lru_cache
 
 import markdown
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 import webapi
 
@@ -78,6 +79,29 @@ def timeline(request: HttpRequest) -> HttpResponse:
         "solverapp/timeline.html",
         {"config_defaults": webapi.config_defaults()},
     )
+
+
+@lru_cache(maxsize=1)
+def _catalogue() -> dict:
+    """The crafting/zone reference data, built once per process.
+
+    Static game content read from files that cannot change under a running
+    server, so it is worth exactly one build -- unlike the solve endpoints,
+    there is no player state to key on.
+    """
+    return webapi.crafting_catalogue()
+
+
+@require_GET
+def api_catalogue(request: HttpRequest) -> JsonResponse:
+    """Recipe graph + zone drops for the timeline page's "made from" filter.
+
+    A GET, and the only API here that is: it carries no player state in either
+    direction (see :func:`webapi.crafting_catalogue`), so there is nothing to
+    post and nothing to key a cache on -- the response is the same for
+    everyone, and a browser may cache it freely.
+    """
+    return JsonResponse(_catalogue())
 
 
 def _section_html(text: str) -> str:

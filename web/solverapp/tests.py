@@ -259,6 +259,21 @@ class TimelinePageTests(SimpleTestCase):
         self.assertContains(response, 'id="save-snapshot"')
         self.assertContains(response, 'id="config-defaults"')
 
+    def test_catalogue_serves_the_recipe_graph_and_zones(self):
+        response = self.client.get("/api/catalogue")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        # The graph the "made from" filter walks, inverted: material -> what
+        # consumes it (see webapi.crafting_catalogue).
+        self.assertIn("twine", body["uses"]["straw"])
+        self.assertEqual(body["names"]["straw"], "Straw")
+        self.assertTrue(any(zone["kind"] == "fishing" for zone in body["zones"]))
+
+    def test_catalogue_is_a_get_with_no_player_state(self):
+        # The one API here that is not a POST: it carries nothing about the
+        # player in either direction, so there is nothing to send it.
+        self.assertEqual(self.client.post("/api/catalogue").status_code, 405)
+
     def test_item_query_is_client_side_only(self):
         # ?item= is read by the page's JS; the view neither needs nor rejects
         # it, and no solve happens either way.

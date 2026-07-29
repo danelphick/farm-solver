@@ -1591,8 +1591,8 @@ that imports it without going through `manage.py`.
   `django.contrib.auth`/`admin`/`sessions`; `DATABASES = {}`, since there is
   nothing server-side to persist; `DEBUG`/`SECRET_KEY`/`ALLOWED_HOSTS` are
   env-driven), `urls.py` (`/` → `index`, `/masteries` → `masteries`,
-  `/timeline` → `timeline`, `/api/solve` → `api_solve`, `/api/mastery-costs` →
-  `api_mastery_costs`), `wsgi.py`.
+  `/timeline` → `timeline`, `/api/catalogue` → `api_catalogue`, `/api/solve` →
+  `api_solve`, `/api/mastery-costs` → `api_mastery_costs`), `wsgi.py`.
 - **`web/solverapp/`** — the one app: `apps.py` (`AppConfig.ready()` pins
   `optimizer.set_solver_backend("highs")` once at process startup -- never
   per-request, since `optimizer._backend` is a module global unsafe under
@@ -1940,6 +1940,27 @@ that imports it without going through `manage.py`.
     lines that fall inside it -- a lone snapshot always keeps the full range,
     having no shape to show. `axisLabel` spells figures out in full on a zoomed
     (<10k wide) axis, where every tick would otherwise round to the same "339k".
+  - **The index's filters** (`#filter-details`, shown with the index and never
+    with a chart): tier checkboxes (**MM off by default** -- a Megamastered item
+    is finished, so it is noise in a list read to decide what to do next), and
+    **"made from"**, which lists only what a set of materials could end up as.
+    `transitiveConsumers(uses, seeds)` breadth-firsts the inverted recipe graph,
+    so Straw brings in Twine, then Rope, then Fishing Net -- the whole chain,
+    not one step -- and several materials **union** (which is what makes a
+    zone's entire drop list a sensible thing to add). `filterIndexRows` applies
+    both. A zone picker fills the materials in from what an exploring location
+    or fishing zone drops, keeping only drops the graph knows as a material
+    (a chip for a chest item could never match anything); zones are identified
+    by **index**, since one name can be both an exploring location and a fishing
+    zone with different drops (Sinking Swamp). Tier boxes and the material list
+    persist under the shared `farm-solver.ui.v1` key.
+  - **`GET /api/catalogue`** (`views.api_catalogue` → `webapi.crafting_catalogue`,
+    `lru_cache`d per process) feeds that filter: `{uses, names, zones}` where
+    `uses` is the workshop graph **inverted** (material → what consumes it
+    directly), lower-cased, plus display names and each zone's drops. The only
+    GET API here -- static game content, no player state in either direction,
+    nothing to key a cache on. The page treats it as a nicety: an empty or
+    failed response leaves the tier filter and everything else working.
   - **`static/solverapp/catalogue.js`** holds `loadCatalogue` and the two
     catalogue URLs, factored out of `app.js` so the timeline's item picker and
     the solver's goal rows share one loader.

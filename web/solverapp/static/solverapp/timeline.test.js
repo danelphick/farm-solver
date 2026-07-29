@@ -10,10 +10,12 @@ import {
   chartSvg,
   compactNumber,
   deltaRows,
+  filterIndexRows,
   indexRows,
   sortIndexRows,
   sortSeriesRows,
   timelineHref,
+  transitiveConsumers,
 } from "./timeline.js";
 
 const point = (takenAt, progress) => ({
@@ -440,6 +442,91 @@ describe("sortSeriesRows", () => {
         dates(sortSeriesRows(ROWS, "progress", direction))
       );
     }
+  });
+});
+
+describe("transitiveConsumers", () => {
+  // The chain the feature exists for: Straw makes Twine, Twine makes Rope and
+  // Yarn, Rope makes Fishing Nets. A pile of Straw is all of them.
+  const USES = {
+    straw: ["twine", "broom"],
+    twine: ["rope", "yarn"],
+    rope: ["fishing net"],
+    wood: ["board"],
+    board: ["bucket"],
+  };
+
+  test("follows the recipes all the way down, not just one step", () => {
+    expect([...transitiveConsumers(USES, ["straw"])].sort()).toEqual([
+      "broom",
+      "fishing net",
+      "rope",
+      "twine",
+      "yarn",
+    ]);
+  });
+
+  test("unions several materials", () => {
+    expect([...transitiveConsumers(USES, ["rope", "wood"])].sort()).toEqual([
+      "board",
+      "bucket",
+      "fishing net",
+    ]);
+  });
+
+  test("a material nothing is made from reaches nothing", () => {
+    expect(transitiveConsumers(USES, ["bucket"]).size).toBe(0);
+    expect(transitiveConsumers(USES, ["nonesuch"]).size).toBe(0);
+    expect(transitiveConsumers(USES, []).size).toBe(0);
+  });
+
+  // Nothing in the data guarantees the graph is acyclic, and a cycle must not
+  // hang the page.
+  test("terminates on a cycle", () => {
+    const cyclic = { a: ["b"], b: ["c"], c: ["a"] };
+    expect([...transitiveConsumers(cyclic, ["a"])].sort()).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("filterIndexRows", () => {
+  const rows = [
+    { item: "Twine", tier: "MM" },
+    { item: "Rope", tier: "GM" },
+    { item: "Broom", tier: "M" },
+    { item: "Bucket", tier: "" },
+  ];
+  const allTiers = new Set(["", "M", "GM", "MM"]);
+
+  test("keeps only the ticked tiers", () => {
+    const kept = filterIndexRows(rows, {
+      tiers: new Set(["", "M", "GM"]), // the default: MM off
+      allowed: null,
+    });
+    expect(kept.map((row) => row.item)).toEqual(["Rope", "Broom", "Bucket"]);
+  });
+
+  test("keeps only what the materials reach", () => {
+    const kept = filterIndexRows(rows, {
+      tiers: allTiers,
+      allowed: new Set(["twine", "rope"]),
+    });
+    expect(kept.map((row) => row.item)).toEqual(["Twine", "Rope"]);
+  });
+
+  test("applies both filters together", () => {
+    const kept = filterIndexRows(rows, {
+      tiers: new Set(["GM"]),
+      allowed: new Set(["twine", "rope"]),
+    });
+    expect(kept.map((row) => row.item)).toEqual(["Rope"]);
+  });
+
+  test("matches the reachable set case-insensitively", () => {
+    const kept = filterIndexRows([{ item: "Fishing Net", tier: "M" }], {
+      tiers: allTiers,
+      allowed: new Set(["fishing net"]),
+    });
+    expect(kept).toHaveLength(1);
   });
 });
 
