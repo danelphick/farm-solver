@@ -218,6 +218,7 @@ save) because each per-item reachable subtree is small.
 | `locksmith.py` | chests/bags openables | `Openable`, `Locksmith`, `load_openables` |
 | `farming.py` | which items are farmed | `FARMING_ITEMS`, `is_farmed` |
 | `web/` | Django web app over `webapi.py` (see "Web app (web/)" below) | `solverapp.views.{index,masteries,api_solve,api_mastery_costs,_decode_request}`, `solverapp.cache.{SessionCache,SOLVE_SEMAPHORE,key_lock}`, `solverapp.apps.SolverappConfig.ready` |
+| `Dockerfile`/`.dockerignore`/`deploy/` | container image + Google Cloud Run deployment (see "Deployment (Dockerfile, deploy/)" below; README's "Container image and Cloud Run" is the user-facing version) | `deploy/gunicorn.conf.py` (one worker per vCPU, `preload_app=False`, `max_requests=0`), `deploy/cloudrun.sh` (`--source .` build, concurrency/max-instances, the `.run.app` → exact-host `DJANGO_ALLOWED_HOSTS` narrowing) |
 
 Data lives in `*.csv` (crops, fishing, exploring, pets, openables, tower,
 seed_drops, plus `unmodelled.csv` — hand-maintained, `#`-commented, the only
@@ -1992,6 +1993,61 @@ that imports it without going through `manage.py`.
   needs Django (`webapi.py` itself has no Django dependency and is covered by
   `tests/test_webapi.py` under the plain suite).
 
+## Deployment (Dockerfile, deploy/)
+
+`Dockerfile` + `deploy/` package the web app for Google Cloud Run; README's
+"Container image and Cloud Run" is the user-facing version. What matters
+architecturally:
+
+- **The image is the whole deployment.** `settings.py` sets `DATABASES = {}`
+  and holds no server-side player state, so there is nothing to mount or
+  migrate. Two build stages on `python:3.14-slim`: `uv sync --frozen --no-dev
+  --group web` against `uv.lock`, then the source. The project has no
+  `[build-system]`, so it is a *virtual* project -- `uv sync` installs the
+  dependency tree and never the project, which is why `farmweb/wsgi.py` still
+  has to put the repo root on `sys.path` by hand.
+- **The root layer is data, not just modules.** `COPY *.py *.csv *.txt *.toml`
+  exists because the solver resolves its game data at import time through
+  `Path(__file__).with_name(...)` (`crops.csv`, `exploring.csv`, `fishing.csv`,
+  `pets.csv`, `seed_drops.csv`, `openables.csv`, `tower.csv`, `unmodelled.csv`,
+  `workshop.txt`, `mastery_items.txt`) and `webapi.WEB_CONFIG_PATH` reads
+  `web_default_config.toml` the same way. Dropping a data file from the copy
+  breaks at import, not at request time.
+- **Two build-time gates**, both failing the build rather than the first
+  request: an `optimizer.set_solver_backend("highs")` import (the same
+  requirement `solverapp.apps.SolverappConfig.ready` enforces before it will
+  start -- and PuLP's CBC fallback in `optimizer._assert_optimal` has **no
+  bundled binary on arm64**, so build x86_64), and `manage.py check`.
+  `compileall` runs too: `main.py`/`optimizer.py`/`report.py` are ~435 KB of
+  source and a scale-to-zero service would otherwise recompile them per cold
+  start.
+- **`DJANGO_DEBUG=false` is an image `ENV`, not a deploy-time variable.**
+  `settings.py` defaults `DEBUG` to *true* for local use; with it on in
+  production `views.index` renders the CLI-command popup and
+  `webapi.capture_debug_state` writes every visitor's pasted game state to the
+  container's temp dir. `DJANGO_ALLOWED_HOSTS` ships as `.run.app` (Django
+  reads a leading dot as a subdomain wildcard) purely to break the
+  chicken-and-egg on the first deploy; `deploy/cloudrun.sh` then narrows it to
+  the service's real hostname.
+- **`deploy/gunicorn.conf.py` deliberately diverges from README's
+  two-worker recipe**, because a Cloud Run instance is sized in whole vCPUs
+  and billed per vCPU-second: **one worker per vCPU** (`SOLVE_SEMAPHORE`
+  already caps a *process* at one solve, so a second worker on 1 vCPU adds no
+  throughput and just puts two frontier sweeps on one core), 4 threads so a
+  cache-hit refilter never queues behind a re-solve, `max_requests = 0` so a
+  recycled worker never discards its `SessionCache`, `preload_app = False` to
+  avoid forking a process holding live HiGHS state (the same non-fork-safety
+  behind `main.py`'s `ProcessPoolExecutor`), and `timeout = 120` to clear
+  `views._MASTERY_SEMAPHORE_TIMEOUT_SECONDS` (60s) plus the sweep itself.
+- **`deploy/cloudrun.sh` sizing is keyed to the semaphores, not throughput.**
+  `--concurrency 4` is chosen against `views._SEMAPHORE_TIMEOUT_SECONDS` (a
+  queued request has 20s to acquire the solve semaphore before a 503); Cloud
+  Run scales out past that. `--max-instances` (default 3) is the only real
+  bound on spend: `api_solve`/`api_mastery_costs` are `csrf_exempt` and
+  unauthenticated, and each POST buys 1-3s of CPU, so a public URL is a
+  cost-amplification surface. The script reuses the existing
+  `DJANGO_SECRET_KEY` across deploys rather than rotating it.
+
 ## Dev workflow
 
 - Run: `uv run pytest -q` (tests in `tests/`). Lint: `uvx ruff check .`.
@@ -2006,4 +2062,6 @@ that imports it without going through `manage.py`.
   inventory data or game-content data files change: `python
   scripts/generate_items.py` (writes `mastery_items.txt`/`items.txt` under
   `web/solverapp/static/solverapp/`).
+- Deploy the web app: `./deploy/cloudrun.sh` (see "Deployment (Dockerfile,
+  deploy/)" above; README's "Container image and Cloud Run" has the prose).
 - Commit directly to `main`; end commit messages with the Co-Authored-By trailer.

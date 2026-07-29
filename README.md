@@ -829,6 +829,64 @@ DJANGO_DEBUG=false
 DJANGO_ALLOWED_HOSTS=your-domain.example
 ```
 
+### Container image and Cloud Run
+
+The `Dockerfile` packages the gunicorn recipe above, and
+`deploy/cloudrun.sh` puts it on Google Cloud Run:
+
+```shell
+./deploy/cloudrun.sh                    # uses the current gcloud project
+REGION=us-east1 ./deploy/cloudrun.sh
+```
+
+Cloud Run suits this app because the app is *stateless* — `settings.py`
+sets `DATABASES = {}` and keeps no server-side player data (each browser
+holds its own pasted state in localStorage), so there is nothing to mount,
+migrate or back up and the image is the whole deployment. It is also idle
+almost all the time and bursty when used, which is what per-request billing
+plus scale-to-zero is priced for: a small deployment sits inside the
+always-free monthly allowance (2M requests, 180k vCPU-seconds, 360k
+GiB-seconds), which applies only in `us-central1`, `us-east1` and
+`us-west1`.
+
+The image builds dependencies with `uv sync --frozen --no-dev --group web`
+against the checked-in `uv.lock`, runs `collectstatic` so whitenoise serves
+`web/staticfiles/` directly, and byte-compiles the tree — `main.py`,
+`optimizer.py` and `report.py` are ~435 KB of source between them, which a
+scale-to-zero service would otherwise recompile on every cold start. Two
+build-time gates fail the build rather than the first request: an import of
+`optimizer` that pins the HiGHS backend (the same check
+`solverapp.apps.SolverappConfig.ready` makes before it will start, and note
+that PuLP's CBC fallback has no bundled binary on arm64 — prefer x86_64),
+and `manage.py check`.
+
+`DJANGO_DEBUG=false` is baked into the image, not left to the deploy
+environment: `settings.py` defaults `DEBUG` to *true* for local use, and
+with it on in production `views.index` renders the CLI-command popup and
+`webapi.capture_debug_state` writes every visitor's pasted mastery and
+inventory text to the container's temp dir. `DJANGO_ALLOWED_HOSTS` ships as
+`.run.app` (Django reads a leading dot as a subdomain wildcard) so the first
+deploy can serve before its own URL is known; the script then narrows it to
+the exact hostname.
+
+`deploy/gunicorn.conf.py` deliberately differs from the two-worker recipe
+above, because a Cloud Run instance is sized in whole vCPUs and billed by
+the vCPU-second. It runs **one worker per vCPU** — `SOLVE_SEMAPHORE` already
+caps each process at one solve, so a second worker on a 1-vCPU instance buys
+no throughput and just puts two frontier sweeps on one core — and scales out
+horizontally instead. Threads stay at 4 so a cache-hit refilter does not
+queue behind someone else's re-solve, `max_requests` is 0 so a recycled
+worker never throws away its `SessionCache`, and `preload_app` is off to
+avoid forking a process that holds live HiGHS state.
+
+Two things to set on a public deployment. `api_solve` and
+`api_mastery_costs` are `csrf_exempt` and unauthenticated — there is no
+login to gate them — and each POST buys 1–3s of CPU, so anyone who finds the
+URL can spend your quota: keep `--max-instances` small (the script defaults
+to 3) and add a billing budget alert. The script's `--concurrency 4` is
+sized against `_SEMAPHORE_TIMEOUT_SECONDS` (a queued request has 20s to
+acquire the solve semaphore); lower it if you see 503s.
+
 ### Server hardware reality
 
 The solver's own README/ARCHITECTURE performance figures (a solve in
