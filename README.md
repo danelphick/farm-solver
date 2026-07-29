@@ -899,3 +899,10 @@ inventory pair is a reasonable proxy): the web UI shows an explicit pending
 state on a re-solve, and the solve-semaphore acquire timeout
 (`_SEMAPHORE_TIMEOUT_SECONDS` in `solverapp/views.py`) is sized for that
 budget rather than the desktop figure.
+
+A measured data point, from the first real Cloud Run deployment
+(`us-central1`, 1 vCPU): a fresh-account tower solve that takes **0.61s** on
+an Apple-silicon desktop takes **~3.5s** there — about 5.7× slower, and
+above the 1–3s guess above. Still comfortably inside the 20s semaphore
+budget, but budget nearer 4s than 2s when sizing anything against a
+shared cloud vCPU. A cache-hit refilter on the same box is ~40ms.

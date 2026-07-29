@@ -28,9 +28,14 @@ WORKDIR /app
 # sys.path by hand instead of importing an installed package.
 # --no-dev drops the dev group (pytest/ipython); --group web adds
 # django/gunicorn/whitenoise/markdown.
+#
+# Deliberately no `--mount=type=cache` for uv's download cache: Cloud Build's
+# default builder (gcr.io/cloud-builders/docker) is the legacy engine, which
+# rejects mounts as BuildKit-only -- and it gives every build a fresh VM, so a
+# cache mount would always start empty there anyway. Layer caching on
+# pyproject.toml + uv.lock is what actually makes rebuilds cheap.
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --group web
+RUN uv sync --frozen --no-dev --group web
 
 # ---------------------------------------------------------------- runtime ---
 FROM python:3.14-slim

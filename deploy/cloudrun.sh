@@ -91,9 +91,14 @@ fi
 # --no-cpu-throttling is deliberately NOT set: this app does nothing between
 # requests (its only background state is an in-memory cache), so paying for
 # always-allocated CPU would buy nothing and would leave the free tier.
+# --quiet accepts gcloud's own prompts non-interactively. The first deploy into
+# a fresh project asks to create the [cloud-run-source-deploy] Artifact Registry
+# repository that --source builds push to; without this the script's behaviour
+# depends on whether stdin happens to be a terminal.
 gcloud run deploy "${SERVICE}" \
     --project "${PROJECT_ID}" \
     --region "${REGION}" \
+    --quiet \
     --source . \
     --allow-unauthenticated \
     --cpu "${CPU}" \
@@ -106,19 +111,31 @@ gcloud run deploy "${SERVICE}" \
     --set-env-vars "DJANGO_DEBUG=false,DJANGO_SECRET_KEY=${SECRET_KEY}"
 
 # The image ships DJANGO_ALLOWED_HOSTS=.run.app so the first deploy can serve
-# before its URL is known. Now that it is known, narrow it to the exact host.
+# before its URL is known. Now that it is known, narrow it to the exact hosts.
+#
+# Cloud Run answers on TWO hostnames and only one of them is in the API:
+# `status.url` returns the legacy <service>-<hash>-<regioncode>.a.run.app form,
+# while gcloud advertises (and users get given) the newer deterministic
+# <service>-<projectNumber>.<region>.run.app. Pinning only the first makes
+# Django reject the URL people are actually handed, with a 400 DisallowedHost.
 URL="$(gcloud run services describe "${SERVICE}" \
     --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
 HOST="${URL#https://}"
 
-echo ">> pinning DJANGO_ALLOWED_HOSTS=${HOST}"
+PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+HOST_CANONICAL="${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
+
+# ^##^ is gcloud's alternate-delimiter escape: without it the comma separating
+# the two hostnames would be read as separating two env-var assignments.
+echo ">> pinning DJANGO_ALLOWED_HOSTS=${HOST_CANONICAL},${HOST}"
 gcloud run services update "${SERVICE}" \
     --project "${PROJECT_ID}" --region "${REGION}" \
-    --update-env-vars "DJANGO_ALLOWED_HOSTS=${HOST}" \
+    --update-env-vars "^##^DJANGO_ALLOWED_HOSTS=${HOST_CANONICAL},${HOST}" \
     --quiet >/dev/null
 
 echo
-echo "deployed: ${URL}"
+# Report the canonical hostname -- the one gcloud prints and users are given.
+echo "deployed: https://${HOST_CANONICAL}"
 echo
 echo "Next, if you have not already:"
 echo "  * Set a billing budget alert, since the service is public and CPU-bound:"
