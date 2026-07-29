@@ -171,15 +171,15 @@ export function seriesFor(snapshots, item) {
     .sort((a, b) => String(a.taken_at).localeCompare(String(b.taken_at)));
 }
 
-// Every item any snapshot mentions, for the timeline page's no-item index:
-// `[{item, first, latest}]`, item-name order -- where `first`/`latest` are its
-// progress in the oldest and newest snapshot that mention it (the two the
-// index's Latest and Change columns are built from).
+// Every item any snapshot mentions, as `[{item, points}]` in item-name order --
+// `seriesFor` for all of them at once, in one pass, for the timeline page's
+// no-item index (which needs each item's whole series to work out what changed
+// inside a window, not just its endpoints).
 //
 // Grouped case-insensitively (like parsing.parse_masteries' lower-cased keys),
 // displaying the NEWEST snapshot's spelling -- if the game ever restyles a name,
 // the list should show what it is called now.
-export function historyIndex(snapshots) {
+export function seriesByItem(snapshots) {
   const ordered = [...snapshots].sort((a, b) =>
     String(a.taken_at).localeCompare(String(b.taken_at))
   );
@@ -187,16 +187,40 @@ export function historyIndex(snapshots) {
   for (const snapshot of ordered) {
     for (const [name, progress] of Object.entries(snapshot.items || {})) {
       const key = name.toLowerCase();
+      const point = { taken_at: snapshot.taken_at, date: snapshot.date, progress };
       const entry = byItem.get(key);
       if (entry === undefined) {
-        byItem.set(key, { item: name, first: progress, latest: progress });
+        byItem.set(key, { item: name, points: [point] });
       } else {
         entry.item = name;
-        entry.latest = progress;
+        entry.points.push(point);
       }
     }
   }
   return [...byItem.values()].sort((a, b) => a.item.localeCompare(b.item));
+}
+
+// How much an item gained over the window starting at `cutoff` (an ISO
+// timestamp): its newest progress minus what it stood at when the window
+// opened. `points` is one item's series, oldest first.
+//
+// `null` -- shown as "—" rather than a misleading 0 -- when the window cannot
+// be answered at all: nothing recorded since it opened (a history that stopped
+// before it), or no earlier reading to measure from (the item's first ever
+// snapshot falls inside it). A history that merely *starts* inside the window
+// does measure from its oldest reading: that is all the change there is on
+// record for the period, and it is the figure the user is asking about.
+export function changeSince(points, cutoff) {
+  if (!points.length) return null;
+  const latest = points[points.length - 1];
+  if (latest.taken_at <= cutoff) return null;
+
+  let baseline = points[0];
+  for (const point of points) {
+    if (point.taken_at > cutoff) break;
+    baseline = point;
+  }
+  return baseline === latest ? null : latest.progress - baseline.progress;
 }
 
 // --- The store --------------------------------------------------------------

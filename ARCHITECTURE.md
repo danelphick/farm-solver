@@ -1906,6 +1906,16 @@ that imports it without going through `manage.py`.
     gap -- and tier). Picking an item `replaceState`s the query string rather
     than reloading. **Both tables sort per column** the way the mastery-costs
     table does (`sortIndexRows`/`sortSeriesRows` over the `INDEX_SORTS`/
+    The index's two **Change columns are windows measured back from now**, not
+    "since your first ever snapshot": `indexRows(snapshots, now)` walks
+    `history.seriesByItem` (one pass giving every item its own series) and calls
+    `history.changeSince(points, cutoff)` per `CHANGE_WINDOWS` entry (7d, 1d).
+    `changeSince` measures from the **last reading before the window opened** --
+    the right baseline for the ordinary once-a-day snapshot, at the cost of
+    over-covering when readings are sparser than the window -- and returns
+    `null` (rendered "—", never a 0 that would read as "no progress") when the
+    window cannot be answered: nothing recorded since it opened, or no earlier
+    reading to measure from.
     `SERIES_SORTS` axis maps, one delegated listener per header row, with the
     arrow glyph and `aria-sort` set by `renderSortIndicators`), persisting under the shared
     `farm-solver.ui.v1` key (`timeline_index_sort`/`timeline_sort`, each with a

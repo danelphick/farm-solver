@@ -17,8 +17,9 @@ import { MASTERY_CATALOGUE, loadCatalogue } from "./catalogue.js";
 import { initHelpTooltips } from "./help.js";
 import {
   TIER_THRESHOLDS,
+  changeSince,
   getSnapshots,
-  historyIndex,
+  seriesByItem,
   seriesFor,
 } from "./history.js";
 import {
@@ -74,6 +75,14 @@ export function compactNumber(value) {
 // of thousand wide, where every tick would round to the same figure.
 export function axisLabel(value, span) {
   return span < 10_000 ? Math.round(value).toLocaleString() : compactNumber(value);
+}
+
+// A gain in a table cell: "+8,100", "-40", "0" -- or "—" for a figure that
+// does not exist rather than one that is zero (no earlier reading to measure
+// from, a rate over too short a gap, a window with nothing recorded in it).
+function signed(value) {
+  if (value === null || value === undefined) return "—";
+  return `${value > 0 ? "+" : ""}${Math.round(value).toLocaleString()}`;
 }
 
 function clockTime(takenAt) {
@@ -314,7 +323,8 @@ export function deltaRows(series) {
 const INDEX_SORTS = {
   item: (row) => [row.item.toLowerCase()],
   latest: (row) => [row.latest, row.item.toLowerCase()],
-  change: (row) => [row.change, row.item.toLowerCase()],
+  change7: (row) => [row.change7, row.item.toLowerCase()],
+  change1: (row) => [row.change1, row.item.toLowerCase()],
   tier: (row) => [row.latest, row.item.toLowerCase()],
 };
 
@@ -412,21 +422,13 @@ function renderTable(series) {
       const when = row.showTime
         ? `${row.date} ${clockTime(row.taken_at)}`
         : row.date;
-      const gain =
-        row.gain === null
-          ? "—"
-          : `${row.gain > 0 ? "+" : ""}${row.gain.toLocaleString()}`;
-      const perDay =
-        row.perDay === null
-          ? "—"
-          : `${row.perDay > 0 ? "+" : ""}${Math.round(row.perDay).toLocaleString()}`;
       const tier = row.tier
         ? `${escapeHtml(row.tier)} <span class="muted-inline">(${escapeHtml(tierLabel(row.tier))})</span>`
         : "—";
       return `<tr><td>${escapeHtml(when)}</td>` +
         `<td class="num">${row.progress.toLocaleString()}</td>` +
-        `<td class="num">${gain}</td>` +
-        `<td class="num">${perDay}</td>` +
+        `<td class="num">${signed(row.gain)}</td>` +
+        `<td class="num">${signed(row.perDay)}</td>` +
         `<td>${tier}</td></tr>`;
     })
     .join("");
@@ -440,14 +442,34 @@ export function timelineHref(item) {
   return "/timeline?item=" + encodeURIComponent(item);
 }
 
-// history.historyIndex plus the two figures the table shows on top of it, so
-// the sort has them to rank on rather than re-deriving them per comparison.
-export function indexRows(snapshots) {
-  return historyIndex(snapshots).map((entry) => ({
-    ...entry,
-    change: entry.latest - entry.first,
-    tier: tierForProgress(entry.latest),
+// The index table's rows: one per item with history, carrying every figure the
+// table shows, so the sort ranks on values rather than re-deriving them per
+// comparison.
+//
+// The two Change columns are **windowed**, not "since your first ever
+// snapshot": what an item gained over the last week and the last day
+// (history.changeSince, which returns null -- "—" in the table -- for a window
+// it cannot answer). Windows are measured from `now`, so a history that stopped
+// a fortnight ago reads as "—" rather than claiming a week of no progress. The
+// 7-day window is also exactly the span retention keeps in full.
+export const CHANGE_WINDOWS = [
+  { key: "change7", days: 7 },
+  { key: "change1", days: 1 },
+];
+
+export function indexRows(snapshots, now = new Date()) {
+  const cutoffs = CHANGE_WINDOWS.map((window) => ({
+    key: window.key,
+    at: new Date(now.getTime() - window.days * DAY_MS).toISOString(),
   }));
+  return seriesByItem(snapshots).map(({ item, points }) => {
+    const latest = points[points.length - 1].progress;
+    const row = { item, latest, tier: tierForProgress(latest) };
+    cutoffs.forEach((cutoff) => {
+      row[cutoff.key] = changeSince(points, cutoff.at);
+    });
+    return row;
+  });
 }
 
 function renderIndex(snapshots) {
@@ -464,7 +486,10 @@ function renderIndex(snapshots) {
         `<td>${escapeHtml(entry.item)}</td>` +
         `<td>${escapeHtml(entry.tier || "—")}</td>` +
         `<td class="num">${entry.latest.toLocaleString()}</td>` +
-        `<td class="num">${entry.change > 0 ? "+" : ""}${entry.change.toLocaleString()}</td></tr>`
+        CHANGE_WINDOWS.map(
+          (window) => `<td class="num">${signed(entry[window.key])}</td>`
+        ).join("") +
+        `</tr>`
     )
     .join("");
   $("#timeline-index").hidden = entries.length === 0;

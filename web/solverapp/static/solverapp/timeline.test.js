@@ -268,24 +268,82 @@ describe("axisLabel", () => {
 });
 
 describe("indexRows", () => {
+  // Read as of 2026-07-28 12:00Z, so the 7-day window opens on the 21st and the
+  // 1-day window on the 27th.
+  const NOW = new Date("2026-07-28T12:00:00.000Z");
+  const snapshot = (takenAt, items) => ({
+    taken_at: takenAt,
+    date: takenAt.slice(0, 10),
+    items,
+  });
+
   const SNAPSHOTS = [
-    { taken_at: "2026-07-01T12:00:00.000Z", date: "2026-07-01", items: { Tomato: 400_000, Hops: 900 } },
-    { taken_at: "2026-07-15T12:00:00.000Z", date: "2026-07-15", items: { Tomato: 412_900 } },
+    snapshot("2026-07-01T12:00:00.000Z", { Tomato: 400_000, Hops: 900 }),
+    snapshot("2026-07-24T12:00:00.000Z", { Tomato: 404_800, Hops: 900 }),
+    snapshot("2026-07-28T08:00:00.000Z", { Tomato: 412_900, Hops: 950 }),
   ];
 
-  test("carries the change and tier the table shows", () => {
-    expect(indexRows(SNAPSHOTS)).toEqual([
-      { item: "Hops", first: 900, latest: 900, change: 0, tier: "" },
-      { item: "Tomato", first: 400_000, latest: 412_900, change: 12_900, tier: "GM" },
+  test("carries the tier and both windowed changes the table shows", () => {
+    expect(indexRows(SNAPSHOTS, NOW)).toEqual([
+      // Hops moved only inside the last day; Tomato moved in both windows.
+      { item: "Hops", latest: 950, tier: "", change7: 50, change1: 50 },
+      { item: "Tomato", latest: 412_900, tier: "GM", change7: 12_900, change1: 8_100 },
     ]);
+  });
+
+  // The headline change of this table: not "since your first ever snapshot".
+  test("ignores movement from before the window", () => {
+    const rows = indexRows(
+      [
+        snapshot("2026-01-01T12:00:00.000Z", { Tomato: 1 }),
+        snapshot("2026-07-21T06:00:00.000Z", { Tomato: 400_000 }),
+        snapshot("2026-07-28T08:00:00.000Z", { Tomato: 412_900 }),
+      ],
+      NOW
+    );
+    // From where it stood when the window opened on the 21st at noon -- the
+    // reading six hours earlier -- not from January's.
+    expect(rows[0].change7).toBe(12_900);
+  });
+
+  // The flip side of measuring from the last reading before the window: with
+  // nothing recorded for months, that reading is months old, so the figure
+  // covers more than the window names. It is still the only answer there is,
+  // and it beats the alternative -- measuring from the oldest reading *inside*
+  // the window, which for the ordinary once-a-day snapshot would leave the
+  // 1-day column with nothing to compare against at all.
+  test("measures from a stale reading when that is all there is", () => {
+    const rows = indexRows(
+      [
+        snapshot("2026-01-01T12:00:00.000Z", { Tomato: 1 }),
+        snapshot("2026-07-28T08:00:00.000Z", { Tomato: 412_900 }),
+      ],
+      NOW
+    );
+    expect(rows[0].change7).toBe(412_899);
+  });
+
+  // "—", not a 0 that would read as "no progress this week".
+  test("has no figure for a window it cannot answer", () => {
+    const stale = indexRows(
+      [snapshot("2026-06-01T12:00:00.000Z", { Tomato: 400_000 })],
+      NOW
+    );
+    expect(stale[0]).toMatchObject({ change7: null, change1: null });
+
+    const brandNew = indexRows(
+      [snapshot("2026-07-28T08:00:00.000Z", { Tomato: 400_000 })],
+      NOW
+    );
+    expect(brandNew[0]).toMatchObject({ change7: null, change1: null });
   });
 });
 
 describe("sortIndexRows", () => {
   const ROWS = [
-    { item: "Apple", latest: 1_400_000, change: 400, tier: "MM" },
-    { item: "hops", latest: 900, change: 20, tier: "" },
-    { item: "Tomato", latest: 412_900, change: 12_900, tier: "GM" },
+    { item: "Apple", latest: 1_400_000, change7: 400, change1: 0, tier: "MM" },
+    { item: "hops", latest: 900, change7: 20, change1: 20, tier: "" },
+    { item: "Tomato", latest: 412_900, change7: 12_900, change1: 8_100, tier: "GM" },
   ];
 
   const names = (rows) => rows.map((row) => row.item);
@@ -297,7 +355,20 @@ describe("sortIndexRows", () => {
 
   test("sorts by each numeric column", () => {
     expect(names(sortIndexRows(ROWS, "latest", "asc"))).toEqual(["hops", "Tomato", "Apple"]);
-    expect(names(sortIndexRows(ROWS, "change", "desc"))).toEqual(["Tomato", "Apple", "hops"]);
+    expect(names(sortIndexRows(ROWS, "change7", "desc"))).toEqual(["Tomato", "Apple", "hops"]);
+    expect(names(sortIndexRows(ROWS, "change1", "desc"))).toEqual(["Tomato", "hops", "Apple"]);
+  });
+
+  // A window with no answer is not a small number: it sinks either way, so
+  // flipping the column never floats "—" rows to the top.
+  test("keeps rows with no figure at the bottom whichever way it points", () => {
+    const rows = [
+      ...ROWS,
+      { item: "Stale", latest: 1_000, change7: null, change1: null, tier: "" },
+    ];
+    for (const direction of ["asc", "desc"]) {
+      expect(names(sortIndexRows(rows, "change7", direction)).at(-1)).toBe("Stale");
+    }
   });
 
   // The tier is the progress, coarsened -- so the two columns agree, and rows
@@ -305,7 +376,7 @@ describe("sortIndexRows", () => {
   test("sorts by tier exactly as it sorts by the mastery itself", () => {
     const rows = [
       ...ROWS,
-      { item: "Corn", latest: 999_999, change: 5, tier: "GM" },
+      { item: "Corn", latest: 999_999, change7: 5, change1: 5, tier: "GM" },
     ];
     for (const direction of ["asc", "desc"]) {
       expect(names(sortIndexRows(rows, "tier", direction))).toEqual(

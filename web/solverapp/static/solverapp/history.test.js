@@ -7,10 +7,11 @@ import { describe, expect, test, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 
 import {
-  historyIndex,
+  changeSince,
   keysToPrune,
   localDateKey,
   parseMasteryText,
+  seriesByItem,
   seriesFor,
   shiftDateKey,
 } from "./history.js";
@@ -151,27 +152,83 @@ describe("seriesFor", () => {
   });
 });
 
-describe("historyIndex", () => {
-  test("summarises each item across the snapshots", () => {
-    const entries = historyIndex([
+describe("seriesByItem", () => {
+  test("gives every item its own series, in item-name order", () => {
+    const entries = seriesByItem([
       snapshot("2026-07-01", { Tomato: 100, Hops: 5 }),
       snapshot("2026-07-15", { Tomato: 300 }),
     ]);
-    expect(entries).toEqual([
-      { item: "Hops", first: 5, latest: 5 },
-      { item: "Tomato", first: 100, latest: 300 },
+    expect(entries.map((entry) => entry.item)).toEqual(["Hops", "Tomato"]);
+    expect(entries[1].points.map((point) => [point.date, point.progress])).toEqual([
+      ["2026-07-01", 100],
+      ["2026-07-15", 300],
     ]);
+    // An item missing from a snapshot simply has no point for it.
+    expect(entries[0].points).toHaveLength(1);
+  });
+
+  test("agrees with seriesFor, which reads one item out of the same snapshots", () => {
+    const snapshots = [
+      snapshot("2026-07-01", { Tomato: 100, Hops: 5 }),
+      snapshot("2026-07-15", { Tomato: 300 }),
+    ];
+    const tomato = seriesByItem(snapshots).find((entry) => entry.item === "Tomato");
+    expect(tomato.points).toEqual(seriesFor(snapshots, "Tomato"));
   });
 
   // Grouped case-insensitively, showing whatever the newest paste calls it.
   test("groups a respelt name and displays the newest spelling", () => {
-    const entries = historyIndex([
+    const entries = seriesByItem([
       snapshot("2026-07-01", { tomato: 100 }),
       snapshot("2026-07-15", { Tomato: 300 }),
     ]);
     expect(entries).toHaveLength(1);
     expect(entries[0].item).toBe("Tomato");
-    expect(entries[0].first).toBe(100);
+    expect(entries[0].points.map((point) => point.progress)).toEqual([100, 300]);
+  });
+});
+
+describe("changeSince", () => {
+  const points = seriesFor(
+    [
+      snapshot("2026-07-01", { Tomato: 400_000 }),
+      snapshot("2026-07-24", { Tomato: 404_800 }),
+      snapshot("2026-07-28", { Tomato: 412_900 }),
+    ],
+    "Tomato"
+  );
+
+  test("measures from where the item stood when the window opened", () => {
+    // Window opens 2026-07-20: the 07-24 reading is the first inside it, so the
+    // baseline is 07-01, the newest reading before it.
+    expect(changeSince(points, "2026-07-20T00:00:00.000Z")).toBe(12_900);
+    expect(changeSince(points, "2026-07-26T00:00:00.000Z")).toBe(8_100);
+  });
+
+  // A partial window is still the change on record for the period; it is the
+  // windows it cannot answer at all that must not read as zero.
+  test("measures from the oldest reading when the history starts inside the window", () => {
+    expect(changeSince(points, "2026-06-01T00:00:00.000Z")).toBe(12_900);
+  });
+
+  test("is null when nothing was recorded inside the window", () => {
+    expect(changeSince(points, "2026-08-01T00:00:00.000Z")).toBeNull();
+  });
+
+  test("is null when there is no earlier reading to measure from", () => {
+    expect(changeSince(points.slice(-1), "2026-07-26T00:00:00.000Z")).toBeNull();
+    expect(changeSince([], "2026-07-26T00:00:00.000Z")).toBeNull();
+  });
+
+  test("reports a fall as a negative", () => {
+    const falling = seriesFor(
+      [
+        snapshot("2026-07-24", { Tomato: 500 }),
+        snapshot("2026-07-28", { Tomato: 400 }),
+      ],
+      "Tomato"
+    );
+    expect(changeSince(falling, "2026-07-26T00:00:00.000Z")).toBe(-100);
   });
 });
 

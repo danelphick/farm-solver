@@ -99,9 +99,18 @@
             <button type="button" class="sort-btn" data-sort="latest"
               aria-label="Sort by latest progress"><span class="sort-arrow">&#8597;</span></button>
           </th>
-          <th scope="col" class="num">Change
-            <button type="button" class="sort-btn" data-sort="change"
-              aria-label="Sort by change"><span class="sort-arrow">&#8597;</span></button>
+          <!-- Both Change columns are windowed, measured back from now: what
+               the item gained over the last week (the span retention keeps in
+               full) and over the last day. "—" means the window cannot be
+               answered, not that nothing moved -- see timeline.js's indexRows
+               and history.changeSince. -->
+          <th scope="col" class="num">Change (7d)
+            <button type="button" class="sort-btn" data-sort="change7"
+              aria-label="Sort by change over the last 7 days"><span class="sort-arrow">&#8597;</span></button>
+          </th>
+          <th scope="col" class="num">Change (1d)
+            <button type="button" class="sort-btn" data-sort="change1"
+              aria-label="Sort by change over the last day"><span class="sort-arrow">&#8597;</span></button>
           </th>
         </tr>
       </thead>

@@ -704,7 +704,14 @@ mastery list, and the app records that list — item by item — in this browser
 Master / Grandmaster / Megamaster thresholds marked as dotted lines, above a
 table of each snapshot's progress, its gain since the one before, and what that
 works out at per day. Open `/timeline` with no item (the **Timeline** link in
-the header) for the list of everything you have history for.
+the header) for the list of everything you have history for, with its tier,
+where it stands now, and what it gained over the last week and the last day.
+
+- Those two **Change** columns are windows measured back from now, not totals
+  since your first snapshot: each compares where the item stands now with where
+  it stood when the window opened. A dash means the window has no answer —
+  nothing recorded since it opened, or no earlier snapshot to measure from —
+  rather than no progress.
 
 - **Snapshots are per day, but not one per day.** Every snapshot from the last
   7 days is kept, so saving twice in an evening records both; days older than

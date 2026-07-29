@@ -40,11 +40,20 @@ const SNAPSHOTS = [
   { when: new Date(2026, 6, 15, 12, 0), items: { Tomato: 412_900, Hops: 1_200 } },
 ];
 
+// The clock the page reads its Change windows back from, a few hours after the
+// newest fixture snapshot. Pinned because those columns are relative to *now*:
+// left on the real clock, every windowed assertion would rot into "—" the week
+// after it was written.
+const NOW = new Date(2026, 6, 16, 6, 0);
+
 // Seed the store, build the page at `url`, import the module and initialise it.
 // The seeding goes through history.js itself (after resetModules, so it is the
 // same module instance timeline.js will import) rather than poking at the raw
 // database -- that keeps the fixture honest about the shape actually stored.
-async function loadPage({ url = "/timeline", snapshots = SNAPSHOTS, ui } = {}) {
+async function loadPage({ url = "/timeline", snapshots = SNAPSHOTS, ui, now = NOW } = {}) {
+  // Only Date is faked: faking the timers themselves deadlocks
+  // fake-indexeddb's queue (and the debounce test below needs real ones).
+  vi.useFakeTimers({ toFake: ["Date"], now });
   vi.stubGlobal("indexedDB", new IDBFactory());
   installLocalStorage();
   // The per-table sort each page load restores from (settings.readUi).
@@ -77,6 +86,7 @@ const rowText = (selector) =>
 describe("the timeline page", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   test("with no ?item= it lists everything with history", async () => {
@@ -87,8 +97,50 @@ describe("the timeline page", () => {
 
     const rows = rowText("#timeline-index-body tr");
     expect(rows.map((cells) => cells[0])).toEqual(["Hops", "Tomato"]);
-    // Item, tier, latest, change over the whole history.
-    expect(rows[1]).toEqual(["Tomato", "GM", "412,900", "+12,900"]);
+    // Item, tier, latest, then the two windowed changes -- both measured from
+    // the 8 July reading, the newest one before either window opened, so the
+    // 1 July → 8 July climb is excluded from each.
+    expect(rows[1]).toEqual(["Tomato", "GM", "412,900", "+8,100", "+8,100"]);
+  });
+
+  // The columns are windows, not "since your first ever snapshot": each
+  // measures from where the item stood when its own window opened.
+  test("the two Change columns cover different windows", async () => {
+    await loadPage({
+      snapshots: [
+        { when: new Date(2026, 6, 1, 12, 0), items: { Tomato: 400_000 } },
+        { when: new Date(2026, 6, 8, 12, 0), items: { Tomato: 404_800 } },
+        { when: new Date(2026, 6, 15, 0, 0), items: { Tomato: 412_900 } },
+        { when: new Date(2026, 6, 16, 3, 0), items: { Tomato: 415_000 } },
+      ],
+    });
+    // 7d opens on the 9th (baseline: the 8th), 1d on the 15th at 06:00
+    // (baseline: that day's 00:00 reading).
+    expect(rowText("#timeline-index-body tr")[0]).toEqual([
+      "Tomato",
+      "GM",
+      "415,000",
+      "+10,200",
+      "+2,100",
+    ]);
+  });
+
+  test('a window with nothing to measure reads "—", not zero', async () => {
+    await loadPage({
+      snapshots: [
+        { when: new Date(2026, 5, 1, 12, 0), items: { Tomato: 400_000 } },
+        { when: new Date(2026, 5, 8, 12, 0), items: { Tomato: 404_800 } },
+      ],
+    });
+    // A history that stopped six weeks ago: nothing moved *in* either window,
+    // which is not the same as no progress having been made.
+    expect(rowText("#timeline-index-body tr")[0]).toEqual([
+      "Tomato",
+      "GM",
+      "404,800",
+      "—",
+      "—",
+    ]);
   });
 
   test("an index row links to that item's own timeline", async () => {
@@ -195,22 +247,23 @@ describe("the timeline page", () => {
 
   test("the active column shows its direction and is remembered", async () => {
     await loadPage();
-    clickSort("timeline-index-head", "change");
+    clickSort("timeline-index-head", "change7");
 
-    // Item, Tier, Latest, Change -- the sorted one being the last of them.
+    // Item, Tier, Latest, Change (7d), Change (1d) -- the sorted one fourth.
     const headers = [...document.querySelectorAll("#timeline-index-head th")];
     expect(headers.map((th) => th.getAttribute("aria-sort"))).toEqual([
       "none",
       "none",
       "none",
       "ascending",
+      "none",
     ]);
     expect(
-      document.querySelector('#timeline-index-head button[data-sort="change"] .sort-arrow')
+      document.querySelector('#timeline-index-head button[data-sort="change7"] .sort-arrow')
         .textContent
     ).toBe("▲");
     expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
-      timeline_index_sort: "change",
+      timeline_index_sort: "change7",
       timeline_index_sort_dir: "asc",
     });
   });
