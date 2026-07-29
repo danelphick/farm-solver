@@ -12,6 +12,9 @@ import {
   deltaRows,
   filterIndexRows,
   indexRows,
+  nextGoalHref,
+  nextGoalLabel,
+  nextGoalTitle,
   sortIndexRows,
   sortSeriesRows,
   timelineHref,
@@ -527,6 +530,37 @@ describe("filterIndexRows", () => {
       allowed: new Set(["fishing net"]),
     });
     expect(kept).toHaveLength(1);
+  });
+});
+
+describe("nextGoalHref", () => {
+  test("aims at the tier above where the item stands", () => {
+    expect(nextGoalHref("Apple", "")).toBe("/?mastery=Apple%3AM");
+    expect(nextGoalHref("Apple", "M")).toBe("/?mastery=Apple%3AGM");
+    expect(nextGoalHref("Apple", "GM")).toBe("/?mastery=Apple%3AMM");
+  });
+
+  // Past Megamaster every threshold is behind you, so a mastery goal of any
+  // size is already met and would plan nothing: ask for a plain count instead.
+  test("asks for 10,000 more of a Megamastered item", () => {
+    expect(nextGoalHref("Rope", "MM")).toBe("/?items=Rope%3A10000");
+  });
+
+  test("encodes a name with spaces and a colon", () => {
+    expect(nextGoalHref("Oak Table", "GM")).toBe("/?mastery=Oak%20Table%3AMM");
+    // parseGoalSpec splits on the LAST colon, so the item's own survives.
+    expect(nextGoalHref("Time: A Gift", "MM")).toBe(
+      "/?items=Time%3A%20A%20Gift%3A10000"
+    );
+  });
+
+  test("labels and titles say which goal it is", () => {
+    expect(nextGoalLabel("M")).toBe("→ GM");
+    expect(nextGoalTitle("Apple", "GM")).toBe("Plan Apple to Megamaster");
+    // An item goal is a target to HOLD that many (the solver counts what is in
+    // inventory towards it), so it reads as "towards", not "10,000 more".
+    expect(nextGoalLabel("MM")).toBe("→ 10,000");
+    expect(nextGoalTitle("Rope", "MM")).toBe("Plan 10,000 Rope");
   });
 });
 

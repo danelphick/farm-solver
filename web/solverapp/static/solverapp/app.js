@@ -150,11 +150,21 @@ export function serializeGoalEntries(entries) {
 // colon-bearing item name ("Time: A Gift") still splits on the right colon, and
 // keeps the tier token (M/GM/MM) as free text the way every other amount is --
 // parsing.parse_amount turns it into the absolute threshold server-side.
+// Two kinds, because the two things a link can want are different goals:
+// `?mastery=Item:TIER` is "get this mastery to that tier" (the mastery-costs
+// table, and the timeline's next-tier links), while `?items=Item:N` is "make N
+// more of it" -- what the timeline offers for an item that is already
+// Megamastered, where every mastery threshold is long since passed and only a
+// plain item count still means anything.
 export function parseSeededGoal(search) {
-  const raw = new URLSearchParams(search || "").get("mastery");
-  if (!raw) return null;
-  const [goal] = parseGoalSpec(raw);
-  return goal && goal.item && goal.amount ? goal : null;
+  const params = new URLSearchParams(search || "");
+  for (const kind of ["mastery", "items"]) {
+    const raw = params.get(kind);
+    if (!raw) continue;
+    const [goal] = parseGoalSpec(raw);
+    if (goal && goal.item && goal.amount) return { kind, ...goal };
+  }
+  return null;
 }
 
 // --- Goal lists: DOM (row render/read/wire) ---------------------------------
@@ -952,16 +962,27 @@ function init() {
   }
 }
 
-// Point the form at a single mastery goal and nothing else, and say so in the
-// header banner. Returns whether anything was seeded, so init() knows to solve
-// even when there was no saved state to restore.
+// A seeded item count for the banner: grouped ("10,000") when it is a plain
+// number, otherwise left as typed -- an amount is free text all the way to the
+// server (parsing.parse_amount reads "1M"/"100k" too).
+function seededAmount(amount) {
+  const number = Number(amount);
+  return Number.isFinite(number) ? number.toLocaleString() : amount;
+}
+
+// Point the form at a single goal and nothing else, and say so in the header
+// banner. Returns whether anything was seeded, so init() knows to solve even
+// when there was no saved state to restore.
 function applySeededGoal(goal) {
   if (!goal) return false;
-  $("#target").value = "none";  // just this mastery, no tower goal
+  const mastery = goal.kind === "mastery";
+  $("#target").value = "none";  // just this goal, no tower goal
   $("#level").hidden = true;
-  renderGoalRows("mastery-rows", [goal], GOAL_LISTS["mastery-rows"]);
-  renderGoalRows("items-rows", [], GOAL_LISTS["items-rows"]);
-  $("#seeded-goal").textContent = `${goal.item} → ${tierLabel(goal.amount)}`;
+  renderGoalRows("mastery-rows", mastery ? [goal] : [], GOAL_LISTS["mastery-rows"]);
+  renderGoalRows("items-rows", mastery ? [] : [goal], GOAL_LISTS["items-rows"]);
+  $("#seeded-goal").textContent = mastery
+    ? `${goal.item} → ${tierLabel(goal.amount)}`
+    : `${seededAmount(goal.amount)} × ${goal.item}`;
   $("#seeded-banner").hidden = false;
   updateGoalSummary();
   return true;

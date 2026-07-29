@@ -66,11 +66,18 @@ async function loadPage({ search, saved } = {}) {
 const solveCalls = () =>
   fetchMock.mock.calls.filter(([url]) => url === "/api/solve");
 
-const goalRows = () =>
-  [...document.querySelectorAll("#mastery-rows .goal-row")].map((r) => {
-    const [item, amount] = r.querySelectorAll("input");
-    return { item: item.value, amount: amount.value };
-  });
+const rowsIn = (containerId) =>
+  [...document.querySelectorAll(`#${containerId} .goal-row`)]
+    .map((r) => {
+      const [item, amount] = r.querySelectorAll("input");
+      return { item: item.value, amount: amount.value };
+    })
+    // renderGoalRows always leaves one blank row to type into, which is not a
+    // goal -- only the filled ones are.
+    .filter((row) => row.item || row.amount);
+
+const goalRows = () => rowsIn("mastery-rows");
+const itemRows = () => rowsIn("items-rows");
 
 const SAVED = {
   mastery_text: "Mastery In-Progress",
@@ -120,6 +127,24 @@ describe("seeded mastery goal", () => {
     expect(goalRows()).toEqual([{ item: "Valve", amount: "M" }]);
     expect(document.querySelector("#seeded-banner").hidden).toBe(false);
     expect(solveCalls()).toEqual([]);
+  });
+
+  // The timeline index's link for an item that is already Megamastered: no
+  // tier is left to aim at, so it asks for a plain count instead. That goes in
+  // the ITEM list, not the mastery one -- a mastery goal of 10,000 on a
+  // Megamastered item is already met, so it would plan nothing at all.
+  test("an items goal seeds the item list, not the mastery one", async () => {
+    await loadPage({ search: "/?items=Rope%3A10000", saved: SAVED });
+
+    expect(goalRows()).toEqual([]); // no mastery rows
+    expect(itemRows()).toEqual([{ item: "Rope", amount: "10000" }]);
+    expect(document.querySelector("#target").value).toBe("none");
+    expect(document.querySelector("#seeded-goal").textContent).toBe("10,000 × Rope");
+
+    await vi.waitFor(() => expect(solveCalls().length).toBeGreaterThan(0));
+    const body = JSON.parse(solveCalls()[0][1].body);
+    expect(body.params.items).toBe("Rope:10000");
+    expect(body.params.mastery).toBeUndefined();
   });
 
   test("a normal visit leaves the banner hidden and the saved goal intact", async () => {

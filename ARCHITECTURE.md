@@ -1856,8 +1856,14 @@ that imports it without going through `manage.py`.
   returns to the list natively. `app.js`'s `parseSeededGoal` (exported, unit
   tested; reuses `parseGoalSpec`'s grammar so a colon-bearing item name still
   splits correctly) reads that goal off the query string and `applySeededGoal`
-  sets Target = "none" plus that single mastery row, on top of the restored
-  settings, revealing a `#seeded-banner`. It deliberately does **not**
+  sets Target = "none" plus that single goal row, on top of the restored
+  settings, revealing a `#seeded-banner`. **Two goal kinds**: `?mastery=` seeds
+  the mastery list, `?items=<Item>:<N>` the item list (a mastery goal wins if
+  both are somehow present). The second exists for the timeline index's
+  next-goal links (`timeline.nextGoalHref`), which aim at the tier above where
+  an item stands — but an already-Megamastered item has no tier left, and a
+  mastery goal below its progress is already met and would plan nothing, so it
+  asks for `MEGAMASTERED_GOAL` (10,000) more of the item instead. It deliberately does **not**
   `saveState()`: following a link must not overwrite the goal the user had
   saved, though their first edit persists it as usual via `onAnyChange`. The
   tier token survives as free text end to end (`parsing.parse_amount` reads

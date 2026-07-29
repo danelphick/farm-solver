@@ -712,6 +712,12 @@ where it stands now, and what it gained over the last week and the last day.
   it stood when the window opened. A dash means the window has no answer —
   nothing recorded since it opened, or no earlier snapshot to measure from —
   rather than no progress.
+- Beside each item name is a link to the **solver, seeded with that item's next
+  goal**: the tier above where it stands now (`→ GM`), or `→ 10,000` for one you
+  have already Megamastered — there is no tier left to aim at, and a mastery
+  goal you have already passed would plan nothing, so it asks for 10,000 of the
+  item instead — an item goal (`-i`), so whatever you already hold counts
+  towards it. Clicking the row itself still opens that item's chart.
 - **Filters** sit above that list. **Tier** picks which of Not mastered / M /
   GM / MM to show; MM is off by default, since those are finished.
   **Made from** answers "I have a pile of this — what could it become?": add

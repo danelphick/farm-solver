@@ -442,6 +442,45 @@ export function timelineHref(item) {
   return "/timeline?item=" + encodeURIComponent(item);
 }
 
+// --- The next goal for an item ------------------------------------------------
+//
+// Each index row links to the solver page seeded with the obvious next thing to
+// do for that item: the tier above where it stands now.
+
+const NEXT_TIER = { "": "M", M: "GM", GM: "MM" };
+
+// Past Megamaster there is no next tier -- every threshold is behind you -- so
+// the goal becomes a plain "make this many more", which is the only thing left
+// that still means anything.
+export const MEGAMASTERED_GOAL = 10_000;
+
+// The solver page, seeded (see app.js's parseSeededGoal): a mastery goal while
+// there is a tier left to reach, otherwise an item count. Both are the same
+// "Item:Amount" spec the goal rows use, and a tier token survives as free text
+// -- parsing.parse_amount reads M/GM/MM as the absolute 10k/100k/1M threshold.
+export function nextGoalHref(item, tier) {
+  const next = NEXT_TIER[tier];
+  return next
+    ? "/?mastery=" + encodeURIComponent(`${item}:${next}`)
+    : "/?items=" + encodeURIComponent(`${item}:${MEGAMASTERED_GOAL}`);
+}
+
+// Short enough to sit beside every item name without crowding it. Both forms
+// read as "towards this": an item goal is a target to HOLD that many, which
+// the solver meets out of inventory first (its Goal table spells out have /
+// target / still needed), so "+10,000" would overstate what it plans.
+export function nextGoalLabel(tier) {
+  const next = NEXT_TIER[tier];
+  return next ? `→ ${next}` : `→ ${MEGAMASTERED_GOAL.toLocaleString()}`;
+}
+
+export function nextGoalTitle(item, tier) {
+  const next = NEXT_TIER[tier];
+  return next
+    ? `Plan ${item} to ${tierLabel(next)}`
+    : `Plan ${MEGAMASTERED_GOAL.toLocaleString()} ${item}`;
+}
+
 // The index table's rows: one per item with history, carrying every figure the
 // table shows, so the sort ranks on values rather than re-deriving them per
 // comparison.
@@ -612,7 +651,10 @@ function renderIndex(snapshots) {
     .map(
       (entry) => `<tr class="clickable" data-href="${escapeHtml(timelineHref(entry.item))}"` +
         ` title="Timeline for ${escapeHtml(entry.item)}">` +
-        `<td>${escapeHtml(entry.item)}</td>` +
+        `<td>${escapeHtml(entry.item)}` +
+        ` <a class="solver-link" href="${escapeHtml(nextGoalHref(entry.item, entry.tier))}"` +
+        ` title="${escapeHtml(nextGoalTitle(entry.item, entry.tier))}">` +
+        `${escapeHtml(nextGoalLabel(entry.tier))}</a></td>` +
         `<td>${escapeHtml(entry.tier || "—")}</td>` +
         `<td class="num">${entry.latest.toLocaleString()}</td>` +
         CHANGE_WINDOWS.map(
@@ -904,6 +946,9 @@ function init() {
   // Delegated on the (stable) tbody, which renderIndex replaces wholesale. A
   // plain navigation, so the browser's Back button returns to the index.
   $("#timeline-index-body").addEventListener("click", (event) => {
+    // The Item cell carries its own next-goal link; let the anchor navigate
+    // rather than hijacking the click for the row's own destination.
+    if (event.target.closest("a")) return;
     const row = event.target.closest("tr[data-href]");
     if (row) window.location.href = row.dataset.href;
   });

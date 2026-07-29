@@ -1175,17 +1175,20 @@ details[open] > summary .summary-detail {
   background: var(--panel);
 }
 
-/* The per-item timeline link in each mastery-costs row's Item cell. Quiet by
-   default so it doesn't compete with the item name, and marked out on hover --
-   the row's own click still goes to that mastery's plan. */
-.timeline-link {
+/* Two quiet per-row links, styled alike: the mastery-costs table's "timeline"
+   link, and the timeline index's next-goal link ("→ GM"). Both sit beside an
+   item name without competing with it, and are marked out on hover -- the
+   row's own click still goes to that row's own destination. */
+.timeline-link,
+.solver-link {
   font-size: 0.75rem;
   color: var(--muted);
   text-decoration: none;
   white-space: nowrap;
 }
 
-.timeline-link:hover {
+.timeline-link:hover,
+.solver-link:hover {
   color: var(--accent);
   text-decoration: underline;
 }

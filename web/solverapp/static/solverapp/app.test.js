@@ -68,16 +68,29 @@ describe("serializeGoalEntries", () => {
 });
 
 describe("parseSeededGoal", () => {
-  // The mastery-costs page links each row here (masteries.js's masteryHref).
+  // The mastery-costs page links each row here (masteries.js's masteryHref),
+  // as does the timeline index for an item with a tier left to reach.
   test("reads the goal a mastery-costs row links with", () => {
     expect(parseSeededGoal("?mastery=Compass%3AGM")).toEqual({
+      kind: "mastery",
       item: "Compass",
       amount: "GM",
     });
   });
 
+  // The timeline's link for an already-Megamastered item: no tier left, so the
+  // goal is a plain count of the item instead.
+  test("reads an item-count goal too", () => {
+    expect(parseSeededGoal("?items=Rope%3A10000")).toEqual({
+      kind: "items",
+      item: "Rope",
+      amount: "10000",
+    });
+  });
+
   test("splits on the last ':' so a colon-bearing item name survives", () => {
     expect(parseSeededGoal("?mastery=Time%3A%20A%20Gift%3AM")).toEqual({
+      kind: "mastery",
       item: "Time: A Gift",
       amount: "M",
     });
@@ -88,5 +101,13 @@ describe("parseSeededGoal", () => {
     expect(parseSeededGoal("?plan=3")).toBeNull();
     expect(parseSeededGoal("?mastery=Compass")).toBeNull(); // no amount
     expect(parseSeededGoal("?mastery=")).toBeNull();
+    expect(parseSeededGoal("?items=Rope")).toBeNull();
+  });
+
+  test("a mastery goal wins if a link somehow carries both", () => {
+    expect(parseSeededGoal("?items=Rope%3A10000&mastery=Compass%3AGM")).toMatchObject({
+      kind: "mastery",
+      item: "Compass",
+    });
   });
 });

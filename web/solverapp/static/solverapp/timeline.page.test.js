@@ -118,9 +118,26 @@ async function loadPage({
   );
 }
 
+// A row's cells, everything in them (the delta table's Tier cell spells the
+// tier out in a nested span, which is part of what it says).
 const rowText = (selector) =>
   [...document.querySelectorAll(selector)].map((tr) =>
     [...tr.children].map((td) => td.textContent.trim())
+  );
+
+// The index's cells, each stripped to its OWN text: an Item cell also carries
+// the next-goal link ("→ GM"), which is asserted on separately rather than
+// being part of every row expectation.
+const cellText = (td) =>
+  [...td.childNodes]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join("")
+    .trim();
+
+const indexRowText = () =>
+  [...document.querySelectorAll("#timeline-index-body tr")].map((tr) =>
+    [...tr.children].map(cellText)
   );
 
 describe("the timeline page", () => {
@@ -135,7 +152,7 @@ describe("the timeline page", () => {
     expect(document.querySelector("#timeline-chart").hidden).toBe(true);
     expect(document.querySelector("#timeline-section").hidden).toBe(true);
 
-    const rows = rowText("#timeline-index-body tr");
+    const rows = indexRowText();
     expect(rows.map((cells) => cells[0])).toEqual(["Hops", "Tomato"]);
     // Item, tier, latest, then the two windowed changes -- both measured from
     // the 8 July reading, the newest one before either window opened, so the
@@ -156,7 +173,7 @@ describe("the timeline page", () => {
     });
     // 7d opens on the 9th (baseline: the 8th), 1d on the 15th at 06:00
     // (baseline: that day's 00:00 reading).
-    expect(rowText("#timeline-index-body tr")[0]).toEqual([
+    expect(indexRowText()[0]).toEqual([
       "Tomato",
       "GM",
       "415,000",
@@ -174,7 +191,7 @@ describe("the timeline page", () => {
     });
     // A history that stopped six weeks ago: nothing moved *in* either window,
     // which is not the same as no progress having been made.
-    expect(rowText("#timeline-index-body tr")[0]).toEqual([
+    expect(indexRowText()[0]).toEqual([
       "Tomato",
       "GM",
       "404,800",
@@ -187,6 +204,50 @@ describe("the timeline page", () => {
     await loadPage();
     const row = document.querySelector("#timeline-index-body tr");
     expect(row.dataset.href).toBe("/timeline?item=Hops");
+  });
+
+  // Beside each name, a link to the solver seeded with that item's next goal:
+  // the tier above where it stands, or 10,000 more of an already-Megamastered
+  // one (Hops is at 1,200, Tomato at 412,900).
+  test("each item name carries a link to its next goal", async () => {
+    await loadPage({
+      snapshots: [
+        {
+          when: new Date(2026, 6, 15, 12, 0),
+          items: { Hops: 1_200, Tomato: 412_900, Rope: 1_400_000 },
+        },
+      ],
+      ui: { timeline_tier_MM: true },
+    });
+    const links = [...document.querySelectorAll("#timeline-index-body .solver-link")];
+    expect(links.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["→ M", "/?mastery=Hops%3AM"],
+      ["→ 10,000", "/?items=Rope%3A10000"],
+      ["→ MM", "/?mastery=Tomato%3AMM"],
+    ]);
+  });
+
+  // The row itself goes to the item's timeline, so its handler must leave the
+  // anchor alone or the next-goal link would never reach the solver.
+  test("clicking the next-goal link does not hijack the row's navigation", async () => {
+    await loadPage();
+    const assign = vi.fn();
+    // jsdom refuses a real navigation, so intercept the assignment -- and put
+    // the real location back afterwards, since everything else on this page
+    // (selectItem's replaceState) reads it.
+    const real = Object.getOwnPropertyDescriptor(window, "location");
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { set href(value) { assign(value); } },
+    });
+    try {
+      document.querySelector("#timeline-index-body .solver-link").dispatchEvent(
+        new Event("click", { bubbles: true })
+      );
+    } finally {
+      Object.defineProperty(window, "location", real);
+    }
+    expect(assign).not.toHaveBeenCalled();
   });
 
   test("?item= charts that item and tabulates its gains", async () => {
@@ -255,19 +316,19 @@ describe("the timeline page", () => {
 
   test("a column's sort button reorders the index", async () => {
     await loadPage();
-    expect(rowText("#timeline-index-body tr").map((cells) => cells[0])).toEqual([
+    expect(indexRowText().map((cells) => cells[0])).toEqual([
       "Hops",
       "Tomato",
     ]);
 
     clickSort("timeline-index-head", "latest");
-    expect(rowText("#timeline-index-body tr").map((cells) => cells[0])).toEqual([
+    expect(indexRowText().map((cells) => cells[0])).toEqual([
       "Hops",
       "Tomato",
     ]);
     // Clicking the active column reverses it.
     clickSort("timeline-index-head", "latest");
-    expect(rowText("#timeline-index-body tr").map((cells) => cells[0])).toEqual([
+    expect(indexRowText().map((cells) => cells[0])).toEqual([
       "Tomato",
       "Hops",
     ]);
@@ -346,9 +407,7 @@ describe("the index filters", () => {
   ];
 
   const items = () =>
-    [...document.querySelectorAll("#timeline-index-body tr td:first-child")].map(
-      (td) => td.textContent.trim()
-    );
+    [...document.querySelectorAll("#timeline-index-body tr td:first-child")].map(cellText);
   const chips = () =>
     [...document.querySelectorAll("#material-chips .chip")].map((chip) =>
       chip.textContent.replace("×", "").trim()
