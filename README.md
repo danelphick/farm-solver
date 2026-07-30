@@ -889,6 +889,15 @@ to 3) and add a billing budget alert. The script's `--concurrency 4` is
 sized against `_SEMAPHORE_TIMEOUT_SECONDS` (a queued request has 20s to
 acquire the solve semaphore); lower it if you see 503s.
 
+The script also asserts `deploy/artifact-cleanup-policy.json` on the
+`cloud-run-source-deploy` repository each run. Every `--source` deploy
+pushes a fresh ~150 MB image and they accumulate forever, so roughly four
+deploys crosses Artifact Registry's 500 MB free tier and starts billing
+storage — and that spend sits *outside* a Cloud Run spend cap, which
+neither counts nor stops it. The policy keeps the 3 most recent versions
+and deletes anything else over 30 days old; because Artifact Registry lets
+Keep win over Delete, a rollback target always survives.
+
 ### Server hardware reality
 
 The solver's own README/ARCHITECTURE performance figures (a solve in

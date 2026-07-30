@@ -146,6 +146,26 @@ gcloud run services update "${SERVICE}" \
     --update-env-vars "^##^DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS}" \
     --quiet >/dev/null
 
+# Cap the build cache. Every `--source` deploy pushes a fresh ~150 MB image into
+# the [cloud-run-source-deploy] repository gcloud creates, and they accumulate
+# forever: about four deploys crosses Artifact Registry's 500 MB free tier and
+# starts billing storage. Worth doing here rather than by hand, because that
+# spend falls OUTSIDE a Cloud Run spend cap -- the cap neither counts it nor
+# stops it.
+#
+# Keep wins over Delete in Artifact Registry, so keeping the 3 most recent
+# versions means nothing is ever removed until there are more than 3 AND they
+# are over 30 days old -- a rollback target always survives. Idempotent, so
+# re-running the script just re-asserts it.
+POLICY_FILE="$(dirname "$0")/artifact-cleanup-policy.json"
+if [[ -f "${POLICY_FILE}" ]]; then
+    echo ">> asserting Artifact Registry cleanup policy"
+    gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
+        --project "${PROJECT_ID}" --location "${REGION}" \
+        --policy="${POLICY_FILE}" --no-dry-run --quiet >/dev/null 2>&1 \
+        || echo "   (skipped: repository not present yet)"
+fi
+
 echo
 # Report the canonical hostname -- the one gcloud prints and users are given.
 echo "deployed: https://${HOST_CANONICAL}"

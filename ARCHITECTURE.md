@@ -2110,7 +2110,15 @@ architecturally:
   bound on spend: `api_solve`/`api_mastery_costs` are `csrf_exempt` and
   unauthenticated, and each POST buys 1-3s of CPU, so a public URL is a
   cost-amplification surface. The script reuses the existing
-  `DJANGO_SECRET_KEY` across deploys rather than rotating it.
+  `DJANGO_SECRET_KEY` across deploys rather than rotating it, appends
+  `EXTRA_ALLOWED_HOSTS` to the two computed run.app hostnames (the update
+  *replaces* `DJANGO_ALLOWED_HOSTS`, so a mapped custom domain left out of it
+  would be dropped by the next deploy), and asserts
+  `deploy/artifact-cleanup-policy.json` on the `cloud-run-source-deploy`
+  repository — keep the 3 most recent images, delete the rest past 30 days.
+  Artifact Registry resolves Keep before Delete, so a rollback target always
+  survives; the point is that image storage accrues outside a Cloud Run spend
+  cap, which neither counts nor stops it.
 
 ## Dev workflow
 
