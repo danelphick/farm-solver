@@ -50,6 +50,14 @@ CONCURRENCY="${CONCURRENCY:-4}"
 MEMORY="${MEMORY:-512Mi}"
 CPU="${CPU:-1}"
 
+# Hostnames to keep in DJANGO_ALLOWED_HOSTS on top of the two run.app ones this
+# script computes. Custom domains mapped onto the service (see "Mapping a custom
+# domain" in README) MUST be listed here: the step at the bottom *replaces*
+# DJANGO_ALLOWED_HOSTS on every deploy, so a domain added by hand in the console
+# would be silently dropped by the next run and the site would start answering
+# 400 DisallowedHost on it. Comma-separated; set to "" to pin only run.app.
+EXTRA_ALLOWED_HOSTS="${EXTRA_ALLOWED_HOSTS-keubsfarm.org,www.keubsfarm.org}"
+
 echo ">> project=${PROJECT_ID} service=${SERVICE} region=${REGION}"
 
 # Reuse the existing secret key rather than rotating it on every deploy.
@@ -125,12 +133,17 @@ HOST="${URL#https://}"
 PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
 HOST_CANONICAL="${SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
 
-# ^##^ is gcloud's alternate-delimiter escape: without it the comma separating
-# the two hostnames would be read as separating two env-var assignments.
-echo ">> pinning DJANGO_ALLOWED_HOSTS=${HOST_CANONICAL},${HOST}"
+ALLOWED_HOSTS="${HOST_CANONICAL},${HOST}"
+if [[ -n "${EXTRA_ALLOWED_HOSTS}" ]]; then
+    ALLOWED_HOSTS="${ALLOWED_HOSTS},${EXTRA_ALLOWED_HOSTS}"
+fi
+
+# ^##^ is gcloud's alternate-delimiter escape: without it the commas separating
+# the hostnames would be read as separating several env-var assignments.
+echo ">> pinning DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS}"
 gcloud run services update "${SERVICE}" \
     --project "${PROJECT_ID}" --region "${REGION}" \
-    --update-env-vars "^##^DJANGO_ALLOWED_HOSTS=${HOST_CANONICAL},${HOST}" \
+    --update-env-vars "^##^DJANGO_ALLOWED_HOSTS=${ALLOWED_HOSTS}" \
     --quiet >/dev/null
 
 echo
