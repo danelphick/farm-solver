@@ -471,6 +471,15 @@ class _Base:
     # Stamped onto every plan this base yields (see :attr:`SourcingPlan.cost`); the
     # LP prices juice regardless, this only governs whether that cost shows in net.
     price_pumpkin_juice: bool = True
+    # The daily Grape Juice instant-grow allowance the daily-budget constraints were
+    # built with (0 = unconfigured, no cap). Kept so the readout can charge a plan
+    # the wait its juice spend implies -- see :func:`_solve_configured`.
+    grape_juices_per_day: float = 0.0
+    # How many daily allocations (cookie set, Grape Juice quota) the plan collects --
+    # an integer, since days arrive whole. ``None`` when no offer spends a daily
+    # resource, which keeps such a model a pure LP. See the daily-budget constraints
+    # in :func:`_build_base`; :func:`_solve_configured` relaxes it for cheap sweeps.
+    days_available: pulp.LpVariable | None = None
     # True when no demanded item is obtainable at all -- the LP is never built
     # (mirrors ``minimize``'s old early return), so ``_solve_configured`` must
     # skip straight to the trivial remainder-only plan without touching ``problem``.
@@ -501,6 +510,7 @@ def _build_base(
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     *,
+    grape_juices_per_day: float = 0.0,
     ap_tradeable: frozenset[str] = frozenset(),
     non_mastery_goals: frozenset[str] = frozenset(),
     no_buy: frozenset[str] = frozenset(),
@@ -602,6 +612,7 @@ def _build_base(
             used=[], crafted=[], opened=[], remainder=remainder,
             pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
             price_pumpkin_juice=price_pumpkin_juice,
+            grape_juices_per_day=grape_juices_per_day,
         )
 
     used = [
@@ -657,10 +668,12 @@ def _build_base(
         if "grandmaster" in steps and "mega" in steps:
             problem += steps["mega"] <= steps["grandmaster"]
 
-    # Cookie-boosted farming days used, capped below at held + bought sets. The
+    # Cookie sets and Grape Juice instant-grows spent, capped below at held +
+    # bought sets and (both of them) at what the plan's span makes available. The
     # other consumable tallies (Arnold Palmers, Large Nets, ...) are read off the
     # solved draws in the plan built at the end, not needed as LP expressions here.
     cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
+    juices_used = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
 
     # Buy variables: a buyable consumable can be bought (free, instant supply) for
     # gold instead of self-sourced (which costs makespan). Only reachable, priced
@@ -682,6 +695,64 @@ def _build_base(
     )
     # Held cookie sets are free; beyond them a purchase lifts the cap at gold cost.
     problem += cookies <= cookie_sets + (buy_cookie if buy_cookie is not None else 0)
+
+    # Daily budgets. A cookie set and the day's Grape Juice instant-grow allowance
+    # are once-a-*day* resources shared by the whole farm, so how much of each a
+    # plan may spend is set by how many days it runs -- not by how many different
+    # crops it touches. ``+ 1`` because the plan's first day is available at once:
+    # without it a plan wanting a single cookie burst (an instant action, the whole
+    # point of that offer) would have to stretch its makespan to a full day, which
+    # is the spurious-wait artifact the burst exists to avoid.
+    #
+    # These are what hold "once a day" across crops. Bounding each crop's burst
+    # offer on its own (the old ``max_units=1``) only said "once per crop", so the
+    # LP could burst every qualifying crop within the same day, spending a cookie
+    # set and a full day's juice allowance on each -- on a real save that meant 16
+    # sets and 211 juices inside six days, most of them on crops the goal did not
+    # want, harvested purely for their Scythe-of-Dewstar bonus drops. Sharing the
+    # budget also *frees* the burst in the other direction: a plan running N days
+    # may now burst the same crop on each of them, which it could not before.
+    #
+    # Note ``makespan`` is the max over concurrent tracks, which is the right base:
+    # a plan that spends 30 days fishing really does accrue 30 days of cookie sets
+    # to spend on farming, whatever the farming track's own length.
+    #
+    # ``days_available`` -- how many daily allocations the plan collects -- is an
+    # INTEGER, and has to be: days arrive whole. A plan running 6d 4h touches seven
+    # days, so it collects seven sets, not 7.17. Left continuous the LP spends that
+    # fractional remainder, and since a part set still costs a whole one the readout
+    # rounds it up -- reporting an eighth set the plan never ran long enough to
+    # collect. Integrality makes ``<= makespan_days + 1`` do the flooring exactly:
+    # 7.17 rounds down to 7, and buying an eighth means running a seventh full day.
+    #
+    # An integer variable turns the whole model into a MIP, so build it only where a
+    # daily budget can actually *bind*: some offer must spend the resource, and the
+    # resource must be available at all. With no sets held and none buyable
+    # ``cookies <= 0`` already, and with no allowance configured the juice cap is not
+    # applied -- in either case the day count would constrain nothing while costing
+    # every solve MIP overhead. A fishing/exploring-only model likewise stays pure LP.
+    # See ``_solve_configured``, which relaxes this alongside the juice variables for
+    # the frontier's cheap sweep.
+    #
+    # Grape Juice is bounded twice over and needs both: the item balance (a grow
+    # ``consumes`` real juice, so a plan cannot use more than it holds or presses) and
+    # this daily allowance (holding thousands does not let you drink more than the
+    # day's quota). ``grape_juices_per_day`` of 0 means "no allowance configured"
+    # rather than "none allowed", keeping callers that do not thread the farm's
+    # setting through unchanged.
+    cookies_bind = (cookie_sets > 0 or buy_cookie is not None) and any(
+        o.cookies for o in used
+    )
+    juices_bind = grape_juices_per_day > 0 and any(o.gj for o in used)
+    days_available: pulp.LpVariable | None = None
+    if cookies_bind or juices_bind:
+        days_available = pulp.LpVariable("days", lowBound=0, cat=pulp.LpInteger)
+        problem += days_available <= makespan / _MINUTES_PER_DAY + 1
+        if cookies_bind:
+            problem += cookies <= days_available
+        if juices_bind:
+            problem += juices_used <= grape_juices_per_day * days_available
+
     gold = pulp.lpSum(prices[item] * var for item, var in buy.items())
     if buy_cookie is not None:
         gold = gold + price_cookie * buy_cookie
@@ -960,6 +1031,7 @@ def _build_base(
         pj_gain=pj_gain, pj_price=pj_price,
         stamina_op=stamina_op, stamina_price=stamina_price,
         price_pumpkin_juice=price_pumpkin_juice,
+        grape_juices_per_day=grape_juices_per_day, days_available=days_available,
         ascension=ascension, ascend_y=ascend_y, ascend_S=ascend_S,
         unmasterable=unmasterable,
     )
@@ -1283,13 +1355,23 @@ def _round_and_fix_ascension(
     return _assert_optimal(problem, solver) if check else solver
 
 
+def _has_integers(base: _Base) -> bool:
+    """Whether ``base`` has any integer variable, so its relaxation is not exact.
+
+    The Pumpkin Juice counts and ``days_available`` (the daily-budget day count).
+    Where neither exists the sweep's relaxed solves already *are* the exact ones and
+    the frontier can skip its re-solve pass entirely.
+    """
+    return bool(base.pj) or base.days_available is not None
+
+
 def _solve_configured(
     base: _Base,
     *,
     gold_weight: float = 0.0,
     time_cap: timedelta | None = None,
     favour_passive: bool = False,
-    pj_integer: bool = True,
+    exact_integers: bool = True,
     juice_cap: int | None = None,
 ) -> SourcingPlan:
     """Solve ``base`` under one call's mode -- the per-call counterpart of
@@ -1298,11 +1380,15 @@ def _solve_configured(
     the *next* call's first step can remove exactly them, leaving the shared
     balance/track constraints untouched. See ``plans/MODEL_REUSE_PLAN.md``.
 
-    ``pj_integer`` decides whether the Pumpkin Juice variables solve as whole units
-    (a MIP -- ~50x the per-solve cost, see :func:`frontier`) or as the continuous
+    ``exact_integers`` decides whether the model's integer variables -- the Pumpkin
+    Juice counts and ``days_available``, the daily-budget day count -- solve as whole
+    units (a MIP: ~50x the per-solve cost, see :func:`frontier`) or as the continuous
     relaxation. :func:`frontier` sweeps its ~hundreds of interior points with
-    ``pj_integer=False`` and re-solves only the plans it returns with ``True``; a
-    bare :func:`minimize` and every other caller keep the exact default.
+    ``exact_integers=False`` and re-solves only the plans it returns with ``True``; a
+    bare :func:`minimize` and every other caller keep the exact default. Relaxed,
+    ``days_available`` reverts to the fractional ``makespan_days + 1`` -- generous by
+    a part day, which only ever mis-ranks an interior sweep point that the exact
+    finish then replaces.
 
     ``juice_cap`` bounds the whole-juice total at ``sum(pj) <= juice_cap`` -- the
     lever a ``--spread pumpkin-juice`` uses to pin the juice axis *directly* (one
@@ -1325,11 +1411,13 @@ def _solve_configured(
             price_pumpkin_juice=base.price_pumpkin_juice,
         )
 
-    # Toggle the juice variables' integrality for this solve. Cheap and idempotent;
+    # Toggle the model's integer variables for this solve. Cheap and idempotent;
     # reuses the one shared base rather than building a second integer copy.
-    pj_cat = pulp.LpInteger if pj_integer else pulp.LpContinuous
+    cat = pulp.LpInteger if exact_integers else pulp.LpContinuous
     for var in base.pj.values():
-        var.cat = pj_cat
+        var.cat = cat
+    if base.days_available is not None:
+        base.days_available.cat = cat
 
     problem = base.problem
     # NOTE: PuLP deprecates dict-style access to `.constraints` (removal by name
@@ -1472,12 +1560,14 @@ def _solve_configured(
         # Freeze the juice counts stage 2 settled on. They are decided by now (stage 2
         # is what weighs juice against everything else), and stage 3 may not move them
         # anyway -- its own pins forbid it. Nailing them down lets the solver's presolve
-        # drop the only integer columns in the model, so stage 3 runs as the pure LP it
-        # was before whole juices, which is most of the MIP's cost paid back. Only when
+        # drop those integer columns, so stage 3 runs closer to the pure LP it was
+        # before whole juices, which is most of the MIP's cost paid back. (The other
+        # integer, ``days_available``, is not frozen -- it is a bound, not a decision
+        # stage 2 weighs.) Only when
         # solving integer: with the continuous relaxation the values are fractional, and
         # fixing them to their rounded selves would force an integrality the sweep is
         # deliberately dropping for speed.
-        if pj_integer:
+        if exact_integers:
             for item, var in base.pj.items():
                 fixed = var == round(var.value() or 0.0)
                 fixed.name = f"pj_fix_{item}"
@@ -1551,6 +1641,30 @@ def _solve_configured(
         if (units := round(var.value() or 0.0)) > 0
     }
     time, ap, ln = aggregate(draws)
+    # Daily budgets (see _build_base): a plan spending N cookie sets, or N days'
+    # worth of Grape Juice, has to wait out those days to collect them -- but the
+    # actions themselves can be near-instant (a cookie burst is five minutes), so
+    # the draws alone under-report the span. Charge that wait here: N of a daily
+    # resource means N-1 days of waiting after the first day's, which is exactly
+    # the floor `cookies <= makespan/day + 1` puts on the LP's own makespan.
+    #
+    # Derived from the plan's own tallies rather than read off ``base.makespan``,
+    # which is only meaningful where the LP actually minimised it: under an
+    # epsilon-constraint cap it minimises *gold* and the makespan variable is free
+    # to park anywhere up to the cap, so reading it back would report the cap as
+    # the plan's time.
+    # Counted in WHOLE days, matching both the constraint's integer
+    # ``days_available`` and the report's own ceil: a part set still costs a whole
+    # one, and the day it is collected on is a whole day too. The epsilon absorbs
+    # the solver returning an integer a hair over (7.0000000001), which would
+    # otherwise ceil to 8 and charge a spurious extra day of waiting.
+    budget_days = math.ceil(sum(d.cookies for d in draws) - UNIT_EPSILON)
+    if base.grape_juices_per_day > 0:
+        budget_days = max(budget_days, math.ceil(
+            sum(d.gj for d in draws) / base.grape_juices_per_day - UNIT_EPSILON
+        ))
+    if budget_days > 1:
+        time = max(time, timedelta(days=budget_days - 1))
     # Ascension: the chore term can make the optimal makespan exceed every
     # track's own time (the plan idles, waiting on daily chores, to close the
     # AK gap) -- draws alone would then under-report it, so take the makespan
@@ -1757,6 +1871,7 @@ def minimize(
     no_buy: frozenset[str] = frozenset(),
     ascension: AscensionSpec | None = None,
     price_pumpkin_juice: bool = True,
+    grape_juices_per_day: float = 0.0,
 ) -> SourcingPlan:
     """Solve one LP: cover ``demand``, trading makespan against gold spent.
 
@@ -1775,6 +1890,13 @@ def minimize(
     demanded, since the demand is already net of what is held (mastery progress or
     the acquired count). The credit is a constant, so surplus stock simply leaves
     the balance slack; it never makes an otherwise-unproducible item obtainable.
+
+    **Daily budgets.** ``cookie_sets`` is the stock of sets held; ``grape_juices_
+    per_day`` the farm's daily instant-grow allowance (``0`` = unconfigured, no cap).
+    Both are once-a-*day*, whole-farm resources, so beyond the stock cap the plan may
+    spend only what its **span** earns it -- see :func:`_build_base` for the pair of
+    constraints and why a per-offer cap (the cookie burst's old ``max_units=1``)
+    could not express it.
 
     **Buying.** Each buyable consumable (see :data:`BUYABLE`; cookie sets too, via
     ``cookie_sets`` + a purchase) gets a ``buy`` variable that adds free, instant
@@ -1829,6 +1951,7 @@ def minimize(
     base = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
+        grape_juices_per_day=grape_juices_per_day,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
         no_buy=no_buy, ascension=ascension, price_pumpkin_juice=price_pumpkin_juice,
     )
@@ -2081,6 +2204,7 @@ def self_sourced_endpoint(
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
+    grape_juices_per_day: float = 0.0,
 ) -> SourcingPlan:
     """The cheap endpoint: the fastest plan that buys nothing (fully self-sourced).
 
@@ -2097,7 +2221,8 @@ def self_sourced_endpoint(
     return minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FREE_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets, quantize=quantize,
+        cookie_sets=cookie_sets, grape_juices_per_day=grape_juices_per_day,
+        quantize=quantize,
     )
 
 
@@ -2118,6 +2243,7 @@ def fastest_endpoint(
     non_mastery_goals: frozenset[str] = frozenset(),
     no_buy: frozenset[str] = frozenset(),
     price_pumpkin_juice: bool = True,
+    grape_juices_per_day: float = 0.0,
 ) -> SourcingPlan:
     """The fast endpoint: buys as freely as needed to finish soonest.
 
@@ -2142,7 +2268,8 @@ def fastest_endpoint(
     return minimize(
         offers, demand, recipes, crafting_bonus, prices=prices,
         gold_weight=_FAST_PRICE, openables=openables, inventory=inventory,
-        cookie_sets=cookie_sets, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+        cookie_sets=cookie_sets, grape_juices_per_day=grape_juices_per_day,
+        pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
         quantize=quantize, ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
         no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
     )
@@ -2181,7 +2308,7 @@ def plan_surplus_gold(
 
 def _sweep(
     base: _Base, caps: list[float], favour_passive: bool = False,
-    pj_integer: bool = True,
+    exact_integers: bool = True,
 ) -> list[SourcingPlan]:
     """Solve ``base`` at each of ``caps`` (seconds), dropping the unmeetable ones.
 
@@ -2190,7 +2317,7 @@ def _sweep(
     where *every* cap is unmeetable simply contributes nothing, and the endpoints
     (solved uncapped) carry it.
 
-    ``pj_integer`` is forwarded to every solve -- :func:`frontier` sweeps ``False`` (the
+    ``exact_integers`` is forwarded to every solve -- :func:`frontier` sweeps ``False`` (the
     cheap continuous relaxation) and finishes the survivors exact.
     """
     plans = []
@@ -2199,7 +2326,7 @@ def _sweep(
             plans.append(
                 _solve_configured(
                     base, favour_passive=favour_passive,
-                    time_cap=timedelta(seconds=cap), pj_integer=pj_integer,
+                    time_cap=timedelta(seconds=cap), exact_integers=exact_integers,
                 )
             )
         except _UnmeetableCap:
@@ -2273,7 +2400,8 @@ def _pumpkin_gap_fill(
     """The fastest exact plan at each whole-juice count in ``[hi_pj, lo_pj)``,
     found by bisecting the time-cap axis between two bracket plans.
 
-    Juice is the model's only integer decision and its count is monotone
+    Juice is the model's only integer *goal* decision (``days_available`` is a
+    daily-budget bound, not a thing to trade off) and its count is monotone
     non-increasing in the time cap (each juice buys a mastery-tier slice of
     farming time), yet the sweep's *relaxed* count is an unreliable proxy for the
     exact one -- the integrality gap runs to a whole juice or two in the
@@ -2289,7 +2417,7 @@ def _pumpkin_gap_fill(
 
     def at(cap: float) -> SourcingPlan:
         return _solve_configured(
-            base, pj_integer=True, time_cap=timedelta(seconds=cap))
+            base, exact_integers=True, time_cap=timedelta(seconds=cap))
 
     def record(plan: SourcingPlan) -> int:
         level = _juice_count(plan)
@@ -2592,16 +2720,16 @@ def _solve_at_axis_target(
     notes) but is not a clean LP expression to pin (surplus/stamina fold in after
     the solve), so this bisects the cap axis exactly like :func:`_pumpkin_gap_fill`
     brackets a juice count, generalized to any gold target. Every solve here is
-    exact (``pj_integer=True``) -- unlike the dense sweep :func:`frontier` thins
+    exact (``exact_integers=True``) -- unlike the dense sweep :func:`frontier` thins
     from, a spread only ever solves the handful of points it actually shows, so
     there is no relaxed-then-finished two-phase step to reuse.
     """
     if axis == "time":
         cap = min(max(target, t_lo), t_hi)
-        return _solve_configured(base, pj_integer=True, time_cap=timedelta(seconds=cap))
+        return _solve_configured(base, exact_integers=True, time_cap=timedelta(seconds=cap))
 
     def at(cap: float) -> SourcingPlan:
-        return _solve_configured(base, pj_integer=True, time_cap=timedelta(seconds=cap))
+        return _solve_configured(base, exact_integers=True, time_cap=timedelta(seconds=cap))
 
     a, b = t_lo, t_hi
     best = at(a)
@@ -2665,13 +2793,13 @@ def _spread(
     that the passive breakpoints anchor on -- see that branch for why the cheap
     endpoint is the wrong anchor.
     """
-    if base_active.pj:
+    if _has_integers(base_active):
         if fast._origin is not None:
             base, kwargs = fast._origin
-            fast = _solve_configured(base, pj_integer=True, **kwargs)
+            fast = _solve_configured(base, exact_integers=True, **kwargs)
         if cheap._origin is not None:
             base, kwargs = cheap._origin
-            cheap = _solve_configured(base, pj_integer=True, **kwargs)
+            cheap = _solve_configured(base, exact_integers=True, **kwargs)
 
     def post(plan: SourcingPlan) -> None:
         _quantize_plan_time(
@@ -2718,7 +2846,7 @@ def _spread(
                 continue
             seen.add(n)
             plan = _solve_configured(
-                base_active, gold_weight=_FAST_PRICE, pj_integer=True, juice_cap=n,
+                base_active, gold_weight=_FAST_PRICE, exact_integers=True, juice_cap=n,
             )
             post(plan)
             by_count.setdefault(_juice_count(plan), plan)  # dedup by *actual* count
@@ -2750,7 +2878,7 @@ def _spread(
         for cap in caps:
             try:
                 plan = _solve_configured(
-                    solve_base, favour_passive=fp, pj_integer=not fp,
+                    solve_base, favour_passive=fp, exact_integers=not fp,
                     time_cap=timedelta(seconds=cap),
                 )
             except _UnmeetableCap:
@@ -2844,6 +2972,7 @@ def frontier(
     no_buy: frozenset[str] = frozenset(),
     spread: SpreadSpec | None = None,
     price_pumpkin_juice: bool = True,
+    grape_juices_per_day: float = 0.0,
 ) -> list[SourcingPlan]:
     """The Pareto frontier of sourcing plans over ``(time, net gold)``, fastest first.
 
@@ -2894,11 +3023,12 @@ def frontier(
     base_active = _build_base(
         offers, demand, recipes, crafting_bonus, openables, inventory,
         cookie_sets, prices, pj_gain, pj_price, pj_limit,
+        grape_juices_per_day=grape_juices_per_day,
         ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
         no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
     )
-    fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, pj_integer=False)
-    cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, pj_integer=False)
+    fast = _solve_configured(base_active, gold_weight=_FAST_PRICE, exact_integers=False)
+    cheap = _solve_configured(base_active, gold_weight=_FREE_PRICE, exact_integers=False)
     # The cheap endpoint's *continuous* makespan -- where its actual sourcing
     # finishes, before quantisation lifts the reported time to a deposit
     # boundary. The slow-regime gate below needs this, not the quantized time:
@@ -2948,12 +3078,13 @@ def frontier(
             base_passive = _build_base(
                 probe_offers, demand, recipes, crafting_bonus, openables, inventory,
                 cookie_sets, prices, pj_gain, pj_price, pj_limit,
+                grape_juices_per_day=grape_juices_per_day,
                 ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
                 no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
             )
             try:
                 probe = _solve_configured(
-                    base_passive, favour_passive=True, pj_integer=False,
+                    base_passive, favour_passive=True, exact_integers=False,
                 )
             except ValueError:  # _assert_optimal: demand unsatisfiable pet-free
                 base_passive = probe = None
@@ -2983,7 +3114,7 @@ def frontier(
         if lo < cap < hi
     ]
     caps += breakpoints
-    plans += _sweep(base_active, caps, pj_integer=False)
+    plans += _sweep(base_active, caps, exact_integers=False)
 
     # Slow regime: extend past the cheap endpoint with favour_passive plans that lean
     # ever harder on passive/farming and bank the surplus. Bounded at t_bound, the
@@ -2996,10 +3127,11 @@ def frontier(
         base_passive = _build_base(
             offers, demand, recipes, crafting_bonus, openables, inventory,
             cookie_sets, prices, pj_gain, pj_price, pj_limit,
+            grape_juices_per_day=grape_juices_per_day,
             ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
             no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
         )
-        probe = _solve_configured(base_passive, favour_passive=True, pj_integer=False)
+        probe = _solve_configured(base_passive, favour_passive=True, exact_integers=False)
         nonpet = _passive_completion_caps(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
             inventory or {}, passive_pet_items, quantize,
@@ -3010,7 +3142,7 @@ def frontier(
             ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
             anchors += ext_breaks
             ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
-            plans += _sweep(base_passive, ext_caps, favour_passive=True, pj_integer=False)
+            plans += _sweep(base_passive, ext_caps, favour_passive=True, exact_integers=False)
 
     # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
     # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
@@ -3034,24 +3166,25 @@ def frontier(
         post(plan)
     thinned = _thin(_non_dominated(plans), count, tuple(anchors))
 
-    # Pumpkin Juice is the model's only integer decision, and a MIP costs ~50x an LP
-    # per solve (see :func:`_solve_configured`). The whole sweep above therefore ran
-    # the cheap *continuous* relaxation, letting juice go fractional; only the handful
+    # A MIP costs ~50x an LP per solve (see :func:`_solve_configured`), and the model
+    # has integer variables whenever juice is on or a daily budget binds. The whole
+    # sweep above therefore ran the cheap *continuous* relaxation, letting juice and
+    # the day count go fractional; only the handful
     # of plans that survive thinning -- the ones actually shown, each row of the
     # frontier table and the expanded plan -- are re-solved exact here, from the
     # ``(base, kwargs)`` each was stamped with. ~5 MIP solves instead of hundreds. The
     # exact plan for a point can differ from its relaxed row by up to a juice's worth of
     # gold/time; that shifts interior *ranking* slightly (already-thinned, so harmless)
-    # but every returned plan is a real whole-juice plan. Skipped entirely when there is
-    # no juice (no integer vars -> the relaxation was already exact).
-    if base_active.pj:
+    # but every returned plan is a real whole-juice plan. Skipped entirely when the
+    # model has no integer variable at all -> the relaxation was already exact.
+    if _has_integers(base_active):
         finished = []
         for plan in thinned:
             if plan._origin is None:  # hand-built/remainder-only: nothing to re-solve
                 finished.append(plan)
                 continue
             base, kwargs = plan._origin
-            exact = _solve_configured(base, pj_integer=True, **kwargs)
+            exact = _solve_configured(base, exact_integers=True, **kwargs)
             post(exact)
             finished.append(exact)
         # Two survivors can land on the same integer point once juice is whole; drop the

@@ -1410,6 +1410,18 @@ def selected_plan(
 COOKIE_ITEMS = ("happy cookies", "spooky cookies", "lovely cookies")
 
 
+def daily_grape_juices(farm: crops.Farm | None) -> float:
+    """The farm's daily Grape Juice instant-grow allowance, for the optimiser's
+    daily-budget cap (see ``optimizer._build_base``).
+
+    Zero -- which the optimiser reads as "no allowance configured", so no cap --
+    when there is no farm at all, which is the case for an ascension or test setup
+    that never built one. A farm with no ``grape_juices_per_day`` set is the same
+    story: nothing to ration.
+    """
+    return getattr(farm, "grape_juices_per_day", 0.0) or 0.0
+
+
 def cookie_sets_available(
     inventory: dict[str, float], override: int | None
 ) -> float:
@@ -1834,6 +1846,7 @@ def solve_frontier(
             fast = optimizer.fastest_endpoint(
                 offers, demand, recipes, args.crafting_bonus, prices=prices,
                 openables=open_flows, inventory=inventory, cookie_sets=cookie_sets,
+                grape_juices_per_day=daily_grape_juices(farm),
                 pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
                 quantize=quantize, ap_tradeable=ap_tradeable,
                 non_mastery_goals=non_mastery_goals, no_buy=no_buy,
@@ -1857,7 +1870,8 @@ def solve_frontier(
         plans = optimizer.frontier(
             offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
             inventory, cookie_sets, report._pet_dominated_items(production),
-            prices=prices, pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+            grape_juices_per_day=daily_grape_juices(farm), prices=prices,
+            pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
             quantize=quantize, ap_tradeable=ap_tradeable,
             non_mastery_goals=non_mastery_goals, no_buy=no_buy, spread=spread,
             price_pumpkin_juice=price_pj,
@@ -1931,8 +1945,9 @@ def derive_report_inputs(
     reference = optimizer.self_sourced_endpoint(
         fr.offers, inputs.demand, inputs.recipes, args.crafting_bonus,
         openables=inputs.open_flows, inventory=inputs.inventory,
-        cookie_sets=inputs.cookie_sets, prices=inputs.prices,
-        quantize=quantize,
+        cookie_sets=inputs.cookie_sets,
+        grape_juices_per_day=daily_grape_juices(inputs.farm),
+        prices=inputs.prices, quantize=quantize,
     )
     max_passive_residuals = optimizer.passive_residuals(
         reference, inputs.demand, inputs.recipes, args.crafting_bonus,
@@ -2339,7 +2354,9 @@ def solve_mastery_costs(
                 plan = optimizer.fastest_endpoint(
                     offers, demand, recipes, args.crafting_bonus, prices=prices,
                     openables=open_flows, inventory=setup.inventory,
-                    cookie_sets=setup.cookie_sets or 0.0, quantize=quantize,
+                    cookie_sets=setup.cookie_sets or 0.0,
+                    grape_juices_per_day=daily_grape_juices(setup.farm),
+                    quantize=quantize,
                     ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
                     no_buy=no_buy,
                 )
@@ -2598,6 +2615,7 @@ def _run_ascend_pass(
             base = optimizer._build_base(
                 offers, {}, recipes=setup.recipes, crafting_bonus=crafting_bonus_k,
                 openables=setup.open_flows, inventory=inventory, cookie_sets=cookie_sets,
+                grape_juices_per_day=daily_grape_juices(setup.farm),
                 prices=setup.prices, ascension=spec,
             )
             if base_cache is not None:
@@ -2706,7 +2724,9 @@ def _select_megas(
     base = optimizer._build_base(
         last_offers, {}, recipes=last_setup.recipes, crafting_bonus=last_crafting_bonus,
         openables=last_setup.open_flows, inventory=last_setup.inventory,
-        cookie_sets=cookie_sets, prices=last_setup.prices, ascension=spec,
+        cookie_sets=cookie_sets,
+        grape_juices_per_day=daily_grape_juices(last_setup.farm),
+        prices=last_setup.prices, ascension=spec,
     )
     try:
         plan = optimizer._solve_configured(base, gold_weight=optimizer._FAST_PRICE)

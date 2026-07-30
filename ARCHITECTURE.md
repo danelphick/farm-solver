@@ -201,11 +201,11 @@ save) because each per-item reachable subtree is small.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `daily_grape_juices` (the farm's Grape-Juice allowance for the optimiser's daily budget; 0/no-farm = uncapped), `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `_prepare` (the config-load/calendar-strip/crafting-bonus + `GameState`-from-text preamble both solve paths share), `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case); **mastery-costs**: `mastery_costs` → `MasteryCostsPayload` (structured rows, not rendered markdown — the client sorts and links per row), `mastery_costs_fingerprint`/`MASTERY_COST_FIELDS` (its own narrower, `"mc:"`-namespaced cache key: the goal/frontier fields never reach `solve_mastery_costs`, so editing a goal must not evict the table) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
-| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend` |
-| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers`, `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc`, `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits), `_farming_action`/`_cookie_harvest_note` (both renderers' cookie day/burst wording — a repeated burst names its count and its once-a-day cadence, since the quoted time is farming-track time, five minutes a burst); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
+| `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend`, `_has_integers`; the shared **daily budgets** for cookie sets / Grape Juice live in `_build_base` (`grape_juices_per_day` param, `_Base.grape_juices_per_day`/`days_available` — the integer day count) and are charged as reported time in `_solve_configured` — see that bullet |
+| `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers` (`farming_offers` builds the cookie day/burst pair; the burst carries **no** `max_units` — "once a day" is the optimiser's shared budget), `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
@@ -245,9 +245,12 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   an explore consumes an Arnold Palmer, a cider explore consumes stamina + part of
   an Apple Cider, a net a Large Net, a GJ grow a Grape Juice — real crafted / held /
   bought items). `track` is `FARMING/FISHING/EXPLORING/PASSIVE_TRACK/DRINKING_TRACK`.
-  Cost fields (`ap/ln/cookies/gj`) are per-unit tallies for reporting. `max_units`
-  (default `None`) caps the offer's LP usage var (its `upBound`) — used only by the
-  once-per-day cookie burst (see the farming-offers bullet).
+  Cost fields (`ap/ln/cookies/gj`) are per-unit tallies — for reporting, and (for
+  `cookies`/`gj`) for the LP's shared **daily budgets**, see that bullet. `max_units`
+  (default `None`) caps the offer's LP usage var (its `upBound`); **no builder sets
+  it today** — the cookie burst did, to mean "once a day", until that turned out to
+  be a shared budget a per-offer bound cannot express (see the cookie-farming
+  section).
 - **`sources.Draw(offer, units)`** — an offer used at scale. Properties:
   `produced` (`rate*units` per item — **overproduces** fast passive items),
   `ap/ln/cookies/gj`, `time` (`time_per_unit*units`).
@@ -280,15 +283,26 @@ plus the 5-minute window's 9× boost); repeatable, so an N-day plan gets N daily
 bursts. `grow X with cookies (burst)` is the **once-per-day burst alone** — the
 boost slice only (`cookie_burst_yield` = `9·(in_window + grape_juices)`, the window
 crops + that day's Grape Juice instant grows, the best home for the daily GJ), at
-`time_per_unit=COOKIE_WINDOW` (~instant) and **`max_units=1`**. So a plan that needs
+`time_per_unit=COOKIE_WINDOW` (~instant). So a plan that needs
 just a sliver of a boosted crop takes it *now* for one cookie set instead of a
 fractional day (the old artifact: 0.02 of a day read as a spurious 29-minute
-"wait"); more bursts require waiting out further days via the whole-day offer, which
-preserves once-per-day. The day's *non*-boosted natural harvests remain the plain
+"wait"). The day's *non*-boosted natural harvests remain the plain
 `grow X` offer's job. Grounded burst offers spend seeds for `cookie_burst_plantings`
 (window + GJ plantings) and the day's Grape Juice; Dewstar's burst bonus is
 `dewstar_cookie_burst_bonus`. Adding the instant burst reshapes the frontier for
 cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long wait).
+
+**"Once a day" is a *shared* budget, not a per-offer cap** — see the daily-budgets
+bullet under "The LP and frontier". The burst offer used to carry `max_units=1`,
+which could only ever say "once per **crop**": with ~10 qualifying crops the LP
+took one burst of *each* on the same day, spending a cookie set and a whole day's
+Grape Juice allowance on every one. On a real save (`-m Pumpkin:MM`) that meant
+**16 sets and 211 juices inside six days**, most of them spent bursting crops the
+goal did not want — Beet, Broccoli, Cotton, Rice — purely to harvest their Scythe-
+of-Dewstar bonus Pumpkins (~280 each, against 9,188 from a Pumpkin burst). The cap
+is now `optimizer._build_base`'s makespan-linked pair, so the offer has no
+`max_units` at all — which also *frees* the burst the other way: an N-day plan may
+burst the **same** crop on each of its days, which the per-offer cap forbade.
 
 ## The LP and frontier (optimizer.py)
 
@@ -311,6 +325,53 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
   are subtracted in each item's balance like a craft's materials, so a grounded
   explore/fish/GJ-grow must itself source the Arnold Palmer / Large Net / Grape
   Juice it burns.
+  - **Daily budgets** (`_build_base`, `_Base.days_available`): a cookie set and the
+    day's Grape Juice instant-grow allowance are once-a-**day**, whole-farm
+    resources, so what a plan may spend of each is set by **how long it runs**, not
+    by how many crops it touches. One shared day-count variable carries both:
+    `days_available ≤ makespan/day + 1`, then `cookies ≤ days_available` and (when
+    `grape_juices_per_day` is passed — 0 means "unconfigured", cap not applied)
+    `Σ o.gj·x ≤ grape_juices_per_day · days_available`. Every farming offer tallies
+    its spend in `Offer.cookies`/`Offer.gj`, so one budget is shared across all of
+    them — which is what makes the cookie burst once a day *across crops*; see the
+    cookie-farming section above for the pathology a per-offer cap allowed. The
+    `+ 1` grants the first day's budget at once, so a single burst stays the
+    zero-wait action it exists to be (without it a plan wanting one burst would
+    have to stretch to a full day — the spurious-wait artifact all over again).
+    `makespan` is the max over concurrent tracks, which is the right base: 30 days
+    spent fishing really do accrue 30 days of cookie sets to spend on farming.
+    Grape Juice is bounded **twice** and needs both: this allowance (how much may
+    be drunk in a day) *and* the ordinary item balance (how much is held or
+    pressed) — holding 36,691 juices does not lift the daily quota.
+    - **`days_available` is an INTEGER**, and has to be: days arrive whole. A plan
+      running 6d 4h touches seven days, so it collects **seven** sets, not 7.17.
+      Continuous, the LP spent that fractional remainder — and since a part set
+      still costs a whole one, the readout's `ceil` then reported an eighth set the
+      plan had never run long enough to collect. Integrality makes
+      `≤ makespan_days + 1` do the flooring exactly: 7.17 → 7, and an eighth set
+      means running a seventh full day. It is the **second** integer in the model
+      (juice is the other) and rides the same relaxed-sweep/exact-finish machinery
+      — see `_solve_configured`'s `exact_integers` (renamed from `pj_integer`,
+      which now toggles both) and `_has_integers`, which decides whether `frontier`
+      needs its re-solve pass at all.
+    - **Only built when a budget can bind** — some offer spends the resource *and*
+      the resource exists (sets held or buyable; an allowance configured).
+      Otherwise the variable would constrain nothing while making every solve a
+      MIP, so a fishing/exploring-only model stays pure LP. Where it does bind the
+      MIP cost is real but modest (one bounded integer, a trivial tree):
+      `--mastery-costs` ~2.7s → ~3.9s, `--ascend 5` ~0.85s → ~1.7s on the sample
+      save; a single frontier run is unchanged to the tenth of a second.
+    - **Reported time**: the actions themselves are near-instant, so the draws
+      alone under-report a plan that waits days to collect its sets. `_solve_
+      configured` charges that wait at readout — `budget_days − 1` days in **whole**
+      days (`ceil`, matching both `days_available` and the report's own rounding,
+      less `UNIT_EPSILON` so a solver-returned `7.0000000001` does not charge a
+      spurious eighth day) — computed from the plan's **own tallies**, *not* read
+      off `base.makespan`. Reading the variable back would only be valid where the
+      LP actually minimised it: under an epsilon-constraint cap it minimises *gold*,
+      leaving makespan free to park anywhere up to the cap, which would report the
+      cap as the plan's time. (Ascension's chore-wait line just below *does* read
+      the variable — it only ever solves weighted-sum.)
   - **Buying** (`buy` vars, gold): a buyable consumable (`BUYABLE` — AP/LN/cider/OJ;
     cookie sets via the `cookie_sets` cap + a purchase) gets a `buy` variable adding
     free, instant supply to its balance at `prices` gold cost, the alternative to
@@ -358,8 +419,9 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
     two ends) for the web pane's guide, which the solver never reads. The web
     Material-trading pane edits `enabled`/`allow`/`prices` per-session (allow list
     only); see "Web app (web/)".
-  - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost, and the model's **only
-    integer variables** — everything else is a continuous flow. `pj_gain` (from
+  - **Pumpkin Juice** (`pj` vars, gold): a bought mastery boost, and one of the model's
+    two **integer variables** (`days_available`, the daily-budget day count, is the
+    other; everything else is a continuous flow). `pj_gain` (from
     `main.pumpkin_juice_gains` = `0.1*threshold/mastery_bonus`) is the demand units one
     juice covers for a goal item; one `pj` var per reachable goal, priced at `pj_price`
     gold each (from `trading.pumpkin_juice`, **nominal** — juice is never bought from a
@@ -389,11 +451,12 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
       and heuristics-off change nothing) but from the fixed MIP machinery HiGHS applies
       to the *whole* thousands-of-vars model the moment one variable is integer. So
       `frontier` sweeps its ~hundreds of interior points on the **continuous relaxation**
-      (`pj_integer=False`, fractional juice, all LP) and re-solves only the handful of
-      plans it *returns* exact (`pj_integer=True`) — the rows of the summary table and
+      (`exact_integers=False`, fractional juice, all LP) and re-solves only the handful of
+      plans it *returns* exact (`exact_integers=True`) — the rows of the summary table and
       the expanded plan, the only juice counts a user reads. Cut ~273 MIP solves → ~21;
-      `--use-pumpkin-juice` wall-clock 3.15s → 0.76s (juice off: no `pj` vars, no MIP,
-      unchanged). Interior *ranking* then uses relaxed costs (off by ≤ one juice's
+      `--use-pumpkin-juice` wall-clock 3.15s → 0.76s (juice off, no daily budget
+      binding: no integer vars, no MIP, unchanged — but a farming plan with cookies
+      held now has `days_available`, so "juice off" no longer implies "pure LP"). Interior *ranking* then uses relaxed costs (off by ≤ one juice's
       gold/time — already-thinned, harmless); every returned plan is a real whole-juice
       plan. The finish reuses each plan's `_origin` (the `(base, kwargs)`
       `_solve_configured` stamps on it) to reproduce its exact solve. Within one solve,
@@ -437,7 +500,7 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
     holds fixed call to call — variables, the balance/track constraints,
     `gold`/`spend_value`/`total_value` — and returns a `_Base`. `_solve_configured` adds the
     per-call bit (the objective, an optional `makespan ≤ time_cap`, `favour_passive`'s
-    `pj ≤ 0` neutralisation, and `pj_integer` — toggles the juice vars' `.cat` between
+    `pj ≤ 0` neutralisation, and `exact_integers` — toggles the juice vars' **and `days_available`'s** `.cat` between
     `Integer` and `Continuous` for this solve, see the Pumpkin Juice cost bullet) then
     runs the refinement above and reads out the `SourcingPlan`, stamping it with
     `_origin = (base, kwargs)` so `frontier` can re-solve it exact. `frontier` (below)
@@ -544,9 +607,10 @@ cookie crops (a fast plan can now cheaply grab a boosted crop with no day-long w
 - **`frontier(...)`** spans two regimes meeting at the cheap endpoint, then credits
   each plan's `surplus_gold` (`plan_surplus_gold`) so `cost` is net, then
   `_non_dominated` then `_thin` to `count`, then **exact-finishes** the survivors
-  when there are juice vars: the whole sweep runs `pj_integer=False` (the cheap
+  when the model has integer vars at all (`_has_integers`: juice, or a binding daily
+  budget): the whole sweep runs `exact_integers=False` (the cheap
   continuous relaxation, since a MIP is ~50x an LP per solve — see the Pumpkin Juice
-  cost bullet), and only the returned plans are re-solved `pj_integer=True` from their
+  cost bullet), and only the returned plans are re-solved `exact_integers=True` from their
   `_origin`, re-quantized/re-surplus'd, and deduped by `(time, net gold)`. It builds
   two `_build_base` bases up front — `base_active` (`favour_passive=False`) shared by
   the fast endpoint, cheap endpoint and every epsilon-cap solve; `base_passive`

@@ -1,3 +1,4 @@
+import math
 from datetime import timedelta
 
 import pytest
@@ -434,6 +435,97 @@ def test_minimize_respects_the_cookie_cap():
     plan = minimize([normal, cookie], {"Slow": 10}, cookie_sets=0)
     assert plan.cookie_sets == 0
     assert plan.time == timedelta(days=10)
+
+
+def _burst(crop: str, item: str, yields: float, juices: float = 2.0) -> Offer:
+    """A once-per-day cookie burst offer, as sources.farming_offers builds it:
+    effectively instant, one cookie set, one day's Grape Juice allowance."""
+    return Offer(
+        f"grow {crop} with cookies (burst)", "farming", {item: yields},
+        cookies=1, gj=juices, time_per_unit=timedelta(minutes=5),
+    )
+
+
+def test_cookie_sets_are_a_daily_budget_shared_across_crops():
+    # Three crops each offer an instant cookie burst yielding the goal item. Held
+    # sets are plentiful, so nothing but the daily budget stops the plan taking all
+    # three at once -- which is exactly the bug this cap fixes: one cookie set a day
+    # is a whole-farm limit, not a per-crop one, so bursting a second crop has to
+    # wait out another day rather than come free alongside the first.
+    bursts = [_burst("A", "it", 10), _burst("B", "it", 10), _burst("C", "it", 10)]
+    plan = minimize(bursts, {"It": 30}, cookie_sets=99)
+    assert plan.cookie_sets == pytest.approx(3)
+    # Three sets need three days' worth of budget; the first is available at once
+    # (see _build_base's `+ 1`), so the plan spans two more days, not five minutes.
+    assert plan.time == pytest.approx(timedelta(days=2), abs=timedelta(minutes=6))
+
+
+def test_a_single_cookie_burst_still_costs_no_wait():
+    # The counterpart to the cap above: one burst must stay an instant action. The
+    # `+ 1` day of budget is what keeps it so -- without it a plan wanting a sliver
+    # of a boosted crop would have to stretch to a full day, the spurious-wait
+    # artifact the burst offer exists to avoid.
+    plan = minimize([_burst("A", "it", 10)], {"It": 10}, cookie_sets=99)
+    assert plan.cookie_sets == pytest.approx(1)
+    assert plan.time == timedelta(minutes=5)
+
+
+def test_one_crops_burst_may_repeat_across_days():
+    # The flip side of dropping the old per-offer `max_units=1`: the same crop's
+    # burst is legal once on each day the plan runs, so a plan needing four of them
+    # bursts one crop four times instead of having to diversify into other crops.
+    plan = minimize([_burst("A", "it", 10)], {"It": 40}, cookie_sets=99)
+    assert plan.cookie_sets == pytest.approx(4)
+    assert plan.time == pytest.approx(timedelta(days=3), abs=timedelta(minutes=6))
+
+
+def test_daily_budget_counts_whole_days_never_a_fraction_of_one():
+    # Days arrive whole, so the day count is an integer variable. Demand here needs
+    # 7.1 bursts -- 8 sets, since a part burst still spends a whole one -- and 8 sets
+    # means running a seventh full day to collect the eighth. Left continuous the cap
+    # read `makespan_days + 1` literally: a 6d 4h plan was allowed 7.17 sets, spent
+    # the fractional remainder, and then reported the 8th set it had never run long
+    # enough to collect.
+    plan = minimize([_burst("A", "it", 10)], {"It": 71}, cookie_sets=99)
+    assert plan.time == timedelta(days=7)
+    sets = math.ceil(plan.cookie_sets - 1e-9)
+    assert sets == 8
+    # The invariant behind it: a plan spanning T touches floor(T)+1 days, and can
+    # never spend more whole sets than that.
+    assert sets <= math.floor(plan.time / timedelta(days=1)) + 1
+
+
+def test_relaxing_the_integers_gives_back_the_fractional_day_count():
+    # The day count rides the same relaxed-sweep/exact-finish mechanism as the juice
+    # counts (see _solve_configured's exact_integers). Relaxed it is fractional --
+    # 7.1 bursts "cost" only 6.1 days, so the sweep prices the plan a part day cheap;
+    # exact, the eighth set means a seventh full day. Only the exact form is ever
+    # returned, so the generous relaxation just ranks interior points it replaces.
+    base = optimizer._build_base([_burst("A", "it", 10)], {"It": 71}, cookie_sets=99)
+    optimizer._solve_configured(base, exact_integers=False)
+    assert base.days_available.value() == pytest.approx(7.1, abs=1e-4)
+    assert base.makespan.value() / optimizer._MINUTES_PER_DAY == pytest.approx(6.1, abs=1e-4)
+    optimizer._solve_configured(base, exact_integers=True)
+    assert base.days_available.value() == pytest.approx(8)  # 7.1 sets round up whole
+    assert base.makespan.value() / optimizer._MINUTES_PER_DAY == pytest.approx(7, abs=1e-4)
+
+
+def test_grape_juice_daily_allowance_caps_total_instant_grows():
+    # Grape Juice is bounded twice over and needs both bounds: the item balance (how
+    # much juice is held or pressed) and the daily allowance (how much may be drunk
+    # in a day). Here juice is not an offer input at all, so only the allowance can
+    # bite: at 2 a day, a plan spending 6 must span three days.
+    plan = minimize([_burst("A", "it", 10, juices=2)], {"It": 30},
+                    cookie_sets=99, grape_juices_per_day=2)
+    assert plan.grape_juices == pytest.approx(6)
+    assert plan.time == pytest.approx(timedelta(days=2), abs=timedelta(minutes=6))
+
+
+def test_grape_juice_allowance_of_zero_means_unconfigured_not_forbidden():
+    # 0 is "no allowance configured" (a caller that does not thread the farm's
+    # setting through), not "no juice allowed" -- so the cap simply is not applied.
+    plan = minimize([_burst("A", "it", 10, juices=2)], {"It": 30}, cookie_sets=99)
+    assert plan.grape_juices == pytest.approx(6)
 
 
 def test_minimize_buys_a_cookie_set_to_speed_farming():
@@ -1226,7 +1318,7 @@ def test_sweep_drops_caps_no_plan_in_the_regime_can_meet():
     assert optimizer._sweep(base, [100 * 60], favour_passive=True)
 
 
-def test_solve_configured_relaxes_pumpkin_juice_when_pj_integer_false():
+def test_solve_configured_relaxes_pumpkin_juice_when_not_exact():
     # The mechanism behind the frontier's speed: juice is normally integer (a MIP,
     # ~50x an LP per solve), but the sweep solves the continuous relaxation. 15 units,
     # each juice covers 10, so the relaxation drinks a fractional 1.5 juices where the
@@ -1236,11 +1328,11 @@ def test_solve_configured_relaxes_pumpkin_juice_when_pj_integer_false():
         [FARM_ITEM], {"It": 15}, {}, 1.0, [], {}, 0.0, GOLD,
         pj_gain={"it": 10}, pj_price=5,
     )
-    optimizer._solve_configured(base, gold_weight=BUY_FREELY, pj_integer=False)
+    optimizer._solve_configured(base, gold_weight=BUY_FREELY, exact_integers=False)
     # The relaxation is what the LP actually solved -- the reported count rounds it, but
     # the variable itself is fractional (and the plan's gold is priced off it).
     assert base.pj["it"].value() == pytest.approx(1.5)
-    exact = optimizer._solve_configured(base, gold_weight=BUY_FREELY, pj_integer=True)
+    exact = optimizer._solve_configured(base, gold_weight=BUY_FREELY, exact_integers=True)
     assert base.pj["it"].value() == pytest.approx(2)
     assert exact.pumpkin_juices.get("it") == 2
 

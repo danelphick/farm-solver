@@ -95,9 +95,10 @@ class Offer:
     linearly with the number of units used.
 
     ``max_units`` caps how many units the optimiser may use (an upper bound on
-    the offer's LP usage variable); ``None`` leaves it unbounded. Used by the
-    once-per-day cookie burst (see :func:`farming_offers`), the one activity you
-    cannot simply repeat back-to-back.
+    the offer's LP usage variable); ``None`` leaves it unbounded. Currently no
+    builder sets it -- the cookie burst used to, to express "once a day", but a
+    per-offer bound could only say "once per *crop*"; that limit is a shared
+    daily budget now (see :func:`farming_offers` and ``optimizer._build_base``).
     """
 
     name: str
@@ -481,6 +482,13 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
     :meth:`Farm.dewstar_cookie_bonus`, which only carries the Cookie multiplier
     onto the bonus crops when Dewstar's Journal is held.
 
+    Cookie sets and Grape Juice instant-grows are **daily** budgets, not per-offer
+    ones: every offer above tallies what it spends of each (``cookies``/``gj``) and
+    ``optimizer._build_base`` caps the totals against how many days the plan runs.
+    That is what holds the burst to once a day *across crops* -- a per-offer cap
+    could only hold it to once per crop, letting a plan burst every qualifying crop
+    on the same day and spend a cookie set and a full day's juice on each.
+
     A seed-limited crop's (a Mega crop's or Spring's) grounded offers also consume
     its seeds (:meth:`crops.Crop.seed_item` -- a full field per planting, one seed
     per plot: ``PLOTS_PER_ROW * rows``), so the LP is bounded by the seeds held in
@@ -559,10 +567,16 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
             # day above, at effectively no wait (see Farm.cookie_burst_yield). It is
             # the best home for the daily Grape Juice, so it is a standalone instant
             # action; the day's remaining natural harvests are the plain `grow`
-            # offer's job. Capped at one use (`max_units=1`): the burst is once a
-            # day, so a plan that wants more waits out further days via the whole-day
-            # offer above (each a day, each its own burst). A whole cookie set is
-            # still spent (cost rounds it up), and the burst's Grape Juice with it.
+            # offer's job. It spends a whole cookie set and that day's whole Grape
+            # Juice allowance, which is what keeps it to once a day: both are daily
+            # budgets the LP shares across every farming offer at once (see
+            # ``optimizer._build_base``'s daily-budget constraints), so a second
+            # burst -- of this crop or any other -- has to come out of another day.
+            # It is deliberately NOT capped per offer: `max_units=1` here bounded
+            # each *crop's* burst separately, so a plan could take one burst of
+            # every qualifying crop on the same day (as many cookie sets and daily
+            # Grape Juice allowances as there are crops), which is exactly what the
+            # shared budget now forbids.
             burst_bundle = {
                 item: farm.cookie_burst_yield(crop.name, item) for item in crop.drops
             }
@@ -584,7 +598,6 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
                     cookies=1,
                     gj=juices,
                     time_per_unit=COOKIE_WINDOW,
-                    max_units=1,
                 )
             )
     return offers

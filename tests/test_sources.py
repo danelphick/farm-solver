@@ -283,11 +283,16 @@ def test_farming_offers_add_a_cookie_day_for_qualifying_crops():
     assert cookie.yields == {"slow": pytest.approx(50)}
 
     # The once-per-day burst: the boost slice only -- 9*(1 natural + 2 grape-juice)
-    # = 27 -- at effectively no wait (the 5-minute window), capped at one use.
+    # = 27 -- at effectively no wait (the 5-minute window). It carries NO per-offer
+    # cap: "once a day" is a budget shared across every crop, enforced by the
+    # optimiser against the plan's span (see optimizer._build_base), because a
+    # per-offer cap could only ever say "once per crop" -- which let a plan burst
+    # every qualifying crop on the same day, one cookie set and one day's Grape
+    # Juice allowance apiece.
     burst = next(o for o in offers if o.name.endswith("(burst)"))
     assert burst.cookies == 1
     assert burst.gj == 2
-    assert burst.max_units == 1
+    assert burst.max_units is None
     assert burst.time_per_unit == COOKIE_WINDOW
     assert burst.yields == {"slow": pytest.approx(27)}
 

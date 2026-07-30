@@ -1122,8 +1122,14 @@ def _farming_action(draw: sources.Draw) -> str:
     """The action and crop a farming draw stands for, cookie days/bursts included."""
     crop = _crop_of(draw.offer)
     if draw.offer.name.endswith("(burst)"):
-        # The once-per-day cookie burst -- capped at one, effectively instant.
-        return f"cookie burst of {crop}"
+        # The cookie burst: effectively instant, but once a day, so a draw of more
+        # than one unit is that many bursts spread over that many days -- name the
+        # count or the line reads as a single five-minute action. Rounded up like a
+        # cookie day's, and for the same reason: a part burst still spends a set.
+        bursts = math.ceil(draw.units)
+        if bursts <= 1:
+            return f"cookie burst of {crop}"
+        return f"{bursts:,} cookie bursts of {crop}"
     if draw.offer.cookies:
         # A partial cookie set still consumes a whole one, so round days (and the
         # sets they stand for) up — never down.
@@ -1436,7 +1442,11 @@ def _cookie_harvest_note(draw: sources.Draw, farm: crops.Farm) -> str:
     boost = f"{round(boosted):,} boosted {crops.COOKIE_SET_MULTIPLIER}x"
     if draw.offer.name.endswith("(burst)"):
         window = passive.format_duration(crops.COOKIE_WINDOW)
-        return f"the {window} window only: {boost} Harvest Alls{juice_note}"
+        # The quoted time is farming-track time -- five minutes a burst -- so for a
+        # repeated burst say the cadence too, or several days of once-a-day actions
+        # read as one back-to-back run of them.
+        each = "each burst, one a day: " if math.ceil(draw.units) > 1 else ""
+        return f"{each}the {window} window only: {boost} Harvest Alls{juice_note}"
     return f"each day: {round(natural):,} natural + {boost} Harvest Alls{juice_note}"
 
 
