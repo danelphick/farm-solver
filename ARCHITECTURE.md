@@ -1940,8 +1940,8 @@ that imports it without going through `manage.py`.
   **"Save dated snapshot"** button (in the `#paste-details` pane, under the
   mastery textarea) parses the mastery box and records it in this browser's
   **IndexedDB**; `/timeline?item=X` charts one item across those snapshots.
-  Nothing is sent to or stored on the server, and history is neither exported
-  nor backed up.
+  Nothing is sent to or stored on the server; the only way it leaves the
+  browser is the backup file the user asks for (`backup.js` below).
   - **Why IndexedDB, not the `localStorage` everything else uses**: one
     snapshot of a well-progressed save is ~15 KB of JSON and history
     accumulates, which would eat the ~5 MB budget the solver state lives in.
@@ -2040,11 +2040,38 @@ that imports it without going through `manage.py`.
     delegated row-click handler bails on `event.target.closest("a")`, so the
     anchor navigates instead of the row's plan link).
   - Tests: `history.test.js` and `timeline.test.js` (pure), plus
-    `timeline.page.test.js` and the snapshot-button cases in
+    `timeline.page.test.js` and the snapshot-button/backup cases in
     `settings.page.test.js`, all driven against **fake-indexeddb** -- jsdom
     ships no IndexedDB, and `openHistoryDb` resolves `null` when there is none
     (the same shrug `readUi()` gives unusable `localStorage`). Note fake
     timers deadlock fake-indexeddb's queue: page tests wait with `vi.waitFor`.
+- **Backup / restore (`static/solverapp/backup.js`)** — because nothing is
+  stored server-side, one JSON file is the *only* way to move a save to another
+  browser (or to survive clearing site data). The pair of buttons at the bottom
+  of the settings popover (`.settings-backup`, below every pane and above
+  Cancel/Save) writes and reads `{format: "farm-solver-backup", version,
+  exported_at, state, ui, snapshots}` -- the whole solver state, the
+  `farm-solver.ui.v1` preferences, and every mastery snapshot.
+  - `backup.js` owns the **format** and nothing else: `buildBackup`,
+    `parseBackup`, `backupFilename`, `formatBytes`/`byteLength` (pure, tested in
+    `backup.test.js`), plus the two browser shims `downloadJson` (an object URL,
+    not a `data:` one -- a long history is megabytes) and `readFileText`
+    (`FileReader`, since jsdom and older Safari have no `Blob.text()`).
+    `settings.js` keeps the storage access, since it owns the keys.
+  - **A restore is destructive, so `parseBackup` validates the whole file
+    before a byte is written** -- format tag, a version it can read, the shape
+    of each block, and every snapshot record (a timestamp that parses, numeric
+    progress) -- and throws a message fit to show the user. A newer `version`
+    is refused outright; a missing snapshot `date` is derived from the
+    timestamp, since the local day of the exporting browser cannot be recovered.
+  - **Back up takes the panel's live values** folded over the saved state's
+    goal (`mergeSettingsIntoState`), so a paste made seconds ago is in the file
+    even though Save has not been pressed. **Restore** confirms first, writes
+    both `localStorage` keys, merges the snapshots via `history.putSnapshots`
+    (a merge, not a replace -- an identical `taken_at` wins, then the usual
+    prune runs), and **reloads**: the goal pane, the results and the timeline
+    each read their own slice of the state at init, so re-reading it beats
+    grafting a foreign state onto a live page.
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --

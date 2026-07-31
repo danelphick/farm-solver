@@ -326,6 +326,26 @@ export async function putSnapshot(items, when = new Date()) {
   return record;
 }
 
+// Merge restored snapshots (from a backup file -- see backup.js) into the
+// history, then prune to the usual retention rule. Returns how many records
+// were written.
+//
+// A MERGE, not a replace: restoring on a browser that has its own history must
+// not throw that history away. Records collide only on an identical `taken_at`,
+// where the incoming one wins (it is the same snapshot, taken at the same
+// instant). The prune runs afterwards in the same transaction, so importing a
+// year of daily snapshots leaves the store obeying the same rule a save does.
+export async function putSnapshots(records, when = new Date()) {
+  const db = await openHistoryDb();
+  if (!db) return 0;
+  const tx = db.transaction(STORE, "readwrite");
+  const store = tx.objectStore(STORE);
+  records.forEach((record) => store.put(record));
+  await pruneSnapshots(store, localDateKey(when));
+  await transactionDone(tx);
+  return records.length;
+}
+
 // Every snapshot, oldest first (key order is timestamp order).
 export async function getSnapshots() {
   const db = await openHistoryDb();

@@ -294,6 +294,21 @@ list are generated from it.
         </div>
       </details>
     </div>
+
+    <!-- Backup/restore, below every pane: the only way to move a save between
+         browsers, since nothing here is stored on a server. Like the snapshot
+         button these are NOT staged -- Restore rewrites this browser's storage
+         and reloads. See settings.js's backupToFile/restoreFromFile. -->
+    <div class="settings-backup">
+      <div class="field-row wide">
+        <label>Backup<button type="button" class="help-icon" aria-label="Help"
+          data-help="One JSON file holding everything this browser keeps for you: the pasted game state, the goal, every option and your whole mastery history. Restore it in another browser to carry your setup across. Restoring replaces the state and options here (history is merged) and reloads the page.">?</button></label>
+        <button type="button" id="backup-save" class="btn-add">Back up to file</button>
+        <button type="button" id="backup-restore" class="btn-add">Restore from file…</button>
+        <input type="file" id="backup-file" accept="application/json,.json" hidden>
+        <span id="backup-status" role="status" aria-live="polite"></span>
+      </div>
+    </div>
   </div>
 
   <div class="settings-actions">

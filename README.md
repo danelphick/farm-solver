@@ -647,8 +647,9 @@ solve rather than one per keystroke; the Goal itself still re-solves as you
 type. There are no accounts and nothing is stored server-side: your pasted text
 and parameter choices live in the browser's `localStorage` only, resent with
 every request (and the dated mastery snapshots behind the
-[timeline page](#mastery-timeline-page) live in the same browser's IndexedDB,
-never leaving it at all).
+[timeline page](#mastery-timeline-page) live in the same browser's IndexedDB).
+The only thing that ever leaves the browser is a
+[backup file](#backup-and-restore) you ask for.
 A solve takes roughly the same ~0.5s a CLI run does on capable hardware (see
 "Server hardware reality" below); a *refilter* — changing a limit or which
 plan is expanded, without changing what needs solving — is answered from an
@@ -746,8 +747,29 @@ where it stands now, and what it gained over the last week and the last day.
   simply has no point for it, rather than a drop to zero.
 - **This history lives in your browser only** (in IndexedDB, not the
   `localStorage` the pasted state uses — snapshots are far too big for that).
-  It is never sent to the server, is not backed up or exported, and clearing
-  the site's data loses it. A different browser or machine starts empty.
+  It is never sent to the server, and clearing the site's data loses it. To
+  carry it (and everything else) to another browser, use **Backup** below.
+
+### Backup and restore
+
+Nothing is stored on a server, so a different browser or machine starts empty
+and there is no account to log back into. At the bottom of the **⚙ Settings**
+popover:
+
+- **Back up to file** downloads one JSON file —
+  `farm-solver-backup-2026-07-31.json` — holding your pasted masteries and
+  inventory, your goal, every option and preference, and your whole mastery
+  history. It captures what is on screen, so a paste you have not pressed
+  **Save** on yet is still in the file.
+- **Restore from file…** reads one back. It asks first, because the game state
+  and options in this browser are replaced; your mastery history is **merged**,
+  so restoring on a browser that already has snapshots keeps both sides
+  (snapshots taken at the same instant are the same snapshot). The page reloads
+  when it is done and re-solves with what it found.
+
+A file that is not a backup — or one written by a newer version of the app, or
+one whose contents have been mangled — is refused with a reason, and nothing in
+the browser is touched.
 
 ### Running it locally
 

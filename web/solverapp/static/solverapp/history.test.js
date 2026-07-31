@@ -234,6 +234,12 @@ describe("changeSince", () => {
 
 // --- The store ---------------------------------------------------------------
 
+const SNAPSHOT_RECORD = {
+  taken_at: "2026-07-28T20:03:11.482Z",
+  date: "2026-07-28",
+  items: { Tomato: 992332 },
+};
+
 // A fresh database and a fresh module instance per test: history.js memoises
 // its open() in module state, so the two have to be reset together.
 async function freshHistory() {
@@ -290,6 +296,44 @@ describe("the snapshot store", () => {
     expect(stored.map((s) => s.items.Tomato)).toEqual([20, 40]);
   });
 
+  // Restoring a backup (see backup.js) merges into whatever this browser
+  // already has, and leaves the store obeying the same retention rule.
+  test("putSnapshots merges restored records without dropping local ones", async () => {
+    const history = await freshHistory();
+    await history.putSnapshot({ Tomato: 40 }, new Date(2026, 6, 28, 8, 0));
+
+    const written = await history.putSnapshots(
+      [
+        { taken_at: new Date(2026, 6, 27, 8, 0).toISOString(), date: "2026-07-27", items: { Tomato: 30 } },
+        { taken_at: new Date(2026, 6, 28, 8, 0).toISOString(), date: "2026-07-28", items: { Tomato: 44 } },
+      ],
+      new Date(2026, 6, 28, 12, 0)
+    );
+
+    expect(written).toBe(2);
+    const stored = await history.getSnapshots();
+    // The local 2026-07-27 gap is filled, and the same-instant record is
+    // replaced by the restored one rather than duplicated.
+    expect(stored.map((s) => [s.date, s.items.Tomato])).toEqual([
+      ["2026-07-27", 30],
+      ["2026-07-28", 44],
+    ]);
+  });
+
+  test("putSnapshots prunes the days a restore brings in", async () => {
+    const history = await freshHistory();
+    await history.putSnapshots(
+      [
+        { taken_at: new Date(2026, 6, 1, 8, 0).toISOString(), date: "2026-07-01", items: { Tomato: 10 } },
+        { taken_at: new Date(2026, 6, 1, 20, 0).toISOString(), date: "2026-07-01", items: { Tomato: 20 } },
+        { taken_at: new Date(2026, 6, 28, 8, 0).toISOString(), date: "2026-07-28", items: { Tomato: 40 } },
+      ],
+      new Date(2026, 6, 28, 12, 0)
+    );
+
+    expect((await history.getSnapshots()).map((s) => s.items.Tomato)).toEqual([20, 40]);
+  });
+
   test("deleteSnapshot removes one record", async () => {
     const history = await freshHistory();
     const record = await history.putSnapshot({ Tomato: 100 }, new Date(2026, 6, 28, 9, 0));
@@ -305,6 +349,7 @@ describe("the snapshot store", () => {
     const history = await import("./history.js");
     expect(await history.openHistoryDb()).toBeNull();
     expect(await history.putSnapshot({ Tomato: 1 })).toBeNull();
+    expect(await history.putSnapshots([SNAPSHOT_RECORD])).toBe(0);
     expect(await history.getSnapshots()).toEqual([]);
   });
 });

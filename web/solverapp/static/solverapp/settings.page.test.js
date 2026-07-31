@@ -11,7 +11,7 @@
 // these tests fail if anyone does. The mirror image matters too: Save must both
 // persist and re-request, and Cancel must put the panel back.
 
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 
 import { pageBody } from "./template-fixture.js";
@@ -251,5 +251,154 @@ describe("the mastery snapshot button", () => {
     expect(JSON.parse(store.get("farm-solver.v1")).mastery_text).toBe(
       "Mastery In-Progress"
     );
+  });
+});
+
+// Backup/restore, the other pair of unstaged controls: they move a whole save
+// between browsers, so what a backup CONTAINS and what a restore refuses both
+// matter more than the buttons themselves. The file format's own edge cases are
+// backup.test.js's; these pin the wiring -- that a backup carries the live
+// panel plus the goal it cannot see, and that a restore writes storage and
+// reloads only once the user has agreed.
+describe("backup and restore", () => {
+  const PASTE = "Tomato\n992,332 / 1,000,000 Progress\n99.2332% Stop\n";
+
+  let downloads;
+  let reload;
+  let locationDescriptor;
+
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    downloads = [];
+    // jsdom implements neither object URLs nor navigation: capture the blob the
+    // download anchor would have fetched, and swallow its click.
+    URL.createObjectURL = vi.fn((blob) => {
+      const url = `blob:${downloads.length}`;
+      downloads.push({ url, blob });
+      return url;
+    });
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    locationDescriptor = Object.getOwnPropertyDescriptor(window, "location");
+    reload = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { href: "http://localhost/", pathname: "/", search: "", reload },
+    });
+  });
+
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+    vi.restoreAllMocks();
+    if (locationDescriptor) Object.defineProperty(window, "location", locationDescriptor);
+  });
+
+  // What the (mocked) download actually received. Read with a FileReader for
+  // the same reason backup.js does: jsdom's Blob has no text() promise.
+  async function downloadedBackup() {
+    expect(downloads).toHaveLength(1);
+    const text = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(downloads[0].blob);
+    });
+    return JSON.parse(text);
+  }
+
+  // Drive the hidden file input the way the file dialog would.
+  function pickFile(contents) {
+    const input = $("#backup-file");
+    const file = new File([contents], "backup.json", { type: "application/json" });
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  test("backs up the live panel, the goal it cannot see, and the history", async () => {
+    await loadPage();
+    click("#settings-btn");
+    edit("#mastery-text", PASTE);
+    click("#save-snapshot");
+    await vi.waitFor(() => expect($("#snapshot-status").textContent).toMatch(/1 kept/));
+
+    click("#backup-save");
+    await vi.waitFor(async () => expect(downloads).toHaveLength(1));
+
+    const backup = await downloadedBackup();
+    expect(backup.format).toBe("farm-solver-backup");
+    // The paste as it stands in the box, not the (older) saved copy...
+    expect(backup.state.mastery_text).toBe(PASTE);
+    // ...alongside the goal, which the panel does not show and must not lose.
+    expect(backup.state.params.mastery).toBe("Gold Bar:5000");
+    expect(backup.state.params.max_gold).toBe("500");
+    expect(backup.snapshots).toHaveLength(1);
+    expect(backup.snapshots[0].items).toEqual({ Tomato: 992332 });
+    expect($("#backup-status").textContent).toMatch(/Backed up 1 snapshot and every setting/);
+  });
+
+  test("restoring writes the file's state and preferences, then reloads", async () => {
+    const { store } = await loadPage();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    const file = JSON.stringify({
+      format: "farm-solver-backup",
+      version: 1,
+      exported_at: "2026-07-31T09:00:00.000Z",
+      state: { mastery_text: "Restored", inventory_text: "", params: { mastery: "Tomato:MM" } },
+      ui: { panes: { "paste-details": true } },
+      snapshots: [
+        { taken_at: "2026-07-28T20:03:11.482Z", date: "2026-07-28", items: { Tomato: 992332 } },
+      ],
+    });
+    click("#settings-btn");
+    pickFile(file);
+
+    await vi.waitFor(() => expect(reload).toHaveBeenCalled());
+    expect(JSON.parse(store.get("farm-solver.v1"))).toEqual({
+      mastery_text: "Restored",
+      inventory_text: "",
+      params: { mastery: "Tomato:MM" },
+    });
+    expect(JSON.parse(store.get("farm-solver.ui.v1"))).toEqual({
+      panes: { "paste-details": true },
+    });
+    const history = await import("./history.js");
+    expect(await history.getSnapshots()).toHaveLength(1);
+  });
+
+  test("a file that is not a backup is refused, and nothing is written", async () => {
+    const { store } = await loadPage();
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    click("#settings-btn");
+    pickFile("<html>not a backup</html>");
+
+    await vi.waitFor(() =>
+      expect($("#backup-status").textContent).toMatch(/Could not restore: that file is not JSON/)
+    );
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(JSON.parse(store.get("farm-solver.v1")).mastery_text).toBe("Mastery In-Progress");
+  });
+
+  test("declining the confirmation leaves the browser as it was", async () => {
+    const { store } = await loadPage();
+    vi.stubGlobal("confirm", vi.fn(() => false));
+
+    click("#settings-btn");
+    pickFile(
+      JSON.stringify({
+        format: "farm-solver-backup",
+        version: 1,
+        state: { mastery_text: "Restored" },
+      })
+    );
+
+    await vi.waitFor(() =>
+      expect($("#backup-status").textContent).toMatch(/Restore cancelled/)
+    );
+    expect(reload).not.toHaveBeenCalled();
+    expect(JSON.parse(store.get("farm-solver.v1")).mastery_text).toBe("Mastery In-Progress");
   });
 });

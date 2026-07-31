@@ -17,8 +17,12 @@
 // what it does not own, and `mergeSettingsIntoState` is how a page folds a
 // panel save back into its saved state without touching those.
 
+import {
+  backupFilename, buildBackup, byteLength, downloadJson, formatBytes, parseBackup,
+  readFileText,
+} from "./backup.js";
 import { createHelpIcon } from "./help.js";
-import { getSnapshots, parseMasteryText, putSnapshot } from "./history.js";
+import { getSnapshots, parseMasteryText, putSnapshot, putSnapshots } from "./history.js";
 
 // Solver state ({mastery_text, inventory_text, params}, mirroring POST
 // /api/solve's body) and, under its own key, UI-only preferences (which panes
@@ -905,11 +909,105 @@ async function saveSnapshot() {
   await showSnapshotSummary();
 }
 
+// --- Backup / restore --------------------------------------------------------
+//
+// Nothing here is stored on a server, so a backup file is the only way to move
+// a save between browsers -- or to survive clearing site data. The pair at the
+// bottom of the panel writes/reads one JSON file holding the solver state, the
+// UI preferences and the whole mastery history (see backup.js for the format).
+//
+// Like the snapshot button these are NOT staged: Back up captures what is on
+// screen right now, and Restore rewrites this browser's storage immediately.
+// Restore is destructive -- it replaces the saved state and preferences
+// wholesale -- so it asks first, validates the entire file before writing
+// anything, and reloads afterwards rather than trying to graft a foreign state
+// onto a live page (the goal pane, the results and the timeline all read their
+// own slices of it at init).
+
+function setBackupStatus(text, kind) {
+  const el = $("#backup-status");
+  if (!el) return;
+  el.textContent = text;
+  el.className = kind ? "status-" + kind : "";
+}
+
+// The saved solver state. Each page has its own copy of this reader (it owns
+// the goal half of the state); this one exists so the panel can back up and
+// restore the whole thing without importing a page module.
+function readSavedState() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function plural(count, noun) {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+// What the file gets: the panel's LIVE values (so a paste made seconds ago is
+// in the backup even though Save hasn't been pressed) folded over the saved
+// state's goal, which the panel does not show.
+async function backupToFile() {
+  try {
+    const state = mergeSettingsIntoState(readSavedState(), readSettingsState());
+    const snapshots = await getSnapshots();
+    const text = JSON.stringify(buildBackup({ state, ui: readUi(), snapshots }));
+    downloadJson(backupFilename(), text);
+    setBackupStatus(
+      `Backed up ${plural(snapshots.length, "snapshot")} and every setting ` +
+        `(${formatBytes(byteLength(text))}).`
+    );
+  } catch (err) {
+    setBackupStatus("Could not back up: " + err.message, "error");
+  }
+}
+
+async function restoreFromFile(file) {
+  let backup;
+  try {
+    backup = parseBackup(await readFileText(file));
+  } catch (err) {
+    setBackupStatus("Could not restore: " + err.message, "error");
+    return;
+  }
+  const confirmed = window.confirm(
+    `Restore ${plural(backup.snapshots.length, "snapshot")} and the saved settings ` +
+      "from this file?\n\nThe game state and options in this browser will be " +
+      "replaced. History is merged, not replaced."
+  );
+  if (!confirmed) {
+    setBackupStatus("Restore cancelled.");
+    return;
+  }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(backup.state));
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(backup.ui));
+    if (backup.snapshots.length) await putSnapshots(backup.snapshots);
+  } catch (err) {
+    setBackupStatus("Could not restore: " + err.message, "error");
+    return;
+  }
+  setBackupStatus("Restored. Reloading…");
+  window.location.reload();
+}
+
 // The controls whose only job is to update the panel itself: enabling a
 // dependent input, or showing a row. None of them save or solve -- that is
 // Save's job -- so unlike the goal controls in app.js they get no onAnyChange.
 function wireSettingsControls() {
   $("#save-snapshot").addEventListener("click", saveSnapshot);
+  $("#backup-save").addEventListener("click", backupToFile);
+  // The button is the affordance; the input is the file dialog behind it.
+  $("#backup-restore").addEventListener("click", () => $("#backup-file").click());
+  $("#backup-file").addEventListener("change", (event) => {
+    const [file] = event.target.files || [];
+    // Cleared so that picking the SAME file again still fires a change event
+    // (a restore the user cancelled, or a file they have since edited).
+    event.target.value = "";
+    if (file) restoreFromFile(file);
+  });
   $("#use-pumpkin-juice").addEventListener("change", () => {
     $("#pumpkin-juice-cap").disabled = !$("#use-pumpkin-juice").checked;
   });

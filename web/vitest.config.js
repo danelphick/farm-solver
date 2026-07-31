@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Pin the Vite/Vitest cache to web/node_modules/.vite (already gitignored) using
 // an absolute path anchored to this config file, not the cwd. Otherwise the IDE's
@@ -16,5 +16,10 @@ export default defineConfig({
     // importing it needs a `document` even for tests that only exercise its
     // pure exports (parseGoalSpec/serializeGoalEntries).
     environment: "jsdom",
+    // collectstatic (run before a deploy) copies the whole static tree --
+    // *.test.js and all -- into web/staticfiles/. Those copies sit at a
+    // different depth, so template-fixture.js's `?raw` template imports don't
+    // resolve from them and the suite fails on a machine that has deployed.
+    exclude: [...configDefaults.exclude, "staticfiles/**"],
   },
 });

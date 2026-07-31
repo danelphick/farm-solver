@@ -219,8 +219,11 @@ export function chartSvg(series, item) {
     )
     .join("");
 
+  // No `height` attribute: it is a presentation attribute wanting a length, so
+  // "auto" logs an SVG parse error in the console. The aspect ratio comes from
+  // the viewBox and style.css's `.timeline-chart svg { height: auto }` anyway.
   return `<svg class="mastery-graph" viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" \
-width="100%" height="auto" role="img" \
+width="100%" role="img" \
 aria-label="${escapeHtml(item)} mastery progress over time" \
 xmlns="http://www.w3.org/2000/svg">
 <style>

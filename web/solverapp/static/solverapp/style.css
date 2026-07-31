@@ -261,6 +261,31 @@ h1 {
   padding: 0.1rem 0.4rem 0.1rem 0.1rem;
 }
 
+/* Below the panes, above the Cancel/Save bar: not a pane of its own (it holds
+   two buttons, not settings) but set off from the panes above it. */
+.settings-backup {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.settings-backup .field-row {
+  margin-bottom: 0;
+}
+
+/* Wraps under the buttons when the status line grows, rather than pushing the
+   popover wider. */
+#backup-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Coloured, but no box: it is a hint beside a button, like #snapshot-status. */
+#backup-status.status-error {
+  color: var(--error);
+  background: none;
+}
+
 .settings-actions {
   display: flex;
   align-items: center;
