@@ -261,23 +261,18 @@ h1 {
   padding: 0.1rem 0.4rem 0.1rem 0.1rem;
 }
 
-/* Below the panes, above the Cancel/Save bar: not a pane of its own (it holds
-   two buttons, not settings) but set off from the panes above it. */
-.settings-backup {
-  margin-top: 0.6rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--border);
-}
-
-.settings-backup .field-row {
-  margin-bottom: 0;
-}
-
-/* Wraps under the buttons when the status line grows, rather than pushing the
-   popover wider. */
+/* The backup pair's status sits LAST in the action bar and claims a whole row
+   of its own, so however long the message runs it never squeezes the buttons
+   above it. Collapsed entirely while empty, or the row's gap would leave a
+   permanent gutter under the bar. */
 #backup-status {
+  flex-basis: 100%;
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+#backup-status:empty {
+  display: none;
 }
 
 /* Coloured, but no box: it is a hint beside a button, like #snapshot-status. */
@@ -289,15 +284,22 @@ h1 {
 .settings-actions {
   display: flex;
   align-items: center;
+  /* The backup buttons share this row (see #backup-status below, which wraps
+     onto its own line). */
+  flex-wrap: wrap;
   gap: 0.6rem;
   margin-top: 0.6rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
 }
 
+/* The auto margin goes on the LEFT, so the gap that separates the backup pair
+   from Cancel/Save opens before the hint rather than after it: the hint is
+   about what Save does (this browser, no server), not about the file the pair
+   beside it writes. */
 .settings-actions .pane-hint {
   margin: 0;
-  margin-right: auto;
+  margin-left: auto;
 }
 
 /* Save is the primary action of the only modal-ish surface in the app. */

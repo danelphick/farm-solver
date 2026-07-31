@@ -294,26 +294,31 @@ list are generated from it.
         </div>
       </details>
     </div>
-
-    <!-- Backup/restore, below every pane: the only way to move a save between
-         browsers, since nothing here is stored on a server. Like the snapshot
-         button these are NOT staged -- Restore rewrites this browser's storage
-         and reloads. See settings.js's backupToFile/restoreFromFile. -->
-    <div class="settings-backup">
-      <div class="field-row wide">
-        <label>Backup<button type="button" class="help-icon" aria-label="Help"
-          data-help="One JSON file holding everything this browser keeps for you: the pasted game state, the goal, every option and your whole mastery history. Restore it in another browser to carry your setup across. Restoring replaces the state and options here (history is merged) and reloads the page.">?</button></label>
-        <button type="button" id="backup-save" class="btn-add">Back up to file</button>
-        <button type="button" id="backup-restore" class="btn-add">Restore from file…</button>
-        <input type="file" id="backup-file" accept="application/json,.json" hidden>
-        <span id="backup-status" role="status" aria-live="polite"></span>
-      </div>
-    </div>
   </div>
 
+  <!-- Backup/restore shares the action bar with Cancel/Save, at the far end
+       from them: it is the only way to move a save between browsers, since
+       nothing here is stored on a server. Unlike its neighbours these two are
+       NOT staged -- Back up captures what is on screen, and Restore rewrites
+       this browser's storage and reloads, whatever Cancel would have done. See
+       settings.js's backupToFile/restoreFromFile. #backup-status is last in the
+       row on purpose: it takes a line of its own below, so a long message never
+       squeezes the buttons. -->
   <div class="settings-actions">
+    <!-- Only Restore takes the ellipsis, and the difference is the point: it
+         opens a file dialog and can still be backed out of, where Back up
+         writes the file the moment it is clicked. -->
+    <button type="button" id="backup-save" class="btn-add">Back up to file</button>
+    <button type="button" id="backup-restore" class="btn-add">Restore from file…</button>
+    <button type="button" class="help-icon" aria-label="Help"
+      data-help="Back up writes one JSON file holding everything this browser keeps for you: the pasted game state, the goal, every option and your whole mastery history. Restore it in another browser to carry your setup across — it replaces the state and options here (history is merged) and reloads the page.">?</button>
+    <input type="file" id="backup-file" accept="application/json,.json" hidden>
+    <!-- A note on Save, not on the backup pair -- hence its place beside the
+         two buttons it describes, with the row's flexible gap opening to its
+         left (.settings-actions .pane-hint). -->
     <span class="pane-hint">Saved to this browser only.</span>
     <button type="button" id="settings-cancel" class="btn-add">Cancel</button>
     <button type="button" id="settings-save" class="btn-add btn-primary">Save</button>
+    <span id="backup-status" role="status" aria-live="polite"></span>
   </div>
 </div>

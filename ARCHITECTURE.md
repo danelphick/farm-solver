@@ -2047,9 +2047,11 @@ that imports it without going through `manage.py`.
     timers deadlock fake-indexeddb's queue: page tests wait with `vi.waitFor`.
 - **Backup / restore (`static/solverapp/backup.js`)** — because nothing is
   stored server-side, one JSON file is the *only* way to move a save to another
-  browser (or to survive clearing site data). The pair of buttons at the bottom
-  of the settings popover (`.settings-backup`, below every pane and above
-  Cancel/Save) writes and reads `{format: "farm-solver-backup", version,
+  browser (or to survive clearing site data). The pair of buttons in the
+  settings popover's action bar (`.settings-actions`, at the far end from
+  Cancel/Save; `#backup-status` is last in that row and `flex-basis: 100%`, so
+  a long message takes its own line instead of squeezing the buttons, and
+  collapses while empty) writes and reads `{format: "farm-solver-backup", version,
   exported_at, state, ui, snapshots}` -- the whole solver state, the
   `farm-solver.ui.v1` preferences, and every mastery snapshot.
   - `backup.js` owns the **format** and nothing else: `buildBackup`,
