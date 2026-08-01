@@ -190,11 +190,6 @@ def test_stamina_per_explore_applies_reductions_multiplicatively():
     assert cider.stamina_per_explore() == pytest.approx(0.67 * 0.8)
 
 
-def test_exploring_from_config_rejects_the_retired_neigh_neigh_flag():
-    with pytest.raises(ValueError, match="have_neigh_neigh is gone"):
-        exploring_from_config({"have_neigh_neigh": True})
-
-
 def test_exploring_from_config_reads_cider_perks_and_effectiveness():
     exploring = exploring_from_config(
         {

@@ -173,18 +173,11 @@ def sawmill_outputs(config: dict[str, Any]) -> dict[str, float]:
     The numeric ``[sawmill]`` entries are the hourly quantities; string/boolean
     entries (``hickory_omelette``, ``have_pine_boost``, ...) are settings, not
     outputs. A quantity of zero is dropped rather than kept as a zero-rate
-    producer: an output you do not have (``oak`` without the Sturdy Saw) is best
-    said by leaving it out or writing ``0``, which is why the separate
-    ``have_sturdy_saw`` flag is gone -- the number already carried it, and the
-    two could disagree. Pine board (a per-minute output, never omelette-boosted)
-    is not included here.
+    producer: an output you do not have (``oak`` without the Sturdy Saw) is said
+    by leaving it out or writing ``0``. Pine board (a per-minute output, never
+    omelette-boosted) is not included here.
     """
     sawmill = config.get("sawmill") or {}
-    if "have_sturdy_saw" in sawmill:
-        raise ValueError(
-            "[sawmill] have_sturdy_saw is gone; the oak quantity says it -- set "
-            "oak = 0 (or drop the key) if you have no Sturdy Saw"
-        )
     return {
         item.lower(): float(qty)
         for item, qty in sawmill.items()

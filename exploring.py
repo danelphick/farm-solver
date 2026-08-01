@@ -29,9 +29,8 @@ QUANDARY_CHOWDER_MULTIPLIER = 1.1
 # Stamina an Apple Cider explore saves per Wanderer level (a fraction of the
 # stamina one explore would otherwise cost), indexed by level 0..4.
 WANDERER_STAMINA_REDUCTION = {0: 0.0, 1: 0.04, 2: 0.11, 3: 0.20, 4: 0.33}
-# The Neigh meal cuts cider stamina 20%, multiplicatively with Wanderer. There
-# is only the one Neigh reduction: a second ``have_neigh_neigh`` flag once
-# applied it twice (0.64x, not 0.8x), understating every cider explore.
+# The Neigh meal cuts cider stamina 20%, multiplicatively with Wanderer. It is
+# the only Neigh reduction -- there is no separate perk stacking on top of it.
 NEIGH_STAMINA_REDUCTION = 0.20
 
 # A CSV row tagged with a flag in the "Flags" column is an alternate for its
@@ -259,15 +258,6 @@ def exploring_from_config(
         have_lemon_squeezer=bool(section.get("have_lemon_squeezer")),
         use_quandary_chowder=bool(section.get("use_quandary_chowder")),
     )
-    if "have_neigh_neigh" in section:
-        # Not ignored: it used to apply the Neigh reduction a SECOND time, so a
-        # config still carrying it was solving with 0.64x stamina per explore
-        # where the game gives 0.8x. Say so, rather than quietly re-pricing
-        # every cider plan.
-        raise ValueError(
-            "[exploring] have_neigh_neigh is gone -- it duplicated use_neigh and "
-            "applied the 20% cider-stamina reduction twice; use use_neigh alone"
-        )
     cider = CiderModifiers(
         have_cinnamon_sticks=bool(section.get("have_cinnamon_sticks")),
         wanderer_level=int(section.get("wanderer_level", 0)),

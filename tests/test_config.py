@@ -48,8 +48,7 @@ def test_passive_production_reads_sawmill():
 
 def test_no_oak_without_an_oak_rate():
     # No Sturdy Saw is said by the quantity itself: a zero rate is no output at
-    # all, not a producer that makes nothing (which is what the retired
-    # have_sturdy_saw flag used to express, redundantly).
+    # all, not a producer that makes nothing.
     production = passive_production({"sawmill": {"wood": 46000, "oak": 0}})
     hourly = next(p for p in production.producers if p.period == HOURLY)
     assert hourly.outputs == {"wood": 46000}
@@ -110,14 +109,6 @@ def test_sawmill_outputs_drops_zero_rates_and_settings():
         "board": 46000,
         "oak": 6000,
     }
-
-
-def test_sawmill_outputs_rejects_the_retired_sturdy_saw_flag():
-    # Left in place it would silently change what the sawmill makes: the flag
-    # used to be able to suppress a configured oak rate, and nothing else says
-    # so. Refuse it and name the replacement, like use_hickory_omelette.
-    with pytest.raises(ValueError, match="have_sturdy_saw is gone"):
-        config.sawmill_outputs({"sawmill": {"oak": 6000, "have_sturdy_saw": False}})
 
 
 def test_hickory_omelette_mode_reads_and_validates():
