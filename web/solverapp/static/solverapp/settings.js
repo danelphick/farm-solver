@@ -88,6 +88,8 @@ const PRICE_FIELDS = {
 //                sent (as a JSON boolean) only when toggled away from it -- so a
 //                checkbox left at its default sends nothing. For definite
 //                settings (perks the game state can't reveal).
+//   int/float additionally take optional `min`/`max` bounds (the browser's own
+//                validation), for a field with a fixed range like a perk level.
 //   autobool  -> Auto-detect / On / Off <select>, for perks the solver
 //                auto-detects from mastery/inventory (Scythe of Dewstar and the
 //                Mechanical Heart from tower progress; Dewstar's Journal, Fungus
@@ -132,19 +134,55 @@ const CONFIG_FIELDS = {
     { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool",
       help: "Dewstar's Journal: extends the Cookie boost to the Scythe's bonus crops. Auto-detect reads it from your inventory." },
   ],
-  // Perks/unlocks changing what the exploring zones drop, or whether they can be
-  // entered at all. (Per-zone Exploring Effectiveness is its own pane.)
+  // Perks/unlocks/meals for exploring: how much one Arnold Palmer yields, how
+  // far an Apple Cider's stamina goes, and what the zones drop (or whether they
+  // can be entered at all). Per-zone Exploring Effectiveness is its own pane.
   exploring: [
+    { key: "exploring.have_lemon_squeezer", label: "Lemon Squeezer", type: "bool",
+      help: "Lemon Squeezer perk: one Arnold Palmer yields 500 items instead of 200." },
+    { key: "exploring.use_quandary_chowder", label: "Quandary Chowder", type: "bool",
+      help: "Quandary Chowder meal: multiplies what an Arnold Palmer yields by 1.1 (so 500 becomes 550)." },
+    { key: "exploring.have_cinnamon_sticks", label: "Cinnamon Sticks", type: "bool",
+      help: "Cinnamon Sticks perk: one Apple Cider does more explores per point of Exploring Effectiveness (12.5 over a base of 1250, instead of 10 over 1000)." },
+    { key: "exploring.wanderer_level", label: "Wanderer level", type: "int", min: 0, max: 4,
+      help: "Wanderer perk level (0–4), cutting the stamina a cider explore costs: 1 = 4%, 2 = 11%, 3 = 20%, 4 = 33%." },
+    { key: "exploring.have_neigh_neigh", label: "Neigh Neigh", type: "bool",
+      help: "Neigh Neigh perk: a cider explore costs 20% less stamina, multiplicatively with Wanderer and the Neigh meal." },
+    { key: "exploring.use_neigh", label: "Neigh (meal)", type: "bool",
+      help: "Neigh meal: another 20% off the stamina a cider explore costs, stacking multiplicatively with the Neigh Neigh perk." },
     { key: "exploring.have_fungus_processing", label: "Fungus Processing and You", type: "autobool",
       help: "Fungus Processing and You: Gary's Crushroom drops Mushroom Paste (plus rarer byproducts) instead of Mushroom. Auto-detect reads the artifact from your inventory." },
     { key: "exploring.have_swamp_puzzle", label: "Swamp Puzzle", type: "autobool",
       help: "Swamp Puzzle: unlocks the Sinking Swamp for both exploring AND fishing. Without it the zone is dropped, so nothing it alone drops (Scrap Cloth, and so the Basic Pillow tower level 301 needs) can be sourced. Auto-detect reads the item from your inventory." },
   ],
-  // The Mechanical Heart's monthly grants are free consumable supply, so its
-  // control lives in Resources beside the Calendar mode that times them.
+  // Perks/meals changing how many fish one Large Net catches. (The Sinking Swamp
+  // fishing zone is gated on the Swamp Puzzle, which lives in the Exploring pane
+  // since it unlocks the exploring location too.)
+  fishing: [
+    { key: "fishing.have_reinforced_netting", label: "Reinforced Netting", type: "bool",
+      help: "Reinforced Netting perk: one Large Net catches 400 fish instead of 250." },
+    { key: "fishing.have_fishing_trawl", label: "Fishing Trawl", type: "bool",
+      help: "Fishing Trawl perk: +100 fish on top of the base catch." },
+    { key: "fishing.use_sea_pincher", label: "Sea Pincher", type: "bool",
+      help: "Sea Pincher meal: multiplies the whole catch by 1.1, after the flat bonuses." },
+  ],
+  // Resource Saver is what a craft yields, and the Mechanical Heart's monthly
+  // grants are free consumable supply -- both resource *supply*, so they sit in
+  // Resources; the Heart last, beside the Calendar mode that times its grants.
   resources: [
+    { key: "workshop.resource_saver", label: "Resource Saver level", type: "int", min: 1, max: 3,
+      help: "Resource Saver perk level (1–3): how many items an average craft yields — 1 = 1.10, 2 = 1.25, 3 = 1.45. Level 3 is the tower level 90 reward, so below level 90 a configured 3 is capped back to 2." },
     { key: "exploring.have_mechanical_heart", label: "Mechanical Heart", type: "autobool",
       help: "Mechanical Heart (the tower level 300 artifact): grants 3000 Apple Cider on the 7th and 2000 Arnold Palmer on the 14th of each month, added to passive production. Auto-detect infers it from your tower progress (level 300)." },
+  ],
+  // The two [trading] values with no dedicated price param: grapes is priced in
+  // AP (not gold) like the material-trading pane, and price_stamina is a switch,
+  // not a price -- both ride the generic config channel instead.
+  trading: [
+    { key: "trading.grapes", label: "Grapes /1k (AP)", type: "float",
+      help: "Trade price of grapes, in Arnold Palmers per 1,000 (not gold — grapes trade for AP). Grape Juice is never bought directly; its value is derived from this, since pressing 200 grapes makes one." },
+    { key: "trading.price_stamina", label: "Charge for free stamina", type: "bool",
+      help: "Charge stamina an Apple Cider explore burns its Orange-Juice-equivalent cost (Orange Juice price ÷ 100 per stamina), so a plan draining banked or Farmhouse stamina is not scored as free. Stamina from drinking Orange Juice is exempt (already priced as the juice)." },
   ],
 };
 
@@ -316,6 +354,8 @@ function createConfigField(field) {
     input.type = field.type === "text" ? "text" : "number";
     if (field.type === "float") input.step = "any";
     if (field.type === "int") input.min = "0";
+    if (field.min != null) input.min = String(field.min);
+    if (field.max != null) input.max = String(field.max);
     if (def !== undefined && def !== null) input.placeholder = String(def);
     input.classList.add("narrow");
   }
@@ -329,7 +369,7 @@ function createConfigField(field) {
 // from initSettings() before anything reads or applies params, so every
 // generated control exists by the time a saved state is restored into it.
 function buildConfigPanels() {
-  ["effectiveness", "farming", "exploring", "resources"].forEach((name) => {
+  ["effectiveness", "farming", "exploring", "fishing", "resources", "trading"].forEach((name) => {
     const container = document.querySelector(`.config-fields[data-config="${name}"]`);
     if (container) CONFIG_FIELDS[name].forEach((f) => container.appendChild(createConfigField(f)));
   });

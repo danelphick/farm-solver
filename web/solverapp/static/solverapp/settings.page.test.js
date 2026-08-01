@@ -185,6 +185,44 @@ describe("settings popover", () => {
     expect($("#settings-popover").hidden).toBe(true);
     expect($("#price-cookie-set").value).toBe("20");
   });
+
+  // A schema section only reaches the page if buildConfigPanels names it AND the
+  // template carries its .config-fields div, so a field added to one but not the
+  // other silently vanishes. These pin one control per section, and that what
+  // they collect really rides the generic `config` param to the server.
+  test("every config schema section is generated into the panel", async () => {
+    await loadPage();
+    click("#settings-btn");
+
+    [
+      "exploring.effectiveness.Forest",     // effectiveness
+      "farming.rows",                       // farming
+      "exploring.wanderer_level",           // exploring
+      "fishing.have_reinforced_netting",    // fishing
+      "workshop.resource_saver",            // resources
+      "trading.price_stamina",              // trading values
+      "pets.Cat",                           // pets
+      "sawmill.wood",                       // buildings
+    ].forEach((key) => {
+      expect($(`[data-config-key="${key}"]`)).not.toBeNull();
+    });
+  });
+
+  test("a generated config control is sent under the `config` param", async () => {
+    const { baseline } = await loadPage();
+
+    click("#settings-btn");
+    edit('[data-config-key="exploring.wanderer_level"]', "2");
+    // A bool starts at the injected config default (false here, the fixture
+    // injects `{}`), so ticking it is the deviation that gets sent.
+    $('[data-config-key="fishing.use_sea_pincher"]').click();
+    click("#settings-save");
+
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    const body = JSON.parse(solveCalls().at(-1)[1].body);
+    expect(body.params.config["exploring.wanderer_level"]).toBe(2);
+    expect(body.params.config["fishing.use_sea_pincher"]).toBe(true);
+  });
 });
 
 // The snapshot button is the one control in the panel that is NOT staged: it

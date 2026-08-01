@@ -27,8 +27,9 @@
   backend plus fewer/cheaper solves; 4.3s -> 0.66s (12x with --model-calendar). Record in
   [plans/PERF_PLAN.md](plans/PERF_PLAN.md).
 
-- Missing config options in web app:
-  - `[fishing]` have_reinforced_netting, have_fishing_trawl, use_sea_pincher — no Fishing pane exists at all
-  - `[exploring]` have_cinnamon_sticks, wanderer_level, have_neigh_neigh, use_neigh, have_lemon_squeezer, use_quandary_chowder
-  - [workshop] resource_saver
-  - [trading] grapes, price_stamina
+- ~~Missing config options in web app: `[fishing]` netting/trawl/sea pincher (no Fishing pane
+  existed), `[exploring]` cinnamon sticks / wanderer / neigh / lemon squeezer / quandary chowder,
+  `[workshop] resource_saver`, `[trading]` grapes and price_stamina.~~ Done 2026-08-01: a new
+  Fishing pane, six more rows in Exploring, Resource Saver in Resources, and grapes/price_stamina
+  in Trading values — all through the settings popover's generated `config` channel, so no
+  server-side wiring was needed.

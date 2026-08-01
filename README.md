@@ -656,7 +656,9 @@ plan is expanded, without changing what needs solving — is answered from an
 in-process cache in a few milliseconds.
 
 Most of the `config.toml` settings have their own controls too, in collapsible
-panes inside that Settings popover: Exploring (the Fungus Processing / Swamp Puzzle unlocks), Exploring
+panes inside that Settings popover: Fishing (the Large Net perks), Exploring
+(the Arnold Palmer and Apple Cider perks, plus the Fungus Processing / Swamp
+Puzzle unlocks), Exploring
 effectiveness, Farming, Pets, Buildings, Trading values, and a
 **Material trading** pane listing every resource that can be traded for Arnold
 Palmers with a checkbox (trade it or not) and an editable price (the going-rate

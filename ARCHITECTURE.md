@@ -1827,8 +1827,11 @@ that imports it without going through `manage.py`.
   track minimum (21.5rem) is the widest row that must not wrap: an 11rem label
   plus a 10rem date field.
 
-  The **config preference panes** (Exploring, Exploring effectiveness, Farming, Pets,
-  Buildings, plus the Mechanical Heart row inside Resources) are
+  The **config preference panes** (Exploring, Fishing, Exploring effectiveness,
+  Farming, Pets, Buildings, plus generated rows inside Resources -- Resource
+  Saver and the Mechanical Heart -- and Trading values -- the grapes AP price
+  and the stamina charge, the two `[trading]` values with no dedicated price
+  param) are
   *generated* from declarative schemas (`CONFIG_FIELDS`/`BUILDING_SECTIONS` +
   `EXPLORING_ZONES`/`PET_NAMES`) rather than hand-written markup:
   `buildConfigPanels` fills each template shell (`.config-fields[data-config=…]`)
@@ -1843,12 +1846,26 @@ that imports it without going through `manage.py`.
   and the Mechanical Heart from tower progress; Dewstar's Journal, Fungus
   Processing and the Swamp Puzzle from inventory -- the `autobool` type) instead
   get an Auto-detect / On / Off `<select>`, where "Auto-detect" (the default)
-  sends nothing and leaves the auto-detection in place. The three `[exploring]`
-  perks are split by *what they do*, not which config section they live in: the
-  two that change what a zone drops (or whether it can be entered) sit in the
-  **Exploring** pane, while `have_mechanical_heart` -- free consumable supply --
+  sends nothing and leaves the auto-detection in place. An `int`/`float` entry may
+  carry optional `min`/`max` bounds for a fixed-range field (Wanderer level 0-4,
+  Resource Saver 1-3); an out-of-range value the browser lets through is caught
+  server-side and comes back as a 422 with the config loader's own message.
+  A section reaches the page only if it is BOTH in `buildConfigPanels`' list and
+  has a `.config-fields[data-config=…]` div in `_settings.html` -- adding a
+  schema without the div (or vice versa) silently drops the whole pane, which is
+  what `settings.page.test.js`'s "every config schema section is generated"
+  test pins. Panes are grouped by *what a setting does*, not which config
+  section it lives in: the `[exploring]` keys that set Arnold Palmer yield or
+  cider stamina cost, plus the two unlocks changing what a zone drops (or
+  whether it can be entered), all sit in the **Exploring** pane, while
+  `have_mechanical_heart` -- free consumable supply --
   sits in **Resources**, immediately above the Calendar radios that decide how
-  its monthly grant days are counted. Placeholders and the controls' initial states
+  its monthly grant days are counted; `[workshop] resource_saver` (what a craft
+  yields) joins it there, above the Heart. Likewise `[trading] grapes` and
+  `price_stamina` ride the generic channel into the hand-written **Trading
+  values** pane rather than becoming `_CONFIG_PARAM_FLAGS` price params: one is
+  priced in AP not gold, the other is a switch, so neither fits that pane's
+  "gold price" shape. Placeholders and the controls' initial states
   come from `configDefault`, which walks the `#config-defaults` `<script>` JSON
   both views inject via `webapi.config_defaults` (from
   `web_default_config.toml`). Buildings groups its controls under `<h4>`

@@ -15,9 +15,10 @@ style.css), so a new pane needs it too. Tag a row `.field-row wide` when it hold
 more than one control after its label and shouldn't be squeezed into one column.
 
 Both pages must inject the bundled config defaults (the
-`{{ config_defaults|json_script:"config-defaults" }}` script) -- the Farming /
-Exploring / Effectiveness / Pets / Buildings panes and the material-trading
-list are generated from it.
+`{{ config_defaults|json_script:"config-defaults" }}` script) -- every
+`.config-fields[data-config=...]` div below (Farming / Exploring / Fishing /
+Effectiveness / Pets / Buildings, plus the generated rows inside Resources and
+Trading values) and the material-trading list are generated from it.
 {% endcomment %}
 <button type="button" id="settings-btn" title="Settings" aria-label="Settings"
   aria-expanded="false" aria-controls="settings-popover">&#9881;</button>
@@ -91,8 +92,9 @@ list are generated from it.
             </label>
             <button type="button" class="help-icon" aria-label="Help" data-help="On (default): a juice's price counts in net gold like any buy. Off: the solver still only uses juice where it beats the alternative, but its cost is dropped from net gold, so plans compare on real gold spent with the juice as its own count — pair with Spread along Pumpkin Juice to read the gold each juice saves.">?</button>
           </div>
-          <!-- The Mechanical Heart's monthly grants; sits just above Calendar, which
-               decides how those grant days are counted. -->
+          <!-- Resource Saver (what a craft yields), then the Mechanical Heart's
+               monthly grants -- the Heart last so it still sits just above
+               Calendar, which decides how those grant days are counted. -->
           <div class="config-fields" data-config="resources"></div>
           <div class="field-row wide">
             <label>Calendar<button type="button" class="help-icon" aria-label="Help" data-help="How date-dependent sources (seasonal pets, Mechanical Heart grants) are handled: ignore them, average to a steady rate, or model the real calendar windows (uses Start date).">?</button></label>
@@ -177,12 +179,26 @@ list are generated from it.
         </div>
       </details>
 
+      <details id="fishing-details" class="pane">
+        <summary>Fishing</summary>
+        <div class="pane-body">
+          <p class="pane-hint">
+            Perks and meals setting how many fish one Large Net catches. (The
+            Sinking Swamp fishing zone is unlocked by the Swamp Puzzle, under
+            Exploring &mdash; it gates the exploring location too.)
+          </p>
+          <div class="config-fields" data-config="fishing"></div>
+        </div>
+      </details>
+
       <details id="exploring-details" class="pane">
         <summary>Exploring</summary>
         <div class="pane-body">
           <p class="pane-hint">
-            Unlocks and perks changing what a zone drops, or whether you can enter
-            it at all. Auto-detect reads each from your pasted inventory.
+            Perks and meals setting how much one Arnold Palmer yields and how far
+            an Apple Cider's stamina goes, plus the unlocks changing what a zone
+            drops or whether you can enter it at all. Auto-detect reads each of
+            those from your pasted inventory.
           </p>
           <div class="config-fields" data-config="exploring"></div>
         </div>
@@ -257,6 +273,9 @@ list are generated from it.
             <label for="price-hickory-omelette">Hickory Omelette /1k<button type="button" class="help-icon" aria-label="Help" data-help="Price of Hickory Omelettes, in gold per 1,000 units (the sawmill boost meal).">?</button></label>
             <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow">
           </div>
+          <!-- Grapes (priced in AP, not gold) and the stamina charge: neither is
+               a gold price param, so both ride the generic config channel. -->
+          <div class="config-fields" data-config="trading"></div>
         </div>
       </details>
 
