@@ -221,9 +221,9 @@ const BUILDING_SECTIONS = [
   ] },
   { title: "Chicken coop", fields: [
     { key: "chicken_coop.produces", label: "Produces / day", type: "int",
-      help: "Eggs the coop produces per day." },
+      help: "Eggs the coop produces per day; it yields the same number of feathers alongside them." },
     { key: "chicken_coop.completed_starmap", label: "Completed starmap", type: "bool",
-      help: "Completed Starmap: the coop also yields feathers alongside eggs." },
+      help: "Completed Starmap: 5% as many Gold Feathers as the coop's daily feathers, on top of them. The eggs and feathers themselves are unaffected." },
   ] },
   { title: "Cow pasture", fields: [
     { key: "cow_pasture.milk", label: "Milk / day", type: "int",
