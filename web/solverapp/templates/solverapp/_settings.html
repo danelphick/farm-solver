@@ -9,6 +9,20 @@ Edits inside it are staged: nothing is saved and nothing re-solves until Save
 with). See settings.js, whose initSettings() wires all of this and whose
 readSettingsParams/applySettingsParams own every id below.
 
+EVERY control mirroring a config.toml key carries `data-config-key` (the dotted
+key) and `data-config-type` (int/float/text/date/bool), whether it is generated
+from settings.js's schemas or hand-written below -- so an external tool (a
+browser extension scraping the game, say) can find a field by what it *means*
+rather than by CSS id, and coerce its value. Write to one the way a user would
+(set `.value`/`.checked`, then dispatch `input` + `change`) and press Save.
+
+The hand-written ones additionally carry `data-config-own-param`: their value
+travels to the server under its own request param, not the generic `config`
+object, so readConfigParams/applyConfigParams skip them. Nothing outside those
+two functions cares about the distinction. Controls with no `data-config-key` at
+all are the ones with no config key to mirror: the paste boxes, cookie sets
+(read from the pasted inventory), and everything under Limits.
+
 Each pane wraps its content in a `.pane-body` div: that wrapper is the grid that
 lays the field rows out in two columns when the popover is wide enough (see
 style.css), so a new pane needs it too. Tag a row `.field-row wide` when it holds
@@ -64,8 +78,9 @@ Trading values) and the material-trading list are generated from it.
         <summary>Resources</summary>
         <div class="pane-body">
           <div class="field-row">
-            <label for="current-stamina">Current stamina<button type="button" class="help-icon" aria-label="Help" data-help="Stamina you already hold, seeding the Apple Cider channel before any more is gained.">?</button></label>
-            <input id="current-stamina" type="number" min="0" value="0">
+            <label for="current-stamina">Current stamina<button type="button" class="help-icon" aria-label="Help" data-help="Stamina you already hold, seeding the Apple Cider channel before any more is gained. Blank uses the bundled config's [farmhouse] current_stamina.">?</button></label>
+            <input id="current-stamina" type="number" min="0" placeholder="0"
+              data-config-key="farmhouse.current_stamina" data-config-type="int" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="cookie-sets">Cookie sets<button type="button" class="help-icon" aria-label="Help" data-help="Cookie sets available for cookie-boosted farming. Blank = take the count from your inventory.">?</button></label>
@@ -73,7 +88,8 @@ Trading values) and the material-trading list are generated from it.
           </div>
           <div class="field-row">
             <label for="hickory-omelette">Hickory Omelette<button type="button" class="help-icon" aria-label="Help" data-help="How the sawmill's +20% boost meal is used: None, All outputs, or only Oak (the scarce output).">?</button></label>
-            <select id="hickory-omelette" class="narrow">
+            <select id="hickory-omelette" class="narrow"
+              data-config-key="sawmill.hickory_omelette" data-config-type="text" data-config-own-param>
               <option value="none">None</option>
               <option value="all">All</option>
               <option value="only_oak">Only Oak</option>
@@ -81,14 +97,19 @@ Trading values) and the material-trading list are generated from it.
           </div>
           <div class="field-row">
             <label for="use-pumpkin-juice">
-              <input id="use-pumpkin-juice" type="checkbox"> Allow Pumpkin Juice
+              <!-- The checkbox is the config key's on/off; the cap box beside it
+                   refines the same key to an integer, so only one of the pair is
+                   tagged with it. -->
+              <input id="use-pumpkin-juice" type="checkbox"
+                data-config-key="mastery.use_pumpkin_juice" data-config-type="bool" data-config-own-param> Allow Pumpkin Juice
             </label>
             <button type="button" class="help-icon" aria-label="Help" data-help="Let the solver buy Pumpkin Juice to instantly boost a mastery goal; the box caps how many it may use.">?</button>
             <input id="pumpkin-juice-cap" type="number" min="0" placeholder="no cap" class="narrow" disabled>
           </div>
           <div class="field-row">
             <label for="count-pumpkin-juice-gold">
-              <input id="count-pumpkin-juice-gold" type="checkbox" checked> Count Pumpkin Juice cost in net gold
+              <input id="count-pumpkin-juice-gold" type="checkbox" checked
+                data-config-key="trading.price_pumpkin_juice" data-config-type="bool" data-config-own-param> Count Pumpkin Juice cost in net gold
             </label>
             <button type="button" class="help-icon" aria-label="Help" data-help="On (default): a juice's price counts in net gold like any buy. Off: the solver still only uses juice where it beats the alternative, but its cost is dropped from net gold, so plans compare on real gold spent with the juice as its own count — pair with Spread along Pumpkin Juice to read the gold each juice saves.">?</button>
           </div>
@@ -98,9 +119,15 @@ Trading values) and the material-trading list are generated from it.
           <div class="config-fields" data-config="resources"></div>
           <div class="field-row wide">
             <label>Calendar<button type="button" class="help-icon" aria-label="Help" data-help="How date-dependent sources (seasonal pets, Mechanical Heart grants) are handled: ignore them, average to a steady rate, or model the real calendar windows (uses Start date).">?</button></label>
-            <label class="inline"><input type="radio" name="calendar" value="ignore" checked> ignore</label>
-            <label class="inline"><input type="radio" name="calendar" value="average"> average</label>
-            <label class="inline"><input type="radio" name="calendar" value="full"> full</label>
+            <!-- One config key, three controls: each radio carries it, and the
+                 one whose `value` matches is the setting (how a radio group
+                 always reads). -->
+            <label class="inline"><input type="radio" name="calendar" value="ignore" checked
+              data-config-key="solver.calendar" data-config-type="text" data-config-own-param> ignore</label>
+            <label class="inline"><input type="radio" name="calendar" value="average"
+              data-config-key="solver.calendar" data-config-type="text" data-config-own-param> average</label>
+            <label class="inline"><input type="radio" name="calendar" value="full"
+              data-config-key="solver.calendar" data-config-type="text" data-config-own-param> full</label>
           </div>
           <div class="field-row">
             <label for="start-date">Start date<button type="button" class="help-icon" aria-label="Help" data-help="The date the plan begins, used by the 'full' calendar model for seasonal windows.">?</button></label>
@@ -174,7 +201,8 @@ Trading values) and the material-trading list are generated from it.
           <div class="config-fields" data-config="farming"></div>
           <div class="field-row">
             <label for="instant-grow-time">Instant grow time<button type="button" class="help-icon" aria-label="Help" data-help="Effective grow time for crops whose base growth is 5 minutes or less when using Breakfast Boost — models the real time it takes to click the plant and harvest buttons (e.g. 3s).">?</button></label>
-            <input id="instant-grow-time" type="text" placeholder="3s" class="narrow">
+            <input id="instant-grow-time" type="text" placeholder="3s" class="narrow"
+              data-config-key="farming.instant_grow_time" data-config-type="text" data-config-own-param>
           </div>
         </div>
       </details>
@@ -247,31 +275,38 @@ Trading values) and the material-trading list are generated from it.
           </p>
           <div class="field-row">
             <label for="price-arnold-palmer">Arnold Palmer /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Arnold Palmers, in gold per 1,000 units. Used to score plans by real gold cost.">?</button></label>
-            <input id="price-arnold-palmer" type="number" min="0" step="any" placeholder="60" class="narrow">
+            <input id="price-arnold-palmer" type="number" min="0" step="any" placeholder="60" class="narrow"
+              data-config-key="trading.arnold_palmer" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-apple-cider">Apple Cider /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Apple Cider, in gold per 1,000 units.">?</button></label>
-            <input id="price-apple-cider" type="number" min="0" step="any" placeholder="20" class="narrow">
+            <input id="price-apple-cider" type="number" min="0" step="any" placeholder="20" class="narrow"
+              data-config-key="trading.apple_cider" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-orange-juice">Orange Juice /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Orange Juice, in gold per 1,000 units.">?</button></label>
-            <input id="price-orange-juice" type="number" min="0" step="any" placeholder="8" class="narrow">
+            <input id="price-orange-juice" type="number" min="0" step="any" placeholder="8" class="narrow"
+              data-config-key="trading.orange_juice" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-large-net">Large Net /1k<button type="button" class="help-icon" aria-label="Help" data-help="Player-trade price of Large Nets, in gold per 1,000 units.">?</button></label>
-            <input id="price-large-net" type="number" min="0" step="any" placeholder="10" class="narrow">
+            <input id="price-large-net" type="number" min="0" step="any" placeholder="10" class="narrow"
+              data-config-key="trading.large_net" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-cookie-set">Cookie Set each<button type="button" class="help-icon" aria-label="Help" data-help="Price of one Cookie Set, in gold each (not per 1,000).">?</button></label>
-            <input id="price-cookie-set" type="number" min="0" step="any" placeholder="20" class="narrow">
+            <input id="price-cookie-set" type="number" min="0" step="any" placeholder="20" class="narrow"
+              data-config-key="trading.cookie_set" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-pumpkin-juice">Pumpkin Juice each<button type="button" class="help-icon" aria-label="Help" data-help="Nominal gold cost of one Pumpkin Juice (used when Allow Pumpkin Juice is on).">?</button></label>
-            <input id="price-pumpkin-juice" type="number" min="0" step="any" placeholder="230" class="narrow">
+            <input id="price-pumpkin-juice" type="number" min="0" step="any" placeholder="230" class="narrow"
+              data-config-key="trading.pumpkin_juice" data-config-type="float" data-config-own-param>
           </div>
           <div class="field-row">
             <label for="price-hickory-omelette">Hickory Omelette /1k<button type="button" class="help-icon" aria-label="Help" data-help="Price of Hickory Omelettes, in gold per 1,000 units (the sawmill boost meal).">?</button></label>
-            <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow">
+            <input id="price-hickory-omelette" type="number" min="0" step="any" placeholder="350" class="narrow"
+              data-config-key="trading.hickory_omelette" data-config-type="float" data-config-own-param>
           </div>
           <!-- Grapes (priced in AP, not gold) and the stamina charge: neither is
                a gold price param, so both ride the generic config channel. -->

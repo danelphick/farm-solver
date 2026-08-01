@@ -376,6 +376,34 @@ def resolve_crafting_bonus(args: argparse.Namespace, cfg: dict) -> None:
     args.crafting_bonus = _crafting_bonus_for_cfg(args.crafting_bonus, cfg)
 
 
+def resolve_current_stamina(args: argparse.Namespace, cfg: dict) -> int:
+    """Stamina already banked, spendable on Apple Cider explores.
+
+    ``--current-stamina N`` wins when given; otherwise ``[farmhouse]
+    current_stamina`` (where the rest of the stamina config lives), and 0 with
+    neither. It seeds the inventory's ``stamina`` balance in
+    :func:`build_inputs`; the Farmhouse's daily deposit and the drink-Orange-
+    Juice flow top it up from there.
+
+    Unlike the Farmhouse's other keys this one is a *reading*, not a property of
+    the building -- it goes stale the moment you explore -- which is why the flag
+    stays, and why the config value is only the starting point a scraped or
+    hand-kept config supplies.
+    """
+    override = getattr(args, "current_stamina", None)
+    if override is None:
+        override = cfg.get("farmhouse", {}).get("current_stamina", 0)
+    if isinstance(override, bool) or not isinstance(override, (int, float)):
+        raise ValueError(
+            f"[farmhouse] current_stamina must be a number, not {override!r}"
+        )
+    if override < 0:
+        raise ValueError(
+            f"[farmhouse] current_stamina must not be negative, not {override!r}"
+        )
+    return int(override)
+
+
 def price_stamina_enabled(args: argparse.Namespace, cfg: dict) -> bool:
     """Whether to charge free stamina its Orange-Juice-equivalent opportunity cost.
 
@@ -891,11 +919,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--current-stamina",
         type=int,
-        default=0,
+        default=None,
         metavar="N",
         help=(
             "stamina already banked, spendable on Apple Cider explores "
-            "(default: 0)"
+            "(default: [farmhouse] current_stamina, else 0)"
         ),
     )
     stamina_pricing = parser.add_mutually_exclusive_group()
@@ -1608,8 +1636,9 @@ def _build_channel_setup(
     }
     # Stamina already banked seeds the inventory so Apple Cider explores can spend
     # it; the drink-Orange-Juice flow tops it up over time.
-    if args.current_stamina:
-        inventory["stamina"] = inventory.get("stamina", 0.0) + args.current_stamina
+    banked_stamina = resolve_current_stamina(args, cfg)
+    if banked_stamina:
+        inventory["stamina"] = inventory.get("stamina", 0.0) + banked_stamina
     cookie_sets = cookie_sets_available(inventory, args.cookie_sets)
     # Per-unit gold prices for the buyable consumables (the [trading] config): what
     # makes each buyable, so the frontier can trade makespan against real gold.

@@ -208,6 +208,43 @@ describe("settings popover", () => {
     });
   });
 
+  // The contract an external tool (a scraping extension) relies on: a control
+  // is findable by the config key it mirrors, whichever channel it travels
+  // under. The own-param ones must NOT also ride the generic `config` object --
+  // the server would then get the same setting twice, by two routes.
+  test("hand-written config-backed controls are tagged but not double-sent", async () => {
+    const { baseline } = await loadPage();
+    click("#settings-btn");
+
+    expect($('[data-config-key="trading.arnold_palmer"]').id).toBe("price-arnold-palmer");
+    expect($('[data-config-key="farmhouse.current_stamina"]').id).toBe("current-stamina");
+    expect($('[data-config-key="farming.instant_grow_time"]').id).toBe("instant-grow-time");
+    expect($('[data-config-key="sawmill.hickory_omelette"]').id).toBe("hickory-omelette");
+
+    edit('[data-config-key="trading.arnold_palmer"]', "77");
+    click("#settings-save");
+
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    const body = JSON.parse(solveCalls().at(-1)[1].body);
+    expect(body.params.price_arnold_palmer).toBe(77);
+    expect(body.params.config?.["trading.arnold_palmer"]).toBeUndefined();
+  });
+
+  test("a blank Current stamina defers to the config; an explicit 0 is sent", async () => {
+    const { baseline } = await loadPage();
+    // Nothing saved for it, so the box is blank and the param stays absent --
+    // that is what lets [farmhouse] current_stamina apply.
+    expect($("#current-stamina").value).toBe("");
+    expect(JSON.parse(solveCalls().at(-1)[1].body).params.current_stamina).toBeUndefined();
+
+    click("#settings-btn");
+    edit("#current-stamina", "0");
+    click("#settings-save");
+
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    expect(JSON.parse(solveCalls().at(-1)[1].body).params.current_stamina).toBe(0);
+  });
+
   test("a generated config control is sent under the `config` param", async () => {
     const { baseline } = await loadPage();
 

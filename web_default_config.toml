@@ -65,6 +65,11 @@ stamina_cap = 98387          # natural max stamina on registered_on
 registered_on = "2026-07-05"
 have_mattress_pad = true     # cap grows +2/day instead of +1
 have_apple_pie_enthusiast = true  # daily stamina gain capped at 1M, not 500k
+# Stamina banked RIGHT NOW, seeding the Apple Cider channel before any is gained.
+# Unlike the keys above this is a reading, not a property of the building, so it
+# goes stale the moment you explore -- the web app's Current stamina box (and
+# --current-stamina N on the command line) overrides it.
+current_stamina = 0
 
 [trout_bait_farm]
 trout = 25000

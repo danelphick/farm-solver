@@ -402,12 +402,35 @@ function buildConfigPanels() {
   }
 }
 
+// Every control that mirrors a config key carries `data-config-key` (plus a
+// `data-config-type`), generated or hand-written, so an external tool can find a
+// field by what it means rather than by CSS id -- see _settings.html's comment.
+// Only the generated ones ride the generic `config` param, though: a
+// hand-written control tagged `data-config-own-param` travels under its own
+// request param (a price, the calendar mode, ...), so the two readers below
+// skip it and it is never sent twice.
+const GENERIC_CONFIG_CONTROLS = "[data-config-key]:not([data-config-own-param])";
+
+// Fill in the placeholder of any own-param control whose config key has a
+// bundled default, so those hand-written fields show the same "blank means
+// this" hint the generated ones do, from the same source, instead of a number
+// hard-coded in the markup that quietly drifts from the config. Controls whose
+// key the injected config doesn't carry (solver.* is stripped from it) keep the
+// markup's own placeholder.
+function applyOwnParamPlaceholders() {
+  document.querySelectorAll("[data-config-key][data-config-own-param]").forEach((el) => {
+    if (el.tagName !== "INPUT" || el.type === "checkbox" || el.type === "radio") return;
+    const def = configDefault(el.dataset.configKey);
+    if (def !== undefined && def !== null) el.placeholder = String(def);
+  });
+}
+
 // Read every generated config control into a {dotted key: value} object, sent
 // as the `config` param. A blank input / "Default" select is omitted, so the
 // server uses config.toml.
 function readConfigParams() {
   const config = {};
-  document.querySelectorAll("[data-config-key]").forEach((el) => {
+  document.querySelectorAll(GENERIC_CONFIG_CONTROLS).forEach((el) => {
     const key = el.dataset.configKey;
     const type = el.dataset.configType;
     if (type === "bool") {
@@ -427,7 +450,7 @@ function readConfigParams() {
 
 function applyConfigParams(config) {
   config = config || {};
-  document.querySelectorAll("[data-config-key]").forEach((el) => {
+  document.querySelectorAll(GENERIC_CONFIG_CONTROLS).forEach((el) => {
     const key = el.dataset.configKey;
     const type = el.dataset.configType;
     if (type === "bool") {
@@ -662,7 +685,10 @@ function updateSpreadRangeVisibility() {
 export function readSettingsParams() {
   const params = {};
 
-  if ($("#current-stamina").value) {
+  // Blank means "use the config's [farmhouse] current_stamina" (like Cookie
+  // sets' "from inventory"), so an explicit 0 -- "I have none banked right now"
+  // -- has to be sent, and only an empty box is left out.
+  if ($("#current-stamina").value !== "") {
     params.current_stamina = Number($("#current-stamina").value);
   }
   if ($("#cookie-sets").value !== "") {
@@ -733,7 +759,7 @@ export function readSettingsParams() {
 
 export function applySettingsParams(params) {
   params = params || {};
-  $("#current-stamina").value = params.current_stamina ?? 0;
+  $("#current-stamina").value = params.current_stamina ?? "";
   $("#cookie-sets").value = params.cookie_sets ?? "";
   $("#hickory-omelette").value = params.hickory_omelette ?? "none";
 
@@ -1103,6 +1129,7 @@ export function initSettings({ onSave } = {}) {
   onSaveCallback = onSave || null;
   readConfigDefaults();
   buildConfigPanels();
+  applyOwnParamPlaceholders();
   buildMaterialTradingPane();
   wireSettingsControls();
   wirePopover();

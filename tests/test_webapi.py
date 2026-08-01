@@ -67,6 +67,15 @@ def test_params_to_args_parses_consumable_limits():
     assert webapi.params_to_args({"max_ac": None}).max_ac is None
 
 
+def test_params_to_args_keeps_current_stamina_absent_from_zero():
+    # An omitted box means "use [farmhouse] current_stamina" (main.resolve_
+    # current_stamina reads the config when args.current_stamina is None), so an
+    # explicit 0 -- none banked right now -- must not collapse into the same thing.
+    assert webapi.params_to_args({}).current_stamina is None
+    assert webapi.params_to_args({"current_stamina": 0}).current_stamina == 0
+    assert webapi.params_to_args({"current_stamina": 900}).current_stamina == 900
+
+
 def test_params_to_args_spread_and_graph_round_trip():
     # "spread" parses through main._parse_spread -- same AXIS[=LO:HI] grammar
     # --spread accepts on the CLI -- into an optimizer.SpreadSpec; "graph" is

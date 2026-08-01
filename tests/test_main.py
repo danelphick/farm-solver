@@ -33,6 +33,7 @@ from main import (
     pumpkin_juice_schedule,
     resolve_calendar_mode,
     resolve_crafting_bonus,
+    resolve_current_stamina,
     resolve_dewstars_journal,
     resolve_frontier_graph,
     resolve_frontier_spread,
@@ -102,6 +103,31 @@ def test_cheapest_plan_ranks_by_net_gold_charging_stamina():
         SourcingPlan(time=timedelta(hours=3), gold=10, stamina_gold=0),
     ]
     assert cheapest_plan(plans) == 1
+
+
+def test_resolve_current_stamina_cli_overrides_config():
+    cfg = {"farmhouse": {"current_stamina": 5000}}
+    assert resolve_current_stamina(build_parser().parse_args([]), cfg) == 5000
+    # The flag wins in either direction, including an explicit zero: "I have
+    # none right now" has to beat a config value that has gone stale.
+    flagged = build_parser().parse_args(["--current-stamina", "120"])
+    assert resolve_current_stamina(flagged, cfg) == 120
+    zeroed = build_parser().parse_args(["--current-stamina", "0"])
+    assert resolve_current_stamina(zeroed, cfg) == 0
+
+
+def test_resolve_current_stamina_defaults_to_zero():
+    unset = build_parser().parse_args([])  # current_stamina is None
+    assert resolve_current_stamina(unset, {"farmhouse": {}}) == 0
+    assert resolve_current_stamina(unset, {}) == 0
+
+
+def test_resolve_current_stamina_rejects_a_nonsense_config_value():
+    unset = build_parser().parse_args([])
+    with pytest.raises(ValueError, match="must not be negative"):
+        resolve_current_stamina(unset, {"farmhouse": {"current_stamina": -1}})
+    with pytest.raises(ValueError, match="must be a number"):
+        resolve_current_stamina(unset, {"farmhouse": {"current_stamina": "lots"}})
 
 
 def test_price_stamina_enabled_cli_overrides_config():
