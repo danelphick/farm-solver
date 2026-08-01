@@ -108,11 +108,10 @@ use_sea_pincher = true
 have_lemon_squeezer = true
 use_quandary_chowder = true
 # Apple Cider perks/meals (inventory plan mode). Cinnamon Sticks raises explores
-# per cider; wanderer_level (1=4%, 2=11%, 3=20%, 4=33%), the Neigh Neigh perk and
-# the Neigh meal each cut the stamina a cider explore costs, multiplicatively.
+# per cider; wanderer_level (1=4%, 2=11%, 3=20%, 4=33%) and the Neigh meal (20%)
+# each cut the stamina a cider explore costs, multiplicatively.
 have_cinnamon_sticks = true
 wanderer_level = 4
-have_neigh_neigh = true
 use_neigh = true
 # Gary's Crushroom's drop table changes if the "Fungus Processing and You"
 # artifact is held. By default this is auto-detected from the inventory file;
@@ -148,7 +147,7 @@ Forest = 136
 
 [farming]    # crop rows and growth modifiers; crops/drops come from the CSVs
 rows = 13
-double_crop_chance = 25    # percent chance a seed drops a second item
+double_crop_chance = 40    # percent chance a seed drops a second item
 speed_reduction = 90       # percent faster every crop grows
 corn_speed_reduction = 20  # corn's further percent reduction
 # The UNDOUBLED per-day Grape Juice count (was 14 before this became undoubled --

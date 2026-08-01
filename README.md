@@ -520,8 +520,7 @@ use_quandary_chowder = true      # then ×1.1 (550 with the squeezer)
 # Apple Cider perks/meals
 have_cinnamon_sticks = true      # 12.5 explores per Effectiveness point, not 10
 wanderer_level = 4               # cider stamina −4/11/20/33% at level 1/2/3/4
-have_neigh_neigh = true          # then ×0.8 stamina (perk)
-use_neigh = true                 # then ×0.8 stamina again (meal)
+use_neigh = true                 # then ×0.8 stamina (the Neigh meal)
 
 # have_fungus_processing = true  # force Gary's Crushroom's drop table on/off;
                                   # unset auto-detects the artifact from inventory
@@ -536,7 +535,7 @@ Forest = 136
 # ... one line per explorable zone
 ```
 
-Each Apple Cider does `1000 + 10 × Effectiveness` explores in a zone (`1250 + 12.5 ×` with Cinnamon Sticks), each costing one stamina before the multiplicative Wanderer / Neigh Neigh / Neigh reductions. A zone with no configured Effectiveness gets no cider offer.
+Each Apple Cider does `1000 + 10 × Effectiveness` explores in a zone (`1250 + 12.5 ×` with Cinnamon Sticks), each costing one stamina before the multiplicative Wanderer and Neigh reductions. A zone with no configured Effectiveness gets no cider offer.
 
 #### Swamp Puzzle (the Sinking Swamp lock)
 

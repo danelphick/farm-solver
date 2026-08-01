@@ -184,11 +184,15 @@ def test_stamina_per_explore_defaults_to_one():
 
 
 def test_stamina_per_explore_applies_reductions_multiplicatively():
-    # Wanderer 4 (33%), Neigh Neigh (20%) and Neigh meal (20%): 0.67*0.8*0.8.
-    cider = CiderModifiers(
-        wanderer_level=4, have_neigh_neigh=True, use_neigh=True
-    )
-    assert cider.stamina_per_explore() == pytest.approx(0.67 * 0.8 * 0.8)
+    # Wanderer 4 (33%) then the Neigh meal (20%): 0.67*0.8. The meal is the ONE
+    # Neigh reduction -- it used to be counted twice (0.67*0.8*0.8).
+    cider = CiderModifiers(wanderer_level=4, use_neigh=True)
+    assert cider.stamina_per_explore() == pytest.approx(0.67 * 0.8)
+
+
+def test_exploring_from_config_rejects_the_retired_neigh_neigh_flag():
+    with pytest.raises(ValueError, match="have_neigh_neigh is gone"):
+        exploring_from_config({"have_neigh_neigh": True})
 
 
 def test_exploring_from_config_reads_cider_perks_and_effectiveness():
@@ -196,13 +200,11 @@ def test_exploring_from_config_reads_cider_perks_and_effectiveness():
         {
             "have_cinnamon_sticks": True,
             "wanderer_level": 3,
-            "have_neigh_neigh": True,
             "effectiveness": {"Forest": 136, "Small Cave": 104},
         }
     )
     assert exploring.cider.have_cinnamon_sticks
     assert exploring.cider.wanderer_level == 3
-    assert exploring.cider.have_neigh_neigh
     assert not exploring.cider.use_neigh
     # Effectiveness keys are lower-cased for case-insensitive zone lookup.
     assert exploring.effectiveness == {"forest": 136, "small cave": 104}

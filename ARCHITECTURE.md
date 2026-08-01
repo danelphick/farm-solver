@@ -28,7 +28,8 @@ exempt from the storehouse cap via `passive.UNCAPPED_ITEMS`). Cider math
 (`exploring.CiderModifiers`): each stamina buys one explore at drop rate
 `CIDER_DROP_RATE` (0.40); explores per cider scale with per-zone Exploring
 Effectiveness (`[exploring.effectiveness]`) and Cinnamon Sticks; stamina per
-explore is cut by Wanderer / Neigh Neigh / Neigh.
+explore is cut by Wanderer and the Neigh meal (`use_neigh`; the retired
+`have_neigh_neigh` duplicated it and applied the cut twice, so it now raises).
 
 **Gold budget** (`--max-gold`, see `optimizer.minimize`'s `buy` variables): the LP
 decides make-vs-buy per consumable subject to a gold budget the frontier sweeps.
