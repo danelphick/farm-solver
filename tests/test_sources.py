@@ -57,7 +57,8 @@ def test_sawmill_boost_only_oak_mode_boosts_oak_alone():
 
 
 def test_sawmill_boost_only_oak_without_oak_is_empty():
-    # No oak output (no sturdy saw) means nothing for only_oak to boost.
+    # No oak output (an oak rate of 0, i.e. no Sturdy Saw) means nothing for
+    # only_oak to boost.
     assert sawmill_boost_offers({"board": 46000}, "only_oak") == []
 
 

@@ -343,8 +343,7 @@ Some buildings generate items on a fixed cadence (every minute, ten minutes, hou
 [sawmill]      # wood/board/oak hourly; pine board one a minute
 wood = 46000
 board = 60000
-oak = 6000
-have_sturdy_saw = true    # oak is only produced with the sturdy saw
+oak = 6000                # 0 (or absent) if you have no Sturdy Saw
 have_pine_boost = true    # two pine board a minute instead of one
 # Hickory Omelette: a held/bought meal (priced in [trading]) that, for the hour
 # it lasts, makes the sawmill deposit +20% of its hourly output every 10 minutes

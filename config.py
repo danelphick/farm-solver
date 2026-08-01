@@ -171,19 +171,25 @@ def sawmill_outputs(config: dict[str, Any]) -> dict[str, float]:
     """The sawmill's base (unboosted) hourly outputs, lower-cased.
 
     The numeric ``[sawmill]`` entries are the hourly quantities; string/boolean
-    entries (``hickory_omelette``, ``have_sturdy_saw``, ...) are settings, not
-    outputs. Oak is only produced with ``have_sturdy_saw``. Pine board (a
-    per-minute output, never omelette-boosted) is not included here.
+    entries (``hickory_omelette``, ``have_pine_boost``, ...) are settings, not
+    outputs. A quantity of zero is dropped rather than kept as a zero-rate
+    producer: an output you do not have (``oak`` without the Sturdy Saw) is best
+    said by leaving it out or writing ``0``, which is why the separate
+    ``have_sturdy_saw`` flag is gone -- the number already carried it, and the
+    two could disagree. Pine board (a per-minute output, never omelette-boosted)
+    is not included here.
     """
     sawmill = config.get("sawmill") or {}
-    outputs = {
+    if "have_sturdy_saw" in sawmill:
+        raise ValueError(
+            "[sawmill] have_sturdy_saw is gone; the oak quantity says it -- set "
+            "oak = 0 (or drop the key) if you have no Sturdy Saw"
+        )
+    return {
         item.lower(): float(qty)
         for item, qty in sawmill.items()
-        if isinstance(qty, (int, float)) and not isinstance(qty, bool)
+        if isinstance(qty, (int, float)) and not isinstance(qty, bool) and qty > 0
     }
-    if not sawmill.get("have_sturdy_saw"):
-        outputs.pop("oak", None)
-    return outputs
 
 
 def hickory_omelette_mode(config: dict[str, Any]) -> str:
@@ -225,7 +231,7 @@ def passive_production(
     Each building has its own cadence and outputs:
 
     * ``[sawmill]`` -- hourly; its numeric keys are item names and values the
-      hourly quantity (oak only with ``have_sturdy_saw``). It also makes pine
+      hourly quantity (a zero one is no output at all). It also makes pine
       board a minute at a time, doubled with ``have_pine_boost``. The Hickory
       Omelette boost is **not** applied here: it is a held/bought consumable, so
       it is modelled as a grounded offer (see :func:`sawmill_outputs`,

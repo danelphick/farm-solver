@@ -37,14 +37,7 @@ def test_load_config_reads_toml(tmp_path):
 
 
 def test_passive_production_reads_sawmill():
-    config = {
-        "sawmill": {
-            "wood": 46000,
-            "board": 60000,
-            "oak": 6000,
-            "have_sturdy_saw": True,
-        }
-    }
+    config = {"sawmill": {"wood": 46000, "board": 60000, "oak": 6000}}
     production = passive_production(config)
     hourly = next(p for p in production.producers if p.period == HOURLY)
     assert hourly.name == "sawmill"
@@ -53,14 +46,15 @@ def test_passive_production_reads_sawmill():
     assert production.time_to_produce("board", 60000) == timedelta(hours=1)
 
 
-def test_oak_needs_the_sturdy_saw():
-    # Without the sturdy saw the sawmill makes no oak.
-    production = passive_production(
-        {"sawmill": {"wood": 46000, "oak": 6000}}
-    )
+def test_no_oak_without_an_oak_rate():
+    # No Sturdy Saw is said by the quantity itself: a zero rate is no output at
+    # all, not a producer that makes nothing (which is what the retired
+    # have_sturdy_saw flag used to express, redundantly).
+    production = passive_production({"sawmill": {"wood": 46000, "oak": 0}})
     hourly = next(p for p in production.producers if p.period == HOURLY)
     assert hourly.outputs == {"wood": 46000}
     assert not production.produces("oak")
+    assert not passive_production({"sawmill": {"wood": 46000}}).produces("oak")
 
 
 def test_sawmill_makes_pine_board_a_minute_at_a_time():
@@ -98,17 +92,32 @@ def test_hickory_omelette_setting_does_not_boost_passive_production():
     assert hourly.outputs == {"board": 46000}
 
 
-def test_sawmill_outputs_gates_oak_on_the_sturdy_saw():
-    cfg = {"sawmill": {"Wood": 60000, "board": 46000, "oak": 6000}}
-    # Without the sturdy saw, no oak; string/bool settings are not outputs.
+def test_sawmill_outputs_drops_zero_rates_and_settings():
+    cfg = {
+        "sawmill": {
+            "Wood": 60000,
+            "board": 46000,
+            "oak": 0,
+            "hickory_omelette": "only_oak",
+            "have_pine_boost": True,
+        }
+    }
+    # A zero quantity is no output; string/bool settings are not outputs either.
     assert config.sawmill_outputs(cfg) == {"wood": 60000, "board": 46000}
-    cfg["sawmill"]["have_sturdy_saw"] = True
-    cfg["sawmill"]["hickory_omelette"] = "only_oak"
+    cfg["sawmill"]["oak"] = 6000
     assert config.sawmill_outputs(cfg) == {
         "wood": 60000,
         "board": 46000,
         "oak": 6000,
     }
+
+
+def test_sawmill_outputs_rejects_the_retired_sturdy_saw_flag():
+    # Left in place it would silently change what the sawmill makes: the flag
+    # used to be able to suppress a configured oak rate, and nothing else says
+    # so. Refuse it and name the replacement, like use_hickory_omelette.
+    with pytest.raises(ValueError, match="have_sturdy_saw is gone"):
+        config.sawmill_outputs({"sawmill": {"oak": 6000, "have_sturdy_saw": False}})
 
 
 def test_hickory_omelette_mode_reads_and_validates():
