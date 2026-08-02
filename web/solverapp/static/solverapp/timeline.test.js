@@ -18,6 +18,8 @@ import {
   sortIndexRows,
   sortSeriesRows,
   timelineHref,
+  tooltipBox,
+  tooltipLines,
   transitiveConsumers,
 } from "./timeline.js";
 
@@ -200,6 +202,81 @@ describe("chartSvg", () => {
     const svg = chartSvg([point("2026-07-01T12:00:00.000Z", 100)], "Ap<ple>");
     expect(svg).not.toContain("Ap<ple>");
     expect(svg).toContain("Ap&lt;ple&gt;");
+  });
+
+  // Every point carries its own hover target and text; positioning them is
+  // wireChartTooltip's job (see the page tests), sized off the one shared box
+  // this markup ends with.
+  test("gives every point a hit target carrying its tooltip text", () => {
+    const svg = draw([
+      point("2026-07-01T12:00:00.000Z", 400_000),
+      point("2026-07-08T12:00:00.000Z", 404_800),
+    ]);
+    const hits = [...svg.querySelectorAll("circle.pt-hit")];
+    expect(hits).toHaveLength(2);
+    // Over the dot it stands in for, and bigger than it.
+    const dots = [...svg.querySelectorAll("circle.pt")];
+    expect(hits[0].getAttribute("cx")).toBe(dots[0].getAttribute("cx"));
+    expect(hits[0].getAttribute("cy")).toBe(dots[0].getAttribute("cy"));
+    expect(Number(hits[0].getAttribute("r"))).toBeGreaterThan(
+      Number(dots[0].getAttribute("r"))
+    );
+    expect(hits[1].getAttribute("data-tip").split("|")).toEqual([
+      expect.stringMatching(/^2026-07-08 \d\d:\d\d$/),
+      "404,800 mastery",
+    ]);
+    expect(svg.querySelectorAll("g.tip")).toHaveLength(1);
+  });
+
+  // The hover is a pointer affordance; a screen reader gets the same words off
+  // the point itself.
+  test("labels each point with what its tooltip says", () => {
+    const svg = draw([point("2026-07-01T12:00:00.000Z", 412_900)]);
+    expect(svg.querySelector("g.pt-group").getAttribute("aria-label")).toMatch(
+      /^2026-07-01 \d\d:\d\d, 412,900 mastery$/
+    );
+  });
+});
+
+describe("tooltipLines", () => {
+  // The tier is deliberately not among them: the chart draws the M/GM/MM lines
+  // and the table below has a column for it.
+  test("name the snapshot and the mastery it recorded", () => {
+    expect(tooltipLines(point("2026-07-01T12:00:00.000Z", 412_900))).toEqual([
+      expect.stringMatching(/^2026-07-01 \d\d:\d\d$/),
+      "412,900 mastery",
+    ]);
+  });
+});
+
+describe("tooltipBox", () => {
+  const LINES = ["2026-07-01 12:00", "412,900 mastery"];
+
+  test("sits above the point, centred on it", () => {
+    const box = tooltipBox(LINES, 300, 200);
+    expect(Math.abs(box.x + box.width / 2 - 300)).toBeLessThanOrEqual(1);
+    expect(box.y + box.height).toBeLessThan(200);
+  });
+
+  test("flips below a point too near the top to fit above it", () => {
+    const box = tooltipBox(LINES, 300, 20);
+    expect(box.y).toBeGreaterThan(20);
+  });
+
+  // Otherwise the first and last points -- the two most worth reading -- would
+  // hang their box off the edge of the viewBox and lose half of it.
+  test("stays inside the chart at either end", () => {
+    const first = tooltipBox(LINES, 62, 150);
+    expect(first.x).toBeGreaterThanOrEqual(0);
+    const last = tooltipBox(LINES, 606, 150);
+    expect(last.x + last.width).toBeLessThanOrEqual(640);
+  });
+
+  test("grows with the longest line and the number of them", () => {
+    const box = tooltipBox(LINES, 300, 200);
+    expect(box.height).toBeGreaterThan(tooltipBox(LINES.slice(0, 1), 300, 200).height);
+    expect(tooltipBox(["a much, much longer line than either of those"], 300, 200).width)
+      .toBeGreaterThan(box.width);
   });
 });
 

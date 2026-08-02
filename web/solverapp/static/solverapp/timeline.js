@@ -103,8 +103,8 @@ function shortDate(takenAt) {
 // A self-contained, theme-aware inline SVG, built the way report._svg_plot
 // builds the solver page's impact graph: colours as CSS custom properties
 // scoped to the root <svg> and re-themed by one `prefers-color-scheme: dark`
-// block, a native <title> per point for the tooltip, and no JavaScript needed
-// once it is in the DOM.
+// block. The one thing it needs the DOM for is the point tooltip -- see
+// "Point tooltips" below.
 
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 300;
@@ -150,6 +150,88 @@ export function chartRange(series) {
   return { lo: Math.max(least - pad, 0), hi: best + pad };
 }
 
+// --- Point tooltips ----------------------------------------------------------
+//
+// Hovering a point says which snapshot it is: when it was taken and the mastery
+// it recorded. A native <title> per circle (what the chart shipped with) is the
+// cheap version of this, but it waits on the OS tooltip delay, cannot be themed,
+// and a 4px circle is a fiddly thing to hover in the first place -- so the box
+// is drawn in the SVG instead, over a hit target several times the size of the
+// dot.
+//
+// The split: `chartSvg` emits the (hidden) tooltip group and a data-carrying
+// hit circle per point, `tooltipLines`/`tooltipBox` decide what it says and
+// where it goes -- all pure, so the tests pin them as markup and numbers -- and
+// `wireChartTooltip` does the only part that needs a live DOM, filling the box
+// in and moving it on hover. Each point still carries the same text as an
+// `aria-label`, which is what a screen reader gets in place of the hover.
+
+const HIT_RADIUS = 12;
+const TIP_LINE_HEIGHT = 14;
+const TIP_PAD_X = 8;
+const TIP_PAD_Y = 6;
+const TIP_GAP = 12; // between the point and the box
+const TIP_MARGIN = 2; // between the box and the edge of the viewBox
+const TIP_LINES = 2; // one per tooltipLines line
+
+// The lines travel from the markup to the hover as one attribute, so they need
+// a separator that survives being one -- a newline does not: XML normalises it
+// to a space (which is how the SVG is parsed when a test reads chartSvg back
+// through DOMParser, even though innerHTML in the page keeps it). No tooltip
+// line can contain a pipe: they are a date and a formatted number.
+const TIP_SEPARATOR = "|";
+
+// Nothing here can measure text -- chartSvg is pure markup and the page tests
+// run in jsdom, which has no getBBox -- so the box is sized off the longest
+// line at roughly the average character width of the chart's 11px font.
+const TIP_CHAR_PX = 6.2;
+
+// What one point's tooltip says: when the snapshot was taken and what it
+// recorded. Not the tier -- the chart already draws the M/GM/MM lines, and the
+// table below spells it out per row.
+export function tooltipLines(point) {
+  return [
+    `${point.date} ${clockTime(point.taken_at)}`,
+    `${point.progress.toLocaleString()} mastery`,
+  ];
+}
+
+// Where the box sits for a point at `(x, y)`: above it and centred on it by
+// preference, nudged back inside the viewBox when that would clip it (a point
+// at either end of the series), and flipped below the point when there is no
+// room above (a point near the top of the range, which is most of them once a
+// series is climbing).
+export function tooltipBox(lines, x, y) {
+  const longest = Math.max(...lines.map((line) => line.length));
+  const width = Math.round(2 * TIP_PAD_X + longest * TIP_CHAR_PX);
+  const height = 2 * TIP_PAD_Y + lines.length * TIP_LINE_HEIGHT;
+  const left = Math.min(
+    Math.max(x - width / 2, TIP_MARGIN),
+    CHART_WIDTH - width - TIP_MARGIN
+  );
+  const above = y - TIP_GAP - height;
+  return {
+    x: Math.round(left),
+    y: Math.round(above >= TIP_MARGIN ? above : y + TIP_GAP),
+    width,
+    height,
+  };
+}
+
+// The hidden box itself, drawn last so it is over every point rather than under
+// the ones plotted after it. Its text lines are filled in on hover.
+function tooltipMarkup() {
+  const lines = Array.from(
+    { length: TIP_LINES },
+    (_, i) =>
+      `<text class="tip-line" x="${TIP_PAD_X}" ` +
+      `y="${TIP_PAD_Y + 10 + i * TIP_LINE_HEIGHT}"></text>`
+  ).join("");
+  return `<g class="tip" opacity="0" aria-hidden="true">` +
+    `<rect class="tip-box" x="0" y="0" width="0" height="0" rx="4" ry="4" />` +
+    `${lines}</g>`;
+}
+
 // `series` is history.seriesFor's output (oldest first, at least one point).
 // Pure -- returns markup, touches no DOM -- so timeline.test.js can pin the
 // geometry directly.
@@ -176,15 +258,20 @@ export function chartSvg(series, item) {
   const px = (t) => left + ((t - tLo) / (tHi - tLo)) * (right - left);
   const py = (v) => bottom - ((v - lo) / (hi - lo)) * (bottom - top);
 
+  // Each point is the visible dot plus an invisible, much larger hit circle
+  // carrying its tooltip text -- the dot alone is a 4px target, and the hover
+  // has to be forgiving enough to be worth having.
   const points = series
     .map((point, i) => {
       const x = px(times[i]).toFixed(1);
       const y = py(point.progress).toFixed(1);
-      const title =
-        `${point.date} ${clockTime(point.taken_at)}\n` +
-        `${point.progress.toLocaleString()} progress`;
-      return `<circle class="pt" cx="${x}" cy="${y}" r="4">` +
-        `<title>${escapeHtml(title)}</title></circle>`;
+      const lines = tooltipLines(point);
+      return `<g class="pt-group" role="img" ` +
+        `aria-label="${escapeHtml(lines.join(", "))}">` +
+        `<circle class="pt" cx="${x}" cy="${y}" r="4" />` +
+        `<circle class="pt-hit" cx="${x}" cy="${y}" r="${HIT_RADIUS}" ` +
+        `data-x="${x}" data-y="${y}" data-tip="${escapeHtml(lines.join(TIP_SEPARATOR))}" />` +
+        `</g>`;
     })
     .join("");
 
@@ -263,7 +350,20 @@ xmlns="http://www.w3.org/2000/svg">
   stroke-width: 2;
   transition: r 120ms ease;
 }
-.mastery-graph .pt:hover { r: 7; }
+/* The hit circle sits over the dot, so the grow-on-hover has to hang off the
+   group rather than off .pt itself, which never sees the pointer. */
+.mastery-graph .pt-hit { fill: transparent; stroke: none; }
+.mastery-graph .pt-group:hover .pt { r: 7; }
+.mastery-graph .tip {
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.mastery-graph .tip-box {
+  fill: var(--mg-surface);
+  stroke: var(--mg-axis);
+  stroke-width: 1;
+}
+.mastery-graph .tip-line { fill: var(--mg-ink); }
 </style>
 <line class="axis" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}" />
 <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}" />
@@ -272,6 +372,7 @@ ${xTicks}
 ${yTicks}
 <polyline class="line" points="${path}" />
 ${points}
+${tooltipMarkup()}
 </svg>`;
 }
 
@@ -411,9 +512,49 @@ function renderSortIndicators(head, sort) {
   });
 }
 
+// The live half of the point tooltip: one box, filled in and moved to whichever
+// point the pointer is on. One shared box rather than one per point, so nothing
+// has to be re-stacked to keep it above the dots plotted after it.
+//
+// Listeners are delegated on the <svg>, which renderChart replaces wholesale, so
+// they go with it -- there is nothing to unbind when the chart is redrawn.
+export function wireChartTooltip(svg) {
+  const tip = svg.querySelector(".tip");
+  const box = tip.querySelector(".tip-box");
+  const texts = [...tip.querySelectorAll(".tip-line")];
+
+  const show = (hit) => {
+    const lines = (hit.getAttribute("data-tip") || "").split(TIP_SEPARATOR);
+    texts.forEach((text, i) => {
+      text.textContent = lines[i] || "";
+    });
+    const at = tooltipBox(
+      lines,
+      Number(hit.getAttribute("data-x")),
+      Number(hit.getAttribute("data-y"))
+    );
+    box.setAttribute("width", String(at.width));
+    box.setAttribute("height", String(at.height));
+    tip.setAttribute("transform", `translate(${at.x}, ${at.y})`);
+    tip.setAttribute("opacity", "1");
+  };
+
+  svg.addEventListener("mouseover", (event) => {
+    const hit = event.target.closest(".pt-hit");
+    if (hit) show(hit);
+  });
+  // On the way out of a point, and again on the way out of the chart: a pointer
+  // leaving fast enough can skip the point's own mouseout.
+  svg.addEventListener("mouseout", (event) => {
+    if (event.target.closest(".pt-hit")) tip.setAttribute("opacity", "0");
+  });
+  svg.addEventListener("mouseleave", () => tip.setAttribute("opacity", "0"));
+}
+
 function renderChart(series, item) {
   const holder = $("#timeline-chart");
   holder.innerHTML = chartSvg(series, item);
+  wireChartTooltip(holder.querySelector("svg"));
   holder.hidden = false;
 }
 

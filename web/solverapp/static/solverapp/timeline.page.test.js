@@ -264,6 +264,48 @@ describe("the timeline page", () => {
     expect(document.querySelector("#timeline-item").value).toBe("Tomato");
   });
 
+  // The chart's one live control: hovering a point raises the shared tooltip
+  // box, fills it with that snapshot's date/time and mastery, and moves it over
+  // the point. Leaving puts it away again.
+  test("hovering a point shows its date and mastery", async () => {
+    await loadPage({ url: "/timeline?item=Tomato" });
+    const tip = document.querySelector("#timeline-chart .tip");
+    expect(tip.getAttribute("opacity")).toBe("0");
+
+    const hits = document.querySelectorAll("#timeline-chart circle.pt-hit");
+    hits[1].dispatchEvent(new Event("mouseover", { bubbles: true }));
+
+    expect(tip.getAttribute("opacity")).toBe("1");
+    expect([...tip.querySelectorAll(".tip-line")].map((t) => t.textContent)).toEqual([
+      "2026-07-08 12:00",
+      "404,800 mastery",
+    ]);
+    // Positioned on the point it belongs to, and given a box to sit in.
+    const [x] = tip.getAttribute("transform").match(/-?\d+/g).map(Number);
+    const cx = Number(hits[1].getAttribute("cx"));
+    expect(Math.abs(x + Number(tip.querySelector(".tip-box").getAttribute("width")) / 2 - cx))
+      .toBeLessThanOrEqual(1);
+
+    hits[1].dispatchEvent(new Event("mouseout", { bubbles: true }));
+    expect(tip.getAttribute("opacity")).toBe("0");
+  });
+
+  // One box serves every point, so moving between them has to refill it and
+  // move it, not leave the previous snapshot's reading sitting there.
+  test("the tooltip follows the pointer from one point to the next", async () => {
+    await loadPage({ url: "/timeline?item=Hops" });
+    const tip = document.querySelector("#timeline-chart .tip");
+    const hits = document.querySelectorAll("#timeline-chart circle.pt-hit");
+    hits[0].dispatchEvent(new Event("mouseover", { bubbles: true }));
+    const first = tip.getAttribute("transform");
+    hits[1].dispatchEvent(new Event("mouseover", { bubbles: true }));
+    expect([...tip.querySelectorAll(".tip-line")].map((t) => t.textContent)).toEqual([
+      "2026-07-15 12:00",
+      "1,200 mastery",
+    ]);
+    expect(tip.getAttribute("transform")).not.toBe(first);
+  });
+
   // A snapshot that doesn't mention the item is a gap, not a zero: Hops is
   // absent from the middle snapshot, so it has two points rather than a dip.
   test("skips snapshots that do not mention the item", async () => {

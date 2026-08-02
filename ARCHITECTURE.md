@@ -2039,8 +2039,7 @@ that imports it without going through `manage.py`.
     would draw a cliff that never happened.
   - **`chartSvg`** is the client-side counterpart of `report._svg_plot` and
     copies its conventions (self-contained inline SVG, `--mg-*` custom
-    properties re-themed by one `prefers-color-scheme: dark` block, a native
-    `<title>` per point, no JS needed once rendered). X is time-proportional
+    properties re-themed by one `prefers-color-scheme: dark` block). X is time-proportional
     from the timestamps, so two snapshots an hour apart sit together and a
     fortnight's gap reads as one. Y comes from **`chartRange`**: 0 → the next
     tier above the best progress, *unless* the series moves less than 20% of
@@ -2049,6 +2048,26 @@ that imports it without going through `manage.py`.
     lines that fall inside it -- a lone snapshot always keeps the full range,
     having no shape to show. `axisLabel` spells figures out in full on a zoomed
     (<10k wide) axis, where every tick would otherwise round to the same "339k".
+  - **Point tooltips** are the one part of the chart that needs the DOM (the
+    rest is markup that just sits there). Hovering a point raises a box naming
+    the snapshot: its date and time, and the mastery it recorded -- **not** the
+    tier, which the chart's own M/GM/MM lines and the table's Tier column
+    already say. It replaced a native `<title>` per circle: that waits on the OS
+    tooltip delay, cannot be themed, and hangs off a 4px target. The split keeps
+    the pure/impure line the rest of the file draws -- `chartSvg` emits **one**
+    hidden `g.tip` (last, so it is over every point rather than under the ones
+    plotted after it) plus a `circle.pt-hit` per point, three times the dot's
+    radius and carrying its own text; `tooltipLines`/`tooltipBox` decide what it
+    says and where it goes (above and centred, flipped below a point too near
+    the top, clamped inside the viewBox at either end -- sized off character
+    counts, since nothing here can measure text: `chartSvg` is pure markup and
+    jsdom has no `getBBox`); and `wireChartTooltip` fills and moves it from
+    listeners delegated on the `<svg>`, which `renderChart` replaces wholesale,
+    so a redraw has nothing to unbind. The lines cross into the markup as one
+    pipe-joined `data-tip` attribute -- **not** newline-joined, which XML
+    attribute normalisation turns into spaces (`innerHTML` in the page keeps
+    them, `DOMParser` in the tests does not). Each point repeats the same text
+    as an `aria-label`, which is what a screen reader gets in place of a hover.
   - **The index's filters** (`#filter-details`, shown with the index and never
     with a chart): tier checkboxes (**MM off by default** -- a Megamastered item
     is finished, so it is noise in a list read to decide what to do next), and
