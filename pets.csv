@@ -287,18 +287,18 @@ Seal,3,Blue Gel
 Seal,3,Gold Sea Crest
 Seal,3,Frost Snapper Shell
 Seal,3,Glacierstone
-Skunk,1,Onion
-Skunk,1,Leek
-Skunk,1,Herbs
-Skunk,1,Cooking Pot
-Skunk,2,Sweet Root
-Skunk,2,Flour
-Skunk,2,Salt
-Skunk,2,Pie Pan
-Skunk,3,Peach
-Skunk,3,Corn Oil
-Skunk,3,Bone Broth
-Skunk,3,Butter
+Critter,1,Onion
+Critter,1,Leek
+Critter,1,Herbs
+Critter,1,Cooking Pot
+Critter,2,Sweet Root
+Critter,2,Flour
+Critter,2,Salt
+Critter,2,Pie Pan
+Critter,3,Peach
+Critter,3,Corn Oil
+Critter,3,Bone Broth
+Critter,3,Butter
 Polar Bear,1,Frozen Peas
 Polar Bear,1,Frozen Catfish
 Polar Bear,1,Frozen Bones

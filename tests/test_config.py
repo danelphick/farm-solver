@@ -371,20 +371,20 @@ def test_passive_production_attaches_storehouse_size():
 
 
 def test_passive_production_includes_pets():
-    # A level-8 Skunk has all three tiers (12 items), fetching 8*24/12 = 16 of
+    # A level-8 Critter has all three tiers (12 items), fetching 8*24/12 = 16 of
     # each a day; Corn Oil is one of its tier-3 items.
-    production = passive_production({"pets": {"Skunk": 8}})
-    skunk = next(p for p in production.producers if p.name == "pet Skunk")
-    assert skunk.period == DAILY
-    assert skunk.outputs["corn oil"] == 16
+    production = passive_production({"pets": {"Critter": 8}})
+    critter = next(p for p in production.producers if p.name == "pet Critter")
+    assert critter.period == DAILY
+    assert critter.outputs["corn oil"] == 16
 
 
 def test_pets_crunchy_omelette_boosts_producer_output():
     production = passive_production(
-        {"pets": {"Skunk": 8, "use_crunchy_omelette": True}}
+        {"pets": {"Critter": 8, "use_crunchy_omelette": True}}
     )
-    skunk = next(p for p in production.producers if p.name == "pet Skunk")
-    assert skunk.outputs["corn oil"] == 24  # 16 * 1.5
+    critter = next(p for p in production.producers if p.name == "pet Critter")
+    assert critter.outputs["corn oil"] == 24  # 16 * 1.5
 
 
 def test_seasonal_pet_output_is_scaled_to_annual_average():

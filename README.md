@@ -413,7 +413,7 @@ steel = 10296
 
 [pets]         # each pet's level; tier items come from pets.csv
 use_crunchy_omelette = true   # 50% more items fetched by every pet
-"Skunk" = 8
+"Critter" = 8
 "Owl" = 8
 # ... one line per pet
 ```

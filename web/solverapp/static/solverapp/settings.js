@@ -107,7 +107,7 @@ const PET_NAMES = [
   "Cat", "Wolf", "Owl", "Dog", "Squirrel", "Swine", "Snake", "Lemur", "Baboon",
   "Frog", "Hedgehog", "Fox", "Armadillo", "Spider", "Pet Rock", "Bird",
   "Penguin", "Green Dragon", "Red Dragon", "Blue Dragon", "Bear", "Capybara",
-  "Strange Onion", "Seal", "Skunk", "Polar Bear", "Hummingbird", "Shark",
+  "Strange Onion", "Seal", "Critter", "Polar Bear", "Hummingbird", "Shark",
 ];
 
 // Flat field lists (one control each), keyed by the container's data-config
