@@ -2013,7 +2013,11 @@ that imports it without going through `manage.py`.
     `chartSvg` plus `deltaRows` (per snapshot: progress, gain since the previous
     snapshot *that mentions the item*, gain/day -- suppressed under an hour's
     gap -- and tier). Picking an item `replaceState`s the query string rather
-    than reloading. **Both tables sort per column** the way the mastery-costs
+    than reloading. Its `#status` box is **exception-only** (unlike the solver
+    and mastery-costs pages, which always report): `setStatus("")` hides it, and
+    the ordinary chart/index renders do exactly that -- it appears only for an
+    item no snapshot mentions, filters that match nothing, or a history store
+    that will not read. **Both tables sort per column** the way the mastery-costs
     table does (`sortIndexRows`/`sortSeriesRows` over the `INDEX_SORTS`/
     The index's two **Change columns are windows measured back from now**, not
     "since your first ever snapshot": `indexRows(snapshots, now)` walks

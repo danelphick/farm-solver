@@ -813,10 +813,16 @@ function renderIndex(snapshots) {
 
 // --- Page state --------------------------------------------------------------
 
+// Unlike the other two pages, this box only speaks up when something is off --
+// an item no snapshot mentions, filters that match nothing, a history store
+// that will not read. Called with no text for the ordinary cases (a chart, a
+// listed index), where the page already shows what it has and a box repeating
+// the count in the corner is just noise.
 function setStatus(text, kind) {
   const el = $("#status");
-  el.textContent = text;
+  el.textContent = text || "";
   el.className = "status" + (kind ? " status-" + kind : "");
+  el.hidden = !text;
 }
 
 // Every snapshot, loaded once per page load (and again after a settings save,
@@ -840,14 +846,12 @@ function render() {
   hideAll();
 
   if (!snapshots.length) {
+    // #timeline-empty says this at length, and says what to do about it.
     $("#timeline-empty").hidden = false;
-    setStatus("No snapshots saved yet.");
+    setStatus("");
     return;
   }
   $("#timeline-empty").hidden = true;
-
-  const span = `${snapshots[0].date} → ${snapshots[snapshots.length - 1].date}`;
-  const kept = `${snapshots.length.toLocaleString()} snapshot${snapshots.length === 1 ? "" : "s"}`;
 
   if (!item) {
     // The filters belong to the index, so they appear with it -- and stay put
@@ -855,15 +859,11 @@ function render() {
     // relax them again.
     $("#filter-details").hidden = false;
     const { shown, total } = renderIndex(snapshots);
-    const listed =
-      shown === total
-        ? `${total.toLocaleString()} items`
-        : `${shown.toLocaleString()} of ${total.toLocaleString()} items`;
     setStatus(
       shown
-        ? `${listed} · ${kept} · ${span} · pick one to chart it`
+        ? ""
         : `Nothing matches these filters · ${total.toLocaleString()} items with history`,
-      shown ? "ok" : "error"
+      "error"
     );
     return;
   }
@@ -876,12 +876,7 @@ function render() {
   shownSeries = series;
   renderChart(series, item);
   renderTable(series);
-  const total = series[series.length - 1].progress - series[0].progress;
-  setStatus(
-    `${item}: ${series.length} of ${kept} · ${series[0].date} → ` +
-      `${series[series.length - 1].date} · ${total >= 0 ? "+" : ""}${total.toLocaleString()} progress`,
-    "ok"
-  );
+  setStatus("");
 }
 
 // Selecting an item rewrites the query string in place, so the URL stays the

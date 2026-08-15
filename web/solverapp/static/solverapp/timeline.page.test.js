@@ -324,6 +324,7 @@ describe("the timeline page", () => {
 
   test("says so when no snapshot mentions the item", async () => {
     await loadPage({ url: "/timeline?item=Nonesuch" });
+    expect(document.querySelector("#status").hidden).toBe(false);
     expect(document.querySelector("#status").textContent).toMatch(/No snapshot mentions/);
     expect(document.querySelector("#timeline-chart").hidden).toBe(true);
     expect(document.querySelector("#timeline-section").hidden).toBe(true);
@@ -333,7 +334,19 @@ describe("the timeline page", () => {
     await loadPage({ snapshots: [] });
     expect(document.querySelector("#timeline-empty").hidden).toBe(false);
     expect(document.querySelector("#timeline-index").hidden).toBe(true);
-    expect(document.querySelector("#status").textContent).toMatch(/No snapshots saved yet/);
+    // #timeline-empty covers this one, so the box stays out of it.
+    expect(document.querySelector("#status").hidden).toBe(true);
+  });
+
+  // The box is for the states that would otherwise go unexplained; when there
+  // is a chart or a listed index to read, it says nothing at all.
+  test("hides the status box once there is something to show", async () => {
+    await loadPage();
+    expect(document.querySelector("#status").hidden).toBe(true);
+
+    await loadPage({ url: "/timeline?item=Tomato" });
+    expect(document.querySelector("#timeline-chart").hidden).toBe(false);
+    expect(document.querySelector("#status").hidden).toBe(true);
   });
 
   // Typing an item rewrites the query string in place, so the URL stays the
@@ -590,6 +603,7 @@ describe("the index filters", () => {
       $$(selector).dispatchEvent(new Event("change"));
     });
     expect(items()).toEqual([]);
+    expect($$("#status").hidden).toBe(false);
     expect($$("#status").textContent).toMatch(/Nothing matches these filters/);
     expect($$("#filter-details").hidden).toBe(false);
   });
