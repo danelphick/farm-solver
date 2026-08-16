@@ -1183,11 +1183,11 @@ details[open] > summary .summary-detail {
 /* The timeline's progress chart: an inline SVG built client-side by
    timeline.js's chartSvg, sized exactly like the solver page's impact graph
    (the container scrolls rather than squashing the fixed viewBox). */
-/* The padding is the band the scale toggle sits in, above the chart's top-right
-   corner: overlaying the plot itself would land the button on the top tier
-   line's M/GM/MM label. The scrolling is #chart-canvas's job rather than this
-   element's, so the absolutely positioned button does not scroll away from the
-   corner it is pinned to. */
+/* The padding is the band the chart's controls sit in, above the plot:
+   overlaying the plot itself would land them on the axis labels and the top
+   tier line's M/GM/MM label. The scrolling is #chart-canvas's job rather than
+   this element's, so the absolutely positioned band does not scroll away with
+   a wide chart. */
 .timeline-chart {
   position: relative;
   margin: 0.5rem 0 1rem;
@@ -1198,10 +1198,25 @@ details[open] > summary .summary-detail {
   overflow-x: auto;
 }
 
-.chart-scale {
+/* Time windows on the left, the scale toggle on the right. */
+.chart-controls {
   position: absolute;
   top: 0;
+  left: 0;
   right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chart-range {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.chart-scale,
+.chart-range button {
   padding: 0.2rem 0.5rem;
   border-radius: 0.4rem;
   background: var(--panel);
@@ -1211,9 +1226,31 @@ details[open] > summary .summary-detail {
   cursor: pointer;
 }
 
-.chart-scale:hover {
+.chart-scale:hover,
+.chart-range button:hover:not(:disabled):not([aria-pressed="true"]) {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* The window being shown. Also the state a screen reader gets, via the
+   buttons' aria-pressed. */
+.chart-range button[aria-pressed="true"] {
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* It is already accent-on-accent, so the hover above would paint its label the
+   colour of its own background: brighten the whole button instead, the way
+   .btn-primary does. */
+.chart-range button[aria-pressed="true"]:hover {
+  filter: brightness(1.1);
+}
+
+/* A window with no snapshots in it -- offering it would draw an empty chart. */
+.chart-range button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .timeline-chart svg {

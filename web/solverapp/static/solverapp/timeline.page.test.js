@@ -308,6 +308,74 @@ describe("the timeline page", () => {
     ).toEqual(["GM", "MM"]);
   });
 
+  // The time windows above the chart's top-left corner. The fixture's Tomato
+  // has snapshots on 1, 8 and 15 July and the clock is 16 July 06:00, so "7d"
+  // reaches back to the 8th (n + 1 days, so a week of movement has a reading at
+  // each end) and keeps the last two -- while the table below still lists all
+  // three.
+  describe("the chart's time windows", () => {
+    const windows = () =>
+      [...document.querySelectorAll("#chart-range button")].map((b) => b.textContent);
+    const pressed = () =>
+      document.querySelector("#chart-range button[aria-pressed='true']").textContent;
+    const plotted = () => document.querySelectorAll("#timeline-chart circle.pt").length;
+    const click = (label) =>
+      [...document.querySelectorAll("#chart-range button")]
+        .find((b) => b.textContent === label)
+        .click();
+
+    test("restrict the chart without touching the table", async () => {
+      await loadPage({ url: "/timeline?item=Tomato" });
+      expect(windows()).toEqual(["1d", "7d", "1m", "1y", "All"]);
+      expect(pressed()).toBe("All");
+      expect(plotted()).toBe(3);
+
+      click("7d");
+      expect(pressed()).toBe("7d");
+      expect(plotted()).toBe(2);
+      expect(document.querySelectorAll("#timeline-body tr")).toHaveLength(3);
+
+      click("All");
+      expect(plotted()).toBe(3);
+    });
+
+    // Three days after the last snapshot: the last day holds nothing, so its
+    // button is not offered -- there would be no chart behind it.
+    const STALE = new Date(2026, 6, 18, 6, 0);
+
+    test("a window with no snapshots in it is disabled", async () => {
+      await loadPage({ url: "/timeline?item=Tomato", now: STALE });
+      const disabled = [...document.querySelectorAll("#chart-range button")]
+        .filter((b) => b.disabled)
+        .map((b) => b.textContent);
+      expect(disabled).toEqual(["1d"]);
+    });
+
+    test("the chosen window is remembered for the next visit", async () => {
+      await loadPage({ url: "/timeline?item=Tomato" });
+      click("1m");
+      expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+        timeline_window: "1m",
+      });
+
+      await loadPage({ url: "/timeline?item=Tomato", ui: { timeline_window: "1m" } });
+      expect(pressed()).toBe("1m");
+    });
+
+    // A saved window this item has since aged out of: draw everything rather
+    // than an empty axis. One loadPage per test -- a second call cannot move
+    // the faked clock, so a case needing its own `now` gets its own test.
+    test("a saved window that has emptied falls back to All", async () => {
+      await loadPage({
+        url: "/timeline?item=Tomato",
+        ui: { timeline_window: "1d" },
+        now: STALE,
+      });
+      expect(pressed()).toBe("All");
+      expect(plotted()).toBe(3);
+    });
+  });
+
   // The chart's one live control: hovering a point raises the shared tooltip
   // box, fills it with that snapshot's date/time and mastery, and moves it over
   // the point. Leaving puts it away again.

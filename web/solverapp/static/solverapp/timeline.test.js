@@ -23,6 +23,7 @@ import {
   tooltipBox,
   tooltipLines,
   transitiveConsumers,
+  windowSeries,
 } from "./timeline.js";
 
 const point = (takenAt, progress) => ({
@@ -164,6 +165,44 @@ describe("chartRange", () => {
   });
 });
 
+describe("windowSeries", () => {
+  const NOW = new Date("2026-08-16T06:00:00.000Z");
+  const series = [
+    point("2025-06-01T12:00:00.000Z", 100), // over a year back
+    point("2026-06-20T12:00:00.000Z", 200), // ~2 months
+    point("2026-08-01T12:00:00.000Z", 300), // ~2 weeks
+    point("2026-08-12T12:00:00.000Z", 400), // 4 days
+    point("2026-08-14T12:00:00.000Z", 500), // 2 days
+    point("2026-08-15T12:00:00.000Z", 600), // 18 hours
+  ];
+  const kept = (key) => windowSeries(series, key, NOW).map((p) => p.progress);
+
+  // Each window reaches back a day further than it says, so what it shows is
+  // that many days of movement: "1d" is a day's climb (two readings), not one
+  // point on its own.
+  test("keeps the points inside the window, measured back from now", () => {
+    expect(kept("1d")).toEqual([500, 600]);
+    expect(kept("7d")).toEqual([400, 500, 600]);
+    expect(kept("1m")).toEqual([300, 400, 500, 600]);
+    expect(kept("1y")).toEqual([200, 300, 400, 500, 600]);
+  });
+
+  test("keeps everything for the All window", () => {
+    expect(kept("all")).toEqual([100, 200, 300, 400, 500, 600]);
+  });
+
+  // What a saved preference from an older build looks like.
+  test("treats an unknown window as All", () => {
+    expect(kept("6h")).toEqual([100, 200, 300, 400, 500, 600]);
+  });
+
+  // A window can be empty -- the page disables the button rather than drawing
+  // an empty axis, but the function itself just says so.
+  test("can come back empty", () => {
+    expect(windowSeries([point("2026-01-01T12:00:00.000Z", 1)], "7d", NOW)).toEqual([]);
+  });
+});
+
 describe("resolveScale", () => {
   const wide = [
     point("2026-07-01T12:00:00.000Z", 120_000),
@@ -238,6 +277,35 @@ describe("chartSvg", () => {
     ]);
     const ys = [...svg.querySelectorAll("circle.pt")].map((c) => Number(c.getAttribute("cy")));
     expect(ys[1]).toBeLessThan(ys[0]); // SVG y grows downwards
+  });
+
+  // The X axis is labelled at both ends and the midpoint -- but they are dates,
+  // and inside the 1d window all three can land on the same day.
+  const xLabels = (svg) =>
+    [...svg.querySelectorAll("text.muted")]
+      .map((t) => t.textContent)
+      .filter((label) => /[A-Za-z]/.test(label));
+
+  test("labels the X axis at both ends and the middle", () => {
+    expect(
+      xLabels(
+        draw([
+          point("2026-07-01T12:00:00.000Z", 100),
+          point("2026-07-31T12:00:00.000Z", 300),
+        ])
+      )
+    ).toHaveLength(3);
+  });
+
+  test("drops a midpoint date that repeats an end", () => {
+    expect(
+      xLabels(
+        draw([
+          point("2026-08-15T12:00:00.000Z", 100),
+          point("2026-08-16T12:00:00.000Z", 300),
+        ])
+      )
+    ).toEqual(["Aug 15", "Aug 16"]);
   });
 
   const tierLabels = (svg) =>

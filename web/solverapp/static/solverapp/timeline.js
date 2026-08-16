@@ -115,6 +115,34 @@ const MARGIN_BOTTOM = 40;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// The chart's time windows, in the order the buttons sit in. Whole days back
+// from *now* (like the index's Change columns, history.changeSince), not from
+// the newest snapshot: "the last week" means the last week, even if nothing was
+// saved in it. A month is 30 days and a year 365 -- the point is a rough span
+// to read the shape over, not a calendar boundary.
+export const CHART_WINDOWS = [
+  { key: "1d", label: "1d", days: 1 },
+  { key: "7d", label: "7d", days: 7 },
+  { key: "1m", label: "1m", days: 30 },
+  { key: "1y", label: "1y", days: 365 },
+  { key: "all", label: "All", days: null },
+];
+
+// The part of `series` a window covers -- everything, for the "all" window (or
+// an unknown key, which is what a stale saved preference looks like).
+//
+// The cutoff reaches back **n + 1 days**, not n: a window of n days is asking
+// for n days of *growth*, and growth over a day needs the reading the day
+// before it as well. At a plain n, "1d" kept one lonely point (no growth
+// visible at all) and "7d" ran Tuesday to Monday; at n + 1 they show one day's
+// climb and a Monday-to-Monday week.
+export function windowSeries(series, key, now = new Date()) {
+  const window = CHART_WINDOWS.find((entry) => entry.key === key);
+  if (!window || !window.days) return series;
+  const cutoff = now.getTime() - (window.days + 1) * DAY_MS;
+  return series.filter((point) => new Date(point.taken_at).getTime() >= cutoff);
+}
+
 // A series has to move at least this fraction of the full 0 -> next-tier range
 // to be drawn on it; below that the chart zooms to the data instead. A mastery
 // moves by ~1% of a tier a week, which from zero is a flat line -- the one
@@ -359,11 +387,20 @@ export function chartSvg(series, item, scale = "auto") {
     })
     .join("");
 
+  // Ends and midpoint -- but the labels are dates, and a window short enough
+  // (the 1d one) puts two or three of them on the same day, where "Aug 16, Aug
+  // 16" reads as a mistake. A repeated middle is simply dropped; the hover
+  // tooltip is where the time of day lives.
   const xTicks = [tLo, (tLo + tHi) / 2, tHi]
+    .map((t) => ({ t, label: shortDate(t) }))
+    .filter(
+      (tick, i, ticks) =>
+        i !== 1 || (tick.label !== ticks[0].label && tick.label !== ticks[2].label)
+    )
     .map(
-      (t) =>
+      ({ t, label }) =>
         `<text class="muted" x="${px(t).toFixed(1)}" y="${bottom + 16}" ` +
-        `text-anchor="middle">${escapeHtml(shortDate(t))}</text>`
+        `text-anchor="middle">${escapeHtml(label)}</text>`
     )
     .join("");
   const yTicks = [lo, (lo + hi) / 2, hi]
@@ -623,15 +660,44 @@ export function wireChartTooltip(svg) {
 // toggle, then whichever they picked, remembered like the sorts and filters.
 let chartScale = "auto";
 
+// Which time window the chart covers -- a CHART_WINDOWS key. The table below it
+// keeps every snapshot either way: the window is about the shape of the line.
+let chartWindow = "all";
+
+// The window buttons, one per CHART_WINDOWS entry, with the empty ones disabled
+// -- a window holding no snapshot has no chart to draw, and saying so on the
+// button beats an empty plot. The chosen one carries aria-pressed.
+function renderWindowButtons(series, shownKey) {
+  $("#chart-range").innerHTML = CHART_WINDOWS.map((window) => {
+    const empty = !windowSeries(series, window.key).length;
+    return `<button type="button" data-window="${window.key}"` +
+      `${empty ? " disabled" : ""}` +
+      ` aria-pressed="${window.key === shownKey ? "true" : "false"}"` +
+      ` title="${window.days ? `The last ${window.days} days` : "Every snapshot"}">` +
+      `${window.label}</button>`;
+  }).join("");
+}
+
+// What the chart is actually plotting: the chosen window of `series`, or the
+// whole thing when that window holds nothing. A saved "1d" on an item last
+// snapshotted a month ago would otherwise leave an empty axis.
+function windowed(series) {
+  const shown = windowSeries(series, chartWindow);
+  return shown.length ? { key: chartWindow, series: shown } : { key: "all", series };
+}
+
 function renderChart(series, item) {
   const holder = $("#timeline-chart");
   const canvas = $("#chart-canvas");
-  canvas.innerHTML = chartSvg(series, item, chartScale);
+  const { key: shownKey, series: shown } = windowed(series);
+  renderWindowButtons(series, shownKey);
+
+  canvas.innerHTML = chartSvg(shown, item, chartScale);
   wireChartTooltip(canvas.querySelector("svg"));
 
   // The button offers the scale you are NOT looking at, so it says what
   // pressing it does rather than what the chart is currently doing.
-  const showing = resolveScale(series, chartScale);
+  const showing = resolveScale(shown, chartScale);
   const button = $("#chart-scale");
   button.textContent = showing === "full" ? "Zoom to data" : "Show next tier";
   button.setAttribute("aria-pressed", showing === "zoom" ? "true" : "false");
@@ -1165,14 +1231,32 @@ function init() {
     () => renderTable(shownSeries)
   );
 
-  // The scale toggle flips to the scale the chart is not in, and only ever
-  // redraws the chart -- the table below it reads the same series either way.
-  const savedScale = readUi().timeline_scale;
-  if (savedScale === "full" || savedScale === "zoom") chartScale = savedScale;
+  // Both chart controls only ever redraw the chart -- the table below it lists
+  // every snapshot whatever the chart is showing -- and both remember what was
+  // picked, like the sorts and the filters.
+  const saved = readUi();
+  if (saved.timeline_scale === "full" || saved.timeline_scale === "zoom") {
+    chartScale = saved.timeline_scale;
+  }
+  if (CHART_WINDOWS.some((window) => window.key === saved.timeline_window)) {
+    chartWindow = saved.timeline_window;
+  }
+  const redrawChart = () => renderChart(shownSeries, $("#timeline-item").value.trim());
+
   $("#chart-scale").addEventListener("click", () => {
-    chartScale = resolveScale(shownSeries, chartScale) === "full" ? "zoom" : "full";
+    chartScale =
+      resolveScale(windowed(shownSeries).series, chartScale) === "full" ? "zoom" : "full";
     writeUi({ timeline_scale: chartScale });
-    renderChart(shownSeries, $("#timeline-item").value.trim());
+    redrawChart();
+  });
+
+  // Delegated on the (stable) group, which renderWindowButtons refills.
+  $("#chart-range").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-window]");
+    if (!button) return;
+    chartWindow = button.dataset.window;
+    writeUi({ timeline_window: chartWindow });
+    redrawChart();
   });
 
   // Delegated on the (stable) tbody, which renderIndex replaces wholesale. A

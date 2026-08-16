@@ -747,10 +747,16 @@ where it stands now, and what it gained over the last week and the last day.
   below that the chart zooms to the data instead, and shows only the tier lines
   that fall inside. The button above the chart's top-right corner switches
   between the two — **Show next tier** for the tier context, **Zoom to data**
-  for the shape — and whichever you pick is remembered for your next visit. A
+  for the shape. A
   zoomed axis is rounded out to tidy bounds — an item running 212,401 → 333,631
   is drawn 210k to 350k — so the labels are figures you can reason about. The
   axis always gives real figures, and the table has the exact numbers.
+- **The chart can be narrowed to a recent stretch.** **1d / 7d / 1m / 1y / All**
+  above the chart's top-left corner restrict it to the last day, week, 30 days
+  or 365 — each reaching back one reading further, so 1d draws a single day's
+  climb and 7d runs Monday to Monday rather than stopping a day short. A window
+  with no snapshots in it is greyed out, the table below always lists every
+  snapshot, and both this and the scale are remembered for your next visit.
 - **The Master line bows out when it is in the way.** On a chart whose scale
   reaches Megamaster, the Master threshold sits at 1% of the height, hard
   against the axis, so only the Grandmaster and Megamaster lines are drawn.
