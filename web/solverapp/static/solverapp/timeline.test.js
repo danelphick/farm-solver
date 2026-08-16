@@ -15,6 +15,7 @@ import {
   nextGoalHref,
   nextGoalLabel,
   nextGoalTitle,
+  niceRange,
   sortIndexRows,
   sortSeriesRows,
   timelineHref,
@@ -36,6 +37,37 @@ function draw(series, item = "Tomato") {
 
 const cx = (svg) =>
   [...svg.querySelectorAll("circle.pt")].map((c) => Number(c.getAttribute("cx")));
+
+describe("niceRange", () => {
+  // The case that prompted the rule: a Bamboo Fence running 212,401 → 333,631
+  // used to be drawn 194k → 352k. Both bounds now carry a 0 in their third
+  // figure, and the midpoint tick lands on one too.
+  test("rounds the bounds out to a whole step of the span", () => {
+    expect(niceRange(212_401, 333_631)).toEqual({ lo: 210_000, hi: 350_000 });
+  });
+
+  // Steps come from the span, not the values: rounding 995,000 → 1,005,000 to
+  // the values' own significant figures would give 990k → 1.1M and flatten a
+  // line that is the whole point of the chart.
+  test("steps by the span even when the values are far larger", () => {
+    expect(niceRange(995_000, 1_005_000)).toEqual({ lo: 995_000, hi: 1_005_000 });
+    expect(niceRange(339_062, 342_487)).toEqual({ lo: 339_000, hi: 342_600 });
+  });
+
+  // chartSvg labels lo, the midpoint and hi, so an odd number of steps would
+  // put the middle label on a half step (210k / 275k / 340k).
+  test("leaves an even number of steps, so the midpoint is round too", () => {
+    const { lo, hi } = niceRange(212_401, 333_631);
+    expect((lo + hi) / 2).toBe(280_000);
+    // 47,512 → 61,004 rounds to 47k → 62k, which is 15 steps: one more.
+    expect(niceRange(47_512, 61_004)).toEqual({ lo: 47_000, hi: 63_000 });
+  });
+
+  test("never steps below a whole unit of progress, or below zero", () => {
+    expect(niceRange(0, 1)).toEqual({ lo: 0, hi: 2 });
+    expect(niceRange(212_401, 212_450)).toEqual({ lo: 212_401, hi: 212_451 });
+  });
+});
 
 describe("chartRange", () => {
   // A lone snapshot has no shape to show, so it keeps the tier context.
@@ -62,16 +94,16 @@ describe("chartRange", () => {
   // The reason the zoom exists: a week's real progress is ~1% of a tier, which
   // drawn from zero is a flat line -- the one thing this page must not be.
   test("zooms to the data when the movement would be invisible", () => {
-    const { lo, hi } = chartRange([
-      point("2026-07-01T12:00:00.000Z", 339_062),
-      point("2026-07-24T12:00:00.000Z", 342_487),
-    ]);
-    expect(lo).toBeGreaterThan(300_000);
-    expect(lo).toBeLessThan(339_062);
-    expect(hi).toBeGreaterThan(342_487);
-    expect(hi).toBeLessThan(400_000);
+    expect(
+      chartRange([
+        point("2026-07-01T12:00:00.000Z", 339_062),
+        point("2026-07-24T12:00:00.000Z", 342_487),
+      ])
+    ).toEqual(niceRange(339_062, 342_487));
   });
 
+  // A flat series has no span for niceRange to step by, so it is given a window
+  // first and that window is what gets rounded.
   test("a flat series still gets a window to sit in", () => {
     const { lo, hi } = chartRange([
       point("2026-07-01T12:00:00.000Z", 339_101),
@@ -79,6 +111,8 @@ describe("chartRange", () => {
     ]);
     expect(lo).toBeLessThan(339_101);
     expect(hi).toBeGreaterThan(339_101);
+    expect(lo % 10).toBe(0);
+    expect(hi % 10).toBe(0);
   });
 
   test("never drops below zero when zooming a small progress", () => {
@@ -160,11 +194,17 @@ describe("chartSvg", () => {
     expect(tierLabels(draw([point("2026-07-01T12:00:00.000Z", 4_000)]))).toEqual(["M"]);
   });
 
-  test("draws all three once the range reaches Megamaster", () => {
+  // On a scale that reaches Megamaster the Master line sits at 1% of the
+  // height, hard against the axis, and adds nothing to the Grandmaster line.
+  test("drops Master once Grandmaster and Megamaster are both drawn", () => {
     expect(tierLabels(draw([point("2026-07-01T12:00:00.000Z", 412_900)]))).toEqual([
-      "M",
       "GM",
       "MM",
+    ]);
+    // Two of the three is not the crowded case: M stays while MM is off-chart.
+    expect(tierLabels(draw([point("2026-07-01T12:00:00.000Z", 40_000)]))).toEqual([
+      "M",
+      "GM",
     ]);
   });
 

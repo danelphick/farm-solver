@@ -2050,10 +2050,21 @@ that imports it without going through `manage.py`.
     fortnight's gap reads as one. Y comes from **`chartRange`**: 0 → the next
     tier above the best progress, *unless* the series moves less than 20% of
     that (a week of real progress is ~1% of a tier, which from zero is a flat
-    line), in which case it zooms to the padded data and keeps only the tier
-    lines that fall inside it -- a lone snapshot always keeps the full range,
-    having no shape to show. `axisLabel` spells figures out in full on a zoomed
-    (<10k wide) axis, where every tick would otherwise round to the same "339k".
+    line), in which case it zooms to the data -- a lone snapshot always keeps
+    the full range, having no shape to show. A zoomed window is rounded out by
+    **`niceRange`**, whose step is the span's **second significant place** (10k
+    across a 121k window, 100 across a 3.4k one): the bounds get a 0 in their
+    third figure while still hugging the data, and an **even** number of steps
+    apart so the midpoint tick is round too — 212,401→333,631 draws 210k / 280k
+    / 350k, not 194k / 273k / 352k. Taking the step from the span rather than
+    the values is what keeps 995,000 → 1,005,000 stepping in 1,000 instead of
+    blowing out to 990k → 1.1M. `axisLabel` spells figures out in full on a
+    zoomed (<10k wide) axis, where every tick would otherwise round to the same
+    "339k".
+  - **Tier lines** (`visibleTiers`): dotted M/GM/MM references, drawn only where
+    the threshold falls inside the plotted range, **minus Master whenever GM and
+    MM are both drawn** — on a scale reaching Megamaster it sits at 1% of the
+    height, crushed against the axis and saying nothing the GM line does not.
   - **Point tooltips** are the one part of the chart that needs the DOM (the
     rest is markup that just sits there). Hovering a point raises a box naming
     the snapshot: its date and time, and the mastery it recorded -- **not** the

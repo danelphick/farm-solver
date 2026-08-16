@@ -121,6 +121,44 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // drawn from zero, the whole page would be one flat line.
 const ZOOM_BELOW = 0.2;
 
+// A zoomed window widened out to round bounds: the data's own low and high
+// pushed down and up to a whole step, so the axis reads 210k / 280k / 350k
+// rather than "data ± 15%" (194k / 273k / 352k, where no figure means anything
+// and the eye has to work to see 333,631 in "352k").
+//
+// The step is the span's SECOND significant place -- 10k across a 121k window,
+// 100 across a 3.4k one -- which is what puts a 0 in the bounds' third figure
+// while still hugging the data. Deriving it from the span rather than from the
+// values is what keeps a small movement high up the scale honest: a series
+// running 995,000 → 1,005,000 steps in 1,000, where rounding the values
+// themselves would blow the window out to 990k → 1.1M and flatten the line.
+//
+// The bounds also come out an EVEN number of steps apart, because chartSvg
+// labels the midpoint as well as the ends -- otherwise the middle tick lands on
+// a half step (a 13-step window would read 210k / 275k / 340k).
+export function niceRange(least, best) {
+  // Never below 1: progress is a whole number, so a sub-unit step would round
+  // to bounds no tidier than the data.
+  const step = Math.max(10 ** (Math.floor(Math.log10(best - least)) - 1), 1);
+  const lo = Math.floor(least / step) * step;
+  let hi = Math.ceil(best / step) * step;
+  if (Math.round((hi - lo) / step) % 2) hi += step;
+  return { lo: Math.max(lo, 0), hi };
+}
+
+// Which tier thresholds the chart draws a reference line for, given the range
+// it is plotting: those inside it, minus Master when Grandmaster and Megamaster
+// are both there too (see chartSvg).
+function visibleTiers(lo, hi) {
+  const inside = TIER_THRESHOLDS.filter(
+    (tier) => tier.progress >= lo && tier.progress <= hi
+  );
+  const labels = new Set(inside.map((tier) => tier.tier));
+  return labels.has("GM") && labels.has("MM")
+    ? inside.filter((tier) => tier.tier !== "M")
+    : inside;
+}
+
 // The Y range a series is drawn in.
 //
 // The default is 0 up to the next tier threshold above the item's best
@@ -128,9 +166,9 @@ const ZOOM_BELOW = 0.2;
 // M/GM/MM lines placed meaningfully (past Megamaster there is no next
 // threshold, so it takes a little headroom instead). But that only works while
 // the series actually spans a useful part of it: when the movement is small,
-// the range zooms to the data (padded), and only the tier lines that fall
-// inside it are drawn. Either way the axis is labelled with real figures, and
-// the table beside it always has the exact numbers.
+// the range zooms to the data (rounded out by niceRange), and only the tier
+// lines that fall inside it are drawn. Either way the axis is labelled with
+// real figures, and the table beside it always has the exact numbers.
 //
 // One point is never "movement", so a lone snapshot keeps the full range --
 // there is no shape to show, and the tier context is the useful part.
@@ -144,10 +182,13 @@ export function chartRange(series) {
   const span = best - least;
   if (series.length < 2 || span >= (full.hi - full.lo) * ZOOM_BELOW) return full;
 
-  // A flat series still needs a window to sit in the middle of, hence the
-  // floor on the padding.
-  const pad = Math.max(span * 0.15, best * 0.0005, 1);
-  return { lo: Math.max(least - pad, 0), hi: best + pad };
+  // A flat series has no span to round out, so it gets a window of its own to
+  // sit in the middle of first.
+  if (!span) {
+    const pad = Math.max(best * 0.0005, 1);
+    return niceRange(least - pad, best + pad);
+  }
+  return niceRange(least, best);
 }
 
 // --- Point tooltips ----------------------------------------------------------
@@ -280,10 +321,11 @@ export function chartSvg(series, item) {
     .join(" ");
 
   // Dotted reference lines at Master / Grandmaster / Megamaster, drawn only
-  // where they actually fall inside the range being plotted.
-  const tierLines = TIER_THRESHOLDS.filter(
-    (tier) => tier.progress >= lo && tier.progress <= hi
-  )
+  // where they actually fall inside the range being plotted -- and Master is
+  // dropped once both of the others are up: on a scale that reaches Megamaster
+  // it sits at 1% of the height, a line crushed against the axis that says
+  // nothing the Grandmaster line above it does not already say.
+  const tierLines = visibleTiers(lo, hi)
     .map((tier) => {
       const y = py(tier.progress).toFixed(1);
       return `<line class="tier" x1="${left}" y1="${y}" x2="${right}" y2="${y}" />` +

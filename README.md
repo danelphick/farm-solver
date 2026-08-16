@@ -744,9 +744,13 @@ where it stands now, and what it gained over the last week and the last day.
   history, not a setting. It does not re-solve anything either.
 - **The chart's scale follows the data.** A week's real progress is around 1% of
   a tier, which drawn from zero would be a flat line, so when the movement is
-  small the chart zooms to it and shows only the tier lines that fall inside.
-  The axis labels always give the real figures, and the table has the exact
-  numbers.
+  small the chart zooms to it and shows only the tier lines that fall inside. A
+  zoomed axis is rounded out to tidy bounds — an item running 212,401 → 333,631
+  is drawn 210k to 350k — so the labels are figures you can reason about. The
+  axis always gives real figures, and the table has the exact numbers.
+- **The Master line bows out when it is in the way.** On a chart whose scale
+  reaches Megamaster, the Master threshold sits at 1% of the height, hard
+  against the axis, so only the Grandmaster and Megamaster lines are drawn.
 - **Gaps are gaps, not zeroes.** A snapshot taken before you started an item
   simply has no point for it, rather than a drop to zero.
 - **This history lives in your browser only** (in IndexedDB, not the
