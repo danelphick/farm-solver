@@ -13,8 +13,8 @@
   <p class="tagline">
     How one mastery has moved over time, from the dated snapshots you save under
     <strong>&#9881; Settings</strong> (top right): paste your masteries, then
-    press <strong>Save dated snapshot</strong>. Every snapshot from the last week
-    is kept and older days are thinned to one a day. This history lives in
+    press <strong>Save dated snapshot</strong>. One snapshot a day is kept &mdash;
+    save again the same day and the newer paste replaces it. This history lives in
     <em>this browser only</em> &mdash; it is never sent to the server, and is not
     backed up or exported, so clearing site data loses it.
   </p>
@@ -142,10 +142,9 @@
               aria-label="Sort by latest progress"><span class="sort-arrow">&#8597;</span></button>
           </th>
           <!-- Both Change columns are windowed, measured back from now: what
-               the item gained over the last week (the span retention keeps in
-               full) and over the last day. "—" means the window cannot be
-               answered, not that nothing moved -- see timeline.js's indexRows
-               and history.changeSince. -->
+               the item gained over the last week and over the last day. "—"
+               means the window cannot be answered, not that nothing moved --
+               see timeline.js's indexRows and history.changeSince. -->
           <th scope="col" class="num">Change (7d)
             <button type="button" class="sort-btn" data-sort="change7"
               aria-label="Sort by change over the last 7 days"><span class="sort-arrow">&#8597;</span></button>

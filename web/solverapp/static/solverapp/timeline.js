@@ -633,8 +633,7 @@ export function nextGoalTitle(item, tier) {
 // snapshot": what an item gained over the last week and the last day
 // (history.changeSince, which returns null -- "—" in the table -- for a window
 // it cannot answer). Windows are measured from `now`, so a history that stopped
-// a fortnight ago reads as "—" rather than claiming a week of no progress. The
-// 7-day window is also exactly the span retention keeps in full.
+// a fortnight ago reads as "—" rather than claiming a week of no progress.
 export const CHANGE_WINDOWS = [
   { key: "change7", days: 7 },
   { key: "change1", days: 1 },

@@ -10,10 +10,10 @@
 // Nothing here ever reaches the server -- history is per-browser, and is neither
 // exported nor backed up.
 //
-// Retention: every snapshot of the last `KEEP_ALL_DAYS` days is kept (so saving
-// twice in one day keeps both, and a same-day re-paste after an hour's play is
-// a real second data point); older days are thinned to their last snapshot. The
-// prune runs inside each save's transaction -- the one moment history grows.
+// Retention: one snapshot a day, every day -- each day is thinned to its last
+// snapshot, so saving again the same evening replaces the morning's rather than
+// recording a second point. The prune runs inside each save's transaction --
+// the one moment history grows.
 
 // Bumped only for a schema change (a new store/index); the upgrade handler
 // creates whatever a given version needs.
@@ -21,8 +21,6 @@ const DB_NAME = "farm-solver-history";
 const DB_VERSION = 1;
 const STORE = "mastery_snapshots";
 const DATE_INDEX = "date";
-
-export const KEEP_ALL_DAYS = 7;
 
 // The three mastery tiers as absolute progress thresholds (mirrors
 // main._MASTERY_TIERS; tiers.js owns the labels and the tier-of-a-progress
@@ -97,28 +95,18 @@ export function localDateKey(when = new Date()) {
   return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
 }
 
-// `dateKey` shifted by whole days. Parsed as UTC midnight rather than local, so
-// a day that is 23 or 25 hours long (a DST boundary) still steps exactly one
-// calendar day -- these keys are labels, not instants.
-export function shiftDateKey(dateKey, days) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day + days));
-  return shifted.toISOString().slice(0, 10);
-}
-
 // --- Retention --------------------------------------------------------------
 
 // Which snapshots to delete, given `[{taken_at, date}]` for everything stored.
 //
-// Everything dated on or after `todayKey - keepDays` survives untouched, so a
-// day's worth of repeat saves stays intact while it is still interesting. Older
-// days keep only their LAST snapshot -- the most recent state of that day, and
-// the one whose gains cover the whole day.
+// Every day keeps only its LAST snapshot -- the most recent state of that day,
+// and the one whose gains cover the whole day. Today included: a second save
+// this evening supersedes this morning's rather than sitting beside it, so the
+// history is exactly one point per day however often the button is pressed.
 //
 // Pure, so the rule is unit-tested directly (history.test.js) rather than
 // through a database.
-export function keysToPrune(entries, todayKey, keepDays = KEEP_ALL_DAYS) {
-  const cutoff = shiftDateKey(todayKey, -keepDays);
+export function keysToPrune(entries) {
   const lastOfDay = new Map();
   const stale = [];
   // Sorted rather than trusting the caller's order (the index cursor already
@@ -129,7 +117,6 @@ export function keysToPrune(entries, todayKey, keepDays = KEEP_ALL_DAYS) {
       : String(a.date).localeCompare(String(b.date))
   );
   for (const entry of sorted) {
-    if (entry.date >= cutoff) continue;
     const previous = lastOfDay.get(entry.date);
     if (previous !== undefined) stale.push(previous);
     lastOfDay.set(entry.date, entry.taken_at);
@@ -258,9 +245,10 @@ export function openHistoryDb() {
         const db = request.result;
         if (!db.objectStoreNames.contains(STORE)) {
           // Keyed by the ISO timestamp: it sorts chronologically, so a plain
-          // cursor over the store is already the time series, and several
-          // snapshots a day each get their own record (unlike a date key, where
-          // the second save of a day would silently replace the first).
+          // cursor over the store is already the time series, and every record
+          // keeps the instant it was taken at (what the delta table divides a
+          // gain by). A day's repeat saves are separate records until the prune
+          // picks the one to keep, rather than a date key silently overwriting.
           const store = db.createObjectStore(STORE, { keyPath: "taken_at" });
           // The local calendar day is stored, not derived at read time (it
           // cannot be recovered from the timestamp once the user travels), and
@@ -285,7 +273,7 @@ export function openHistoryDb() {
 // Every delete is issued synchronously from the cursor's final onsuccess, so
 // there is no await between reading the keys and using them -- an intervening
 // microtask turn would let the transaction auto-commit out from under us.
-function pruneSnapshots(store, todayKey) {
+function pruneSnapshots(store) {
   return new Promise((resolve, reject) => {
     const entries = [];
     const request = store.index(DATE_INDEX).openKeyCursor();
@@ -297,7 +285,7 @@ function pruneSnapshots(store, todayKey) {
         cursor.continue();
         return;
       }
-      const pruned = keysToPrune(entries, todayKey);
+      const pruned = keysToPrune(entries);
       pruned.forEach((key) => store.delete(key));
       resolve(pruned.length);
     };
@@ -321,7 +309,7 @@ export async function putSnapshot(items, when = new Date()) {
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
   store.put(record);
-  await pruneSnapshots(store, record.date);
+  await pruneSnapshots(store);
   await transactionDone(tx);
   return record;
 }
@@ -333,15 +321,15 @@ export async function putSnapshot(items, when = new Date()) {
 // A MERGE, not a replace: restoring on a browser that has its own history must
 // not throw that history away. Records collide only on an identical `taken_at`,
 // where the incoming one wins (it is the same snapshot, taken at the same
-// instant). The prune runs afterwards in the same transaction, so importing a
-// year of daily snapshots leaves the store obeying the same rule a save does.
-export async function putSnapshots(records, when = new Date()) {
+// instant). The prune runs afterwards in the same transaction, so a backup
+// holding several snapshots of a day collapses to one the way a save would.
+export async function putSnapshots(records) {
   const db = await openHistoryDb();
   if (!db) return 0;
   const tx = db.transaction(STORE, "readwrite");
   const store = tx.objectStore(STORE);
   records.forEach((record) => store.put(record));
-  await pruneSnapshots(store, localDateKey(when));
+  await pruneSnapshots(store);
   await transactionDone(tx);
   return records.length;
 }

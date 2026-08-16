@@ -735,9 +735,10 @@ where it stands now, and what it gained over the last week and the last day.
   turn into. Only drops that are a material for something are added. **Clear
   all** empties the list, and both filters are remembered for your next visit.
 
-- **Snapshots are per day, but not one per day.** Every snapshot from the last
-  7 days is kept, so saving twice in an evening records both; days older than
-  that are thinned to their last snapshot, so a year of history stays small.
+- **One snapshot per day.** Each day keeps its last snapshot, so pressing the
+  button again after another hour's play replaces that day's reading with the
+  newer one rather than recording a second point — the chart is one point a day,
+  and a year of history stays small.
 - **The button saves immediately.** Unlike every other control in the popover,
   it does not wait for **Save** and is not undone by **Cancel** — a snapshot is
   history, not a setting. It does not re-solve anything either.

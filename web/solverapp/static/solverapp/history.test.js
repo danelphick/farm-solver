@@ -13,7 +13,6 @@ import {
   parseMasteryText,
   seriesByItem,
   seriesFor,
-  shiftDateKey,
 } from "./history.js";
 
 // A paste in the exact shape FarmRPG copies out (see mydata/mastery-*.txt):
@@ -75,24 +74,15 @@ describe("localDateKey", () => {
   });
 });
 
-describe("shiftDateKey", () => {
-  test("steps whole calendar days across month and year ends", () => {
-    expect(shiftDateKey("2026-07-28", -7)).toBe("2026-07-21");
-    expect(shiftDateKey("2026-07-03", -7)).toBe("2026-06-26");
-    expect(shiftDateKey("2026-01-02", -7)).toBe("2025-12-26");
-    expect(shiftDateKey("2026-07-28", 1)).toBe("2026-07-29");
-  });
-});
-
 describe("keysToPrune", () => {
   const at = (date, hour) => ({ date, taken_at: `${date}T${String(hour).padStart(2, "0")}:00:00.000Z` });
 
-  test("keeps every snapshot inside the retention window", () => {
-    const entries = [at("2026-07-28", 9), at("2026-07-28", 21), at("2026-07-22", 8)];
-    expect(keysToPrune(entries, "2026-07-28")).toEqual([]);
+  test("keeps a history that already holds one snapshot a day", () => {
+    const entries = [at("2026-07-28", 9), at("2026-07-27", 21), at("2026-07-22", 8)];
+    expect(keysToPrune(entries)).toEqual([]);
   });
 
-  test("thins each older day to its last snapshot", () => {
+  test("thins each day to its last snapshot", () => {
     const entries = [
       at("2026-07-10", 8),
       at("2026-07-10", 12),
@@ -100,19 +90,26 @@ describe("keysToPrune", () => {
       at("2026-07-11", 9),
       at("2026-07-28", 9),
     ];
-    expect(keysToPrune(entries, "2026-07-28")).toEqual([
+    expect(keysToPrune(entries)).toEqual([
       at("2026-07-10", 8).taken_at,
       at("2026-07-10", 12).taken_at,
     ]);
   });
 
+  // The rule has no window, so the newest day is thinned like any other: a
+  // second save today supersedes this morning's rather than joining it.
+  test("thins today too", () => {
+    const entries = [at("2026-07-28", 9), at("2026-07-28", 21)];
+    expect(keysToPrune(entries)).toEqual([at("2026-07-28", 9).taken_at]);
+  });
+
   test("is order-independent", () => {
     const entries = [at("2026-07-10", 20), at("2026-07-10", 8)];
-    expect(keysToPrune(entries, "2026-07-28")).toEqual([at("2026-07-10", 8).taken_at]);
+    expect(keysToPrune(entries)).toEqual([at("2026-07-10", 8).taken_at]);
   });
 
   test("nothing to do when there is no history at all", () => {
-    expect(keysToPrune([], "2026-07-28")).toEqual([]);
+    expect(keysToPrune([])).toEqual([]);
   });
 });
 
@@ -259,13 +256,15 @@ describe("the snapshot store", () => {
     expect(stored[0].items).toEqual({ Tomato: 100 });
   });
 
-  test("keeps both of two saves on the same day", async () => {
+  // One point per day: the evening's save replaces the morning's, rather than
+  // recording a second reading for the same date.
+  test("a second save on a day supersedes the first", async () => {
     const history = await freshHistory();
     await history.putSnapshot({ Tomato: 100 }, new Date(2026, 6, 28, 9, 0));
     await history.putSnapshot({ Tomato: 140 }, new Date(2026, 6, 28, 21, 0));
 
     const stored = await history.getSnapshots();
-    expect(stored.map((s) => s.items.Tomato)).toEqual([100, 140]);
+    expect(stored.map((s) => s.items.Tomato)).toEqual([140]);
   });
 
   test("returns snapshots oldest first", async () => {
@@ -279,19 +278,17 @@ describe("the snapshot store", () => {
     ]);
   });
 
-  // The retention rule, end to end. The prune runs inside the saving
-  // transaction and measures the window from the day being SAVED, so a save is
-  // what thins the days that have since aged out.
-  test("a save thins days older than a week to one snapshot", async () => {
+  // The retention rule, end to end: the prune runs inside the saving
+  // transaction, so the store holds one snapshot a day at every point along the
+  // way -- never a backlog waiting for some later save to thin it.
+  test("a save leaves one snapshot per day", async () => {
     const history = await freshHistory();
     await history.putSnapshot({ Tomato: 10 }, new Date(2026, 6, 1, 8, 0));
     await history.putSnapshot({ Tomato: 20 }, new Date(2026, 6, 1, 20, 0));
-    // Both still inside the window as of the day they were taken.
-    expect(await history.getSnapshots()).toHaveLength(2);
+    expect(await history.getSnapshots()).toHaveLength(1);
 
     await history.putSnapshot({ Tomato: 40 }, new Date(2026, 6, 28, 8, 0));
 
-    // 2026-07-01 has aged out, so only its last snapshot survives.
     const stored = await history.getSnapshots();
     expect(stored.map((s) => s.items.Tomato)).toEqual([20, 40]);
   });
@@ -306,8 +303,7 @@ describe("the snapshot store", () => {
       [
         { taken_at: new Date(2026, 6, 27, 8, 0).toISOString(), date: "2026-07-27", items: { Tomato: 30 } },
         { taken_at: new Date(2026, 6, 28, 8, 0).toISOString(), date: "2026-07-28", items: { Tomato: 44 } },
-      ],
-      new Date(2026, 6, 28, 12, 0)
+      ]
     );
 
     expect(written).toBe(2);
@@ -327,8 +323,7 @@ describe("the snapshot store", () => {
         { taken_at: new Date(2026, 6, 1, 8, 0).toISOString(), date: "2026-07-01", items: { Tomato: 10 } },
         { taken_at: new Date(2026, 6, 1, 20, 0).toISOString(), date: "2026-07-01", items: { Tomato: 20 } },
         { taken_at: new Date(2026, 6, 28, 8, 0).toISOString(), date: "2026-07-28", items: { Tomato: 40 } },
-      ],
-      new Date(2026, 6, 28, 12, 0)
+      ]
     );
 
     expect((await history.getSnapshots()).map((s) => s.items.Tomato)).toEqual([20, 40]);

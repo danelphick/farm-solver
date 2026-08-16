@@ -1999,10 +1999,12 @@ that imports it without going through `manage.py`.
     `tiers.tierForProgress`), so they are derived, not stored.
   - **Retention** (`keysToPrune`, pure and unit-tested; run inside each save's
     own transaction, deletes issued synchronously from the index cursor's final
-    `onsuccess` so the transaction cannot auto-commit in between): every
-    snapshot of the last 7 days is kept -- **several a day is the point**, not
-    an accident -- and each older day is thinned to its **last** snapshot. The
-    window is measured from the day being saved.
+    `onsuccess` so the transaction cannot auto-commit in between): **one
+    snapshot per day**, every day thinned to its **last** one -- the most recent
+    state of that day, and the one whose gains cover the whole of it. There is
+    no keep-everything window, so the day being saved is thinned like any other:
+    a second save today supersedes this morning's. `keysToPrune(entries)` takes
+    nothing else -- no "today", no window length.
   - **The button is the only unstaged control in the popover**: it writes the
     moment it is clicked and so survives Cancel (a snapshot is history, not a
     setting). It neither solves nor touches `farm-solver.v1`.
