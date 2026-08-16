@@ -86,9 +86,21 @@ describe("chartRange", () => {
     expect(
       chartRange([
         point("2026-07-01T12:00:00.000Z", 100_000),
-        point("2026-07-15T12:00:00.000Z", 600_000),
+        point("2026-07-15T12:00:00.000Z", 700_000),
       ])
     ).toEqual({ lo: 0, hi: 1_000_000 });
+  });
+
+  // Under half the tier scale, the movement is real but the chart is mostly
+  // empty above and below it -- 307k → 603k used to sit in the middle third of
+  // a 0 → 1M chart.
+  test("zooms a series that uses less than half the tier scale", () => {
+    expect(
+      chartRange([
+        point("2026-07-29T12:00:00.000Z", 307_000),
+        point("2026-08-16T12:00:00.000Z", 603_000),
+      ])
+    ).toEqual(niceRange(307_000, 603_000));
   });
 
   // The reason the zoom exists: a week's real progress is ~1% of a tier, which

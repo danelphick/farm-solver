@@ -742,9 +742,9 @@ where it stands now, and what it gained over the last week and the last day.
 - **The button saves immediately.** Unlike every other control in the popover,
   it does not wait for **Save** and is not undone by **Cancel** — a snapshot is
   history, not a setting. It does not re-solve anything either.
-- **The chart's scale follows the data.** A week's real progress is around 1% of
-  a tier, which drawn from zero would be a flat line, so when the movement is
-  small the chart zooms to it and shows only the tier lines that fall inside. A
+- **The chart's scale follows the data.** It runs from zero to the next tier
+  while an item's movement fills at least half of that; below that the chart
+  zooms to the data instead, and shows only the tier lines that fall inside. A
   zoomed axis is rounded out to tidy bounds — an item running 212,401 → 333,631
   is drawn 210k to 350k — so the labels are figures you can reason about. The
   axis always gives real figures, and the table has the exact numbers.

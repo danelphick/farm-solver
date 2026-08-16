@@ -2048,10 +2048,13 @@ that imports it without going through `manage.py`.
     properties re-themed by one `prefers-color-scheme: dark` block). X is time-proportional
     from the timestamps, so two snapshots an hour apart sit together and a
     fortnight's gap reads as one. Y comes from **`chartRange`**: 0 → the next
-    tier above the best progress, *unless* the series moves less than 20% of
-    that (a week of real progress is ~1% of a tier, which from zero is a flat
-    line), in which case it zooms to the data -- a lone snapshot always keeps
-    the full range, having no shape to show. A zoomed window is rounded out by
+    tier above the best progress, *unless* the series moves less than
+    `ZOOM_BELOW` (**half**) of that, in which case it zooms to the data -- a
+    lone snapshot always keeps the full range, having no shape to show. The tier
+    scale has to earn the space it takes: a week of real progress is ~1% of a
+    tier (from zero, a flat line), and even a 307k → 603k climb used a third of
+    a 0 → 1M chart with the rest empty, which is why the bar is half and not the
+    fifth it started at. A zoomed window is rounded out by
     **`niceRange`**, whose step is the span's **second significant place** (10k
     across a 121k window, 100 across a 3.4k one): the bounds get a 0 in their
     third figure while still hugging the data, and an **even** number of steps

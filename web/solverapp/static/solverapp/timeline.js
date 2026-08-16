@@ -115,11 +115,16 @@ const MARGIN_BOTTOM = 40;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Below this fraction of the full 0 -> next-tier range, a series' movement is
-// invisible on that scale (a few thousand progress inside a million), so the
-// chart zooms to the data instead. A mastery moves by ~1% of a tier a week --
-// drawn from zero, the whole page would be one flat line.
-const ZOOM_BELOW = 0.2;
+// A series has to move at least this fraction of the full 0 -> next-tier range
+// to be drawn on it; below that the chart zooms to the data instead. A mastery
+// moves by ~1% of a tier a week, which from zero is a flat line -- the one
+// thing this page must not be.
+//
+// Half, not a fifth: at a fifth an item running 307k -> 603k was left on the
+// 0 -> 1M scale, "visible" but using a third of the height with the rest of the
+// chart empty above and below it. The tier scale has to earn the space it
+// takes, and a series filling half of it does.
+const ZOOM_BELOW = 0.5;
 
 // A zoomed window widened out to round bounds: the data's own low and high
 // pushed down and up to a whole step, so the axis reads 210k / 280k / 350k
