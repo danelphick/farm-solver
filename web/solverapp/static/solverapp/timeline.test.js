@@ -16,6 +16,7 @@ import {
   nextGoalLabel,
   nextGoalTitle,
   niceRange,
+  resolveScale,
   sortIndexRows,
   sortSeriesRows,
   timelineHref,
@@ -140,6 +141,47 @@ describe("chartRange", () => {
     const { lo, hi } = chartRange([point("2026-07-01T12:00:00.000Z", 2_000_000)]);
     expect(lo).toBe(0);
     expect(hi).toBeGreaterThan(2_000_000);
+  });
+
+  // The chart's toggle: either scale can be asked for outright, whatever the
+  // automatic rule would have picked.
+  test("takes the scale the reader asked for", () => {
+    const series = [
+      point("2026-07-29T12:00:00.000Z", 307_000),
+      point("2026-08-16T12:00:00.000Z", 603_000),
+    ];
+    expect(chartRange(series, "full")).toEqual({ lo: 0, hi: 1_000_000 });
+    expect(chartRange(series, "zoom")).toEqual(niceRange(307_000, 603_000));
+    expect(chartRange(series)).toEqual(chartRange(series, "zoom"));
+
+    // A lone snapshot is "full" on its own, but can still be zoomed to a window
+    // around the one point it has.
+    const lone = [point("2026-07-01T12:00:00.000Z", 412_900)];
+    expect(resolveScale(lone)).toBe("full");
+    const { lo, hi } = chartRange(lone, "zoom");
+    expect(lo).toBeLessThan(412_900);
+    expect(hi).toBeGreaterThan(412_900);
+  });
+});
+
+describe("resolveScale", () => {
+  const wide = [
+    point("2026-07-01T12:00:00.000Z", 120_000),
+    point("2026-07-15T12:00:00.000Z", 820_000),
+  ];
+  const narrow = [
+    point("2026-07-01T12:00:00.000Z", 307_000),
+    point("2026-07-15T12:00:00.000Z", 603_000),
+  ];
+
+  test("auto keeps the tier scale only for a series that fills it", () => {
+    expect(resolveScale(wide)).toBe("full");
+    expect(resolveScale(narrow)).toBe("zoom");
+  });
+
+  test("an explicit choice wins over the rule", () => {
+    expect(resolveScale(wide, "zoom")).toBe("zoom");
+    expect(resolveScale(narrow, "full")).toBe("full");
   });
 });
 

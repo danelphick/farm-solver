@@ -85,8 +85,14 @@
   <!-- The chart is a self-contained inline <svg> built client-side by
        timeline.js (chartSvg) -- unlike the solver page's impact graph, which
        the server renders, because the history it plots never leaves the
-       browser. -->
-  <div id="timeline-chart" class="timeline-chart" hidden></div>
+       browser. It goes inside #chart-canvas, which timeline.js replaces
+       wholesale on every redraw; the scale toggle sits outside that, in the
+       band above the chart's top right, so it is wired once and stays put.
+       Its label and aria-pressed are set by timeline.js (renderChart). -->
+  <div id="timeline-chart" class="timeline-chart" hidden>
+    <button type="button" id="chart-scale" class="chart-scale" aria-pressed="false"></button>
+    <div id="chart-canvas"></div>
+  </div>
 
   <div id="timeline-section" class="report-section" hidden>
     <table>

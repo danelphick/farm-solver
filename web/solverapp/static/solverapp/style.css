@@ -1183,9 +1183,37 @@ details[open] > summary .summary-detail {
 /* The timeline's progress chart: an inline SVG built client-side by
    timeline.js's chartSvg, sized exactly like the solver page's impact graph
    (the container scrolls rather than squashing the fixed viewBox). */
+/* The padding is the band the scale toggle sits in, above the chart's top-right
+   corner: overlaying the plot itself would land the button on the top tier
+   line's M/GM/MM label. The scrolling is #chart-canvas's job rather than this
+   element's, so the absolutely positioned button does not scroll away from the
+   corner it is pinned to. */
 .timeline-chart {
+  position: relative;
   margin: 0.5rem 0 1rem;
+  padding-top: 1.9rem;
+}
+
+#chart-canvas {
   overflow-x: auto;
+}
+
+.chart-scale {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.chart-scale:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .timeline-chart svg {

@@ -164,36 +164,56 @@ function visibleTiers(lo, hi) {
     : inside;
 }
 
-// The Y range a series is drawn in.
+// The two Y ranges a series can be drawn in, and the rule that picks one.
 //
-// The default is 0 up to the next tier threshold above the item's best
-// progress, so the chart reads as "progress towards the next tier" with the
-// M/GM/MM lines placed meaningfully (past Megamaster there is no next
-// threshold, so it takes a little headroom instead). But that only works while
-// the series actually spans a useful part of it: when the movement is small,
-// the range zooms to the data (rounded out by niceRange), and only the tier
-// lines that fall inside it are drawn. Either way the axis is labelled with
-// real figures, and the table beside it always has the exact numbers.
-//
-// One point is never "movement", so a lone snapshot keeps the full range --
-// there is no shape to show, and the tier context is the useful part.
-export function chartRange(series) {
+// FULL is 0 up to the next tier threshold above the item's best progress, so
+// the chart reads as "progress towards the next tier" with the M/GM/MM lines
+// placed meaningfully (past Megamaster there is no next threshold, so it takes
+// a little headroom instead). ZOOMED is the data's own window, rounded out by
+// niceRange, where only the tier lines that happen to fall inside are drawn.
+// Either way the axis is labelled with real figures, and the table beside it
+// always has the exact numbers.
+export function fullRange(series) {
+  const best = Math.max(...series.map((point) => point.progress));
+  const next = TIER_THRESHOLDS.find((tier) => tier.progress > best);
+  return { lo: 0, hi: next ? next.progress : Math.max(best * 1.05, 1) };
+}
+
+export function zoomedRange(series) {
   const values = series.map((point) => point.progress);
   const best = Math.max(...values);
   const least = Math.min(...values);
-  const next = TIER_THRESHOLDS.find((tier) => tier.progress > best);
-  const full = { lo: 0, hi: next ? next.progress : Math.max(best * 1.05, 1) };
-
-  const span = best - least;
-  if (series.length < 2 || span >= (full.hi - full.lo) * ZOOM_BELOW) return full;
-
-  // A flat series has no span to round out, so it gets a window of its own to
-  // sit in the middle of first.
-  if (!span) {
+  // A flat series (or a lone snapshot) has no span to round out, so it gets a
+  // window of its own to sit in the middle of first.
+  if (best === least) {
     const pad = Math.max(best * 0.0005, 1);
     return niceRange(least - pad, best + pad);
   }
   return niceRange(least, best);
+}
+
+// Which of the two a chart is actually drawn in. "full"/"zoom" are the reader's
+// own choice, from the toggle above the chart; "auto" (the default, until that
+// button is pressed) keeps the full range only while the series fills at least
+// ZOOM_BELOW of it. One point is never "movement", so a lone snapshot stays on
+// the full range -- there is no shape to show, and the tier context is the
+// useful part.
+//
+// Separate from chartRange because the button's own label depends on it: it
+// offers the scale you are not looking at.
+export function resolveScale(series, scale = "auto") {
+  if (scale === "full" || scale === "zoom") return scale;
+  if (series.length < 2) return "full";
+  const values = series.map((point) => point.progress);
+  const span = Math.max(...values) - Math.min(...values);
+  const full = fullRange(series);
+  return span >= (full.hi - full.lo) * ZOOM_BELOW ? "full" : "zoom";
+}
+
+export function chartRange(series, scale = "auto") {
+  return resolveScale(series, scale) === "full"
+    ? fullRange(series)
+    : zoomedRange(series);
 }
 
 // --- Point tooltips ----------------------------------------------------------
@@ -278,11 +298,12 @@ function tooltipMarkup() {
     `${lines}</g>`;
 }
 
-// `series` is history.seriesFor's output (oldest first, at least one point).
+// `series` is history.seriesFor's output (oldest first, at least one point);
+// `scale` is the reader's toggle, passed straight through to chartRange.
 // Pure -- returns markup, touches no DOM -- so timeline.test.js can pin the
 // geometry directly.
-export function chartSvg(series, item) {
-  const { lo, hi } = chartRange(series);
+export function chartSvg(series, item, scale = "auto") {
+  const { lo, hi } = chartRange(series, scale);
   const left = MARGIN_LEFT;
   const right = CHART_WIDTH - MARGIN_RIGHT;
   const top = MARGIN_TOP;
@@ -598,10 +619,26 @@ export function wireChartTooltip(svg) {
   svg.addEventListener("mouseleave", () => tip.setAttribute("opacity", "0"));
 }
 
+// Which Y scale the chart is drawn in: "auto" until the reader presses the
+// toggle, then whichever they picked, remembered like the sorts and filters.
+let chartScale = "auto";
+
 function renderChart(series, item) {
   const holder = $("#timeline-chart");
-  holder.innerHTML = chartSvg(series, item);
-  wireChartTooltip(holder.querySelector("svg"));
+  const canvas = $("#chart-canvas");
+  canvas.innerHTML = chartSvg(series, item, chartScale);
+  wireChartTooltip(canvas.querySelector("svg"));
+
+  // The button offers the scale you are NOT looking at, so it says what
+  // pressing it does rather than what the chart is currently doing.
+  const showing = resolveScale(series, chartScale);
+  const button = $("#chart-scale");
+  button.textContent = showing === "full" ? "Zoom to data" : "Show next tier";
+  button.setAttribute("aria-pressed", showing === "zoom" ? "true" : "false");
+  button.title =
+    showing === "full"
+      ? "Draw the chart to this item's own range"
+      : "Draw the chart from zero to the next mastery tier";
   holder.hidden = false;
 }
 
@@ -1127,6 +1164,16 @@ function init() {
     { key: "timeline_sort", dir: "timeline_sort_dir" },
     () => renderTable(shownSeries)
   );
+
+  // The scale toggle flips to the scale the chart is not in, and only ever
+  // redraws the chart -- the table below it reads the same series either way.
+  const savedScale = readUi().timeline_scale;
+  if (savedScale === "full" || savedScale === "zoom") chartScale = savedScale;
+  $("#chart-scale").addEventListener("click", () => {
+    chartScale = resolveScale(shownSeries, chartScale) === "full" ? "zoom" : "full";
+    writeUi({ timeline_scale: chartScale });
+    renderChart(shownSeries, $("#timeline-item").value.trim());
+  });
 
   // Delegated on the (stable) tbody, which renderIndex replaces wholesale. A
   // plain navigation, so the browser's Back button returns to the index.

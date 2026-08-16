@@ -2047,14 +2047,17 @@ that imports it without going through `manage.py`.
     copies its conventions (self-contained inline SVG, `--mg-*` custom
     properties re-themed by one `prefers-color-scheme: dark` block). X is time-proportional
     from the timestamps, so two snapshots an hour apart sit together and a
-    fortnight's gap reads as one. Y comes from **`chartRange`**: 0 → the next
-    tier above the best progress, *unless* the series moves less than
-    `ZOOM_BELOW` (**half**) of that, in which case it zooms to the data -- a
-    lone snapshot always keeps the full range, having no shape to show. The tier
-    scale has to earn the space it takes: a week of real progress is ~1% of a
-    tier (from zero, a flat line), and even a 307k → 603k climb used a third of
-    a 0 → 1M chart with the rest empty, which is why the bar is half and not the
-    fifth it started at. A zoomed window is rounded out by
+    fortnight's gap reads as one. Y is one of **two** ranges — `fullRange`
+    (0 → the next tier above the best progress) or `zoomedRange` (the data's own
+    window) — and **`resolveScale(series, scale)`** picks between them, with
+    `chartRange` returning whichever it names. `scale` is `"auto"` until the
+    reader presses the chart's toggle, and auto keeps the full range unless the
+    series moves less than `ZOOM_BELOW` (**half**) of it -- a lone snapshot
+    always keeps it, having no shape to show. The tier scale has to earn the
+    space it takes: a week of real progress is ~1% of a tier (from zero, a flat
+    line), and even a 307k → 603k climb used a third of a 0 → 1M chart with the
+    rest empty, which is why the bar is half and not the fifth it started at.
+    A zoomed window is rounded out by
     **`niceRange`**, whose step is the span's **second significant place** (10k
     across a 121k window, 100 across a 3.4k one): the bounds get a 0 in their
     third figure while still hugging the data, and an **even** number of steps
@@ -2068,6 +2071,17 @@ that imports it without going through `manage.py`.
     the threshold falls inside the plotted range, **minus Master whenever GM and
     MM are both drawn** — on a scale reaching Megamaster it sits at 1% of the
     height, crushed against the axis and saying nothing the GM line does not.
+  - **The scale toggle** (`#chart-scale`) sits in the band above the chart's
+    top-right corner — `.timeline-chart` is `position: relative` with a
+    `padding-top` for it, and the scrolling moved to the inner `#chart-canvas`
+    so the button stays pinned rather than scrolling with a wide chart. It is
+    the one chart control in the *template* rather than in `chartSvg`'s output
+    (which stays pure SVG): `renderChart` replaces `#chart-canvas` wholesale on
+    every redraw, so a button inside it would need re-binding each time. It
+    **names the scale you are not looking at** ("Show next tier" / "Zoom to
+    data", `aria-pressed` = zoomed), flips `chartScale` and redraws the chart
+    alone, and persists as `timeline_scale` under the shared
+    `farm-solver.ui.v1` key — so the choice outlives the item and the visit.
   - **Point tooltips** are the one part of the chart that needs the DOM (the
     rest is markup that just sits there). Hovering a point raises a box naming
     the snapshot: its date and time, and the mastery it recorded -- **not** the

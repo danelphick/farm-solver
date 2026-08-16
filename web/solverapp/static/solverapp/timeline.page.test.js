@@ -264,6 +264,50 @@ describe("the timeline page", () => {
     expect(document.querySelector("#timeline-item").value).toBe("Tomato");
   });
 
+  // The scale toggle above the chart's top-right corner. Tomato moves 12,900
+  // inside a 0 → 1M tier scale, so it starts zoomed; the button offers the
+  // scale it is not in, and the tier lines follow the scale it lands on.
+  test("the scale toggle flips between the data and the tier scale", async () => {
+    await loadPage({ url: "/timeline?item=Tomato" });
+    const button = document.querySelector("#chart-scale");
+    const tiers = () =>
+      [...document.querySelectorAll("#timeline-chart text.tier-label")].map(
+        (t) => t.textContent
+      );
+
+    expect(button.textContent).toBe("Show next tier");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(tiers()).toEqual([]);
+
+    button.click();
+
+    expect(button.textContent).toBe("Zoom to data");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(tiers()).toEqual(["GM", "MM"]);
+    // Redrawn, not duplicated -- and the table below is untouched.
+    expect(document.querySelectorAll("#timeline-chart svg")).toHaveLength(1);
+    expect(document.querySelectorAll("#timeline-body tr")).toHaveLength(3);
+
+    button.click();
+    expect(tiers()).toEqual([]);
+  });
+
+  test("the chosen scale is remembered for the next visit", async () => {
+    await loadPage({ url: "/timeline?item=Tomato" });
+    document.querySelector("#chart-scale").click();
+    expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+      timeline_scale: "full",
+    });
+
+    await loadPage({ url: "/timeline?item=Tomato", ui: { timeline_scale: "full" } });
+    expect(document.querySelector("#chart-scale").textContent).toBe("Zoom to data");
+    expect(
+      [...document.querySelectorAll("#timeline-chart text.tier-label")].map(
+        (t) => t.textContent
+      )
+    ).toEqual(["GM", "MM"]);
+  });
+
   // The chart's one live control: hovering a point raises the shared tooltip
   // box, fills it with that snapshot's date/time and mastery, and moves it over
   // the point. Leaving puts it away again.
