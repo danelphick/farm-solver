@@ -380,6 +380,7 @@ have_antler_snare = true
 
 [cow_pasture]    # milk daily
 milk = 5000
+# has_mariyas_wheelbarrow = true  # held item; unset auto-detects from inventory
 
 [vineyard]    # grapes daily
 grapes = 43000

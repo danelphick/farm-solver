@@ -44,6 +44,10 @@ completed_starmap = true
 
 [cow_pasture]
 milk = 16650
+# Mariya's Wheelbarrow: the cows shed Horns as well as milk, three per milk, in
+# the same daily deposit. Left unset this is auto-detected from the inventory
+# file; set it to force the answer either way.
+# has_mariyas_wheelbarrow = true
 
 [worm_habitat]
 worms = 10000

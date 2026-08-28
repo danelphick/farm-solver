@@ -49,6 +49,11 @@ FARMHOUSE_DAILY_MULTIPLIER = 8
 FARMHOUSE_GAIN_CAP = 500_000
 FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
 
+# With Mariya's Wheelbarrow the herd sheds horns alongside the milk, at this
+# multiple of the daily milk -- see the ``[cow_pasture]`` note in
+# :func:`passive_production` and :func:`main.resolve_mariyas_wheelbarrow`.
+COW_HORN_MULTIPLIER = 3
+
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
 
@@ -241,7 +246,11 @@ def passive_production(
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
       so that extra is not lost to the storehouse cap of the main run.
-    * ``[cow_pasture]`` -- milk every day.
+    * ``[cow_pasture]`` -- milk every day, plus (when
+      ``has_mariyas_wheelbarrow``) :data:`COW_HORN_MULTIPLIER` times that many
+      horns in the same daily deposit. The key is normally resolved from the
+      inventory by :func:`main.resolve_mariyas_wheelbarrow` before this runs;
+      absent entirely it means no wheelbarrow, so no horns.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -419,12 +428,14 @@ def passive_production(
 
     cow_pasture = config.get("cow_pasture")
     if cow_pasture:
+        milk = int(cow_pasture["milk"])
+        outputs = {"milk": milk}
+        if cow_pasture.get("has_mariyas_wheelbarrow"):
+            # The wheelbarrow collects horns as well as milk, three times as
+            # fast, in the same daily deposit (so they share its cap window).
+            outputs["horn"] = milk * COW_HORN_MULTIPLIER
         producers.append(
-            PassiveProducer(
-                name="cow_pasture",
-                period=DAILY,
-                outputs={"milk": int(cow_pasture["milk"])},
-            )
+            PassiveProducer(name="cow_pasture", period=DAILY, outputs=outputs)
         )
 
     vineyard = config.get("vineyard")

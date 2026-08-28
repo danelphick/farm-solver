@@ -267,6 +267,25 @@ def test_passive_production_reads_cow_pasture_milk_daily():
     assert milk.outputs == {"milk": 5000}
 
 
+def test_mariyas_wheelbarrow_adds_horns_to_the_same_daily_deposit():
+    # Three horns per milk, in the pasture's own producer -- one deposit, so the
+    # two share a storehouse-cap window.
+    production = passive_production(
+        {"cow_pasture": {"milk": 5000, "has_mariyas_wheelbarrow": True}}
+    )
+    assert len(production.producers) == 1
+    pasture = production.producers[0]
+    assert pasture.name == "cow_pasture"
+    assert pasture.period == DAILY
+    assert pasture.outputs == {"milk": 5000, "horn": 15000}
+
+
+def test_cow_pasture_without_the_wheelbarrow_produces_no_horns():
+    for cfg in ({"milk": 5000}, {"milk": 5000, "has_mariyas_wheelbarrow": False}):
+        production = passive_production({"cow_pasture": cfg})
+        assert production.producers[0].outputs == {"milk": 5000}
+
+
 def test_passive_production_reads_vineyard_grapes_daily():
     production = passive_production({"vineyard": {"grapes": 43000}})
     grapes = production.producers[0]

@@ -224,6 +224,8 @@ const BUILDING_SECTIONS = [
   { title: "Cow pasture", fields: [
     { key: "cow_pasture.milk", label: "Milk / day", type: "int",
       help: "Milk the pasture produces per day." },
+    { key: "cow_pasture.has_mariyas_wheelbarrow", label: "Mariya's Wheelbarrow", type: "autobool",
+      help: "Mariya's Wheelbarrow: the herd sheds Horns alongside the milk, 3 per milk, in the same daily deposit. Auto-detect reads the item from your inventory." },
   ] },
   { title: "Worm habitat", fields: [
     { key: "worm_habitat.worms", label: "Worms / hr", type: "int",

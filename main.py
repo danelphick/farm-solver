@@ -317,6 +317,40 @@ def resolve_dewstars_journal(
     return inventory.amount(DEWSTARS_JOURNAL_ARTIFACT) > 0
 
 
+# The item that makes the cow pasture shed horns alongside its milk -- see
+# config.passive_production's [cow_pasture] notes and COW_HORN_MULTIPLIER.
+MARIYAS_WHEELBARROW_ITEM = "Mariya's Wheelbarrow"
+
+
+def resolve_mariyas_wheelbarrow(
+    cfg: dict, inventory: farm_solver.Inventory | None = None
+) -> None:
+    """Settle ``[cow_pasture] has_mariyas_wheelbarrow``, writing it into ``cfg``.
+
+    With the wheelbarrow the herd sheds horns as well as milk, at
+    :data:`config.COW_HORN_MULTIPLIER` times the daily milk. It IS a held item,
+    so -- like Fungus Processing and You -- its presence in the inventory decides
+    the question, with the config key overriding the check either way. With no
+    inventory to check (the ``--unobtainable`` report) and no override it is off.
+
+    Unlike its sibling resolvers this one has no single caller to hand a bool to:
+    :func:`config.passive_production` is called from half a dozen places and reads
+    the pasture straight out of ``cfg``. So the answer is written back into the
+    config section (never creating one that was absent -- no pasture, no horns),
+    the way :func:`resolve_crafting_bonus` settles ``args.crafting_bonus`` in
+    place. Call it once, right after the inventory is loaded and before anything
+    builds passive production.
+    """
+    cow_pasture = cfg.get("cow_pasture")
+    if not cow_pasture:
+        return
+    if cow_pasture.get("has_mariyas_wheelbarrow") is not None:
+        return  # an explicit setting wins, either way
+    cow_pasture["has_mariyas_wheelbarrow"] = (
+        inventory is not None and inventory.amount(MARIYAS_WHEELBARROW_ITEM) > 0
+    )
+
+
 # The tower level whose completion grants the Mechanical Heart -- the artifact
 # handing over a monthly bulk of Apple Cider and Arnold Palmer (config.MONTHLY_GRANTS).
 MONTHLY_GRANT_TOWER_LEVEL = 300
@@ -3083,6 +3117,7 @@ def run(args: argparse.Namespace) -> int:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
+        resolve_mariyas_wheelbarrow(cfg, state.inventory)
         # Validated against `state` (megas_required_by/mega_count/candidates
         # need it, see _validate_ascend's docstring) -- so this must come
         # after the state load above, unlike every other mode's validation.
@@ -3132,6 +3167,7 @@ def run(args: argparse.Namespace) -> int:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
+        resolve_mariyas_wheelbarrow(cfg, state.inventory)
         result = solve_mastery_costs(args, cfg, state)
         reporter.mastery_costs(result, args.sort)
         reporter.finish()
@@ -3187,6 +3223,9 @@ def run(args: argparse.Namespace) -> int:
         apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)
         )
+    # Settles [cow_pasture] has_mariyas_wheelbarrow in cfg before any
+    # config.passive_production call reads it.
+    resolve_mariyas_wheelbarrow(cfg, state.inventory)
 
     inputs = build_inputs(args, cfg, state)
 
