@@ -767,9 +767,6 @@ def _prepare(
         main.apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)
         )
-    # Mirror main.run: settle [cow_pasture] has_mariyas_wheelbarrow from the
-    # inventory before anything builds passive production off cfg.
-    main.resolve_mariyas_wheelbarrow(cfg, state.inventory)
     return cfg, state
 
 

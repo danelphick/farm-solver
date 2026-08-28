@@ -213,6 +213,36 @@ def resolve_pumpkin_juice(
     return True, (None if limit < 0 else limit), price
 
 
+def resolve_held_item(
+    cfg: dict,
+    section: str,
+    key: str,
+    item: str,
+    inventory: farm_solver.Inventory | None,
+    default: bool = False,
+) -> bool:
+    """Whether a held item is owned: config override first, else the inventory.
+
+    The shared body of every ``resolve_*`` for an item the player either holds or
+    does not (Fungus Processing and You, the Swamp Puzzle, Dewstar's Journal,
+    Mariya's Wheelbarrow). ``cfg[section][key]`` wins whenever it is set -- so a
+    config can plan for a state the player is not in yet, in either direction --
+    and an absent key falls back to the item's presence in ``inventory``. With no
+    inventory to check (the ``--unobtainable`` report reads no inventory file)
+    the answer is ``default``.
+
+    Each caller stays a named function rather than a table entry: what a reader
+    needs is the *domain* fact -- what the item changes, and why one of them
+    defaults to on -- and that lives in those docstrings.
+    """
+    override = cfg.get(section, {}).get(key)
+    if override is not None:
+        return bool(override)
+    if inventory is None:
+        return default
+    return inventory.amount(item) > 0
+
+
 # The artifact whose presence changes Gary's Crushroom's drop table -- see
 # exploring.FUNGUS_PROCESSING_FLAG.
 FUNGUS_PROCESSING_ARTIFACT = "Fungus Processing and You"
@@ -228,12 +258,10 @@ def resolve_fungus_processing(
     inventory to check (the ``--unobtainable`` report, which reads no
     inventory file) and no override, it defaults to off.
     """
-    override = cfg.get("exploring", {}).get("have_fungus_processing")
-    if override is not None:
-        return bool(override)
-    if inventory is None:
-        return False
-    return inventory.amount(FUNGUS_PROCESSING_ARTIFACT) > 0
+    return resolve_held_item(
+        cfg, "exploring", "have_fungus_processing",
+        FUNGUS_PROCESSING_ARTIFACT, inventory,
+    )
 
 
 # The item unlocking the Sinking Swamp exploring location and fishing zone --
@@ -260,12 +288,10 @@ def resolve_swamp_puzzle(
     **on**: that report asks what the game data can source at all, and silently
     deleting a zone from it would call the swamp's items unobtainable outright.
     """
-    override = cfg.get("exploring", {}).get("have_swamp_puzzle")
-    if override is not None:
-        return bool(override)
-    if inventory is None:
-        return True
-    return inventory.amount(SWAMP_PUZZLE_ITEM) > 0
+    return resolve_held_item(
+        cfg, "exploring", "have_swamp_puzzle", SWAMP_PUZZLE_ITEM, inventory,
+        default=True,
+    )
 
 
 # The artifact governing the Cookie interaction with Dewstar bonus crops -- see
@@ -309,12 +335,10 @@ def resolve_dewstars_journal(
     otherwise the journal's presence in inventory decides it. With no inventory to
     check and no override, it defaults to off.
     """
-    override = cfg.get("farming", {}).get("have_dewstars_journal")
-    if override is not None:
-        return bool(override)
-    if inventory is None:
-        return False
-    return inventory.amount(DEWSTARS_JOURNAL_ARTIFACT) > 0
+    return resolve_held_item(
+        cfg, "farming", "have_dewstars_journal",
+        DEWSTARS_JOURNAL_ARTIFACT, inventory,
+    )
 
 
 # The item that makes the cow pasture shed horns alongside its milk -- see
@@ -324,31 +348,20 @@ MARIYAS_WHEELBARROW_ITEM = "Mariya's Wheelbarrow"
 
 def resolve_mariyas_wheelbarrow(
     cfg: dict, inventory: farm_solver.Inventory | None = None
-) -> None:
-    """Settle ``[cow_pasture] has_mariyas_wheelbarrow``, writing it into ``cfg``.
+) -> bool:
+    """Whether the cow pasture sheds horns alongside its milk.
 
-    With the wheelbarrow the herd sheds horns as well as milk, at
-    :data:`config.COW_HORN_MULTIPLIER` times the daily milk. It IS a held item,
-    so -- like Fungus Processing and You -- its presence in the inventory decides
-    the question, with the config key overriding the check either way. With no
-    inventory to check (the ``--unobtainable`` report) and no override it is off.
-
-    Unlike its sibling resolvers this one has no single caller to hand a bool to:
-    :func:`config.passive_production` is called from half a dozen places and reads
-    the pasture straight out of ``cfg``. So the answer is written back into the
-    config section (never creating one that was absent -- no pasture, no horns),
-    the way :func:`resolve_crafting_bonus` settles ``args.crafting_bonus`` in
-    place. Call it once, right after the inventory is loaded and before anything
-    builds passive production.
+    With Mariya's Wheelbarrow the herd produces :data:`config.COW_HORN_MULTIPLIER`
+    horns per milk, in the pasture's same daily deposit (see
+    :func:`config.passive_production`). ``cow_pasture.has_mariyas_wheelbarrow``
+    in the config overrides the check; otherwise the item's presence in
+    inventory decides it. With no inventory to check and no override, off.
     """
-    cow_pasture = cfg.get("cow_pasture")
-    if not cow_pasture:
-        return
-    if cow_pasture.get("has_mariyas_wheelbarrow") is not None:
-        return  # an explicit setting wins, either way
-    cow_pasture["has_mariyas_wheelbarrow"] = (
-        inventory is not None and inventory.amount(MARIYAS_WHEELBARROW_ITEM) > 0
+    return resolve_held_item(
+        cfg, "cow_pasture", "has_mariyas_wheelbarrow",
+        MARIYAS_WHEELBARROW_ITEM, inventory,
     )
+
 
 
 # The tower level whose completion grants the Mechanical Heart -- the artifact
@@ -1548,6 +1561,8 @@ class SolveInputs:
     # Consumables the solver may not buy (--self-sourced: Arnold Palmer / Large Net
     # / Apple Cider), forcing them to be self-sourced. Empty by default (buy freely).
     no_buy: frozenset[str] = frozenset()
+    # Whether the cow pasture also sheds horns (see _ChannelSetup's field).
+    has_mariyas_wheelbarrow: bool = False
 
 
 @dataclass
@@ -1582,6 +1597,12 @@ class _ChannelSetup:
     # and for deriving the ``ap_tradeable`` buyable set passed to the optimiser.
     # Defaulted so hand-built test _ChannelSetups need not supply it.
     ap_prices: dict[str, float] = field(default_factory=dict)
+    # Mariya's Wheelbarrow: the cow pasture sheds horns alongside its milk. A
+    # resolved held-item flag like the ones the channel builders take above, but
+    # its consumer is config.passive_production, which every caller rebuilds per
+    # plan span -- so it rides along here rather than in a channel object.
+    # Defaulted likewise.
+    has_mariyas_wheelbarrow: bool = False
 
 
 # The consumable tools --self-sourced withholds from buying, so the solver must
@@ -1652,6 +1673,9 @@ def _build_channel_setup(
     monthly_grants = (
         resolve_monthly_grants(cfg, state, requirements) and calendar_mode != "ignore"
     )
+    # The cow pasture's horns: a held-item flag like the three above, but read by
+    # config.passive_production rather than by a channel builder.
+    has_mariyas_wheelbarrow = resolve_mariyas_wheelbarrow(cfg, state.inventory)
     model_calendar = _should_model_calendar(cfg.get("pets", {}), calendar_mode, monthly_grants)
 
     # Every recipe is a craft flow; the optimiser sources the top-level demand,
@@ -1724,6 +1748,7 @@ def _build_channel_setup(
         ap_prices=ap_prices,
         boost_offers=boost_offers,
         model_calendar=model_calendar,
+        has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
     )
 
 
@@ -1800,6 +1825,7 @@ def build_inputs(
         fish=setup.fish,
         workshop=setup.workshop,
         monthly_grants=setup.monthly_grants,
+        has_mariyas_wheelbarrow=setup.has_mariyas_wheelbarrow,
         solution=solution,
         recipes=setup.recipes,
         smith=setup.smith,
@@ -1855,6 +1881,7 @@ def solve_frontier(
     explore = inputs.explore
     farm = inputs.farm
     monthly_grants = inputs.monthly_grants
+    has_mariyas_wheelbarrow = inputs.has_mariyas_wheelbarrow
     recipes = inputs.recipes
     open_flows = inputs.open_flows
     demand = inputs.demand
@@ -1874,7 +1901,8 @@ def solve_frontier(
 
     horizon: timedelta | None = horizon_seed
     production = config.passive_production(
-        cfg, today=start, monthly_grants=monthly_grants
+        cfg, today=start, monthly_grants=monthly_grants,
+        has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
     )
     # Assigned in the loop below (which always runs at least once); declared here
     # so the data flow past the loop is explicit rather than leaking out of it.
@@ -1901,6 +1929,7 @@ def solve_frontier(
             production = config.passive_production(
                 cfg, today=start, start=start, horizon=horizon,
                 monthly_grants=monthly_grants,
+                has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
             )
             quantize = config.passive_quantizer(production)
             offers = optimizer.all_offers(
@@ -1925,6 +1954,7 @@ def solve_frontier(
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon,
             monthly_grants=monthly_grants,
+            has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
         )
         quantize = config.passive_quantizer(production)
         offers = optimizer.all_offers(
@@ -2350,7 +2380,8 @@ def solve_mastery_costs(
     # Steady-state production (no start/horizon): the yearly-average calendar, so
     # each item is one solve rather than a per-item seasonal fixed point.
     production = config.passive_production(
-        cfg, today=start, monthly_grants=setup.monthly_grants
+        cfg, today=start, monthly_grants=setup.monthly_grants,
+        has_mariyas_wheelbarrow=setup.has_mariyas_wheelbarrow,
     )
     quantize = config.passive_quantizer(production)
     offers = optimizer.all_offers(
@@ -2968,6 +2999,7 @@ def solve_ascension_frontier(
         production = config.passive_production(
             cfg_k, today=start, start=start, horizon=None,
             monthly_grants=setup.monthly_grants,
+            has_mariyas_wheelbarrow=setup.has_mariyas_wheelbarrow,
         )
         offers = optimizer.all_offers(
             production, setup.fish, setup.explore, setup.farm, setup.boost_offers
@@ -3117,7 +3149,6 @@ def run(args: argparse.Namespace) -> int:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
-        resolve_mariyas_wheelbarrow(cfg, state.inventory)
         # Validated against `state` (megas_required_by/mega_count/candidates
         # need it, see _validate_ascend's docstring) -- so this must come
         # after the state load above, unlike every other mode's validation.
@@ -3167,7 +3198,6 @@ def run(args: argparse.Namespace) -> int:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
             )
-        resolve_mariyas_wheelbarrow(cfg, state.inventory)
         result = solve_mastery_costs(args, cfg, state)
         reporter.mastery_costs(result, args.sort)
         reporter.finish()
@@ -3207,7 +3237,8 @@ def run(args: argparse.Namespace) -> int:
             have_swamp_puzzle=have_swamp_puzzle,
         )
         production = config.passive_production(
-            cfg, today=start, monthly_grants=resolve_monthly_grants(cfg)
+            cfg, today=start, monthly_grants=resolve_monthly_grants(cfg),
+            has_mariyas_wheelbarrow=resolve_mariyas_wheelbarrow(cfg),
         )
         obtainable = obtainable_items(production, farm, fish, explore)
         reporter.unobtainable(unobtainable_materials(workshop, obtainable))
@@ -3223,9 +3254,6 @@ def run(args: argparse.Namespace) -> int:
         apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)
         )
-    # Settles [cow_pasture] has_mariyas_wheelbarrow in cfg before any
-    # config.passive_production call reads it.
-    resolve_mariyas_wheelbarrow(cfg, state.inventory)
 
     inputs = build_inputs(args, cfg, state)
 

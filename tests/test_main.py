@@ -38,6 +38,7 @@ from main import (
     resolve_frontier_graph,
     resolve_frontier_spread,
     resolve_fungus_processing,
+    resolve_held_item,
     resolve_mariyas_wheelbarrow,
     resolve_monthly_grants,
     resolve_pumpkin_juice,
@@ -1952,45 +1953,45 @@ def test_resolve_dewstars_journal_config_override_wins():
     )
 
 
-def test_resolve_mariyas_wheelbarrow_writes_the_inventory_answer_into_cfg():
-    # Unlike its siblings this resolver returns nothing: config.passive_production
-    # reads the pasture straight out of cfg, so the answer is settled there.
-    held = Inventory(
-        items={"mariya's wheelbarrow": InventoryItem(name="Mariya's Wheelbarrow", quantity=1)}
-    )
-    cfg = {"cow_pasture": {"milk": 5000}}
-    assert resolve_mariyas_wheelbarrow(cfg, held) is None
-    assert cfg["cow_pasture"]["has_mariyas_wheelbarrow"] is True
+HELD_WHEELBARROW = Inventory(
+    items={
+        "mariya's wheelbarrow": InventoryItem(name="Mariya's Wheelbarrow", quantity=1)
+    }
+)
 
-    cfg = {"cow_pasture": {"milk": 5000}}
-    resolve_mariyas_wheelbarrow(cfg, Inventory())
-    assert cfg["cow_pasture"]["has_mariyas_wheelbarrow"] is False
 
+def test_resolve_mariyas_wheelbarrow_checks_inventory_by_default():
+    assert resolve_mariyas_wheelbarrow({}, HELD_WHEELBARROW) is True
+    assert resolve_mariyas_wheelbarrow({}, Inventory()) is False
     # Nothing to check (the --unobtainable report) defaults to off.
-    cfg = {"cow_pasture": {"milk": 5000}}
-    resolve_mariyas_wheelbarrow(cfg)
-    assert cfg["cow_pasture"]["has_mariyas_wheelbarrow"] is False
+    assert resolve_mariyas_wheelbarrow({}) is False
 
 
 def test_resolve_mariyas_wheelbarrow_config_override_wins():
-    held = Inventory(
-        items={"mariya's wheelbarrow": InventoryItem(name="Mariya's Wheelbarrow", quantity=1)}
-    )
-    cfg = {"cow_pasture": {"milk": 5000, "has_mariyas_wheelbarrow": False}}
-    resolve_mariyas_wheelbarrow(cfg, held)
-    assert cfg["cow_pasture"]["has_mariyas_wheelbarrow"] is False
-
-    cfg = {"cow_pasture": {"milk": 5000, "has_mariyas_wheelbarrow": True}}
-    resolve_mariyas_wheelbarrow(cfg, Inventory())
-    assert cfg["cow_pasture"]["has_mariyas_wheelbarrow"] is True
+    off = {"cow_pasture": {"milk": 5000, "has_mariyas_wheelbarrow": False}}
+    assert resolve_mariyas_wheelbarrow(off, HELD_WHEELBARROW) is False
+    on = {"cow_pasture": {"milk": 5000, "has_mariyas_wheelbarrow": True}}
+    assert resolve_mariyas_wheelbarrow(on, Inventory()) is True
 
 
-def test_resolve_mariyas_wheelbarrow_never_invents_a_cow_pasture():
-    # An absent section must stay absent: passive_production would then read
-    # cow_pasture["milk"] off a section that has none.
-    cfg = {}
-    resolve_mariyas_wheelbarrow(cfg, Inventory())
-    assert cfg == {}
+def test_resolve_mariyas_wheelbarrow_leaves_the_config_alone():
+    # It reports, it does not settle: passive_production takes the resolved bool
+    # as an argument, so no caller depends on cfg having been rewritten.
+    cfg = {"cow_pasture": {"milk": 5000}}
+    resolve_mariyas_wheelbarrow(cfg, HELD_WHEELBARROW)
+    assert cfg == {"cow_pasture": {"milk": 5000}}
+
+
+def test_resolve_held_item_defaults_only_apply_without_an_inventory():
+    # The shared body behind every held-item resolver: an explicit config value
+    # beats both the inventory and the default, in either direction.
+    cfg = {"sec": {"key": False}}
+    assert resolve_held_item(cfg, "sec", "key", "Thing", HELD_WHEELBARROW) is False
+    assert resolve_held_item({}, "sec", "key", "Thing", None) is False
+    assert resolve_held_item({}, "sec", "key", "Thing", None, default=True) is True
+    # With an inventory the default never applies -- absence means absent.
+    assert resolve_held_item({}, "sec", "key", "Thing", Inventory(), default=True) is False
+
 
 
 def test_resolve_monthly_grants_defaults_off_with_nothing_to_check():

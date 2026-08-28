@@ -51,7 +51,9 @@ FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
 
 # With Mariya's Wheelbarrow the herd sheds horns alongside the milk, at this
 # multiple of the daily milk -- see the ``[cow_pasture]`` note in
-# :func:`passive_production` and :func:`main.resolve_mariyas_wheelbarrow`.
+# :func:`passive_production`. Whether the wheelbarrow is held is resolved by the
+# caller (:func:`main.resolve_mariyas_wheelbarrow`), like every other held-item
+# flag the builders take.
 COW_HORN_MULTIPLIER = 3
 
 # Bundled config, used when the user does not supply their own.
@@ -223,6 +225,7 @@ def passive_production(
     start: date | None = None,
     horizon: timedelta | None = None,
     monthly_grants: bool = False,
+    has_mariyas_wheelbarrow: bool = False,
 ) -> PassiveProduction:
     """Build the passive producers described by ``config``.
 
@@ -246,11 +249,10 @@ def passive_production(
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
       so that extra is not lost to the storehouse cap of the main run.
-    * ``[cow_pasture]`` -- milk every day, plus (when
-      ``has_mariyas_wheelbarrow``) :data:`COW_HORN_MULTIPLIER` times that many
-      horns in the same daily deposit. The key is normally resolved from the
-      inventory by :func:`main.resolve_mariyas_wheelbarrow` before this runs;
-      absent entirely it means no wheelbarrow, so no horns.
+    * ``[cow_pasture]`` -- milk every day, plus (with the
+      ``has_mariyas_wheelbarrow`` argument, resolved by the caller -- see
+      :func:`main.resolve_mariyas_wheelbarrow`) :data:`COW_HORN_MULTIPLIER`
+      times that many horns in the same daily deposit.
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
@@ -430,7 +432,7 @@ def passive_production(
     if cow_pasture:
         milk = int(cow_pasture["milk"])
         outputs = {"milk": milk}
-        if cow_pasture.get("has_mariyas_wheelbarrow"):
+        if has_mariyas_wheelbarrow:
             # The wheelbarrow collects horns as well as milk, three times as
             # fast, in the same daily deposit (so they share its cap window).
             outputs["horn"] = milk * COW_HORN_MULTIPLIER
