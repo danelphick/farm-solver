@@ -24,7 +24,9 @@ growth = 20
 [sawmill]
 wood = 60000
 board = 46000
-oak = 6000    # 0 (or absent) if you have no Sturdy Saw
+oak = 6000
+# Set oak to 0 (or absent) if you have no Sturdy Saw. This includes the multiplier
+# from perks, but not from hickory omelette.
 have_pine_boost = true
 # Hickory Omelette: a held/bought meal (priced in [trading]) that, for the hour it
 # lasts, makes the sawmill deposit +20% of its hourly output every 10 minutes -- six

@@ -211,7 +211,7 @@ const BUILDING_SECTIONS = [
     { key: "sawmill.board", label: "Board / hr", type: "int",
       help: "Board the sawmill produces per hour." },
     { key: "sawmill.oak", label: "Oak / hr", type: "int",
-      help: "Oak the sawmill produces per hour — 0 if you have no Sturdy Saw, since that is the perk that produces it. (The Hickory Omelette boost is set under Resources.)" },
+      help: "Oak the sawmill produces per hour — 0 if you have no Sturdy Saw. Use the post-perk number. (The Hickory Omelette boost is set under Resources.)" },
     { key: "sawmill.have_pine_boost", label: "Pine Boost", type: "bool",
       help: "Pine Boost: the sawmill makes 2 pine board per minute instead of 1." },
   ] },
