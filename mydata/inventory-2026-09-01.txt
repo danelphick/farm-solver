@@ -1,0 +1,5782 @@
+Meals chevron_down
+
+Bone Broth
+Useful to cook other things
+Grand Mastered
+22,251
+
+Onion Soup
++10% Exploring XP for 5 minutes
+Grand Mastered
+13,820
+
+Breakfast Boost
+Crops with base growth of
+5 mins or less are ready instantly.
+Effect lasts 2 mins
+Grand Mastered
+4,216
+
+Shrimp-a-Plenty
+10% more Silver at Market for 5 minutes
+Grand Mastered
+2,224
+
+Crunchy Omelette
+When active, collecting from Pets results
+in 50% more items collected.
+Effect lasts for 2 minutes.
+Grand Mastered
+2,095
+
+Over The Moon
+10% more Friendship XP for 5 minutes
+Grand Mastered
+1,630
+
+Cabbage Stew
+Allows for 5x Cider use per click
+Effect lasts for 2 minutes.
+Grand Mastered
+1,417
+
+Festive Eggnog
+The nogs are finally in season.
+Mariya's delicious take on a
+classic beverage.
+Mastered
+1,261
+
+Acorn Pie
+Trackers discovered to their dismay how
+much certain wildlife loved this
+treat from southern T'rah
+Mega Mastered
+1,161
+
+Quandary Chowder
+Lemonade/APs more effective
+for 5 minutes
+Grand Mastered
+681
+
+Neigh
+Cider uses 20% less stamina
+for 5 minutes
+Grand Mastered
+659
+
+Red Velvet Cake
+Smells a little fishy...
+Mastered
+602
+
+Lemon Cream Pie
+Allows for 5x AP use per click
+Effect lasts for 2 minutes.
+529
+
+Lemon Seltzer
+Refreshing and crisp with
+a hint of lemon
+Increases effectiveness of
+Lemonade and Arnold Palmers
+248
+
+Sea Pincher Special
+Fishing Nets/LNs more
+effective for 5 minutes
+Grand Mastered
+241
+
+Mushroom Stew
++10% Mastery for 5 minutes
+Grand Mastered
+229
+
+Cat's Meow
+Multiple bites (manual fishing)
+for 5 minutes
+Grand Mastered
+139
+
+Happy Cookies
+Harvesting while effect is active
+yields 3x more than normal
+Effect lasts 5 minutes
+59
+
+Spooky Cookies
+Harvesting while effect is active
+yields 3x more than normal
+Effect lasts 5 minutes
+54
+
+Lovely Cookies
+Harvesting while effect is active
+yields 3x more than normal
+Effect lasts 5 minutes
+44
+
+Spooky Pie
+Scares your crops into
+dropping everything!
+32
+
+Gravy Boat
+Toot toot! Here comes the gravy boat!
+26
+
+Fish and Chips
+Greatly increases XP earned
+from each cooking action
+14
+
+Hickory Omelette
+When active, Sawmill also
+produces 20% every 10 mins.
+Effect lasts for 1 hour.
+Grand Mastered
+8
+Items chevron_down
+
+Board
+The foundation of any good farm
+MAX ON HAND
+Mega Mastered
+51,710
+
+Iron
+A pressing need
+MAX ON HAND
+51,710
+
+Bucket
+Doesn't leak much
+MAX ON HAND
+Mega Mastered
+51,710
+
+Wood
+It's better than bad, it's good
+MAX ON HAND
+51,710
+
+Wooden Plank
+Like wood, but in plank form
+MAX ON HAND
+Mega Mastered
+51,710
+
+Nails
+Thankfully, no chalkboards here
+MAX ON HAND
+51,710
+
+Sturdy Box
+High quality box to store goods in
+MAX ON HAND
+Mega Mastered
+51,710
+
+Mushroom Paste
+Useful to bind things together
+MAX ON HAND
+Mega Mastered
+51,710
+
+Iron Ring
+The base for other rings
+MAX ON HAND
+Mega Mastered
+51,710
+
+Black Powder
+Not for skiing on
+MAX ON HAND
+Mega Mastered
+51,710
+
+Arrowhead
+Carved stone from long ago
+MAX ON HAND
+51,710
+
+Glass Bottle
+Should be recycled
+MAX ON HAND
+Mega Mastered
+51,710
+
+Wooden Shield
+Might protect you
+MAX ON HAND
+Mega Mastered
+51,710
+
+Straw
+It's always the last one
+MAX ON HAND
+51,710
+
+Broom
+Does not fly
+MAX ON HAND
+Mega Mastered
+51,710
+
+Steak
+Only bad if you named the cow
+after someone special
+MAX ON HAND
+51,710
+
+Steel
+Heavier than feathers
+MAX ON HAND
+Mega Mastered
+51,710
+
+Twine
+Ties stuff together
+MAX ON HAND
+Mega Mastered
+51,710
+
+Sturdy Shield
+Should protect you
+MAX ON HAND
+Mega Mastered
+51,710
+
+Rope
+Can tie things together
+MAX ON HAND
+Mega Mastered
+51,710
+
+Sandstone
+Not quite sand, not quite stone
+MAX ON HAND
+51,710
+
+Wooden Mask
+Not creepy at all
+MAX ON HAND
+51,710
+
+Shimmer Topaz
+Could help to ward off evil
+MAX ON HAND
+Mega Mastered
+51,710
+
+Treasure Chest
+Decorative only, does not open
+MAX ON HAND
+Mega Mastered
+51,710
+
+Flour
+Good for baking and selling
+MAX ON HAND
+Mega Mastered
+51,710
+
+Steel Wire
+Useful for many things
+MAX ON HAND
+Mega Mastered
+51,710
+
+Green Scarf
+Cozy and warm
+MAX ON HAND
+Mega Mastered
+51,710
+
+Yarn
+Knit one, purl two, craft three
+MAX ON HAND
+Mega Mastered
+51,710
+
+Chum
+Absolutely disgusting
+MAX ON HAND
+Mega Mastered
+51,710
+
+Blue Dye
+Can turn some things blue
+MAX ON HAND
+Mega Mastered
+51,710
+
+Butter Churn
+Allows you to make butter
+MAX ON HAND
+Mega Mastered
+51,710
+
+Energy Coil
+Directional energy amplifier
+MAX ON HAND
+Grand Mastered
+51,710
+
+Pine Board
+Soft wood that is great for woodworking
+MAX ON HAND
+Grand Mastered
+51,710
+
+Green Twine
+A more fancy twine
+MAX ON HAND
+Mega Mastered
+51,710
+
+Purple Twine
+A more fancy twine
+MAX ON HAND
+Mega Mastered
+51,710
+
+Glass Jar
+Used for storing food and other items
+MAX ON HAND
+Mega Mastered
+51,710
+
+Sewing Needle
+For sewing or tailoring
+MAX ON HAND
+Mega Mastered
+51,710
+
+Orange Twine
+A more fancy twine made out of the best color
+MAX ON HAND
+Mega Mastered
+51,710
+
+Brown Twine
+A more fancy twine
+MAX ON HAND
+Mega Mastered
+51,710
+
+Black Purse
+You'll never see when it's dirty
+MAX ON HAND
+Grand Mastered
+51,710
+
+Tie Dye Scarf
+It was the style at the time
+MAX ON HAND
+Grand Mastered
+51,710
+
+Tin Scraps
+Pliable enough for use in other applications
+MAX ON HAND
+Mega Mastered
+51,710
+
+Chisel
+Chip off the old block
+MAX ON HAND
+Mastered
+51,710
+
+Wooden Box
+It is a box made of wood
+Mega Mastered
+51,708
+
+Giant Centipede
+If it were any bigger, it'd be a dollarpede
+51,690
+
+Blue Purse
+Not a man-purse
+Mega Mastered
+51,690
+
+Kill Switch
+Emergency kill switch to deactivate a machine
+Grand Mastered
+51,690
+
+Thorns
+Sharp to the touch
+51,689
+
+Amethyst Necklace
+A purple pendant
+Mega Mastered
+51,670
+
+Pearl Necklace
+It's no earring, but...
+Mega Mastered
+51,670
+
+Red Shield
+Red is scarier than green
+Mega Mastered
+51,670
+
+Belt Drive
+Rotational device
+Grand Mastered
+51,670
+
+Red Parchment
+Reading red writing rights reactionary readings
+Mega Mastered
+51,670
+
+Red Scarf
+Cozy and warm
+Mega Mastered
+51,670
+
+Unpolished Emerald
+Green and ready to shine
+51,651
+
+Sweet Root
+A sweet smelling root
+51,650
+
+Iron Cup
+Keeps coffee cold
+Mega Mastered
+51,650
+
+MIAB
+A mysterious message
+Mega Mastered
+51,650
+
+Horseshoe
+A stallion slipper, a hoof helper,
+and a tossable toy all in one!
+Mega Mastered
+51,650
+
+Shiny Beetle
+A colorful carapace
+51,650
+
+Purple Bag
+A more stylish choice
+Mega Mastered
+51,650
+
+Green Diary
+A phthalo paper product
+Mega Mastered
+51,630
+
+Green Shield
+Enemies fear green
+Mega Mastered
+51,630
+
+Fancy Pipe
+Farm RPG does not endorse smoking
+Mega Mastered
+51,630
+
+Blue Parchment
+Boosts blooming biographies
+Mega Mastered
+51,630
+
+Red Diary
+Ruby-red revelations recorded relentlessly
+Mega Mastered
+51,630
+
+Gold Aquamarine Ring
+The bluest of bling on a gold ring
+Grand Mastered
+51,630
+
+Purple Diary
+A lovely lavender ledger
+Mega Mastered
+51,610
+
+Strange Letter
+You can't read it
+51,610
+
+Candy
+Don't eat too much
+51,610
+
+Lollipop
+Don't drop it
+51,610
+
+Ruby Scorpion
+It'll make you see red
+51,610
+
+Essence of Slime
+Smells repulsive
+Mega Mastered
+51,610
+
+Fancy Pan Flute
+Easy to pick up, difficult to master
+Mega Mastered
+51,610
+
+Brown Cloak
+It's more evenly brown than before
+Grand Mastered
+51,610
+
+Purple Parchment
+Purple paper promotes proper penmanship
+Mega Mastered
+51,608
+
+Yellow Purse
+A purse for a beautiful day
+Mega Mastered
+51,590
+
+Orange Shirt
+A bold color choice
+Grand Mastered
+51,590
+
+Gold Garnet Ring
+Subtlety is overrated
+Mega Mastered
+51,590
+
+Emberstone
+Maybe let that cool a second
+51,576
+
+Spectacles
+They’re spectacular!
+51,570
+
+Dice
+Cubes with dots on them
+51,565
+
+Brown Bag
+Goes well with the brown pants
+Mega Mastered
+51,565
+
+Snail
+Just a shelled gastropod
+51,522
+
+Steel Buckle
+Stainless, anti-allergy, hammered steel
+Mega Mastered
+51,520
+
+Horn
+It's calling to you
+51,516
+
+Aquamarine Ring
+The bluest of bling
+Mega Mastered
+51,514
+
+White Purse
+Fashion has never looked so good
+Grand Mastered
+51,514
+
+Yellow Bag
+The most cheerful bag
+Mega Mastered
+51,490
+
+Yellow Scarf
+Cozy and warm
+Mega Mastered
+51,490
+
+Orange Scarf
+Like wrapping a sunrise around your neck
+Mega Mastered
+51,490
+
+Red Berries
+Probably not poisonous
+51,393
+
+Blue Diary
+Whispers of wonder within a blue-bound diary
+Mega Mastered
+51,380
+
+Honey
+Keep away from bears
+51,372
+
+Mystic Ring
+Radiates a calming energy
+Mega Mastered
+51,250
+
+Red Twine
+A more fancy twine
+Mega Mastered
+51,234
+
+Black Scarf
+Cozy and warm and goes with everything
+Mega Mastered
+51,190
+
+Gold Emerald Ring
+The similarity in hues to corn have not gone unnoticed
+Mega Mastered
+51,073
+
+Seaweed
+A great wrapper for some of your fish
+Mega Mastered
+51,070
+
+Red Trunk
+Can only store red things
+Mega Mastered
+51,025
+
+Garnet Ring
+Like crystal honey for your finger
+Mega Mastered
+50,980
+
+Jade Charm
+Green and lucky
+Mega Mastered
+50,974
+
+Wooden Button
+A fastener
+Mega Mastered
+50,970
+
+Scrap Wire
+Do you know how wires are made?
+It's shocking
+50,930
+
+Magnifying Glass
+Makes things appear larger
+Mega Mastered
+50,890
+
+Nailed Board
+A board with a nail in it
+Mega Mastered
+50,844
+
+Bottle Rocket
+Blast off!
+Mega Mastered
+50,840
+
+White Scarf
+This is snow stylish
+Mega Mastered
+50,830
+
+Green Parchment
+Escribe an exciting essay on emerald
+Mega Mastered
+50,802
+
+White Shirt
+Dude, where's your tie?
+Grand Mastered
+50,685
+
+Wooden Table
+It is a table made of wood
+Mega Mastered
+50,665
+
+Slimestone
+A gelatinous green glob
+50,570
+
+Wooden Spear
+Or a really long arrow
+Mega Mastered
+50,570
+
+Broken Pipe
+In the Conservatory with Professor Plum?
+50,548
+
+Looking Glass
+Allows a person to see far away
+Mega Mastered
+50,249
+
+Frog
+Ribbit.
+50,024
+
+4-leaf Clover
+Often overlooked
+49,753
+
+Emerald Ring
+A pricey piece of lovely lime
+Mega Mastered
+49,670
+
+Hourglass
+The sands of time
+Mega Mastered
+49,665
+
+Frost Shield
+As sturdy as a sheet of ice
+Grand Mastered
+49,645
+
+Wooden Bow
+Semi-accurate, not very solid
+Mega Mastered
+49,636
+
+Sturdy Sword
+Probably won't break
+Mega Mastered
+49,630
+
+Wooden Sword
+Might give you a splinter
+Mega Mastered
+49,574
+
+Pickaxe
+Rock hates this
+Mega Mastered
+49,523
+
+Purple Shirt
+So close to royalty...
+Grand Mastered
+49,214
+
+Explosive
+Keep away from Jill
+Mega Mastered
+49,166
+
+Sea Dragon
+Rare saltwater fish
+Grand Mastered
+49,118
+
+Bamboo Flute
+Play me a tune, but not too loud
+Mega Mastered
+49,111
+
+Black Shirt
+It's not a phase, mom!
+Grand Mastered
+49,068
+
+Bamboo Rope
+Stronger than normal rope
+Mega Mastered
+48,896
+
+Garnet
+While red and yellow are common,
+some garnet can be green or even blue
+Mega Mastered
+48,882
+
+Pie Pan
+Used to bake pies
+Grand Mastered
+48,810
+
+Shimmer Ring
+A blinger for your finger
+Mega Mastered
+48,573
+
+Crossbow
+Powerful ranged weapon
+Mega Mastered
+48,480
+
+Taffy
+Sticks to your teeth
+48,390
+
+Ruby Ring
+Bright and sparkly
+Mega Mastered
+48,385
+
+Candy Cane
+Peppermint flavored
+48,384
+
+Candy Roll
+Chocolate flavored
+48,384
+
+Bamboo Chair
+Goes great on your front porch
+Grand Mastered
+48,371
+
+Beary Squishies
+Won't eat you, but might
+stick to your teeth forever
+48,088
+
+Square Key
+A geometric key that opens medium chests
+48,074
+
+Green Shirt
+This shirt makes those who wear it feel heroic
+Grand Mastered
+48,055
+
+Grape Juice
+Instant crops, consumable,
+one-time use
+Grand Mastered
+47,989
+
+Strawberry Good Goods
+What strawberries could have been
+47,883
+
+Ladder
+Vertically challenged folk love this
+Mega Mastered
+47,852
+
+Horn Canteen
+Holds water or beer
+Mega Mastered
+47,777
+
+Canoe
+Gently down the stream...
+Mega Mastered
+47,589
+
+B for Buddies
+Melts in your hands and
+makes a real good mess
+47,428
+
+Blue Gel
+Do NOT drink
+47,396
+
+Shimmer Quartz
+Four of these make a sparkly gallon
+47,297
+
+Wizard Hat
+Magical head protection
+Mega Mastered
+47,120
+
+Skeleton Key
+A spooky key to open mystical chests
+46,949
+
+Spiky Bracelet
+Fashionable defensive gear
+Mastered
+46,894
+
+Propeller Hat
+Wheeeeee!
+Grand Mastered
+46,869
+
+Red Shirt
+Ancient myths recommend not wearing this when exploring
+Grand Mastered
+46,743
+
+Seashell Necklace
+She sells seashells
+down by the seashore
+Grand Mastered
+46,742
+
+Gazebo
+Can I shoot an arrow at the gazebo?
+Grand Mastered
+46,677
+
+Sour Root
+A sour smelling root
+46,592
+
+Tin Can
+Useful in crafting
+Mega Mastered
+46,145
+
+Axe
+Why did the chicken put the egg under an axe?
+To hatchet
+Mega Mastered
+46,125
+
+Valve
+Releases steam
+Grand Mastered
+46,015
+
+Blue Twine
+A more fancy twine
+Mega Mastered
+45,738
+
+Old Boot
+Anybody need a boot?
+45,737
+
+Butter
+Useful to cook other things
+Grand Mastered
+45,555
+
+Cheese
+Savory and delicate
+45,107
+
+Yellow Twine
+A more fancy twine
+Mega Mastered
+44,913
+
+Sunflower Oil
+Makes food taste like the sun
+Grand Mastered
+44,659
+
+Valentines Card
+Be my Valentine
+Mega Mastered
+44,632
+
+Green Top Hat
+A Top Hat that is green
+Grand Mastered
+44,422
+
+Potato Battery
+Electrified Spud
+Grand Mastered
+44,186
+
+Herbs
+They'll spice up your life
+44,171
+
+Fire Ant Farm
+Massive pain if glass is broken
+Grand Mastered
+44,147
+
+Coin Purse
+Holds coins and stuff
+Mega Mastered
+44,040
+
+Hammer
+Works with nails
+Mega Mastered
+43,999
+
+Salt
+Makes food taste better
+Mega Mastered
+43,746
+
+Engine
+Used to power a machine
+Grand Mastered
+43,676
+
+Milk Carton
+Part of a healthy school lunch
+Grand Mastered
+43,626
+
+Fancy Violin
+Adorned with intricate inlays and
+shimmering varnish
+Grand Mastered
+43,626
+
+Bone Pickaxe
+The bone handle is more grippy
+Mega Mastered
+43,377
+
+Lemon Quartz Ring
+Like holding the sun in your hands
+Mega Mastered
+43,356
+
+Cannon
+This thing goes BOOM
+Grand Mastered
+43,308
+
+Sturdy Bow
+Should last longer, more accurate
+Mega Mastered
+43,299
+
+Crab Claw
+Delicious with butter
+Grand Mastered
+43,230
+
+Fancy Guitar
+Perfectly tuned
+Mega Mastered
+43,217
+
+Heart Necklace
+For someone special
+Grand Mastered
+43,045
+
+Leather Waterskin
+Quench your thirst
+Mega Mastered
+43,019
+
+Chattering Teeth
+Not to be used as dentures
+42,920
+
+Cooking Pot
+Used to cook things.
+Grand Mastered
+42,396
+
+Jade
+Not as disillusioned as it sounds
+Mega Mastered
+42,173
+
+Leather Diary
+Buttery soft and full of secrets
+Mega Mastered
+42,110
+
+Mayonnaise
+A flavorful - if controversial -
+addition to any sandwich.
+Grand Mastered
+42,099
+
+Red Dye
+Can turn some things red
+Mega Mastered
+41,573
+
+Spoon
+Good for soup
+Mega Mastered
+41,545
+
+Grand Piano
+Produces soothing music
+Grand Mastered
+41,053
+
+Dragonfly
+Amazingly successful predator, ~95% good hunts
+40,966
+
+Magus Hat
+Hat suited for mages
+Grand Mastered
+40,557
+
+Sail Cloth
+Catch the prevailing winds
+Grand Mastered
+40,531
+
+Fancy Table
+Made of the finest oak
+and perfectly polished
+Grand Mastered
+40,231
+
+Pulley
+Give it the ol' heave-ho
+40,008
+
+Holiday Wreath
+A joyful circular evergreen
+Grand Mastered
+38,805
+
+Ugly Buddy Sweater
+Unimaginably ugly
+Grand Mastered
+38,673
+
+Transistor
+Electronic component
+38,620
+
+Yellow Dye
+Can turn some things yellow
+Mega Mastered
+38,377
+
+Christmas Tree
+Full of holiday spirit and maybe a squirrel
+Grand Mastered
+38,311
+
+Leather Helmet
+When you wear this, you're
+ahead of the helmet game
+Grand Mastered
+37,903
+
+Gold Ring
+The base for gold jewelry
+Mega Mastered
+37,882
+
+Large Net
+Can catch lots of stuff
+Mega Mastered
+37,591
+
+Witch Hat
+I'm not a witch, I'm your wife
+37,425
+
+Bat Wing
+I am Batwing.
+37,410
+
+Water Lily
+You probably can't stand on this
+Mega Mastered
+37,055
+
+Veggie Juice
+Should've drank a veggie juice
+Grand Mastered
+37,017
+
+Block of Wood
+Ready for carving
+Grand Mastered
+36,906
+
+Unpolished Jade
+Where do you get this from again?
+36,895
+
+Pumpkin Spiced Milk
+A warm autumn fire in a glass.
+Shaken, not stirred.
+Grand Mastered
+36,858
+
+Swamp Algae
+It slowly pulses in your hand
+36,838
+
+Pirate Flag
+Jolly Roger
+36,534
+
+Spool of Copper
+A spool of copper wire
+Grand Mastered
+36,504
+
+Brown Dye
+Can turn some things brown
+Mega Mastered
+36,448
+
+Pitchfork
+Used to storm castles
+Mega Mastered
+36,330
+
+Eye Patch
+Do not look under it
+35,988
+
+Acorn Butter
+Squirrels will fight you for this
+Grand Mastered
+35,824
+
+Blue Butterfly
+I'm a beautiful butterfly!
+Mastered
+35,790
+
+Crown of Clover
+Adorned by many folk during dances in Redbrook
+Grand Mastered
+35,754
+
+Wagon Wheel
+Hey... mama rock me
+Mega Mastered
+35,678
+
+Toilet Paper
+Where does toilet paper come from?
+Toiletries
+Mega Mastered
+35,663
+
+Red Brick
+Not to be thrown
+through red windows
+Grand Mastered
+35,604
+
+Pine Shelf
+Pine is fine
+Grand Mastered
+35,485
+
+Pear Grease
+Semisolid lubricant for machinery
+Grand Mastered
+35,197
+
+Re'taw
+The finest water in all of T'rah
+(According to Borgen)
+34,687
+
+Reinforced Helmet
+More protection for the
+cost of visibility
+Grand Mastered
+34,401
+
+Gold Lemon Quartz Ring
+When life gives you lemons, wear them
+Grand Mastered
+34,284
+
+Gold Diamond Ring
+Can buy me love
+Mastered
+34,278
+
+Stone
+Don't leave it unturned
+34,010
+
+Barbed Wire
+Who made Barb mad?
+Mega Mastered
+33,927
+
+Flywheel
+Conserves angular momentum
+Grand Mastered
+33,761
+
+Green Cloak
+Full of convenient pockets
+Grand Mastered
+33,749
+
+Blue Shirt
+Casual but good looking
+Grand Mastered
+33,509
+
+Fancy Drum
+Keeps the beat going
+Mega Mastered
+33,312
+
+Small Gear
+Helps keep things running like clockwork!
+33,116
+
+Spooky Scarecrow
+If it only had a brain...
+Mastered
+33,004
+
+Grasshopper
+Also known as a locust when
+they gather in swarms
+32,954
+
+Amber Cane
+Spared no expense
+Mastered
+32,936
+
+Candy Corn
+Who really likes this stuff?
+Grand Mastered
+32,928
+
+Oak Table
+Sturdier than a normal wooden table
+Mega Mastered
+32,640
+
+Snow Globe
+Frozen in time
+Grand Mastered
+32,495
+
+Orange Dye
+Can turn some things orange
+Mega Mastered
+32,171
+
+Basic Pillow
+It's better than a rock
+Grand Mastered
+32,123
+
+Leather Belt
+Keeps your pants up
+Mega Mastered
+31,460
+
+Bamboo Fence
+For when white pickets just aren't right
+Grand Mastered
+30,943
+
+Purple Dye
+Can turn some things purple
+Mega Mastered
+30,808
+
+White Twine
+A more fancy twine
+Grand Mastered
+30,566
+
+Purple Ornament
+For a Christmas Tree
+30,509
+
+Orange Ornament
+For a Christmas Tree
+30,505
+
+Yellow Ornament
+For a Christmas Tree
+30,491
+
+Amethyst
+Am-e-thyst, am-e-that
+30,486
+
+Red Ornament
+For a Christmas Tree
+30,467
+
+Blue Ornament
+For a Christmas Tree
+30,448
+
+Green Ornament
+For a Christmas Tree
+30,432
+
+Small Key
+A tiny key that opens small chests
+30,222
+
+Lantern
+Portable light source
+Mega Mastered
+30,215
+
+Star
+Festoon the fir
+29,554
+
+Yellow Butterfly
+I'm a beautiful butterfly!
+Grand Mastered
+29,439
+
+Pirate Bandana
+Keeps hair out of the rigging
+28,864
+
+Mittens
+Keeps hands warm
+28,826
+
+Cyclops Spider
+Avoid eye contact
+28,819
+
+Fancy Sword
+A sharp look, and an
+even sharper edge
+Mastered
+28,551
+
+Handsaw
+Wood hates this
+Mega Mastered
+28,256
+
+Feed
+Animal feed for pigs/horses
+Mega Mastered
+27,964
+
+Monster Skull
+A former monster
+26,748
+
+Ruby
+Sometimes confused with pink sapphire
+Mega Mastered
+26,612
+
+Green Butterfly
+I'm a beautiful butterfly!
+Mastered
+26,573
+
+Orange Gecko
+Fifteen minutes could save you...
+25,958
+
+Wine
+Fermented grape juice
+Grand Mastered
+24,653
+
+Popcorn
+I'm just here for the popcorn
+24,614
+
+Gold Jade Ring
+Rich and jaded
+Grand Mastered
+24,581
+
+Scissors
+Do NOT run with these
+Mega Mastered
+23,898
+
+Acid Extract
+Caustic, use with caution
+Mastered
+23,791
+
+Glacierstone
+Cold as ice
+23,567
+
+Bouquet of Flowers
+Oh my they smell wonderful
+Grand Mastered
+23,514
+
+Blue Feathers
+From a sad chicken
+22,796
+
+Glass Eyes
+Craniofacial prosthesis
+Mastered
+22,671
+
+Black Twine
+A more fancy and emotional twine
+Grand Mastered
+21,594
+
+Corn Husk Doll
+A children's toy
+Grand Mastered
+21,486
+
+Magicite
+A stone for special spells
+Mega Mastered
+21,482
+
+Small Spring
+A helical metal coil
+21,332
+
+Control Box
+Provides operational controls for machines
+Grand Mastered
+20,754
+
+Iced Tea
+Restores your best fishing streak
+Mega Mastered
+20,656
+
+Ship Mast
+The wind beneath my sails
+Mastered
+20,563
+
+Black Shield
+Said to stop arrows, swords, and light
+Mega Mastered
+20,084
+
+Joyful Ring
+A gift to bring joy to others
+Mastered
+20,019
+
+Rucksack
+Hauls stuff around
+Grand Mastered
+18,920
+
+QED Cell
+Better than carrying around a nuclear accelerator
+Mastered
+18,768
+
+Pinecone Bird Feeder
+Enjoy from your window while washing dishes
+Mastered
+18,736
+
+Black Cloak
+Like you were born in the mist
+Mastered
+18,554
+
+Machine Part
+From some sort of ancient machine
+18,423
+
+Shark Tooth
+Fish are friends, not food.
+18,216
+
+Orange Butterfly
+I'm a beautiful butterfly!
+Mastered
+17,708
+
+Fruit Punch
+Instant cooking, consumable, one-time use
+Mastered
+17,566
+
+Yellow Shirt
+Hard to ignore
+Grand Mastered
+17,557
+
+Metal Spool
+Useful to spool wire
+Grand Mastered
+17,168
+
+Black Bag
+Looks like a black hole but does not act like it
+Grand Mastered
+16,385
+
+Bone
+A former animal
+16,293
+
+Awl
+Good for piercing small holes
+Mega Mastered
+16,292
+
+Glass Orb
+Refined from Shimmer Stone
+Mega Mastered
+15,917
+
+Purple Butterfly
+I'm a beautiful butterfly!
+Mastered
+15,851
+
+Linked Lantern
+Luminously linked lanterns
+light long lanes!
+Mega Mastered
+15,447
+
+Unrefined Sugar
+Guaranteed to put its elbows on the table
+Grand Mastered
+14,838
+
+Coal
+The foundation of the Industrial Revolution
+14,711
+
+Red Butterfly
+I'm a beautiful butterfly!
+Mastered
+14,697
+
+Flying Machine
+Fly like an eagle, in theory
+Mastered
+14,380
+
+Witch's Broom
+Slightly cursed
+Mastered
+14,285
+
+Apple Cider
+1000+ Stamina Use
+Does not give Stamina
+Works with Wanderer Perks
+Need at least 1000 Stamina to use
+Mega Mastered
+14,206
+
+Sporefly
+Known for a painful sting and itchy bite
+14,092
+
+Gold Feather
+Feathers, but gold
+13,400
+
+Ancient Coin
+From another age
+13,390
+
+Gouda
+Sweet and creamy
+13,286
+
+Steel Plate
+Solid metal plating for constructing things
+Mega Mastered
+13,206
+
+Gold Feed
+Really crunchy animal feed
+Mastered
+12,719
+
+Fancy Chair
+So cushy and comfortable
+Grand Mastered
+12,587
+
+Fireworks
+Pyrotechnic device for entertainment
+12,464
+
+Bell
+Creates a terribly annoying sound
+12,383
+
+Green Dye
+Can turn some things green
+Mega Mastered
+12,378
+
+Magna Quartz
+Has a thing for metal
+12,083
+
+Spiked Shell
+Covered in sharp spikes
+Grand Mastered
+11,722
+
+Leather Bag
+It's all I got
+Mega Mastered
+11,473
+
+Re'taw Pail
+Aech to Oh no!
+Mastered
+11,063
+
+Bamboo Trellis
+Way better than a wooden trellis
+Mega Mastered
+11,034
+
+Wrench
+Works with bolts
+Mega Mastered
+10,969
+
+Egyptian Necklace
+Show off your wealth
+10,890
+
+Lemon Quartz
+A citric rock
+10,661
+
+Fancy Clock
+Tick..Tock..Tick....
+Mastered
+10,432
+
+White Cloak
+First popularized by Galad Damodred
+Mastered
+10,182
+
+Emerald
+We're off to see the wizard
+Mega Mastered
+10,143
+
+Gold Ruby Ring
+Bright and sparkly with a beautiful band
+Grand Mastered
+10,008
+
+Steel Vise
+Good for clamping stuff down
+Grand Mastered
+9,784
+
+Gold Leaf
+A thing of beauty
+9,352
+
+Wooden Barrel
+Made of the best materials
+Mega Mastered
+9,336
+
+White Parchment
+Useful to make paper
+Mega Mastered
+9,011
+
+Cutlass
+Commonly used by pirates
+8,813
+
+Carbon Sphere
+Used to harden iron
+8,741
+
+Arnold Palmer
+Quicker than regular Lemonade
+Grand Mastered
+8,523
+
+Redbrook Patch
+Given to those of exemplary character in Redbrook
+8,514
+
+Snowball
+Packed tightly
+7,845
+
+Fancy Box
+Very ornate, does not open
+7,770
+
+Piñata Whop Stick
+Assistive tool designed to whop piñatas
+Mastered
+7,637
+
+Rubber Duckie
+You're the one
+7,630
+
+Unicorn Shell
+You can hear faint magical neighs
+Mastered
+7,485
+
+Carved Rhino
+Willfully skittled
+7,071
+
+Treasure Key
+A fancier key to open large chests
+6,950
+
+Event Token
+Earned during special events
+6,426
+
+Mushroom
+A fungus among us
+Mega Mastered
+6,259
+
+White Flowers
+Beautiful White Flowers
+6,213
+
+Teapot
+Short and stout
+5,886
+
+Pink Jelly
+Nautical nonsense
+Mastered
+5,628
+
+Wax Candle
+Provides a little bit of light
+5,589
+
+Red Flowers
+Beautiful Red Flowers
+5,567
+
+Striped Feather
+From a Striped Bird
+5,433
+
+Polished Boot
+Steel Toe and Rugged
+Grand Mastered
+5,322
+
+Yule Goat
+Keep away from matches
+Mastered
+5,312
+
+Machine Press
+So much pressure
+Grand Mastered
+5,127
+
+Carved Squirrel
+Ah, nuts!
+4,997
+
+Steel Pickaxe
+Tough as steel
+4,915
+
+Oak
+From a tiny acorn, much can be produced
+4,801
+
+Glowing Lantern
+The soft green glow is much stronger than you expected
+Grand Mastered
+4,673
+
+Blue Milk
+Ever tried to milk a Bantha?
+4,484
+
+Small Screw
+A workshop isn't complete without some
+4,432
+
+Orange Flowers
+Beautiful Orange Flowers
+4,387
+
+Yellow Flowers
+Beautiful Yellow Flowers
+4,354
+
+Carved Owl
+Skillfully whittled
+4,302
+
+Freaky Picture
+Who even is this
+4,249
+
+White Truffle
+Very yummy and valuable
+4,209
+
+Spider
+It just wants a hug!
+3,988
+
+Carved Rabbit
+Thankfully, it doesn't seem to
+be looking for carved carrots
+3,958
+
+Snow Shoes
+Makes walking through snow possible
+Grand Mastered
+3,882
+
+Captains Log
+Full of pirate secrets
+3,876
+
+Carved Warthog
+Its friends never stood downwind
+3,867
+
+Sugar Cube
+A certain equus caballus loves these
+3,772
+
+Monarch Butterfly
+Ruler of all butterflies
+3,634
+
+Crystal Pickaxe
+Sturdy but slippery
+3,622
+
+Wood Planer
+Smooooooooth
+Mastered
+3,419
+
+Bird Egg
+I'd hate to meet the bird that laid this
+3,137
+
+Carved Camel
+Needs water even less often than its live namesake
+3,050
+
+Brown Sugar
+Pour some on me
+Mastered
+3,027
+
+Carved Moose
+It's a pretty big animal, eh?
+3,014
+
+Mug of Beer
+Crisp and dark with a balance of bitter
+and sweet notes with a dry finish.
+3,003
+
+Fuzzy Chick 03
+Fuzzy and adorable
+2,962
+
+Shovel
+Good for moving dirt
+Mega Mastered
+2,919
+
+Pocket Watch
+Tells the time
+2,915
+
+Tin Goblet
+You chose poorly
+2,892
+
+Heart Necklace Right Piece
+The right piece of a Heart Necklace
+2,812
+
+Sturdy Pickaxe
+Infused with Stone Shell
+2,793
+
+Cooked Fish
+Ready to serve with chips
+2,524
+
+Carved Bear
+Will not steal your picnic basket
+2,349
+
+Peach Juice
+Causes invisibility
+Mastered
+2,129
+
+Black Truffle
+Very very yummy and valuable
+2,088
+
+Leather
+Strong and durable, important for crafting
+Mega Mastered
+2,075
+
+Snowman
+Made of snow
+Grand Mastered
+2,052
+
+Borgen Buck
+No cash value nor is it legal tender
+2,036
+
+Witch's Brew
+Full of bones, brew and other magic
+1,937
+
+Moonstone
+Its beauty eclipses other gems
+1,904
+
+Teddy Bear
+Super soft, plush, cuddly
+1,801
+
+Barnacle Shell
+A shell covered in barnacles
+1,741
+
+Molasses
+Not as slow as you think
+Mastered
+1,722
+
+Ghost Jelly
+Floating phantom of the deep
+1,707
+
+Bitten Apple
+Somebody took a bite
+1,658
+
+Shamrock Milk
+Luck +10
+1,647
+
+Sea Urchin
+Worse than stepping on legos
+1,633
+
+Bacon
+Mmmmm bacon
+1,632
+
+Fuzzy Chick 02
+Fuzzy and adorable
+1,570
+
+Corn Oil
+Makes food taste like corn
+Grand Mastered
+1,534
+
+Potted Flower
+Brightens up your day
+1,473
+
+Fuzzy Chick 04
+Fuzzy and adorable
+1,433
+
+Honeysuckle
+Tastes like Honey
+1,432
+
+Step Ladder
+You're not even my real Ladder!
+Grand Mastered
+1,292
+
+Fall Leaves
+Vivid and colorful
+1,274
+
+Gainite
+No gain...
+1,195
+
+Hot Cocoa
+A Holiday treat
+1,107
+
+Green Rubee
+Linked to the Path
+1,080
+
+Raw Meat
+Best served cooked
+1,056
+
+Snowflakes
+Can you spot the differences?
+1,040
+
+Piñata
+Don't hit me!
+956
+
+Magna Core
+Rotor based magnetic core
+928
+
+Egg 05
+A hand painted Egg
+918
+
+Small Flute
+Practice makes perfect
+868
+
+Carved Squisquatch
+Skillfully Squittled
+848
+
+Carved Chicken
+Lays brown eggs
+804
+
+King Apple
+I love it when you call me Big Apple
+Mastered
+744
+
+Fire Ant
+Avoid stepping on these at all costs
+723
+
+Pine Shavings
+Treescaping
+Mastered
+692
+
+Waffle
+Golden grid beckons,
+Syrup rivers weave their tale,
+Morning bites delight.
+660
+
+Expired Ticket
+Basically worthless
+630
+
+Briomine
+A raw mineral
+609
+
+Ship in a Bottle
+Admired by seafarers and landlubbers alike
+599
+
+Embershard
+Crystallized lava
+594
+
+Ghost Candy
+Ghastly delicious
+585
+
+Plum Ore
+A raw mineral
+565
+
+Bogslug
+A massive swamp slug that can
+leech out poison or venom
+564
+
+Magmastone
+Like regular stone, but warm
+539
+
+Carved Kitty
+Enjoys chasing carved mice
+518
+
+Egg of Life
+A strange, magical Egg
+503
+
+Bomb
+ACME
+502
+
+Carved Cow
+Got Chocolate Milk?
+485
+
+Black Dye
+Can turn some things black
+Mega Mastered
+481
+
+Pair of Boots
+Great for hiking or wars
+Grand Mastered
+453
+
+Fairy Crystal
+Emanating Life Force
+440
+
+Piece 30
+A piece to a puzzle...
+425
+
+Esperium Band
+Minimalist elegance
+419
+
+Pet Treat
+Pets love these!
+Pet will bring you items immediately
+416
+
+Egg 03
+A hand painted Egg
+402
+
+Carved Fox
+What does the fox say?
+400
+
+Fuzzy Chick 06
+Fuzzy and adorable
+388
+
+Carved Pig
+That'll do pig, that'll do
+386
+
+Calcifite
+A raw mineral
+384
+
+Carved Dragon
+Fire Damage +1
+384
+
+Rudolph
+The most famous reindeer of all
+381
+
+Silk
+Smooth as... silk?
+Grand Mastered
+364
+
+Sinkroot
+A hardy swamp plant that clings
+to the mire and refuses to sink
+363
+
+Apple
+Adds 15 stamina
+346
+
+Unpolished Flarite
+Crystalized Fire
+342
+
+Cotton Candy
+Sweet and fluffy
+335
+
+Bone 02
+A former animal
+326
+
+Carved Mouse
+LF wooden cheese
+322
+
+Bamboo
+Fast-growing, sturdy plant used
+for crafting
+318
+
+Jar of Pickles
+Dill with it
+288
+
+Mini Marshmallows
+Perfect for Hot Cocoa
+276
+
+Egg 12
+A hand painted Egg
+271
+
+Bone 05
+A former animal
+254
+
+Bone Fragments
+Fragments of an unknown creature
+252
+
+Esperium
+A raw mineral
+250
+
+Cave Mushroom
+Found in dark caves
+240
+
+Pencil
+A writing utensil
+219
+
+Green Halite Earrings
+Works best with pierced ears
+217
+
+Lapis Lazuli
+A beautiful blue crystal
+214
+
+Christmas Sweater
+Incredibly ugly
+210
+
+Pitviper Tail
+Wide as a thigh and the
+length of three men
+205
+
+Aquacite
+Polished Crystalized Water
+191
+
+Egg 11
+A hand painted Egg
+190
+
+Oceanite
+From an ancient ocean
+190
+
+Lemonade
+Finds items while exploring
+Mega Mastered
+183
+
+Stone Shell
+From a stone turtle?
+178
+
+Egg 04
+A hand painted Egg
+171
+
+Egg 02
+A hand painted Egg
+168
+
+Egg 09
+A hand painted Egg
+168
+
+Soap
+Keep it clean
+167
+
+Cricket
+Chirp.
+164
+
+Egg 06
+A hand painted Egg
+157
+
+Pyredrop
+A very rare stone
+157
+
+Egg 01
+A hand painted Egg
+156
+
+Egg 10
+A hand painted Egg
+155
+
+Bone 03
+A former animal
+149
+
+Deep Ocean Ring
+The deeper the ocean, the more mysteries it holds
+145
+
+Egg 08
+A hand painted Egg
+143
+
+Sunstone Ring
+Seems to magnify sunlight as it reflects it
+141
+
+Donner
+One of Santa's Reindeer
+136
+
+Apple Core
+ewwwwwwwwwww
+134
+
+Mistletoe
+Actually poisonous
+130
+
+Brain Fungus
+Are you smarter than a fungus?
+130
+
+Gingerbread Man
+Please don't eat me
+128
+
+Purple Mushroom
+Rasmodius loves these
+126
+
+Prancer
+One of Santa's Reindeer
+120
+
+Egg 07
+A hand painted Egg
+119
+
+Fish Flakes
+Makes fish go crazy
+115
+
+Broken Sword
+Used in battle long ago
+113
+
+Red Berry Pie
+A super yummy pie full of red berries
+Mega Mastered
+109
+
+Salt Rock
+Science you can lick
+107
+
+Comet
+One of Santa's Reindeer
+107
+
+Grapes
+From the vine
+105
+
+Buddy Doll
+Gives you comfort
+101
+
+Purple Flower
+Violet, you're turning violet, Violet!
+100
+
+Cicada Shell
+Cicada Nymph Exuvia
+Mastered
+100
+
+Cicada
+Hummmmmmmmmmmmmmmmmmm
+Mastered
+93
+
+Green Halite
+A raw mineral
+88
+
+Cloth
+A foundational textile
+Mega Mastered
+87
+
+Orange Calcite
+A raw mineral
+85
+
+Horn Powder
+Said to have many medicinal properties
+84
+
+11th Leaf Centerpiece
+A celebration of the changing of seasons in T'rah
+82
+
+Egg of Fire
+A strange, magical Egg
+80
+
+Chocolate Bunny
+Ridiculously cute and sweet
+76
+
+Ant Apple
+Apple abdomen from an Apple Ant
+74
+
+Fuzzy Chick 10
+Fuzzy and adorable
+72
+
+Dasher
+One of Santa's Reindeer
+71
+
+Cupid
+One of Santa's Reindeer
+70
+
+Joker
+A card that may be best suited
+for jokes and riddles?
+68
+
+Bone 04
+A former animal
+68
+
+Fuzzy Chick 11
+Fuzzy and adorable
+68
+
+Corn Kabob
+Seasoned and buttered
+67
+
+Unpolished Aquacite
+Crystalized Water
+66
+
+Garlic
+Freshens breath. 9 out of 10 vampires agree.
+65
+
+Dancer
+One of Santa's Reindeer
+63
+
+Vixen
+One of Santa's Reindeer
+62
+
+Thomas's Cup of PB
+There's only one right way
+to eat a Thomas's
+62
+
+Fire Crystal
+Crystalized Inferno
+60
+
+Egg of Space
+A strange, magical Egg
+59
+
+Hearts
+A card that may be best suited
+for cardiologists and love?
+58
+
+Fossilized Frog
+This poor frog
+57
+
+Blitzen
+One of Santa's Reindeer
+55
+
+Sunstone
+Full of energy
+55
+
+Wooden Footstool
+Put your feet up
+Mastered
+52
+
+Acorn
+A tasty snack for squirrels
+50
+
+Egg of Tree
+Just a hatchling
+50
+
+Horned Beetle
+A bug with a somewhat mooselike nature
+49
+
+Planet Egg
+Do not drop. Seriously.
+49
+
+Spades
+A card that may be best suited
+for plenty of dirt?
+48
+
+Egg of Light
+A strange, magical Egg
+47
+
+Apple Turnover
+Flaky, golden goodness.
+Accept Exchange Center offers again
+46
+
+Fossilized Print
+A print from an ancient creature
+45
+
+Egg of Earth
+A strange, magical Egg
+41
+
+Whistle
+Loud and clear
+40
+
+Fuzzy Chick 05
+Fuzzy and adorable
+40
+
+Bird Skull 01
+A former bird
+37
+
+Gummy Globber
+Röd fisk
+37
+
+Fuzzy Chick 08
+Fuzzy and adorable
+37
+
+Wooden Pipe
+Ceci n'est pas une pipe
+36
+
+Egg of Chaos
+A strange, magical Egg
+36
+
+PHR Voucher
+Adds 5 more PHRs instantly
+36
+
+Cooked Turkey
+A very big treat
+35
+
+Apple Ant
+A giant, but tasty ant that
+hatches in September
+34
+
+Travel Voucher
+Creates a 48 hour charter or expedition
+34
+
+Baba Cola
+Carbonated Cabbage Cola for Cool Kids.
+Sets Townsfolk of the Day
+33
+
+Orange Juice
+Adds 100 Stamina
+Mega Mastered
+31
+
+Gingerbread House
+A Gingerbread Man's House
+30
+
+Egg of Ages
+A strange, magical Egg
+29
+
+Lemon
+From a lemon tree
+27
+
+Prune Juice
+A warrior's drink.
+Resets grape juice used count
+27
+
+Painite
+No pain...
+26
+
+Diamonds
+A card that may be best suited
+for gems and baseball?
+25
+
+Egg of Water
+A strange, magical Egg
+25
+
+Jester Buddy Doll
+Watch me juggle
+25
+
+Clubs
+A card that may be best suited
+for dancing and beatings?
+23
+
+Protein Bar
+Chocolate Peanut Butter
+with 8g of complete protein.
+Increases exploring effectiveness
+22
+
+Pumpkin Juice
+Hauntingly good
+Increases Mastery
+22
+
+Mana Scarab
+Drains magical power
+22
+
+Bouquet of Roses
+For someone special
+21
+
+Taco
+Anybody want a taco?
+20
+
+Blue Spritz
+Chilled and refreshing
+20
+
+Egg of Air
+A strange, magical Egg
+20
+
+Beach Umbrella
+Stay cool
+20
+
+Safety Pin
+Can pin things together
+19
+
+Spooky Doll
+Not creepy at all... no sir.
+19
+
+Spooky Slime
+Magical ooze
+19
+
+Heart Candies
+Heart-shaped sweets
+19
+
+Egg of Shadow
+A strange, magical Egg
+18
+
+Adventure Buddy Doll
+Let's go explore together!
+18
+
+Fuzzy Chick 01
+Fuzzy and adorable
+18
+
+Fuzzy Chick 07
+Fuzzy and adorable
+18
+
+Day Off Voucher
+Completes and collects all possible chores for the day
+18
+
+Honeycomb
+Delicious, golden geometry
+17
+
+Concord Grape Pie
+A super yummy pie full of grapes
+Mega Mastered
+16
+
+Book of Spells
+You hear a whisper
+16
+
+Maverick Chip
+Resets cheat count
+in Buddy Jack
+16
+
+Fuzzy Chick 12
+Fuzzy and adorable
+16
+
+Prickly Pear
+Fruit from a cactus
+15
+
+Raffle Ticket
+A chance to win
+15
+
+Thankful Notes
+A few of my favorite things
+15
+
+Holiday Garland
+Bright and Festive
+15
+
+Notebook
+Note-taking is an important skill
+14
+
+Calavera 01
+A colorful, elegant, ceramic skull
+14
+
+Calavera 02
+A colorful, elegant, ceramic skull
+14
+
+Piece of Cake
+To celebrate!
+14
+
+Tombstone
+Just a prop
+14
+
+Milk
+Produced by most mammals
+13
+
+Pie
+Who doesn't like pie?
+13
+
+Water Bottle
+Please recycle
+13
+
+Fuzzy Chick 09
+Fuzzy and adorable
+13
+
+Sand Dollar
+Actually worthless
+12
+
+Peafowl Feather
+You feel like you are being watched
+12
+
+Pizza Slice
+"Wise men say, 'Forgiveness is divine,
+but never pay full price for late pizza."
+12
+
+Temple Voucher
+Resets a Sacrificial Chain
+in the Temple of Reward
+12
+
+Piece 11
+A piece to a puzzle...
+11
+
+Event Key
+Unlocks certain event related things
+11
+
+Frozen Large Net
+Practically a blanket of frost
+11
+
+Gloorp
+Super Fun Fart Goo Substance
+11
+
+Paper Receipt
+Proof of purchase
+10
+
+Onion Rings
+Mostly breading
+10
+
+Power Monitor
+Monitor for a machine
+Grand Mastered
+10
+
+Lucky Spiral Belt
+Borgen Belt #777
+10
+
+Party Hat
+To commemorate!
+10
+
+Safety Goggles
+Eye protection
+10
+
+Lucky Cat Buddy Doll
+Brings good luck
+10
+
+Nebula Egg
+Hides the Nexus
+10
+
+Supply Voucher
+50% off next Farm Supply purchase
+(Maximum 200 Gold Discount)
+9
+
+Shark Jaws
+Duuuun... dun...
+Duun... dun...
+Dun-dun-dun-dun-dun-dun-dun-dun...
+DUUUUUUUUNNNNNNNNN!!!
+9
+
+Stone Fragment
+Feels old man
+9
+
+Sun Egg
+Don't stare too long
+9
+
+Bread
+The best thing since sliced... well, itself!
+8
+
+Fossilized Shell
+A very old shell
+8
+
+Reindeer Headband
+Does not allow you to fly or pull Santa's sleigh.
+Looks great though.
+8
+
+Apple Slicer
+by Simply Borgen
+8
+
+Turkey Buddy Doll
+Gobble gobble
+8
+
+Spring Cave Charm
+Increases Mining Effectiveness
+in Spring Cave
+8
+
+Toothbrush
+Regular dental hygiene is important
+7
+
+Nut Cracker Buddy
+Odd thrift store find
+7
+
+Snowman Buddy Doll
+Might melt in the spring
+7
+
+The Big One
+Extremely dangerous. Keep out
+of reach from children.
+7
+
+Ice Scraper
+Winter debuff
+7
+
+Glyph Sphere
+Stay away from the summoner!
+7
+
+Santa Hat
+Smells like Old Spice
+6
+
+Copper Wire
+Prized for its conductivity
+6
+
+Frozen Fishing Net
+The ropes are covered in frost
+6
+
+Frozen Bouquet
+Frosty elegance
+6
+
+Boltonic Love Potion 4
+This is more than love I feel inside.
+6
+
+Sand Shovel
+Required to build the most epic sand castles
+6
+
+Sand Castle Bucket
+Turns sand into mini-kingdoms
+6
+
+Consumption Belt
+Borgen Belt #1260
+6
+
+Two Hearts Belt
+Borgen Belt #214
+6
+
+Strong Paste
+Useful to strongly bind things together
+Mega Mastered
+6
+
+Piece 12
+A piece to a puzzle...
+6
+
+Fern Leaf
+Usually found in gullies
+5
+
+Fishing Net
+Can catch stuff
+Mega Mastered
+5
+
+Sealed Letter
+What could it say?
+5
+
+Scrap Metal
+Make sure your tetanus shot is up to date
+5
+
+Ram Skull 01
+Baaaa
+5
+
+Shillelagh
+Made of the finest blackthorn wood
+5
+
+Coconut
+You've got two empty halves of coconut
+and you're bangin' 'em together
+5
+
+Rudolph Buddy Doll
+Will get you through any storm
+5
+
+Bunny Buddy Doll
+Hopping
+5
+
+Sunscreen
+50 SPF
+5
+
+Sun Shades
+Cruise approved
+5
+
+Uncle Sam Buddy Doll
+I Want YOU
+5
+
+Bar of Silver
+Expensive paperweight
+5
+
+Moon Egg
+Made of cheese
+5
+
+Comet Egg
+Blink and you'll miss it
+5
+
+Bunny Ears
+Turns you into a Bunny
+4
+
+Onyx Scorpion
+Black as night and twice as dangerous
+4
+
+Pearl Berries
+Fancy, pearly bling for your taste buds
+4
+
+Mixed Nuts
+From mixed trees
+4
+
+Vampire Buddy Doll
+Keep away from pointy sticks
+4
+
+Movember Buddy Doll
+Blue ox doll sold separately
+4
+
+Tanooki Buddy Doll
+Raccoon Dog
+4
+
+Nirumdivar
+Stave of the Black Depths
+4
+
+Safety Mask
+Face protection
+4
+
+Apple Picker
+by Simply Borgen
+4
+
+Buddy Elf on a Shelf
+Odd thrift store find
+4
+
+Lucky Bacon
+Mmmmm green bacon
+4
+
+Black Hole Egg
+Aka Void Egg
+4
+
+Strange Mushroom
+It's a-mushroom!
+3
+
+Peach
+Fuzzy and sweet
+3
+
+Mark of Knowledge
+An acknowledgement of your high marks
+3
+
+Piece 03
+A piece to a puzzle...
+3
+
+Krampus Buddy Doll
+You better be nice
+3
+
+Frozen Buddy Doll
+Keeps your drinks cold
+3
+
+Cupid Buddy Doll
+Find that special someone
+3
+
+Gold Laurel
+Et tu, Brute?
+3
+
+frank's Bunny Mask
+Why are you wearing
+that silly human suit?
+3
+
+Corn Buddy Doll
+Corny
+3
+
+Party Horn
+To celebrate!
+3
+
+Smart Buddy Doll
+I am very smart!
+3
+
+Lovely Rose
+It's just so lovely dear
+3
+
+Leprechaun Hat
+Boosts confidence and nullifies cold
+3
+
+Asteroid Egg
++100 Dexterity (DEX)
+3
+
+Garden Claw
+by Simply Borgen
+3
+
+Garden Trowel
+by Simply Borgen
+3
+
+Coconut Water
+Simply refreshing
+3
+
+Green Halite Ring
+Were you blinded by its majesty?
+3
+
+Prism Shard
+Reflects light in strange ways
+2
+
+Pine Cone
+Smells like the forest
+2
+
+R.O.A.S.
+Rodent On A Stick
+2
+
+Backstabbing Dagger
+Watch your back!
+2
+
+Carnevale
+Keeps your reputation untarnished
+2
+
+Tea Leaves
+Useful for a relaxing beverage
+2
+
+Desk Calendar
+Helps you to track the
+Day, Leaf and Branch
+2
+
+Cranberry Juice
+Extremely refreshing
+Adds a lot of stamina
+2
+
+Fangs
+Chomps
+2
+
+Ghost Buddy Doll
+Boo-dy
+2
+
+Werewolf Buddy Doll
+Team Jacob
+2
+
+Santa Buddy Doll
+Hur Hur Hur
+2
+
+Hotdog Buddy Doll
+Let's be frank
+2
+
+School Buddy Doll
+Back to school!
+2
+
+Apple Belt
+Borgen Belt #4016
+2
+
+Swamp Thistle
+A hardy yellow thistle that thrives in the swamps
+2
+
+Mist Lily
+The white petals can be used
+to make White Dye
+2
+
+Slime Buddy Doll
+Double Dare contestant
+2
+
+Safety Headgear
+Head protection
+2
+
+Robot Chicken
+BOK BOK BWAAAAK-CHK-CHK-CHK...
+*dial-up modem noises*
+2
+
+Aquacite Ring
+The gem looks as though water is moving inside it
+2
+
+Plum Iron
+Stronger than iron, don't let the color fool you
+2
+
+Garnet Walking Stick
+A fancy looking walking stick for a more civilized age
+2
+
+Eggs
+Spam sold separately
+1
+
+Feathers
+Hope is a thing with these
+1
+
+Unpolished Shimmer Stone
+Has a strange glow to it
+Mega Mastered
+1
+
+Ring of Renthisj
+Did you say something?
+1
+
+Star's Treasure Map
+The original title has been scratched out
+other than the word 'winnings'...
+1
+
+Wishbone Necklace
+Considered a lucky charm
+1
+
+Gold Horseshoe
+For someone who really needs
+to turn their luck around
+1
+
+Sombrero
+Lots of shade
+1
+
+Small Bolt
+Part of an ancient Romuskan mechanism
+Mega Mastered
+1
+
+Holger's Mushroom Stew
+Holger's Recipe. Allows you to cook Mushroom Stew
+1
+
+George's Onion Soup
+George's Recipe. Allows you to cook Onion Soup
+1
+
+Rosalie's Bone Broth
+Rosalie's Recipe. Allows you to cook Bone Broth
+1
+
+Thomas's Cat's Meow
+Thomas's Recipe. Allows you to cook Cat’s Meow
+1
+
+Jill's Quandary Chowder
+Jills's Recipe. Allows you to cook Quandary Chowder
+1
+
+Vincent's Sea Pincher Special
+Vincent's Recipe. Allows you to cook Sea Pincher Special
+1
+
+Cecil's Shrimp-a-Plenty
+Cecils's Recipe. Allows you to cook Shrimp-a-Plenty
+1
+
+Roomba's Over The Moon
+Roomba's Recipe. Allows you to cook Over The Moon
+1
+
+Charles's Neigh
+Charles's Recipe. Allows you to cook Neigh
+1
+
+Lorn's Breakfast Boost
+Lorn's Recipe. Allows you to cook Breakfast Boost
+1
+
+Fancy Shoe
+Made of the finest leather and velcro
+1
+
+Jack-o-key
+The smile is genuine, but the door seems scary
+1
+
+Pumpkin Pie
+Not enough whipped cream
+1
+
+Keyglobe
+Your light? Never lose sight of it.
+1
+
+Cepathorf's Case
+Golden Leaf’s R&D really outdid themselves with this box
+1
+
+Frozen Playground Key
+You spoke the word, but what does it open?
+1
+
+Bananas
+There's always money in the banana stand
+1
+
+Rosalie's Red Berry Pie
+Rosalie's Recipe. Allows you to cook Red Berry Pie
+1
+
+Rosalie's Concord Grape Pie
+Rosalie's Recipe. Allows you to cook Concord Grape Pie
+1
+
+King Cake
+A delicious ring-shaped pastry
+1
+
+Blue Flowers
+Beautiful Blue Flowers
+1
+
+Mariya's Hickory Omelette
+Mariya's Recipe. Allows you to cook a Hickory Omelette
+1
+
+Mariya's Crunchy Omelette
+Mariya's Recipe. Allows you to cook a Crunchy Omelette
+1
+
+Piece 09
+A piece to a puzzle...
+1
+
+Baba Gec's Cabbage Stew
+Baba Gec's Recipe. Allows you to cook Cabbage Stew
+1
+
+Anchor
+Keeps your boat from drifting away
+1
+
+Ship Wheel
+Keeps your boat going the right direction
+1
+
+Sling Blade
+Hail Reaper
+1
+
+Green Apple
+A bit sour
+1
+
+Belt of Commander Uteer
+Borgen Belt #271
+1
+
+Velocity Belt
+Borgen Belt #112
+1
+
+Belt of Truth
+Borgen Belt #89
+1
+
+Buddy's Old Pirate Belt
+Borgen Belt #12
+1
+
+Broken Memory Belt
+Borgen Belt #189
+1
+
+Raptor Wrangler Belt
+Borgen Belt #37
+1
+
+Utal's Sabre
+Just like Buddy, it never gets dull!
+1
+
+QED Pack
+For prevention of mass hysteria
+1
+
+Cleaver
+It's not nearly as sharp as it looks
+1
+
+Horseman's Belt
+Borgen Belt #150
+1
+
+Owl Feather
+Who?
+1
+
+Circuit Breaker Belt
+Borgen Belt #113
+1
+
+Owl Guard Belt
+Borgen Belt #3
+1
+
+Santa's Travel Belt
+Borgen Belt #487
+1
+
+Borgen's Dancing Belt
+Borgen Belt #123
+1
+
+Certificate of Pepper Giving
+Proof of Pepper Perfection
+1
+
+Certificate of Carrot Giving
+Certificate of Carrot Completeness
+1
+
+Certificate of Pea Giving
+Papers of Pea Procurement
+1
+
+Certificate of Cucumber Giving
+Crown of Cucumber Cumulation
+1
+
+Certificate of Eggplant Giving
+Endorsement of Eggplant Enlightenment
+1
+
+Certificate of Radish Giving
+Registration of Radish Royalty
+1
+
+Certificate of Onion Giving
+Order of Onion Optimization
+1
+
+Certificate of Hops Giving
+Honor of Hops Husbandry
+1
+
+Certificate of Potato Giving
+Pass of Potato Prosperity
+1
+
+Certificate of Tomato Giving
+Trophy of Tomato Triumph
+1
+
+Certificate of Leek Giving
+Letter of Leek Leadership
+1
+
+Certificate of Watermelon Giving
+Writ of Watermelon Wonders
+1
+
+Certificate of Corn Giving
+Credential of Corn Consignment
+1
+
+Certificate of Cabbage Giving
+Credit of Cabbage Commitment
+1
+
+Certificate of Pine Giving
+Pin of Pine Paragons
+1
+
+Certificate of Pumpkin Giving
+Permit of Pumpkin Processing
+1
+
+Certificate of Wheat Giving
+Warrant of Wheat Winningness
+1
+
+Certificate of Broccoli Giving
+Brooch of Broccoli Benefaction
+1
+
+Certificate of Cotton Giving
+Crest of Cotton Consolidation
+1
+
+Certificate of Sunflower Giving
+Sash of Sunflower Superlatives
+1
+
+Certificate of Beet Giving
+Badge of Beet Bestness
+1
+
+Certificate of Rice Giving
+Receipt of Rice Realization
+1
+
+Kite Kite
+Requires wind beneath its wings
+1
+
+Beach Towel
+Stay dry
+1
+
+Buddy's Beach Ball
+Fun to toss around with friends
+1
+
+Belt of Freedom
+Borgen Belt #1776
+1
+
+YoYo
+Buzz, I was a YoYo!
+1
+
+Strange Temple Necklace
+Grants you strange and wonderful knowledge in the ...
+1
+
+Bird Key
+Unlocks something spooky
+1
+
+Zombie Buddy Doll
+In search of grrrrraaaaains
+1
+
+Nut Cracker Buddy Doll
+Not to be confused with
+Nut Cracker Buddy
+1
+
+Mariya's Festive Eggnog
+Mariya's Recipe. Allows you to cook Festive Eggnog
+1
+
+Fish Biscuit
+Polar Bears love these
+1
+
+Strange Key 01
+What could this be?
+1
+
+Gary's Crushroom Key
+For gains
+1
+
+Groundhog Buddy Doll
+Bellwether Buddy
+1
+
+Leprechaun Buddy Doll
+Lucky Charm
+1
+
+Banana Peel
+Kart racers hate these
+1
+
+Cockatrice Ether Source
+Extremely magical ether source rumored
+to attract one of the cockatrice's
+many food sources.
+1
+
+Birthday Suit Buddy Doll
+Wh-whew!!!
+1
+
+Fantastic Buddy Doll
+Hey, rise and shine, big boy.
+1
+
+Mermaid's Scale
+Come on down to Martha's Bay
+1
+
+Dino Buddy Doll
+w y y yay wish y
+1
+
+Vacation Buddy Doll
+When the sun goes down
+1
+
+Mermaid's Necklace
+Martha is looking for this
+1
+
+Fishing Hook
+I think I got a bite
+1
+
+Dewstar's Journal
+A journal containing notes on farming
+and practical applications for crop
+rotation. Scribbled on the final
+page is one word, 'Jumino.'
+1
+
+Apple Buddy Doll
+Please don't eat me!
+1
+
+Apple Ant Buddy Doll
+Give me an apple!
+1
+
+George's Acorn Pie
+George's Recipe. Allows you to cook Acorn Pie
+1
+
+Certificate of Sugar Cane Giving
+Stamp of Sugary Approval
+1
+
+Labubuddy Doll
+Not even cute
+1
+
+Cursed Shield
+If only there were a way to lift
+the curse, it would be the finest
+shield in the world...
+1
+
+Parade Balloon Buddy Doll
+Visible for miles
+1
+
+Gingerbread Buddy Doll
+Extremely tart
+1
+
+Wampa Buddy Doll
+Likes to eat tauntauns
+1
+
+Swamp Puzzle
+A completed puzzle of a swamp
+1
+
+Glowshroom
+A small mushroom that gives off
+a faint glow
+1
+
+Bear Buddy Doll
+So adorable
+1
+
+Toga Buddy Doll
+Et tu, Agricola?
+1
+
+Lucky Eggs
+Where's the ham?
+1
+
+Egg Buddy Doll
+Humpty Dumpty
+1
+
+Slimed Buddy Doll
+I don't know
+1
+
+Thomas's Red Velvet Cake
+Thomas's Recipe. Allows you to bake Red Velvet Cake
+1
+
+Camping Buddy Doll
+Enjoys fly fishing
+1
+
+Crowbar
+Rise and shine, Mr. Freeman.
+Rise and shine.
+1
+
+Cake
+Anyway, this cake is great.
+It's so delicious and moist.
+1
+
+Gardening Buddy Doll
+Mr Green Thumb
+1
+
+Highland Hollow Charm
+Increases Mining Effectiveness
+in Highland Hollow
+1
+
+Blitz Buddy Doll
+Listen to my story
+1
+
+Fairy Ring
+Hey! Listen!
+1
+
+Detonator
+Explosive's best friend
+1
+Fish & Bait chevron_down
+
+Grubs
+Catch fish, 2x Fishing XP
+MAX ON HAND
+51,710
+
+Minnows
+Catch fish faster
+MAX ON HAND
+51,710
+
+Gummy Worms
+Quick fish, 3x Fishing XP
+MAX ON HAND
+51,710
+
+Mealworms
+Single tap manual fishing
+Doesn't increase streak
+Fish love these!
+MAX ON HAND
+51,710
+
+Worms
+Use this to catch fish
+MAX ON HAND
+51,710
+
+Trout
+Gotta catch 'em all!
+Mega Mastered
+51,690
+
+Crappie
+The joke sort of makes itself, doesn't it?
+Mega Mastered
+51,535
+
+Shinefish
+So shiny
+Grand Mastered
+51,330
+
+Globber
+Old fishermen say these can talk
+back during a full moon
+Mega Mastered
+51,274
+
+Conch Shell
+A reminder of the ocean
+Mega Mastered
+51,210
+
+Bone Fish
+Someone else had this for dinner already
+Mega Mastered
+51,170
+
+Sunfish
+Like a starfish but much closer
+Mega Mastered
+51,170
+
+Blue Catfish
+Sad meowing abounds
+Mega Mastered
+51,169
+
+Pearl
+What is irritating can become good
+Mega Mastered
+50,842
+
+Clam Shell
+Wait, is that a VHS tape in there?
+Mega Mastered
+50,800
+
+Gold Sea Crest
+Super glittery
+Mastered
+49,931
+
+Goldgill
+1 gill is equal to 40 drams or 8 tablespoons
+Grand Mastered
+48,933
+
+Gold Coral
+Even better than the O.K. Coral
+Mastered
+48,791
+
+Gold Catfish
+Not usually a contest you want to win
+Mastered
+45,888
+
+Goldjack
+Nice big gold fish
+Mastered
+41,991
+
+Frozen Boot
+Wearing causes frostbite
+Mega Mastered
+40,972
+
+Gold Drum
+Cogito ergo Drum
+Mastered
+40,419
+
+Frozen Starfish
+Poor little thing
+Grand Mastered
+37,892
+
+Frozen Book
+Written in an ancient language
+Grand Mastered
+37,605
+
+Gold Crab
+Gold crab meat just tastes better
+37,335
+
+Gold Sea Bass
+Now you just need to find a Gold Sea Guitar
+Mastered
+36,604
+
+Large Clam Shell
+Bigger than a Small Clam Shell
+36,240
+
+Frozen Feather
+Let it go
+Grand Mastered
+36,127
+
+Skipjack
+Nice big fish
+Mega Mastered
+35,925
+
+Goldray
+Can sting you with gold
+Mastered
+35,755
+
+Gold Jelly
+I don't think you're ready for this
+Mastered
+35,742
+
+Gold Trout
+What makes it gold? The jury is still trout
+Mastered
+35,099
+
+Goldfin
+Blinding bright
+Mastered
+34,601
+
+Anglerfish
+I'm feeling happy... which is a big deal.
+34,158
+
+Red Starfish
+So pretty
+Mega Mastered
+32,960
+
+Clownfish
+More entertaining than the mimefish
+Mega Mastered
+32,747
+
+Gold Flier
+A change from the standard red wagon
+Mastered
+31,801
+
+Swordfish
+Fencing champion
+Mega Mastered
+30,922
+
+Small Prawn
+Cocktail sauce not included
+Mega Mastered
+29,637
+
+Goldfish
+A Goldfish never forgets
+29,455
+
+Mackerel
+Holy...
+Mega Mastered
+27,072
+
+Frozen Wheel
+From a long lost shipwreck
+Grand Mastered
+23,509
+
+Frozen Squid
+Eight frosty arms, zero chill
+Mega Mastered
+23,344
+
+Yellow Perch
+Cowardly and fishy
+Mega Mastered
+20,315
+
+Frozen Skull
+Time was not friendly
+Mastered
+20,259
+
+Blue Tiger Fish
+It might be less sad if it knew whether
+it was a big cat or a worm-eating swimmer
+Mega Mastered
+18,883
+
+Red Diamond Fish
+Elusive scarlet brilliance
+Mastered
+18,582
+
+Largemouth Bass
+Counterintuitively not very talkative
+Mega Mastered
+18,341
+
+Swamp Gourd
+Some people use these as wind chimes
+16,140
+
+Stingray
+Beware of stinger
+Mega Mastered
+14,323
+
+Shrimp
+It's big on the inside
+Mega Mastered
+12,890
+
+Green Chromis
+Time flies when you're fishing
+Mega Mastered
+12,017
+
+Puffer
+Fat boy
+Mega Mastered
+11,172
+
+Seahorse
+Stallion of the sea
+Mega Mastered
+11,139
+
+Blue Crab
+Not actually a sad crustacean
+Mega Mastered
+10,003
+
+Slimeback
+A slimy, icky fish that smells terrible
+Mega Mastered
+8,879
+
+Blue Shell
+Throw it at the racer in first place
+Mega Mastered
+8,018
+
+Lucky Trout
+Sprouting luck
+Mastered
+7,885
+
+Marlin
+The big one
+Mega Mastered
+7,670
+
+Twilight Squid
+From the deep dark
+Mastered
+7,201
+
+Frozen Crab Claw
+The money is always right!
+Grand Mastered
+6,851
+
+Green Jellyfish
+It's so jelly-ous it turned green with envy
+Mega Mastered
+6,565
+
+Jellyfish
+The mixed fruit of the ocean
+Mega Mastered
+6,471
+
+Splatfish
+Will spit at you
+Mega Mastered
+6,063
+
+Bog Barnacle
+Once attached, very very difficult to remove
+Mega Mastered
+5,907
+
+Magenta Growth
+Each core pulsates at a different rate
+Mega Mastered
+5,197
+
+Flarefin
+Hot as lava
+Mega Mastered
+5,107
+
+Drum
+Not an instrument
+Mega Mastered
+4,797
+
+Fuzzy Trout
+An April Delicacy
+Mastered
+4,325
+
+Catfish
+A bottom-feeder you'll want to keep for later
+Mega Mastered
+4,325
+
+Reaver Claw
+The dropped claw of a reaver
+What is a reaver?!?
+Mega Mastered
+4,108
+
+Sea Turtle
+Dude, you got serious thrill issues, dude.
+Mastered
+4,023
+
+Boghead Snapper
+Very aggressive and generally unhappy fish
+Mega Mastered
+3,745
+
+Blubberfish
+It just blubbers on and on and on
+Mega Mastered
+3,624
+
+Fluorifish
+Extremely reactive
+Mega Mastered
+2,991
+
+Slime Egg Shell
+Remains of a slimey egg
+...but what hatched?
+Mega Mastered
+2,946
+
+Slobster
+A slime emitting crustacean
+Mega Mastered
+2,807
+
+Mussel
+Sells for 400 Silver
+Mega Mastered
+2,753
+
+Ruby Fish
+Almost too pretty to eat
+Mega Mastered
+2,620
+
+Blue Sea Bass
+Into the deep
+Mega Mastered
+2,500
+
+Glass Eye Urchin
+The eye in the center is false
+but you can't help but look away
+Mega Mastered
+2,459
+
+Fish Bones
+Look what the cat dragged in
+Mega Mastered
+2,236
+
+Frozen Coin
+From an empire lost
+Grand Mastered
+1,978
+
+Gold Slimeback
+Still slimey
+1,898
+
+Toxic Tendrils
+A carnivorous swamp plant
+Mega Mastered
+1,861
+
+Bluegill
+Make sure you get your blue fill
+Mega Mastered
+1,821
+
+Carp
+Prefers to be called koi
+Mega Mastered
+1,411
+
+Flier
+Wings in the water
+Mega Mastered
+1,341
+
+Giant Squid
+I have an inkling...
+Mega Mastered
+1,049
+
+Mini Slime Squid
+The smaller version
+Mega Mastered
+947
+
+Torch Fish
+If you see pitchforks, run
+Mega Mastered
+40
+
+Mulberry Snapper
+Very Exotic
+Mega Mastered
+28
+
+Crab
+There is only one step and it is crab
+Mega Mastered
+23
+
+Purple Butterfly Fish
+Very tropical
+Mega Mastered
+19
+
+Octopus
+Eight legs make it the best at hugging
+Mega Mastered
+16
+
+Jumbo Fish
+Mostly made of fat
+Mega Mastered
+10
+
+Green Barracuda
+Really mean
+Mega Mastered
+8
+
+Speckled Grouper
+A cooking delight
+Mega Mastered
+7
+
+Lobster
+Sea food differently
+2
+Crops chevron_down
+
+Hops
+Discovered by Charlie Mops
+MAX ON HAND
+Grand Mastered
+51,710
+
+Gold Peppers
+They're more of a Major Peppers
+than a lowly Sergeant
+Grand Mastered
+51,599
+
+Gold Cucumber
+A cuke fit for a duke
+Mega Mastered
+51,313
+
+Rice
+No matter if steamed, boiled, or fried,
+it always hits the spot
+Grand Mastered
+50,622
+
+Gold Peas
+We don't recommend making them into a soup
+Grand Mastered
+50,196
+
+Gold Eggplant
+Laid by the Golden Gooseplant
+Grand Mastered
+49,908
+
+Gold Carrot
+The classiest of bunnies might snack on this
+Grand Mastered
+48,759
+
+Peppers
+A spicy treat
+Mega Mastered
+47,488
+
+Wheat
+Wheat-ease: Breakfast of champions
+Grand Mastered
+45,550
+
+Leek
+Hopefully not as draining as they sound
+Grand Mastered
+44,700
+
+Peas
+Pod racers
+Mega Mastered
+43,405
+
+Onion
+Layers so deep you might cry
+Mega Mastered
+42,053
+
+Cucumber
+Kind of a big dill
+Mega Mastered
+36,428
+
+Pumpkin
+Good for more than just pie
+Grand Mastered
+36,001
+
+Eggplant
+Looks nothing like an egg
+Mega Mastered
+29,356
+
+Carrot
+Rabbit food
+Mega Mastered
+28,512
+
+Tomato
+Tow-MAY-to, tow-MAH-to
+Mega Mastered
+27,732
+
+Broccoli
+Better with cheese
+Grand Mastered
+23,242
+
+Yellow Watermelon
+Like a regular watermelon,
+but yellow on the inside
+Mastered
+19,077
+
+Frozen Peas
+Nasty jaw-breakers
+Mastered
+14,616
+
+Watermelon
+Implies the existence of airmelons,
+earthmelons, and firemelons
+Mega Mastered
+12,067
+
+Cotton
+The fabric of our lives
+Mega Mastered
+10,662
+
+Hot Potato
+Like a regular potato, but so incredibly hot
+Mastered
+7,813
+
+Radish
+Daikonic
+Grand Mastered
+6,609
+
+Potato
+Boil 'em, mash 'em, stick 'em in a stew
+Mega Mastered
+6,196
+
+Frozen Radish
+Blue Meat
+5,922
+
+Frozen Corn
+Frosty the Kernel
+5,551
+
+Frozen Pine
+Always blue
+3,177
+
+Frozen Tomato
+Fried Blue Tomatoes
+3,029
+
+Sugar Cane
+Looks like bamboo, tastes like candy
+Mega Mastered
+2,730
+
+Jack-o-lantern
+A carved pumpkin
+Grand Mastered
+2,728
+
+Frozen Hops
+Blue Moon
+2,641
+
+Cabbage
+A favored snack of the platypus bear
+Mega Mastered
+2,093
+
+Inferno Pepper
+Like a regular pepper, but so incredibly hot
+2,046
+
+Frozen Cabbage
+Not to be used for ice bowling
+1,518
+
+Lucky Potato
+Probably poisonous
+563
+
+Lucky Corn
+Leprecorn
+397
+
+Corn
+Make it into bread or meal;
+you can never have enough
+Mega Mastered
+384
+
+Pine Tree
+Always green
+Mega Mastered
+84
+
+Beet
+They can't be
+Mega Mastered
+8
+
+Sunflower
+Praise the sun
+Jolly cooperation
+Mega Mastered
+4
+Seeds chevron_down
+
+Mushroom Spores
+Harvest every 90 minutes
+Grows 10x Mushrooms
+49,440
+
+Onion Seeds
+Harvest every 15 minutes
+49,440
+
+Hops Seeds
+Harvest every 20 minutes
+49,440
+
+Watermelon Seeds
+Harvest every 2 hours
+48,816
+
+Pumpkin Seeds
+Harvest every 12 hours
+48,712
+
+Potato Seeds
+Harvest every 25 minutes
+48,296
+
+Leek Seeds
+Harvest every 60 minutes
+47,880
+
+Radish Seeds
+Harvest every 10 minutes
+47,108
+
+Broccoli Seeds
+Harvest every 48 hours
+46,632
+
+Wheat Seeds
+Harvest every 24 hours
+46,164
+
+Rice Seeds
+Harvest every 240 hours
+45,540
+
+Pea Seeds
+Harvest every 3 minutes
+44,968
+
+Cotton Seeds
+Harvest every 96 hours
+44,760
+
+Corn Seeds
+Harvest every 4 hours
+40,986
+
+Eggplant Seeds
+Harvest every 5 minutes
+40,236
+
+Pine Seeds
+Harvest every 8 hours
+38,520
+
+Cucumber Seeds
+Harvest every 4 minutes
+36,180
+
+Gold Pepper Seeds
+Grows into rare Gold Peppers
+33,238
+
+Carrot Seeds
+Harvest every 2 minutes
+32,436
+
+Beet Seeds
+Harvest every 216 hours
+32,024
+
+Mega Beet Seeds
+Harvest every 216 hours,
+yields 10x Beet per seed
+planted
+29,884
+
+Cabbage Seeds
+Harvest every 8 hours
+27,080
+
+Sunflower Seeds
+Harvest every 144 hours
+23,596
+
+Gold Carrot Seeds
+Grows into rare Gold Carrots
+20,424
+
+Sugar Cane Seeds
+Harvest every 90 minutes
+18,318
+
+Mega Sunflower Seeds
+Harvest every 144 hours,
+yields 10x Sunflower per seed
+planted
+12,911
+
+Spring Seeds
+Harvest every 120 minutes
+Grows 10x Mixed Flowers
+11,409
+
+Tomato Seeds
+Harvest every 30 minutes
+10,764
+
+Gold Pea Seeds
+Grows into rare Gold Peas
+9,136
+
+Pepper Seeds
+Harvest every minute
+7,730
+
+Gold Eggplant Seeds
+Grows into rare Gold Eggplants
+5,827
+
+Gold Cucumber Seeds
+Grows into rare Gold Cucumbers
+2,304
+
+Mega Cotton Seeds
+Harvest every 96 hours,
+yields 10x Cotton per seed
+planted
+233
+
+Mega Pine Seeds
+Harvest every 8 hours,
+yields 10x Pine per seed
+planted
+65
+Loot & Treasure chevron_down
+
+Grab Bag 08
+Random selection of keys
+Open it at the Locksmith in Town
+43,072
+
+Medium Chest 02
+Medium amount of shiny rocks inside
+32,864
+
+Small Chest 01
+Small amount of shiny rocks inside
+19,884
+
+Large Chest 02
+Large amount of useful materials inside
+18,149
+
+Grab Bag 02
+Random selection of useful items
+Open it at the Locksmith in Town
+16,157
+
+Mystical Chest 02
+Full of obscure items
+15,658
+
+Small Chest 02
+Small amount of useful materials inside
+14,784
+
+Treat Bag 02
+A bag of Halloween treats to share with friends
+14,392
+
+Large Chest 01
+Large amount of shiny rocks inside
+10,635
+
+Medium Chest 03
+Medium amount of odds and ends
+8,655
+
+Large Chest 03
+Some useful items for crafting
+6,651
+
+Grab Bag 07
+Random selection of gold fish
+Open it at the Locksmith in Town
+4,570
+
+Treat Bag 03
+A bag of useful Halloween goodies
+4,081
+
+Void Bag 01
+Who put that in the void?
+4,006
+
+Grab Bag 05
+Random selection of late runestones
+Open it at the Locksmith in Town
+2,809
+
+Mystical Chest 01
+Full of obscure treasures
+2,718
+
+Grab Bag 04
+Random selection of early runestones
+Open it at the Locksmith in Town
+2,420
+
+Medium Chest 01
+Medium amount of helpful things inside
+1,963
+
+Grab Bag 03
+Random selection of golden items
+Open it at the Locksmith in Town
+1,192
+
+Grab Bag 06
+Random selection of valuable items
+Open it at the Locksmith in Town
+1,102
+
+Bag of Spring Seeds
+Contains 25x Spring Seeds
+Open at Locksmith
+706
+
+Grab Bag 01
+Random selection of early resources
+Open it at the Locksmith in Town
+602
+
+Egg Basket
+Contains random eggs in random amounts
+395
+
+Bait Bag 01
+Random selection of specific bait
+370
+
+Corn Prize Bag
+Hopefully not full of corn
+340
+
+Gold Seed Bag 01
+Full of gold seeds
+255
+
+Mining Bag 01
+Open for random mining equipment
+203
+
+Treat Bag 01
+A bag of sweet and savory treats
+200
+
+Magical Egg Basket
+Contains random magical eggs in random amounts
+147
+
+Drink Bundle
+Full of helpful drinks
+Includes OJs, Lemonades, Ciders,
+Grape Juices, Arnold Palmers,
+and Ice Teas
+100
+
+Mining Bag 02
+Open for random mining equipment
+71
+
+Mining Bag 03
+Open for random mining equipment
+64
+
+Bug Bag 01
+Random selection of specific bugs
+48
+
+Fuzzy Egg
+Contains random fuzzy chicks in random amounts
+21
+
+Buddy Doll Bag 01
+Contains a random Buddy Doll from 2024
+18
+
+10 Gold
+Open at Locksmith for 10 Gold
+Givable to other players
+15
+
+Galactic Egg Basket
+Contains random galactic eggs in random amounts
+14
+
+Friendship Bag 01
+Open at locksmith for stuff
+townsfolk really love
+7
+
+Buddy Doll Bag 02
+Contains a random Buddy Doll
+from early 2025
+7
+
+Christmas Stocking
+Not full of coal
+7
+
+5 Gold
+Open at Locksmith for 5 Gold
+Givable to other players
+3
+
+Treat Bag 06
+Full of useful treats
+2
+
+Cid’s Minecart 01
+Never go mining without it
+1
+Runestones chevron_down
+
+Runestone 09
+Some say it can be found
+amid piles of coal and sand
+48,577
+
+Runestone 04
+Some say it can be found
+inside cool stone
+47,722
+
+Runestone 13
+Some say it can be found
+near a dark fissure
+46,335
+
+Runestone 17
+Some say it can be found
+near molten glass
+45,639
+
+Runestone 05
+Some say it can be found
+in a fog
+45,341
+
+Runestone 12
+Some say it can be found
+under lucent waters
+43,012
+
+Runestone 02
+Some say it can be found
+in familiar waters
+42,545
+
+Runestone 03
+Some say it can be found
+next to a shallow pool
+42,395
+
+Runestone 18
+Some say it can be found
+in a great blue
+40,275
+
+Runestone 06
+Some say it can be found
+when you're in a pickle
+30,714
+
+Runestone 14
+Some say it can be found
+in a rolling fell
+30,408
+
+Runestone 01
+Some say it can be found
+near a rabbit's warren
+26,241
+
+Runestone 08
+Some say it can be found
+at a nice, quiet spot just outside of town
+17,033
+
+Runestone 15
+Some say it can be found
+on a wild shore
+11,847
+
+Runestone 19
+Some say it can be found
+on a high peak
+9,649
+
+Runestone 11
+Some say it can be found
+in a field of ears
+2,756
+
+Runestone 10
+Some say it can be found
+when you're on an even keel - backwards
+468
+
+Runestone 20
+Some say it can be found
+after a long purple winter
+334
+
+Runestone Necklace
+Made of magic and twine
+15
+
+Runestone 07
+Some say it can be found
+next to the ranch dip on the hors d'oeuvres tray
+13
+
+Runestone 16
+Some say it can be found
+with the brewers
+7
+
+Runestone 23
+A mysterious artifact from another world
+1
+Books chevron_down
+
+Book of Flora
+A reference guide containing some flowery prose
+The effect is still a mystery
+2
+
+Book of Skill
+A reference guide that's not at all for dummies
+The effect is still a mystery
+2
+
+Book of Schemas
+A reference guide explaining how things work
+The effect is still a mystery
+1
+
+Book of Knots
+A reference guide for those who are
+tangled up in their tasks
+The effect is still a mystery
+1
+
+Book of Clues
+A reference guide containing helpful hints and tips
+The effect is still a mystery
+1
+
+Book of Maps
+A reference guide for those exploring the frontier
+The effect is still a mystery
+1
+
+Book of Time
+A reference guide that's a clock-stopper
+The effect is still a mystery
+1
+
+Book of Insects
+A reference guide to address what bugs you
+The effect is still a mystery
+1
+
+Book of Fish
+A reference guide of a piscine nature
+The effect is still a mystery
+1
+Cards chevron_down
+
+Welcome Card
+Welcome to Redbrook! Open this card
+at the Locksmith for some goodies!
+(Must be Farming 10 or less to open)
+9,355
+
+4th Birthday Card
+FANTASTIC 4 YEARS!
+714
+
+Thank You Card
+Just a small token of appreciation
+107
+
+Christmas Card
+Seasons greetings!
+33
+
+Congratulations Card
+You did something awesome!
+14
+
+You Rock Card
+Gneiss job!
+13
+
+Buddy Loves You Card
+You're the best!
+12
+
+Clawed Card
+Scratching and clawing your way up!
+11
+
+5th Birthday Card
+PARTY SLIME!
+10
+
+3rd Birthday Card
+3 EARS for 3 YEARS!
+9
+
+Sappy Christmas Card
+Wishing you a Hallmark Holiday!
+9
+
+Good Luck Card
+Wishing you the best of luck!
+9
+
+Happy Farmiversary Card
+What a long strange trip it's been,
+but we're glad you're here!
+4
+
+Capy Birthday Card
+Capy Birthday to you!
+3
+
+Get Well Soon Card
+Aw feel better!
+3
+
+We Know Card
+Hey, you. You're finally awake.
+1
+
+Happy Halloween Card
+Have a spook-tacular night!
+1
+Super Rares chevron_down
+
+Lava Sphere
+Opens portal to Lake Minerva
+Grand Mastered
+48,270
+
+Inferno Sphere
+Opens portal to Ember Lagoon
+Grand Mastered
+44,556
+
+Skull Coin
+For your skeletal spending needs
+35,500
+
+Pirate Hook
+The Captain would like this back
+24,972
+
+Compass
+Guides you to Whispering Creek
+Mastered
+15,009
+
+Magic Conch Shell
+Try asking again
+13,618
+
+Raptor Egg
+Life uh.... finds a way
+11,113
+
+Diving Helmet
+Where's the diver?
+10,305
+
+Winged Amulet
+A flight of fanciness
+9,923
+
+Diamond
+Shine bright
+7,726
+
+Langstaff Crest
+Crest of House Langstaff
+2,682
+
+Buddystone
+Incredibly strange
+2,669
+
+Lavos Shard
+Likes to bury deep deep into the ground
+2,333
+
+U'ral Talisman
+Keeps evil spirits away
+1,336
+
+Strange Ring
+... and in the darkness bind them
+1,103
+
+Tribal Staff
+Captain Thomas has been trying to find the
+staff's owner to return, with no luck
+800
+
+Dragon Skull
+Hopefully its family isn't looking for it
+726
+
+Lima Bean
+Succotash-tic
+503
+
+Amber
+Ancient tree sap, sometimes with
+particularly unlucky insects
+134
+
+Model Ship
+Great attention to detail
+127
+
+Holiday Candles
+Smell like sugar cookies
+109
+
+Raptor Chicken Egg
+Clever girl
+90
+
+Milk and Cookies
+Don't eat too many!
+89
+
+Gold Boot
+Anybody need a gold boot?
+73
+
+Piece of Heart
+Way better than getting a
+piece of someone's mind
+57
+
+Apple Slice
+A piece of an apple
+35
+
+Heart Container
+It's dangerous to go alone
+27
+
+Raptor Claw
+Rawr
+26
+
+Pair of Gold Boots
+Not great for hiking or wars
+24
+
+Coderanger's Missing Semicolon
+Wait is this one line or two?
+19
+
+Firestream's Magic Wire
+Everything at the end of it all
+19
+
+Gold Potato
+This spud's for you
+18
+
+Support's Ticket
+Here for you
+15
+
+Quicksilver's Ring
+What does it see?
+15
+
+Gold Shamrock
+The rarest of all clover
+12
+
+Tenfoo's Lost Sock
+That was my favorite one…
+10
+
+Frost Snapper Shell
+Ice Ice Baby, too cold, too cold
+10
+
+Mizzem's Daisies
+Full of happiness
+9
+
+Forcepath's Book of Quest Requirements
+The notes seem to run off the page
+8
+
+Boobun's Spray Bottle
+Smells like freshly cut grass
+8
+
+Hensods's Bonsai
+Turns chaos into clarity
+7
+
+Schoolbook
+Educational Material
+6
+
+Ramjoram's Mask
+You've met with a terrible fate, haven't you?
+5
+
+Ancient Stone Cicada
+Carved by hand a millennia ago
+4
+
+Cid's Stone Ale
+Best Ale Ever
+2
+
+Pink Ribbon
+Fashionably elegant
+2
+
+Beach Ball
+Fun to toss around with friends
+2
+
+World Globe
+Imagine T'rah
+2
+
+Gold Rudolph
+You might even say he glowed
+2
+
+Gold King Apple
+It's good to be King...
+2
+
+Alien Fuzzy Chick
+I want to believe
+2
+
+Koala's Corgi
+He may look cute, but
+he's always ready for battle
+2
+
+Prism Shell
+Prismatic home of a marine mollusk
+2
+
+Tribal Mask
+Grants access to Large Island fishing
+1
+
+Mystical Staff
+Made of Mystery and Awe
+1
+
+Flame Orb
+Memories of a dragon
+1
+
+Hockey Mask
+Used only for friendly hockey games
+1
+
+Trident of Poseidon
+In Memory of Poseidon
+1
+
+Lucky Rabbit Foot
+Brings good luck maybe
+1
+
+Tower Key
+Unlocks the Tower
+1
+
+Opposition Hourglass
+Frozen in Time
+1
+
+Mapping Compass
+Measuring Device
+1
+
+Gold Egg
+From a Gold Chicken probably.
+1
+
+Y73841 Detector
+A strange mechanical device
+1
+
+Runecorn
+Magically infused corn
+1
+
+Water Orb
+Memories of Shva
+1
+
+Brooch of the Bahltruvian Elite
+Extremely rare brooch, given as an honorific
+badge of trust by Emperor Ariathes
+1
+
+Buddy Cushion
+The ultimate gag cushion, smells like Buddy too!
+1
+
+VIP Card
+<3 Borgen
+Gives access to Borgen Mercantile
+1
+
+Sturdy Saw
+Can cut through the toughest of wood
+1
+
+Rune Dice
+Magically infused dice
+1
+
+Keeper Trapper
+Frankly Lisa, I love it!
+1
+
+Harpoon
+It is not down on any map;
+true places never are.
+1
+
+Music Box
+Sounds like a squisquatch/cephalotti
+1
+
+Notary Stamp
+Only given to an official Notary of
+Redbrook. Previously owned by Genevieve.
+1
+
+VIP Platinum Card
+<3 <3 Borgen
+Now with 0% APR forever!
+Entitles you to a special gift daily from Borgen.
+1
+
+Skull-in-the-box
+Pop goes the cranium
+1
+
+Hessian's Axe
+The Pumpkin Maker
+1
+
+Snowball Cup
+You claimed icy supremacy!
+1
+
+Cursed Effigy
+What even is this?
+1
+
+Corn Ball
+This is where all dad jokes eventually end up.
+1
+
+Buddy's Sleeping Cap
+Useful in catching Zzzs
+1
+
+Egg of Zeal
+Acquired only by those that
+are the most determined
+1
+
+Lorn Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Charles Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Jill Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Beatrix Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Borgen Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Buddy Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+CptThomas Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Cecil Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+frank Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Gary Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Geist Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+George Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Holger Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Mariya Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Mummy Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Ric Ryph Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Roomba Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Rosalie Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Star Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Thomas Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Vincent Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Baba Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Cid Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Gold Mittens
+Somehow less warm than not wearing mittens
+1
+
+Gold Wreath
+Blindingly bright
+1
+
+Fungus Processing and You
+Smells like dirt
+1
+
+Cockatrice Egg
+The outside looks a lot more
+pleasant than what's inside.
+1
+
+Fuzzy Bunny
+Plush cuddly, super-soft
+1
+
+Blue Tang
+P. Sherman, 42 Wallaby Way, Sydney
+1
+
+Dream Nail
+Cut through the veil
+1
+
+Sponge
+Super absorbant
+1
+
+List of Corn Puns
+Corniest Page of Paper in T'rah
+1
+
+Corn Speedrun Trophy
+Speed. I am speed.
+1
+
+Pearl Berry Jam
+Can’t find a better jam
+1
+
+Santa Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Gold Buddy Sweater
+Made of gold, but still ugly
+1
+
+Goostav Bobblehead
+Drag with your finger
+or mouse to make it bobble.
+1
+
+Podcast Swear Jar
+-blam-
+1
+
+Slime Bucket
+Are we sure this is safe?
+1
+
+Chapiku
+Catch all, you must
+1
+
+Astro Fuzzy Chick
+Lost in Space
+1
+
+Farmiversary Trophy 01
+Annual Agricultural Allegiance Award
+(Awarded for playing for 1 year!)
+1
+
+Farmiversary Trophy 02
+Annual Agricultural Allegiance Award
+(Awarded for playing for 2 years!)
+1
+
+Farmiversary Trophy 03
+Annual Agricultural Allegiance Award
+(Awarded for playing for 3 years!)
+1
+
+Farmiversary Trophy 04
+Annual Agricultural Allegiance Award
+(Awarded for playing for 4 years!)
+1
+
+Fuzzy Trophy
+Award for best fuzzy chick
+in an online farming RPG
+1
+
+Blue Diamond Fish
+Elusive azure brilliance
+1
+
+Buddy Box
+I invited your best friend...
+the Buddy Box
+1
+
+Goldfish Prize
+SWAG: Sealife We All Get
+1
+
+Rocket Trophy
+Awarded for excellence in
+the Bottle Rocket Brawl
+1
+
+Roomba’s Locket
+Become more than you were programmed to be
+1
+
+Veggie Juice Instruction Sheet
+Shaken, not stirred
+1
+
+Mariya's Wheelbarrow
+Not a toy
+1
+
+Cid's Spare Pickaxe
+Well-worn with a lot of life left
+1
+
+Meerif Crest
+Crest of House Meerif
+1
+
+Pig Collar
+Truffle-hunting fashionista
+1
