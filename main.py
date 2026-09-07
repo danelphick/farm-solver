@@ -96,14 +96,19 @@ def parse_gold_budget(value: str) -> int | None:
 
 
 def parse_format(value: str) -> str:
-    """Parse ``--format``: ``text``/``txt`` or ``markdown``/``md``."""
-    aliases = {"text": "text", "txt": "text", "markdown": "markdown", "md": "markdown"}
+    """Parse ``--format``: ``text``/``txt``, ``markdown``/``md`` or ``json``."""
+    aliases = {
+        "text": "text", "txt": "text",
+        "markdown": "markdown", "md": "markdown",
+        "json": "json",
+    }
     text = value.strip().lower()
     try:
         return aliases[text]
     except KeyError:
         raise argparse.ArgumentTypeError(
-            f"--format must be 'text'/'txt' or 'markdown'/'md', not {value!r}"
+            f"--format must be 'text'/'txt', 'markdown'/'md' or 'json', "
+            f"not {value!r}"
         ) from None
 
 
@@ -1144,14 +1149,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--format",
         type=parse_format,
         default="text",
-        metavar="text|markdown",
+        metavar="text|markdown|json",
         help=(
-            "report layout: 'text' (default) or 'markdown' ('txt'/'md' also "
-            "accepted), with tables for the frontier and each plan section. "
-            "Markdown renders through the terminal (via rich) when stdout is a "
-            "terminal, or prints the raw Markdown source when redirected (e.g. "
-            "to a .md file)"
+            "report layout: 'text' (default), 'markdown' or 'json' ('txt'/'md' "
+            "also accepted), with tables for the frontier and each plan "
+            "section. Markdown renders through the terminal (via rich) when "
+            "stdout is a terminal, or prints the raw Markdown source when "
+            "redirected (e.g. to a .md file); json prints one machine-readable "
+            "document holding every report section"
         ),
+    )
+    parser.add_argument(
+        # Shorthand for the format most likely to be reached for from a script.
+        # store_const on --format's own dest, so the two spellings are one
+        # setting and the last one given wins; SUPPRESS keeps this action's
+        # (absent) default from competing with --format's "text".
+        "--json",
+        action="store_const",
+        const="json",
+        dest="format",
+        default=argparse.SUPPRESS,
+        help="shorthand for --format json: the whole report as one JSON document",
     )
     parser.add_argument(
         "--pager",

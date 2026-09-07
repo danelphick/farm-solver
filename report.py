@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import calendar
 import dataclasses
+import json
 import math
 import re
 import sys
@@ -82,29 +83,144 @@ def _column_is_numeric(rows: list[list[str]], index: int) -> bool:
     return bool(cells) and numeric * 2 >= len(cells)
 
 
-class MarkdownDoc:
-    """Accumulates a report as Markdown source, rendered once at the end.
+@dataclasses.dataclass(frozen=True)
+class Block:
+    """One self-contained element of a report: a heading, paragraph, bullet
+    list, table or impact graph.
 
-    Each call appends one self-contained block (a heading, a paragraph, a bullet
-    list or a table); :meth:`render` joins them blank-line-separated, which is
-    what makes each a distinct element to a Markdown parser/renderer.
+    Blocks are kept *structured* rather than pre-rendered so more than one
+    serializer can read them back: :meth:`markdown` is the Markdown source
+    :class:`MarkdownDoc` joins, and :meth:`as_json` the JSON
+    :class:`JsonReporter` emits. That is what lets ``--format json`` share
+    every report function -- and so every *decision* in one -- with the
+    Markdown ones instead of reimplementing them (see "Two renderers, one set
+    of decisions" in ARCHITECTURE.md).
+    """
+
+    def markdown(self) -> str:
+        raise NotImplementedError
+
+    def as_json(self) -> dict:
+        raise NotImplementedError
+
+
+@dataclasses.dataclass(frozen=True)
+class Heading(Block):
+    text: str
+    level: int = 2
+
+    def markdown(self) -> str:
+        return f"{'#' * self.level} {self.text}"
+
+    def as_json(self) -> dict:
+        return {"kind": "heading", "level": self.level, "text": self.text}
+
+
+@dataclasses.dataclass(frozen=True)
+class Paragraph(Block):
+    text: str
+
+    def markdown(self) -> str:
+        return self.text
+
+    def as_json(self) -> dict:
+        return {"kind": "paragraph", "text": self.text}
+
+
+@dataclasses.dataclass(frozen=True)
+class Bullets(Block):
+    items: list[str]
+
+    def markdown(self) -> str:
+        return "\n".join(f"- {line}" for line in self.items)
+
+    def as_json(self) -> dict:
+        return {"kind": "list", "items": list(self.items)}
+
+
+@dataclasses.dataclass(frozen=True)
+class Table(Block):
+    headers: list[str]
+    rows: list[list[str]]
+    align: list[str] | None = None
+
+    def markdown(self) -> str:
+        head = "| " + " | ".join(_escape_cell(h) for h in self.headers) + " |"
+        # Per column: an explicit "left"/"right" from ``align``, else "auto" --
+        # right when most cells are quantities (counts, gold, durations, dates
+        # all start with a digit, possibly signed/parenthesised; the odd word
+        # like "done" rides along). Explicit alignment is for prose columns
+        # whose text merely *starts* with a number ("8,541 from sawmill, ...").
+        aligns = []
+        for i in range(len(self.headers)):
+            mode = self.align[i] if self.align is not None else "auto"
+            if mode == "auto":
+                mode = "right" if _column_is_numeric(self.rows, i) else "left"
+            aligns.append("---:" if mode == "right" else "---")
+        sep = "| " + " | ".join(aligns) + " |"
+        body = [
+            "| " + " | ".join(_escape_cell(c) for c in row) + " |" for row in self.rows
+        ]
+        return "\n".join([head, sep, *body])
+
+    def as_json(self) -> dict:
+        # Rows as objects keyed by column name: every table here has unique,
+        # non-empty headers (they are the printed column titles), so this is
+        # lossless and far easier to consume than bare positional arrays.
+        return {
+            "kind": "table",
+            "columns": list(self.headers),
+            "rows": [dict(zip(self.headers, row)) for row in self.rows],
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class Graph(Block):
+    """A spread's impact graph. Markdown gets a self-contained inline SVG
+    (Markdown renders to HTML); JSON gets the points themselves, which is the
+    useful form for a caller that plots or thresholds them itself."""
+
+    series: optimizer.GraphSeries
+    plans: list[optimizer.SourcingPlan]
+
+    def markdown(self) -> str:
+        return _svg_plot(self.series, self.plans)
+
+    def as_json(self) -> dict:
+        return {
+            "kind": "graph",
+            "x_label": self.series.x_label,
+            "y_label": self.series.y_label,
+            "points": [
+                {"x": x, "y": y} for x, y in zip(self.series.xs, self.series.ys)
+            ],
+        }
+
+
+class MarkdownDoc:
+    """Accumulates a report as a list of :class:`Block`s.
+
+    Each call appends one block; :meth:`render` turns them into Markdown source
+    joined blank-line-separated, which is what makes each a distinct element to
+    a Markdown parser/renderer. :attr:`blocks` stays readable so a non-Markdown
+    serializer (:class:`JsonReporter`) can walk the same structure.
     """
 
     def __init__(self, heading_shift: int = 0) -> None:
-        self._blocks: list[str] = []
+        self.blocks: list[Block] = []
         # Demotes every heading by this many levels: a doc rendered under an
         # externally supplied heading (the web app's "Selected plan" pane)
         # shifts by 1 so its sections nest instead of competing with it.
         self._heading_shift = heading_shift
 
     def heading(self, text: str, level: int = 2) -> None:
-        self._blocks.append(f"{'#' * (level + self._heading_shift)} {text}")
+        self.blocks.append(Heading(text, level + self._heading_shift))
 
     def para(self, text: str) -> None:
-        self._blocks.append(text)
+        self.blocks.append(Paragraph(text))
 
     def bullets(self, lines: Iterable[str]) -> None:
-        self._blocks.append("\n".join(f"- {line}" for line in lines))
+        self.blocks.append(Bullets(list(lines)))
 
     def table(
         self,
@@ -114,26 +230,17 @@ class MarkdownDoc:
     ) -> None:
         if not rows:
             return
-        head = "| " + " | ".join(_escape_cell(h) for h in headers) + " |"
-        # Per column: an explicit "left"/"right" from ``align``, else "auto" --
-        # right when most cells are quantities (counts, gold, durations, dates
-        # all start with a digit, possibly signed/parenthesised; the odd word
-        # like "done" rides along). Explicit alignment is for prose columns
-        # whose text merely *starts* with a number ("8,541 from sawmill, ...").
-        aligns = []
-        for i in range(len(headers)):
-            mode = align[i] if align is not None else "auto"
-            if mode == "auto":
-                mode = "right" if _column_is_numeric(rows, i) else "left"
-            aligns.append("---:" if mode == "right" else "---")
-        sep = "| " + " | ".join(aligns) + " |"
-        body = [
-            "| " + " | ".join(_escape_cell(str(c)) for c in row) + " |" for row in rows
-        ]
-        self._blocks.append("\n".join([head, sep, *body]))
+        self.blocks.append(
+            Table(list(headers), [[str(c) for c in row] for row in rows], align)
+        )
+
+    def graph(
+        self, series: optimizer.GraphSeries, plans: list[optimizer.SourcingPlan]
+    ) -> None:
+        self.blocks.append(Graph(series, plans))
 
     def render(self) -> str:
-        return "\n\n".join(self._blocks) + "\n"
+        return "\n\n".join(block.markdown() for block in self.blocks) + "\n"
 
 
 # Marks a goal item the frontier can't source at all (it's fully stuck in
@@ -823,7 +930,7 @@ def markdown_frontier(
     if graph_metric is not None:
         series = optimizer.spread_graph_series(plans, spread_axis or "time", graph_metric)
         doc.heading("Impact graph")
-        doc.para(_svg_plot(series, plans))
+        doc.graph(series, plans)
 
 
 def _frontier_reasons(
@@ -3288,7 +3395,7 @@ class SectionedReporter(Reporter):
             series = optimizer.spread_graph_series(
                 plans, spread_axis or "time", graph_metric
             )
-            self.docs["graph"].para(_svg_plot(series, plans))
+            self.docs["graph"].graph(series, plans)
 
     def plan(self, *args, **kwargs) -> None:
         markdown_plan(self.docs["plan"], *args, **kwargs)
@@ -3300,12 +3407,96 @@ class SectionedReporter(Reporter):
         pass
 
 
+class JsonReporter(Reporter):
+    """Emits the whole report as one JSON document, printed in :meth:`finish`.
+
+    It calls the exact same ``markdown_*`` functions as :class:`MarkdownReporter`
+    and :class:`SectionedReporter` -- every row, every wording, every decision
+    is theirs -- and serializes the resulting :class:`Block`s (``Block.as_json``)
+    instead of rendering them to Markdown source. So this is *the report* in
+    JSON, not a separate data API: a cell holds the report's own formatted
+    string (``"6d 5h 16m"``, ``"1,234 g"``), not a raw number. The one place
+    the JSON is richer is the impact graph, which carries its points rather
+    than the inline SVG Markdown needs.
+
+    ``sections`` is a list, not an object, because order is the report's own
+    and a name repeats: a run emits several ``notes``, and an ascension run a
+    ``plan`` per stage. The names are :class:`SectionedReporter`'s, so the two
+    structured consumers speak one vocabulary.
+    """
+
+    def __init__(self) -> None:
+        self.sections: list[tuple[str, MarkdownDoc]] = []
+
+    def _doc(self, name: str) -> MarkdownDoc:
+        """A fresh doc for one report call, appended under ``name``."""
+        doc = MarkdownDoc()
+        self.sections.append((name, doc))
+        return doc
+
+    def solution(
+        self, solution: farm_solver.Solution, remainder: dict[str, int] | None = None
+    ) -> None:
+        markdown_solution(self._doc("solution"), solution, remainder)
+
+    def unobtainable(self, materials: list[str]) -> None:
+        markdown_unobtainable(self._doc("unobtainable"), materials)
+
+    def mastery_costs(self, *args, **kwargs) -> None:
+        markdown_mastery_costs(self._doc("mastery_costs"), *args, **kwargs)
+
+    def note(self, text: str) -> None:
+        self._doc("notes").para(text)
+
+    def ascension_goal(self, *args, **kwargs) -> None:
+        markdown_ascension_goal(self._doc("solution"), *args, **kwargs)
+
+    def ascension_frontier(self, *args, **kwargs) -> None:
+        markdown_ascension_frontier(self._doc("frontier"), *args, **kwargs)
+
+    def ascension_plan(self, *args, **kwargs) -> None:
+        markdown_ascension_plan(self._doc("plan"), *args, **kwargs)
+
+    def frontier(self, *args, **kwargs) -> None:
+        markdown_frontier(self._doc("frontier"), *args, **kwargs)
+
+    def plan(self, *args, **kwargs) -> None:
+        markdown_plan(self._doc("plan"), *args, **kwargs)
+
+    def crafts(self, *args, **kwargs) -> None:
+        markdown_crafts(self._doc("crafts"), *args, **kwargs)
+
+    def finish(self) -> None:
+        print(self.render())
+
+    def render(self) -> str:
+        """The JSON source :meth:`finish` prints (split out so tests -- and any
+        in-process caller -- can read it without capturing stdout)."""
+        # Sections a call left empty are dropped, so the document says what
+        # the other two formats print: markdown_solution on a goal-less solve
+        # (no needs, no notes, no remainder) emits nothing at all, and so does
+        # markdown_plan for a plan with no draws.
+        payload = {
+            "sections": [
+                {"name": name, "blocks": [block.as_json() for block in doc.blocks]}
+                for name, doc in self.sections
+                if doc.blocks
+            ]
+        }
+        # ensure_ascii off so item names and UNREACHABLE_GOAL_MARK stay readable
+        # rather than turning into \uXXXX escapes.
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
 def build_reporter(format_: str, pager: bool = False) -> Reporter:
-    """The :class:`Reporter` for ``--format`` (``"text"`` or ``"markdown"``).
+    """The :class:`Reporter` for ``--format`` (``"text"``, ``"markdown"`` or
+    ``"json"``).
 
     ``pager`` (Markdown only) pages the rendered output through the system
     pager instead of dumping it straight to the terminal.
     """
     if format_ == "markdown":
         return MarkdownReporter(pager=pager)
+    if format_ == "json":
+        return JsonReporter()
     return TextReporter()
