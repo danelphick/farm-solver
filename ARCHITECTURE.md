@@ -206,7 +206,7 @@ save) because each per-item reachable subtree is small.
 | --- | --- | --- |
 | `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_mariyas_wheelbarrow`, `resolve_held_item` (the shared config-override-then-inventory body behind all four), `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_current_stamina` (`--current-stamina` over `[farmhouse] current_stamina`, then 0 -- a *reading*, not a building property, so the flag stays and an explicit 0 must beat a stale config value), `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `daily_grape_juices` (the farm's Grape-Juice allowance for the optimiser's daily budget; 0/no-farm = uncapped), `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `_prepare` (the config-load/calendar-strip/crafting-bonus + `GameState`-from-text preamble both solve paths share), `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case); **mastery-costs**: `mastery_costs` → `MasteryCostsPayload` (structured rows, not rendered markdown — the client sorts and links per row), `mastery_costs_fingerprint`/`MASTERY_COST_FIELDS` (its own narrower, `"mc:"`-namespaced cache key: the goal/frontier fields never reach `solve_mastery_costs`, so editing a goal must not evict the table) |
-| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`JsonReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc` + its `Block` types (`Heading`/`Paragraph`/`Bullets`/`Table`/`Graph`, each with `markdown()` and `as_json()`), `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits), `_farming_action`/`_cookie_harvest_note` (both renderers' cookie day/burst wording — a repeated burst names its count and its once-a-day cadence, since the quoted time is farming-track time, five minutes a burst); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
+| `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`JsonReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc` + its `Block` types (`Heading`/`Paragraph`/`Bullets`/`Table`/`Graph`, each with `markdown()` and `as_json()`) and `Cell`/`Cell.num`/`Cell.duration` (a table cell's printed text + its machine-readable value), `_wanted_amounts`/`_open_yields`/`_format_amounts` (the item->quantity maps behind a "Yields" cell, and the shared joiner both renderers print), `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits), `_farming_action`/`_cookie_harvest_note` (both renderers' cookie day/burst wording — a repeated burst names its count and its once-a-day cadence, since the quoted time is farming-track time, five minutes a burst); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend`, `_has_integers`; the shared **daily budgets** for cookie sets / Grape Juice live in `_build_base` (`grape_juices_per_day` param, `_Base.grape_juices_per_day`/`days_available` — the integer day count) and are charged as reported time in `_solve_configured` — see that bullet |
 | `sources.py` | offer/draw model, per-channel offer builders | `Offer`, `Draw`, `OpenFlow`, `*_offers` (`farming_offers` builds the cookie day/burst pair; the burst carries **no** `max_units` — "once a day" is the optimiser's shared budget), `sawmill_boost_offers`/`_omelette_bonus` (Hickory Omelette boost — 20% every 10 min = +120%/hr, per-deposit storehouse-capped; `SAWMILL_BOOST_TRACK`/`HICKORY_OMELETTE`), track constants |
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
@@ -1346,15 +1346,54 @@ Block shapes: `{"kind": "heading", "level", "text"}`, `{"kind": "paragraph",
 "text"}`, `{"kind": "list", "items"}`, `{"kind": "table", "columns", "rows"}`
 (rows are objects keyed by column name -- every table's headers are unique and
 non-empty, being the printed column titles), and `{"kind": "graph", "x_label",
-"y_label", "points"}`. **Values are the report's own formatted strings**
-(`"6d 5h 16m"`, `"1,234 g"`), not raw numbers: this is the report in JSON, not
-a separate data API -- a caller wanting the model's numbers should drive
-`main`'s stage functions the way `webapi.py` does. The one place JSON is
-*richer* is `Graph`, which carries the `optimizer.GraphSeries` points where
-Markdown needs the inline SVG (`_svg_plot`) -- that is why `markdown_frontier`
-and `SectionedReporter` append a graph via `doc.graph(series, plans)` rather
-than a pre-rendered `doc.para(_svg_plot(...))`. `--pager` still requires
-`--format markdown`.
+"y_label", "points"}`. `--pager` still requires `--format markdown`.
+
+**`Cell`: the same number, two ways.** A table cell is either a plain `str`
+(prose -- an Action, a Detail, a Notes tag, which serialize as themselves) or a
+`report.Cell`, which carries *both* the printed `text` and the machine-readable
+`value`. `Cell.num(x)` renders `"1,234"` (or `"1,234 g"` / `"1,234 AP"` with a
+unit) and emits `x`; `Cell.duration(td)` renders the report's own `"6d 5h 16m"`
+and emits whole **seconds**. `MarkdownDoc.table` keeps `Cell`s intact,
+`Table.markdown()` renders their text (and runs the `_column_is_numeric`
+alignment heuristic over that text, so alignment still follows what a reader
+sees), and `Table.as_json()` takes their values. So JSON carries bare numbers
+-- no thousands separators, no `g`/`AP` suffix, no `"6d 5h"` -- while text and
+Markdown are **byte-identical to before** (verified by a same-timeframe
+stash-diff, per the CBC-non-determinism note; the block-parity test also
+covers it).
+
+**The `Cell` invariant:** `value` is *the number the report shows*, already
+rounded exactly as the printed text rounds it -- never the raw float behind it.
+Build a cell from the same rounded expression the text uses (`Cell.num(round(x))`,
+`Cell.num(math.ceil(units))`), or the two serializations quietly disagree, which
+is the one thing the shared-decisions design exists to prevent.
+
+A few cells are richer than a single number, since JSON has somewhere to put
+the structure the printed sentence flattens:
+
+- **"Yields"** (Fishing / Exploring / Opening) is the item->quantity map behind
+  the printed `"148,290x Wood"` -- `_wanted_amounts`/`_open_yields` produce the
+  map and `_format_amounts` joins it, so *both* renderers print the same
+  sentence off the same data (`print_plan`'s Opening yields was folded onto
+  `_open_yields` too, removing a duplicated comprehension). Fishing's
+  quantity-less variant emits the plain list of names (`_wanted_items`).
+- **"Drink at mastery"** (Pumpkin Juice) emits the list of mastery levels, not
+  the `"18,000 / 19,000"` joined string.
+- **Graph** carries the `optimizer.GraphSeries` points where Markdown needs the
+  inline SVG (`_svg_plot`) -- which is why `markdown_frontier` and
+  `SectionedReporter` append a graph via `doc.graph(series, plans)` rather than
+  a pre-rendered `doc.para(_svg_plot(...))`.
+
+Three cells deliberately keep a *human annotation* that JSON drops, because the
+information survives elsewhere in the document:
+
+- The Goal table's **"Still needed"** prints `"done"` or `"4,616 ✗"`; the value
+  is the shortfall itself (`0` when done). The `✗` items are named in full by
+  the "Materials with no known source" table right below it.
+- The frontier's **Gold** cell prints the `"buy + passive = total g"` split plus
+  `_net_gold_note`; the value is that headline total.
+- Prose columns (Action, Detail, Source, Notes, Materials used) stay strings:
+  they are sentences, not data.
 
 ## Printing conventions (report.print_plan)
 

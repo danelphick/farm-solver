@@ -84,6 +84,45 @@ def _column_is_numeric(rows: list[list[str]], index: int) -> bool:
 
 
 @dataclasses.dataclass(frozen=True)
+class Cell:
+    """A table cell that knows both how it reads and what it *is*.
+
+    ``text`` is what the text and Markdown reports print -- grouped with commas
+    and carrying its unit ("1,234 g", "6d 5h 16m"); ``value`` is the machine-
+    readable number :class:`JsonReporter` emits instead. A bare ``str`` cell is
+    still allowed and means "prose": it serializes as itself.
+
+    The invariant is that ``value`` is *the number the report shows*, already
+    rounded the way the printed text rounds it -- never the raw float behind
+    it. Otherwise the two serializations would quietly disagree, which is the
+    one thing the shared-decisions design (see ARCHITECTURE.md) exists to
+    prevent. So build a cell from the same rounded expression the text uses.
+    """
+
+    text: str
+    value: object
+
+    @classmethod
+    def num(cls, value: float, unit: str = "") -> Cell:
+        """A quantity: comma-grouped and unit-suffixed for a human, bare for JSON."""
+        suffix = f" {unit}" if unit else ""
+        return cls(f"{value:,}{suffix}", value)
+
+    @classmethod
+    def duration(cls, value: timedelta) -> Cell:
+        """A span: the report's own "6d 5h 16m" for a human, whole seconds for JSON."""
+        return cls(passive.format_duration(value), round(value.total_seconds()))
+
+
+def _cell_text(cell: str | Cell) -> str:
+    return cell.text if isinstance(cell, Cell) else cell
+
+
+def _cell_value(cell: str | Cell) -> object:
+    return cell.value if isinstance(cell, Cell) else cell
+
+
+@dataclasses.dataclass(frozen=True)
 class Block:
     """One self-contained element of a report: a heading, paragraph, bullet
     list, table or impact graph.
@@ -141,11 +180,16 @@ class Bullets(Block):
 @dataclasses.dataclass(frozen=True)
 class Table(Block):
     headers: list[str]
-    rows: list[list[str]]
+    # A cell is either a :class:`Cell` (a quantity: printed text plus the raw
+    # number JSON wants) or a plain ``str`` (prose, the same in both).
+    rows: list[list[str | Cell]]
     align: list[str] | None = None
 
     def markdown(self) -> str:
         head = "| " + " | ".join(_escape_cell(h) for h in self.headers) + " |"
+        # The alignment heuristic reads the *printed* text, so a Cell aligns on
+        # what a reader sees rather than on its underlying value.
+        text_rows = [[_cell_text(c) for c in row] for row in self.rows]
         # Per column: an explicit "left"/"right" from ``align``, else "auto" --
         # right when most cells are quantities (counts, gold, durations, dates
         # all start with a digit, possibly signed/parenthesised; the odd word
@@ -155,11 +199,11 @@ class Table(Block):
         for i in range(len(self.headers)):
             mode = self.align[i] if self.align is not None else "auto"
             if mode == "auto":
-                mode = "right" if _column_is_numeric(self.rows, i) else "left"
+                mode = "right" if _column_is_numeric(text_rows, i) else "left"
             aligns.append("---:" if mode == "right" else "---")
         sep = "| " + " | ".join(aligns) + " |"
         body = [
-            "| " + " | ".join(_escape_cell(c) for c in row) + " |" for row in self.rows
+            "| " + " | ".join(_escape_cell(c) for c in row) + " |" for row in text_rows
         ]
         return "\n".join([head, sep, *body])
 
@@ -170,7 +214,10 @@ class Table(Block):
         return {
             "kind": "table",
             "columns": list(self.headers),
-            "rows": [dict(zip(self.headers, row)) for row in self.rows],
+            "rows": [
+                dict(zip(self.headers, (_cell_value(c) for c in row)))
+                for row in self.rows
+            ],
         }
 
 
@@ -225,13 +272,20 @@ class MarkdownDoc:
     def table(
         self,
         headers: list[str],
-        rows: list[list[str]],
+        rows: list[list[str | Cell]],
         align: list[str] | None = None,
     ) -> None:
         if not rows:
             return
+        # A :class:`Cell` passes through whole (it carries its own text and its
+        # machine-readable value); anything else is prose and is stringified on
+        # the way in, as the Markdown renderer always did.
         self.blocks.append(
-            Table(list(headers), [[str(c) for c in row] for row in rows], align)
+            Table(
+                list(headers),
+                [[c if isinstance(c, Cell) else str(c) for c in row] for row in rows],
+                align,
+            )
         )
 
     def graph(
@@ -319,15 +373,19 @@ def markdown_solution(
             rows.append([
                 purpose,
                 need.item,
-                f"{need.have:,}",
-                f"{need.target:,}",
-                still_needed,
+                Cell.num(need.have),
+                Cell.num(need.target),
+                # "done" and the mark annotate the shortfall for a reader; the
+                # value is the shortfall itself (0 when done). JSON loses
+                # nothing by dropping the mark -- the unreachable items are
+                # named in the "no known source" table right below.
+                Cell(still_needed, need.extra),
             ])
         doc.table(headers, rows)
     for note in solution.notes:
         doc.para(note)
     if remainder:
-        rows = [[material, f"{remainder[material]:,}"] for material in sorted(remainder)]
+        rows = [[material, Cell.num(remainder[material])] for material in sorted(remainder)]
         doc.heading("Materials with no known source (supply yourself)")
         doc.table(["Material", "Qty"], rows)
 
@@ -407,7 +465,7 @@ def markdown_mastery_costs(
     doc.para(_mastery_costs_caption(sort_key))
     if result.rows:
         rows = [
-            [r.item, r.tier, passive.format_duration(r.time), f"{round(r.gold):,} g"]
+            [r.item, r.tier, Cell.duration(r.time), Cell.num(round(r.gold), "g")]
             for r in result.rows
         ]
         doc.table(["Item", "Target", "Time", "Cost"], rows)
@@ -883,28 +941,34 @@ def markdown_frontier(
 
     rows = []
     for i, plan in enumerate(plans):
-        row = [
-            str(i + 1),
-            passive.format_duration(_plan_makespan(plan)),
-            f"{round(plan.arnold_palmers):,}",
-            f"{round(plan.large_nets):,}",
+        row: list[str | Cell] = [
+            # The row number is small and never grouped, so it keeps its plain
+            # text rather than going through Cell.num's comma formatting.
+            Cell(str(i + 1), i + 1),
+            Cell.duration(_plan_makespan(plan)),
+            Cell.num(round(plan.arnold_palmers)),
+            Cell.num(round(plan.large_nets)),
         ]
         if show_cookies:
-            row.append(f"{_cookie_sets_used(plan):,}")
+            row.append(Cell.num(_cookie_sets_used(plan)))
         if show_juices:
-            row.append(f"{round(plan.grape_juices):,}")
+            row.append(Cell.num(round(plan.grape_juices)))
         if show_ciders:
-            row.append(f"{round(plan.apple_ciders):,}")
+            row.append(Cell.num(round(plan.apple_ciders)))
         if show_pumpkin:
-            row.append(f"{round(_pumpkin_juices(plan)):,}")
+            row.append(Cell.num(round(_pumpkin_juices(plan))))
         if prices is not None:
             if golds is not None:
                 buy, passv = (round(g) for g in golds[i])
-                gold = f"{buy:,} + {passv:,} = {buy + passv:,} g"
+                total_gold = buy + passv
+                gold = f"{buy:,} + {passv:,} = {total_gold:,} g"
             else:
-                gold = f"{round(optimizer.plan_gold(plan, prices)):,} g"
+                total_gold = round(optimizer.plan_gold(plan, prices))
+                gold = f"{total_gold:,} g"
             gold += _net_gold_note(plan)
-            row.append(gold)
+            # The buy/passive split and the net-gold note annotate the headline
+            # figure for a reader; the value is that headline total.
+            row.append(Cell(gold, total_gold))
         tags = []
         if i == 0:
             tags.append("fastest")
@@ -1668,7 +1732,7 @@ def markdown_surplus_value(
     total = sum(gold for _, _, gold in rows)
     doc.heading("Surplus (accumulates past the goal), craftable into sellable goods")
     table_rows = [
-        [display.get(item, item), f"{round(count):,}", f"{round(gold):,} g"]
+        [display.get(item, item), Cell.num(round(count)), Cell.num(round(gold), "g")]
         for item, count, gold in rows
     ]
     doc.table(["Item", "Qty", "Gold"], table_rows, align=["left", "right", "right"])
@@ -1784,10 +1848,15 @@ def _build_plan_context(
     )
 
 
-def _wanted(ctx: _PlanContext, offer: sources.Offer) -> str:
-    return ", ".join(
-        sorted(ctx.display.get(key, key) for key in offer.yields if key in ctx.interesting)
+def _wanted_items(ctx: _PlanContext, offer: sources.Offer) -> list[str]:
+    """The items ``offer`` yields that the plan actually wants, display-named."""
+    return sorted(
+        ctx.display.get(key, key) for key in offer.yields if key in ctx.interesting
     )
+
+
+def _wanted(ctx: _PlanContext, offer: sources.Offer) -> str:
+    return ", ".join(_wanted_items(ctx, offer))
 
 
 def _zone_label(name: str, draw: sources.Draw) -> str:
@@ -1804,12 +1873,46 @@ def _zone_label(name: str, draw: sources.Draw) -> str:
     return name.replace("with acorn pie", f"with {math.ceil(pies):,} acorn pie")
 
 
-def _wanted_counts(ctx: _PlanContext, draw: sources.Draw) -> str:
-    return ", ".join(
-        f"{round(draw.produced[key]):,}x {ctx.display.get(key, key)}"
+def _format_amounts(amounts: dict[str, int]) -> str:
+    """An item->quantity map as a "1,234x Corn, 56x Wood" cell."""
+    return ", ".join(f"{quantity:,}x {name}" for name, quantity in amounts.items())
+
+
+def _wanted_amounts(ctx: _PlanContext, draw: sources.Draw) -> dict[str, int]:
+    """How many of each wanted item ``draw`` produces, display-named.
+
+    The data behind a "Yields" cell: :func:`_wanted_counts` is only this joined
+    into a sentence, so the printed text and the JSON object can never disagree
+    about what a draw yields.
+    """
+    return {
+        ctx.display.get(key, key): round(draw.produced[key])
         for key in sorted(draw.offer.yields)
         if key in ctx.interesting or key in ctx.consumed
-    )
+    }
+
+
+def _wanted_counts(ctx: _PlanContext, draw: sources.Draw) -> str:
+    return _format_amounts(_wanted_amounts(ctx, draw))
+
+
+def _yields_cell(ctx: _PlanContext, draw: sources.Draw) -> Cell:
+    """A draw's "Yields" cell: the printed sentence, and the map behind it."""
+    amounts = _wanted_amounts(ctx, draw)
+    return Cell(_format_amounts(amounts), amounts)
+
+
+def _open_yields(
+    ctx: _PlanContext, flow: sources.OpenFlow, count: float
+) -> dict[str, int]:
+    """What opening ``count`` of an openable yields that the plan is after
+    (:attr:`_PlanContext.open_worthy`), display-named -- the Opening section's
+    own "Yields", shared by both renderers."""
+    return {
+        ctx.display.get(item, item): round(flow.yields[item] * count)
+        for item in sorted(flow.yields)
+        if item in ctx.open_worthy and round(flow.yields[item] * count) >= 1
+    }
 
 
 def _sourced(ctx: _PlanContext, draws: list[sources.Draw]) -> list[sources.Draw]:
@@ -2016,11 +2119,7 @@ def print_plan(
                 if item != name.lower() and round(quantity * count) >= 1
             ]
             cost = f" using {', '.join(keys)}" if keys else ""
-            gained = ", ".join(
-                f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
-                for item in sorted(flow.yields)
-                if item in ctx.open_worthy and round(flow.yields[item] * count) >= 1
-            )
+            gained = _format_amounts(_open_yields(ctx, flow, count))
             detail = f" -> {gained}" if gained else ""
             print(
                 f"  {math.ceil(count):>{width},}x"
@@ -2308,9 +2407,9 @@ def markdown_plan(
         ordered = sorted(fishing_draws, key=lambda d: d.ln, reverse=True)
         rows = [
             [
-                f"{math.ceil(d.units):,}",
+                Cell.num(math.ceil(d.units)),
                 d.offer.name.removeprefix("fish "),
-                _wanted(ctx, d.offer),
+                Cell(_wanted(ctx, d.offer), _wanted_items(ctx, d.offer)),
             ]
             for d in ordered
         ]
@@ -2328,9 +2427,9 @@ def markdown_plan(
         ordered = sorted(palmer_draws, key=lambda d: d.ap, reverse=True)
         rows = [
             [
-                f"{math.ceil(d.units):,}",
+                Cell.num(math.ceil(d.units)),
                 _zone_label(d.offer.name.removeprefix("explore "), d),
-                _wanted_counts(ctx, d),
+                _yields_cell(ctx, d),
             ]
             for d in ordered
         ]
@@ -2349,10 +2448,10 @@ def markdown_plan(
         for d in ordered:
             stamina = d.units * d.offer.consumes.get("stamina", 0.0)
             rows.append([
-                f"{math.ceil(ciders(d)):,}",
+                Cell.num(math.ceil(ciders(d))),
                 _zone_label(d.offer.name.removeprefix("cider "), d),
-                f"{-round(stamina):,}",
-                _wanted_counts(ctx, d),
+                Cell.num(-round(stamina)),
+                _yields_cell(ctx, d),
             ])
         doc.heading("Exploring (Apple Cider)")
         doc.table(
@@ -2417,21 +2516,19 @@ def markdown_plan(
             # left-aligned name (in practice an openable consumes at most
             # one key; several would pair up positionally).
             used = [
-                (f"{round(quantity * count):,}", display.get(item, item))
+                (round(quantity * count), display.get(item, item))
                 for item, quantity in flow.consumes.items()
                 if item != name.lower() and round(quantity * count) >= 1
             ]
-            gained = ", ".join(
-                f"{round(flow.yields[item] * count):,}x {display.get(item, item)}"
-                for item in sorted(flow.yields)
-                if item in ctx.open_worthy and round(flow.yields[item] * count) >= 1
-            )
+            gained = _open_yields(ctx, flow, count)
             rows.append([
-                f"{math.ceil(count):,}",
+                Cell.num(math.ceil(count)),
                 display.get(name.lower(), name),
-                ", ".join(qty for qty, _ in used),
+                # Paired positionally with "Materials used"; in practice an
+                # openable consumes one key, so this is a one-element list.
+                Cell(", ".join(f"{qty:,}" for qty, _ in used), [q for q, _ in used]),
                 ", ".join(material for _, material in used),
-                gained,
+                Cell(_format_amounts(gained), gained),
             ])
         doc.heading("Opening (Locksmith)")
         doc.table(
@@ -2451,7 +2548,7 @@ def markdown_plan(
         for draw in sorted(farming_draws, key=lambda d: d.time, reverse=True):
             juices = draw.gj
             crop = _crop_of(draw.offer)
-            duration = passive.format_duration(draw.time)
+            duration = Cell.duration(draw.time)
             if draw.offer.cookies:
                 # A cookie day is a whole day of farming, not just its boosted
                 # window; the Detail column carries that split (see
@@ -2463,7 +2560,7 @@ def markdown_plan(
                 for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
                     rows.append([
                         action, duration, display.get(key, key),
-                        f"{round(draw.produced[key]):,}", note,
+                        Cell.num(round(draw.produced[key])), note,
                     ])
                 continue
             action = f"{_harvest_alls(math.ceil(draw.units))} of {crop}"
@@ -2480,7 +2577,7 @@ def markdown_plan(
                         f"{round(from_gj):,} from Grape Juice, "
                         f"{round(total - from_gj):,} from normal farming"
                     )
-                rows.append([action, duration, name, f"{round(total):,}", detail])
+                rows.append([action, duration, name, Cell.num(round(total)), detail])
         doc.heading(heading + ")")
         doc.table(
             ["Action", "Duration", "Item", "Qty", "Detail"],
@@ -2533,7 +2630,7 @@ def markdown_plan(
                 if source.startswith("(") and source.endswith(")"):
                     source = source[1:-1]
                 rows.append([
-                    name, f"{quantity:,}", passive.format_duration(wait), source,
+                    name, Cell.num(quantity), Cell.duration(wait), source,
                 ])
             doc.heading("Passive production (concurrent)")
             doc.table(
@@ -2560,7 +2657,7 @@ def markdown_plan(
     ]
     if held:
         rows = [
-            [display.get(item, item), f"{round(units):,}"]
+            [display.get(item, item), Cell.num(round(units))]
             for item, units in sorted(held, key=lambda kv: -kv[1])
         ]
         doc.heading("From inventory (held consumables)")
@@ -2578,8 +2675,8 @@ def markdown_plan(
         rows = [
             [
                 display.get(item, item),
-                f"{round(units):,}",
-                f"{round(units * prices.get(item, 0.0)):,} g",
+                Cell.num(round(units)),
+                Cell.num(round(units * prices.get(item, 0.0)), "g"),
             ]
             for item, units in ordered
         ]
@@ -2593,9 +2690,9 @@ def markdown_plan(
         rows = [
             [
                 display.get(item, item),
-                f"{round(units):,}",
-                f"{round(units * ap_prices.get(item, 0.0)):,} AP",
-                f"{round(units * (prices or {}).get(item, 0.0)):,} g",
+                Cell.num(round(units)),
+                Cell.num(round(units * ap_prices.get(item, 0.0)), "AP"),
+                Cell.num(round(units * (prices or {}).get(item, 0.0)), "g"),
             ]
             for item, units in ordered
         ]
@@ -2618,9 +2715,16 @@ def markdown_plan(
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
             cost = round(units * per_juice)
             name = display.get(item, item)
-            levels = (pumpkin_schedule or {}).get(item)
-            drink = " / ".join(f"{level:,}" for level in levels) if levels else ""
-            rows.append([name, f"{round(units):,}", f"{cost:,} g", drink])
+            levels = (pumpkin_schedule or {}).get(item) or []
+            drink = " / ".join(f"{level:,}" for level in levels)
+            rows.append([
+                name,
+                Cell.num(round(units)),
+                Cell.num(cost, "g"),
+                # A schedule of mastery levels: one string for a reader, the
+                # levels themselves for JSON.
+                Cell(drink, list(levels)),
+            ])
         doc.heading("Pumpkin Juice (mastery boost)")
         doc.table(["Goal", "Juices", "Gold", "Drink at mastery"], rows)
         doc.para(f"Total: {round(plan.pumpkin_gold):,} g")
@@ -2722,7 +2826,7 @@ def markdown_crafts(
             3,
         )
         rows = [
-            [material, f"{round(count * quantity):,}"]
+            [material, Cell.num(round(count * quantity))]
             for material, quantity in recipe.materials.items()
             if material.lower() not in crafting.IGNORED_MATERIALS
         ]
@@ -2893,14 +2997,14 @@ def markdown_ascension_frontier(
         tags = _ascension_tags(i, selected, cheapest, include_selected_tag)
         notes = f"[{', '.join(tags)}]" if tags else ""
         rows.append([
-            str(i + 1),
-            passive.format_duration(plan.time),
-            f"{round(plan.gold):,} g",
-            f"{round(net_gold):,} g",
-            str(masters),
-            str(grandmasters),
-            str(megas),
-            f"{chore_ak:,.1f}",
+            Cell(str(i + 1), i + 1),
+            Cell.duration(plan.time),
+            Cell.num(round(plan.gold), "g"),
+            Cell.num(round(net_gold), "g"),
+            Cell(str(masters), masters),
+            Cell(str(grandmasters), grandmasters),
+            Cell(str(megas), megas),
+            Cell(f"{chore_ak:,.1f}", round(chore_ak, 1)),
             notes,
         ])
     doc.heading("Ascension plans")

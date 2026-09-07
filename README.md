@@ -167,6 +167,7 @@ Pass `--format markdown` (`md` also accepted) to get the same report as Markdown
 Pass `--format json` to get the whole report as one JSON document instead — every section a normal run prints, machine-readable, so you can pipe a solve into `jq` or a script:
 
 ```bash
+# the frontier as "plan, seconds, gold" triples
 python main.py -i Corn:5000 --format json | jq -r '.sections[] | select(.name=="frontier") | .blocks[] | select(.kind=="table") | .rows[] | "\(.["#"])  \(.Time)  \(.Gold)"'
 ```
 
@@ -180,7 +181,13 @@ The document is `{"sections": [{"name": ..., "blocks": [...]}]}`. `sections` is 
 | `table` | `columns` (the column names, in order), `rows` (one object per row, keyed by column name) |
 | `graph` | `x_label`, `y_label`, `points` (`{"x", "y"}` objects) — the `--graph` impact plot, as its points rather than the SVG the Markdown format draws |
 
-Every other value is the **report's own formatted string** — `"6d 5h 16m"`, `"1,234 g"`, `"4,616"` — not a raw number: this is the report in JSON, so what you read is exactly what the text and Markdown formats show, down to the `✗` on an unreachable goal. `--format json` works with every mode, including `--unobtainable`, `--mastery-costs` and `--ascend`. `--pager` needs `--format markdown` and so does not apply.
+**Values are machine-readable, not the printed text.** A quantity is a bare number — no thousands separators and no unit suffix, so the frontier's `1,234 g` is `1234` and a count of `148,290` is `148290`. **Every duration is in whole seconds**: `6d 5h 16m` is `538560`, and an instant plan's `0m` is `0`. The text and Markdown reports are unchanged — they still print for a reader; only the JSON drops the formatting.
+
+Some cells carry more than a number, since JSON has room for the structure the printed sentence flattens: a **Yields** cell is an item→quantity object (`{"Wood": 148290}`, or a plain list of names where the report shows no counts), and **Drink at mastery** is the list of mastery levels rather than `"18,000 / 19,000"`. Columns that are genuinely prose — Action, Detail, Source, Notes, Materials used — stay strings.
+
+Two cells drop a human annotation, but nothing is lost from the document: the Goal table's **Still needed** is the shortfall itself (`0` where the report prints `done`, and no `✗` — the unreachable items are named in full by the *Materials with no known source* table right below it), and the frontier's **Gold** is the headline total the report's `buy + passive = total g` cell adds up to.
+
+`--format json` works with every mode, including `--unobtainable`, `--mastery-costs` and `--ascend`. `--pager` needs `--format markdown` and so does not apply.
 
 Add `--pager` (with `--format markdown`, on a terminal) to page the rendered report through the system pager (`$PAGER`/`$MANPAGER`, else `less`) instead of dumping it straight to the scrollback — reports with a lot of sections (a full tower solve) can be long. This pages the *rendered* tables and styling; piping the command's own output to a pager yourself (`python main.py --format markdown | less`) doesn't work for that, since the pipe makes stdout a non-terminal before the report is ever rendered, so it falls back to raw Markdown source instead.
 
