@@ -59,10 +59,14 @@ context (`cheapest`, `display`, `max_passive_residuals`, `reasons`, `golds`,
 file loading and the `--unobtainable` early exit, then calls the three in order
 and drives the `Reporter` off their results:
 
-1. **Load state** — `main.load_state` → `parsing` builds `farm_solver.GameState`
-   (masteries + inventory) from the pasted-in text files, then
-   `main.apply_inventory_overrides` forces any `--override-inventory` items to
-   their given held amount, replacing whatever the file said.
+1. **Load state** — `main.load_game_state` (the single load point all three
+   modes -- normal, `--mastery-costs`, `--ascend` -- go through) → `parsing`
+   builds `farm_solver.GameState` (masteries + inventory) either from the
+   pasted-in text files (`resolve_files` + `load_state`) or, with
+   `--backup-file`, from the text a web-app backup carries (see "Solving from a
+   web-app backup" below); then `main.apply_inventory_overrides` forces any
+   `--override-inventory` items to their given held amount, replacing whatever
+   the file said.
 2. **Goal → demand** — `farm_solver.solve_tower/solve_mastery/solve_acquire`
    produce a `Solution` with `ItemNeed`s. `build_inputs` computes a `goals_only`
    flag = `args.target == "none"` **or** (`args.target is None` and `-m`/`-i`
@@ -204,7 +208,7 @@ save) because each per-item reachable subtree is small.
 
 | File | Owns | Key names |
 | --- | --- | --- |
-| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_mariyas_wheelbarrow`, `resolve_held_item` (the shared config-override-then-inventory body behind all four), `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_current_stamina` (`--current-stamina` over `[farmhouse] current_stamina`, then 0 -- a *reading*, not a building property, so the flag stays and an explicit 0 must beat a stale config value), `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `daily_grape_juices` (the farm's Grape-Juice allowance for the optimiser's daily budget; 0/no-farm = uncapped), `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
+| `main.py` | CLI, orchestration (no printing except ascension mode's TEMPORARY report) | `run` (setup + file loading + the `--unobtainable` branch, then delegates to the three stage functions below, or to ascension mode), `build_inputs` → `SolveInputs` (now `_build_channel_setup` → `_ChannelSetup` + goal-solving layered on top), `solve_frontier` → `FrontierResult`, `derive_report_inputs` → `PlanContextData`, `build_parser`, `parse_target`, `resolve_files` (falls back to `_latest_dated_file` on `solver.data_directory`), `load_game_state` (the one state-load point: a `--backup-file`'s pasted text, else `resolve_files`+`load_state`), `load_backup`/`apply_backup_params`/`Backup`/`BACKUP_FORMAT`/`BACKUP_VERSION`/`_BACKUP_GOAL_PARAMS` (the web app's backup JSON as a CLI input), `selected_plan`, `cheapest_plan`, `resolve_pumpkin_juice`, `resolve_fungus_processing`, `resolve_scythe_of_dewstar`, `resolve_dewstars_journal`, `resolve_mariyas_wheelbarrow`, `resolve_held_item` (the shared config-override-then-inventory body behind all four), `resolve_swamp_puzzle`, `resolve_monthly_grants`, `resolve_current_stamina` (`--current-stamina` over `[farmhouse] current_stamina`, then 0 -- a *reading*, not a building property, so the flag stays and an explicit 0 must beat a stale config value), `resolve_calendar_mode`/`strip_dated_sources` (the `solver.calendar` full/average/ignore enum), `apply_inventory_overrides`, `daily_grape_juices` (the farm's Grape-Juice allowance for the optimiser's daily budget; 0/no-farm = uncapped), `pumpkin_juice_gains`, `pumpkin_juice_schedule`, `load_config` (takes an optional path, from `--config`); ascension mode (milestone 4, see "Ascension orchestration" below): `solve_ascension_frontier` → `AscensionFrontierResult`, `_validate_ascend`/`resolve_ascend_params`, `_ascend_stage_cfgs`, `_run_ascend_pass`, `StagedPlan`/`StageResult`; milestone 6 (levels 101-200): `_select_megas`; **`--mastery-costs` mode** (a standalone report, see "Mastery-costs mode" below): `solve_mastery_costs` → `MasteryCostsResult` (`MasteryCostRow` rows + `unmasterable` chains), `_sorted_mastery_rows`, `unmasterable_chain`, `_MASTERY_TIERS`/`_MASTERY_TIER_NAMES`, `load_unmodelled_reasons`/`UNMODELLED_PATH`/`_UNMODELLED_REASON_TEXT` (why an unsourceable item really cannot be had) |
 | `webapi.py` | framework-free web API layer (no Django import; drives `main`'s stage functions from pasted text instead of files) | `params_to_args` (JSON `params` → `argparse.Namespace`), `_CONFIG_PARAM_FLAGS` (Trading-values price params + `instant_grow_time` → `args.override` entries, so a price change re-solves via the `override` RESOLVE_FIELD), `_ap_trading_override_lines` (the Material-trading pane's `ap_trading` param → `trading.ap.enabled`/`allow`/`deny`/`prices` overrides -- an ALLOW list only, empty allow ⇒ `enabled=false`, prices as a whole-table inline-table replace; see "Material trading pane" below), the generic `config` param → `_config_override_line` (the preference panels' `{section.flag: value}` object → typed `args.override` lines, same channel as the free-text overrides box), `load_web_config`/`WEB_CONFIG_PATH` (the web app's own defaults live in `web_default_config.toml`, separate from the CLI's `config.toml`; every web solve and `config_defaults` load it), `config_defaults` (that config minus `[solver]`, injected into the page for the panels' placeholders and bool checkbox states), `args_to_command` (reconstruct the equivalent `python main.py …` command line from a request's args -- the DEBUG-only "CLI command" popup; reuses `args.override` verbatim; when given the `capture_debug_state` paths it emits `--mastery-file`/`--inventory-file` so the command reproduces the exact pasted state), `capture_debug_state`/`DEBUG_CAPTURE_DIR` (DEBUG-only: dump the browser's pasted mastery/inventory text to a fresh timestamped `mastery-<ts>.txt`/`inventory-<ts>.txt` pair under the system temp dir -- one per solve, so past captures survive; `web/solverapp/views._debug_command` wires it in), `fingerprint` (session cache key), `RESOLVE_FIELDS`/`REFILTER_FIELDS`, `SolveSession`/`SolveResult`, `_prepare` (the config-load/calendar-strip/crafting-bonus + `GameState`-from-text preamble both solve paths share), `solve` (full re-solve), `render` (refilter against a cached `SolveSession`, with the one horizon-guard re-solve edge case); **mastery-costs**: `mastery_costs` → `MasteryCostsPayload` (structured rows, not rendered markdown — the client sorts and links per row), `mastery_costs_fingerprint`/`MASTERY_COST_FIELDS` (its own narrower, `"mc:"`-namespaced cache key: the goal/frontier fields never reach `solve_mastery_costs`, so editing a goal must not evict the table) |
 | `report.py` | **all printing** + critical-path naming | `Reporter`/`TextReporter`/`MarkdownReporter`/`JsonReporter`/`SectionedReporter`/`build_reporter` (the `--format` facade), `print_frontier`/`print_plan`/`print_critical_path` (text) and their `markdown_*` counterparts, `MarkdownDoc` + its `Block` types (`Heading`/`Paragraph`/`Bullets`/`Table`/`Graph`, each with `markdown()` and `as_json()`) and `Cell`/`Cell.num`/`Cell.duration` (a table cell's printed text + its machine-readable value), `_wanted_amounts`/`_open_yields`/`_format_amounts` (the item->quantity maps behind a "Yields" cell, and the shared joiner both renderers print), `_build_plan_context`/`_PlanContext` (setup shared by both renderers), `build_display`, `_defining_passive_resources`, `_passive_wait` (quantized deposit waits), `_farming_action`/`_cookie_harvest_note` (both renderers' cookie day/burst wording — a repeated burst names its count and its once-a-day cadence, since the quoted time is farming-track time, five minutes a burst); `--ascend` mode (milestone 5, see "Ascension report sections" below): `print_ascension_goal`/`print_ascension_frontier`/`print_ascension_plan` and their `markdown_ascension_*` counterparts (the `Reporter.ascension_goal`/`ascension_frontier`/`ascension_plan` facade methods), `_ascension_ledger`, `_ascension_timeline`, `_ascension_todo`, `_ascension_chore_wait`; `--mastery-costs` mode: `print_mastery_costs`/`markdown_mastery_costs` (the `Reporter.mastery_costs` facade — the table plus its two "cannot" sections, "Items that cannot be mastered" and "Tiers that cannot be reached"), `_mastery_costs_caption` |
 | `optimizer.py` | the LP and the frontier, LP backend choice | `SourcingPlan` (`passive_draw`, `track_times`, `cost`, `ascension`), `_Base`/`_build_base`/`_solve_configured` (`minimize`'s split, see below; `_build_base`'s optional `ascension` param and `_solve_configured`'s `_round_and_fix_ascension` are the ascension extension, see below), `minimize`, `frontier` (sweeps the continuous juice relaxation, exact-finishes only the plans it returns — see its cost bullet), `_sweep`/`_UnmeetableCap` (capped sweep solves; a cap the regime cannot reach is dropped, not an error), `fastest_endpoint`, `self_sourced_endpoint`, `plan_balance`, `passive_residuals`, `plan_gold`, `plan_gold_breakdown`, `plan_leftovers`, `leftover_inventory_share`, `accumulated_leftovers`, `surplus_sale_value`, `plan_surplus_gold`, `_quantize_plan_time`, `set_solver_backend`, `_has_integers`; the shared **daily budgets** for cookie sets / Grape Juice live in `_build_base` (`grape_juices_per_day` param, `_Base.grape_juices_per_day`/`days_available` — the integer day count) and are charged as reported time in `_solve_configured` — see that bullet |
@@ -2285,6 +2289,10 @@ that imports it without going through `manage.py`.
     prune runs), and **reloads**: the goal pane, the results and the timeline
     each read their own slice of the state at init, so re-reading it beats
     grafting a foreign state onto a live page.
+  - **The CLI reads the same file** (`main.load_backup`, `--backup-file`) --
+    see "Solving from a web-app backup" below. `backup.js` stays the owner of
+    the format; `main.BACKUP_FORMAT`/`BACKUP_VERSION` mirror its constants and
+    must be bumped with them.
 - **Per-worker caches are a deliberate simplicity trade-off**: no state is
   shared across gunicorn workers/processes, so a request landing on a
   different worker (or after a restart/eviction) is just a cache miss --
@@ -2296,6 +2304,73 @@ that imports it without going through `manage.py`.
   not named `test_*.py`, so plain `uv run pytest -q` neither collects nor
   needs Django (`webapi.py` itself has no Django dependency and is covered by
   `tests/test_webapi.py` under the plain suite).
+
+## Solving from a web-app backup (`--backup-file`, main.py)
+
+The web app stores nothing server-side, so its "Back up" button's JSON file is
+the only way a browser-held save moves anywhere (see "Backup / restore" above).
+`--backup-file` makes the CLI a second reader of that file, so a save does not
+have to be kept twice.
+
+A backup is `{format, version, exported_at, state, ui, snapshots}`.
+`main.load_backup` reads **only `state`** into a `Backup` (`mastery_text`,
+`inventory_text`, `params`) -- `ui` (pane/sort preferences) and `snapshots` (the
+mastery history) are browser-only. It validates before returning anything and
+names the file in every message, mirroring `backup.js`'s `parseBackup`: a JSON
+file that happens to be lying in the Downloads folder must not be mistaken for
+a backup, and a file from a *newer* `version` is refused because this build
+cannot know what the new shape means. `BACKUP_FORMAT`/`BACKUP_VERSION` mirror
+`backup.js`'s own constants and must be bumped with them.
+
+**Two things come out of the file, at two different moments.** The `params` are
+merged into `args` at the very top of `run()` -- before `load_config`, which
+already reads `args.override` -- while the game state is read later, at each
+mode's own load point via `load_game_state`. That split is why `run()` holds
+the `Backup` in a local rather than converting it once.
+
+**`params` *is* the body of `POST /api/solve`** (settings.js keeps the saved
+state in exactly that shape), so `apply_backup_params` hands it to
+`webapi.params_to_args` rather than reimplementing the mapping -- which means
+`main` importing `webapi`, and `webapi` already imports `main`. The import is
+**function-local**, the same cycle-breaking move `farm_solver.
+load_tower_requirements` makes for `parsing`. The layering inversion is
+deliberate and worth its cost: the alternative is a second copy of a ~150-line
+mapping (plus `_CONFIG_PARAM_FLAGS`, `_ap_trading_override_lines`,
+`_config_override_line`) that would silently drift from the web app's. It is
+also self-limiting -- `params_to_args` never touches `--format`, `--pager`,
+`--solver`, a file path or the `--empty-*` flags, which stay the CLI's alone.
+
+**Precedence.** `params_to_args` builds a *fresh defaults* namespace and
+applies the params to it; `apply_backup_params` then diffs that against the
+same defaults, so it knows exactly which options the backup set, and writes
+each onto `args` only where `args` is *still at its default*. So an option you
+actually typed wins, and one you left alone takes the backup's value. Two
+deliberate exceptions:
+
+- **`--override` concatenates** rather than being replaced -- both sides carry
+  overrides (the preference panels turn config knobs into them), so the
+  backup's go first and the command line's last, which is what makes the
+  command line win under `apply_overrides`' in-order application.
+- **The goal is withheld from the goal-less modes.** `--mastery-costs`,
+  `--ascend` and `--unobtainable` solve their own goals and *reject* a
+  `--target`/`-m`/`-i`, so inheriting a backup's goal made
+  `--backup-file save.json --mastery-costs` fail citing a flag the user never
+  typed. `apply_backup_params(..., with_goal=False)` drops
+  `_BACKUP_GOAL_PARAMS` (settings.js's own `GOAL_PARAM_KEYS`, in its
+  vocabulary rather than argparse's, since that is the shape a backup stores)
+  and keeps every solver knob.
+
+`--backup-file` **conflicts with `--mastery-file`/`--inventory-file`** (half a
+state from each is nobody's intent, so it is refused rather than silently
+resolved one way), but composes with `--empty-mastery`/`--empty-inventory`,
+which still drop their half. With a backup, `resolve_files` never runs, so no
+`[solver]` file config is needed at all.
+
+The near relative of this is the DEBUG-only "CLI command" popup
+(`webapi.capture_debug_state` + `args_to_command`), which dumps the pasted text
+to a timestamped file pair and reconstructs a `--mastery-file`/`--inventory-file`
+command line; `--backup-file` is the offline, no-temporary-files version of the
+same idea.
 
 ## Deployment (Dockerfile, deploy/)
 

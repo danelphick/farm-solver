@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import json
 import math
 import os
 import sys
@@ -654,6 +655,19 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "text file of your inventory copied from FarmRPG "
             "(overrides solver.inventory_file in the config)"
+        ),
+    )
+    parser.add_argument(
+        "--backup-file",
+        type=Path,
+        metavar="FILE",
+        help=(
+            "a backup file exported by the web app's 'Back up' button: solve "
+            "from the mastery/inventory text it holds AND the goal/options of "
+            "the web solve it came from. Any option you also give on the "
+            "command line wins over the file's; --empty-mastery/"
+            "--empty-inventory still drop their half. Cannot be combined with "
+            "--mastery-file/--inventory-file"
         ),
     )
     parser.add_argument(
@@ -1353,6 +1367,142 @@ def resolve_files(
             "inventory_file",
             "--inventory-file",
             args.empty_inventory,
+        ),
+    )
+
+
+# The web app's backup file (web/solverapp/static/solverapp/backup.js): the
+# only way a browser-held save moves anywhere, since nothing is stored
+# server-side. These must match backup.js's own BACKUP_FORMAT/BACKUP_VERSION --
+# a file from a NEWER version is refused here for the same reason its
+# ``parseBackup`` refuses one: this build cannot know what the new shape means.
+BACKUP_FORMAT = "farm-solver-backup"
+BACKUP_VERSION = 1
+
+
+@dataclass(frozen=True)
+class Backup:
+    """The half of a web-app backup file the CLI can use.
+
+    A backup holds ``state`` (the pasted mastery/inventory text plus the params
+    of the web solve), ``ui`` (pane/sort preferences) and ``snapshots`` (the
+    mastery history) -- the last two are browser-only, so only ``state`` is
+    read here. ``params`` is the body of ``POST /api/solve`` (settings.js keeps
+    the saved state in exactly that shape), which is why
+    :func:`apply_backup_params` hands it to ``webapi.params_to_args``.
+    """
+
+    mastery_text: str
+    inventory_text: str
+    params: dict
+
+
+def load_backup(path: Path) -> Backup:
+    """Read and validate a web-app backup file.
+
+    Validates before returning anything, and names the file in every message,
+    mirroring ``backup.js``'s ``parseBackup``: a JSON file that happens to be
+    lying around must not be mistaken for a backup.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not JSON: {exc}") from None
+    if not isinstance(data, dict) or data.get("format") != BACKUP_FORMAT:
+        raise ValueError(f"{path} is not a farm-solver backup")
+    version = data.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+        raise ValueError(f"{path} has no backup version")
+    if version > BACKUP_VERSION:
+        raise ValueError(
+            f"{path} is backup version {version}; this build can only read "
+            f"version {BACKUP_VERSION}"
+        )
+    state = data.get("state") or {}
+    if not isinstance(state, dict):
+        raise ValueError(f"{path}'s saved state is not an object")
+    params = state.get("params") or {}
+    if not isinstance(params, dict):
+        raise ValueError(f"{path}'s saved params are not an object")
+    return Backup(
+        mastery_text=state.get("mastery_text") or "",
+        inventory_text=state.get("inventory_text") or "",
+        params=params,
+    )
+
+
+# The params that carry a *goal* rather than a solver setting -- settings.js's
+# own GOAL_PARAM_KEYS, in its vocabulary rather than argparse's, since that is
+# the shape a backup stores. Dropped for the modes that solve their own goals
+# (see :func:`apply_backup_params`'s ``with_goal``).
+_BACKUP_GOAL_PARAMS = frozenset({"target", "mastery", "items", "plan_select"})
+
+
+def apply_backup_params(
+    args: argparse.Namespace, params: dict, with_goal: bool = True
+) -> None:
+    """Fold a backup's saved web params into ``args``, in place.
+
+    An option actually given on the command line wins; one left at its default
+    takes the backup's value -- so ``--backup-file save.json --plans 8`` is the
+    web solve with a wider frontier. ``--override`` is the one exception: both
+    sides can carry overrides (the preference panels turn config knobs into
+    them), so they are concatenated with the command line's *last*, which is
+    what makes it win in :func:`apply_overrides`' in-order application.
+
+    ``with_goal=False`` drops the goal params (:data:`_BACKUP_GOAL_PARAMS`) and
+    keeps the rest. ``--mastery-costs``/``--ascend`` solve their own goals and
+    refuse a ``--target``/``-m``/``-i``, so carrying a backup's goal into them
+    would make the obvious command fail citing a flag the user never typed --
+    while its game state and solver knobs are exactly what they want.
+
+    ``webapi`` is imported inside the function because it imports this module:
+    the same cycle-breaking local import ``farm_solver.load_tower_requirements``
+    uses. ``params_to_args`` lives there because the params *are* the web
+    request's body -- and it deliberately never touches ``--format``,
+    ``--pager``, ``--solver``, a file path or the ``--empty-*`` flags, which
+    stay the command line's alone.
+    """
+    if not with_goal:
+        params = {k: v for k, v in params.items() if k not in _BACKUP_GOAL_PARAMS}
+    if not params:
+        return
+    import webapi
+
+    defaults = build_parser().parse_args([])
+    from_backup = webapi.params_to_args(params)
+    for key, value in vars(from_backup).items():
+        default = getattr(defaults, key, None)
+        if value == default:
+            continue  # the backup left this one alone
+        if key == "override":
+            args.override = list(value) + list(args.override or [])
+            continue
+        if getattr(args, key) != default:
+            continue  # an explicit flag beats the file
+        setattr(args, key, value)
+
+
+def load_game_state(
+    args: argparse.Namespace, cfg: dict, backup: Backup | None
+) -> farm_solver.GameState:
+    """The mastery/inventory state a run starts from.
+
+    A ``--backup-file``'s pasted text when there is one (no temporary files:
+    the text is exactly what :func:`load_state` would have read off disk),
+    else the mastery/inventory files :func:`resolve_files` picks. Either way
+    ``--empty-mastery``/``--empty-inventory`` still drop their half.
+    """
+    if backup is None:
+        return load_state(*resolve_files(args, cfg))
+    return farm_solver.GameState(
+        masteries=(
+            {} if args.empty_mastery else parsing.parse_masteries(backup.mastery_text)
+        ),
+        inventory=(
+            farm_solver.Inventory()
+            if args.empty_inventory
+            else parsing.parse_inventory(backup.inventory_text)
         ),
     )
 
@@ -3132,6 +3282,33 @@ def run(args: argparse.Namespace) -> int:
     # All output goes through this: text prints immediately (today's behaviour),
     # markdown buffers into a MarkdownDoc and renders once in reporter.finish().
     reporter = report.build_reporter(args.format, pager=args.pager)
+    # A --backup-file carries the game state AND the params of the web solve it
+    # came from, so its params merge in before anything below reads args (the
+    # config load right here already reads args.override). The state itself is
+    # read later, by load_game_state, at each mode's own load point.
+    backup = None
+    if args.backup_file is not None:
+        conflicts = [
+            flag for flag, given in (
+                ("--mastery-file", args.mastery_file is not None),
+                ("--inventory-file", args.inventory_file is not None),
+            ) if given
+        ]
+        if conflicts:
+            raise ValueError(
+                "--backup-file supplies the game state, so it conflicts with "
+                + ", ".join(conflicts)
+            )
+        backup = load_backup(args.backup_file)
+        # The goal-solving modes below own their goal and reject a --target/
+        # -m/-i, so a backup's goal is withheld from them (its game state and
+        # solver knobs still apply) -- see apply_backup_params' with_goal.
+        apply_backup_params(
+            args, backup.params,
+            with_goal=not (
+                args.mastery_costs or args.unobtainable or args.ascend is not None
+            ),
+        )
     cfg = load_config(args.config)
     apply_overrides(cfg, args.override)
     # In the calendar 'ignore' mode seasonal pets contribute nothing: drop them
@@ -3149,8 +3326,7 @@ def run(args: argparse.Namespace) -> int:
         backend = args.solver or cfg.get("solver", {}).get("backend")
         if backend:
             optimizer.set_solver_backend(backend)
-        mastery_file, inventory_file = resolve_files(args, cfg)
-        state = load_state(mastery_file, inventory_file)
+        state = load_game_state(args, cfg, backup)
         if args.override_inventory is not None:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
@@ -3198,8 +3374,7 @@ def run(args: argparse.Namespace) -> int:
         backend = args.solver or cfg.get("solver", {}).get("backend")
         if backend:
             optimizer.set_solver_backend(backend)
-        mastery_file, inventory_file = resolve_files(args, cfg)
-        state = load_state(mastery_file, inventory_file)
+        state = load_game_state(args, cfg, backup)
         if args.override_inventory is not None:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
@@ -3252,10 +3427,8 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     # The mastery and inventory files come from the command line, falling back
-    # to the [solver] config section.
-    mastery_file, inventory_file = resolve_files(args, cfg)
-
-    state = load_state(mastery_file, inventory_file)
+    # to the [solver] config section -- or the pasted text of a --backup-file.
+    state = load_game_state(args, cfg, backup)
     if args.override_inventory is not None:
         apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)

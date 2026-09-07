@@ -16,6 +16,28 @@ inventory_file = "./sample-inventory.txt"
 
 A command-line flag overrides the config; if a file is given in neither place, the solver reports an error. The examples below rely on the `[solver]` config, but you can add `--mastery-file <file> --inventory-file <file>` to any of them. Pass `--empty-mastery` / `--empty-inventory` to ignore the mastery/inventory file (and config) entirely and start from nothing — neither flag nor config is required for the one it ignores.
 
+### Solving from a web-app backup
+
+If you use the [web app](#web-app), its **Back up** button writes one JSON file holding everything that browser has for you. `--backup-file` reads it directly, so you don't have to keep a separate pair of text files in sync:
+
+```shell
+python main.py --backup-file ~/Downloads/farm-solver-backup-2026-09-01.json
+```
+
+That solves the *same* run the web page would: the backup carries the pasted mastery and inventory text **and** the goal and options of the solve it was exported from (`-i`/`-m`/`--target`, budgets, `--plans`, the preference panels' config overrides, and which frontier row was selected). It replaces `--mastery-file`/`--inventory-file` — giving either alongside it is an error, since half a state from each is nobody's intent — and needs no `[solver]` file config at all.
+
+Anything you also put on the command line wins over the file, so you can reuse a saved state with a different question:
+
+```shell
+python main.py --backup-file backup.json -i "Gold Bar:5000"   # same save, new goal
+python main.py --backup-file backup.json --plans 8 --format json
+python main.py --backup-file backup.json --mastery-costs      # the goal is not inherited
+```
+
+`--override` is the exception to "yours wins outright": the backup's overrides and yours are *combined*, with yours applied last so it wins on any flag both set. `--empty-mastery`/`--empty-inventory` still drop their half of the backup. And `--mastery-costs`, `--ascend` and `--unobtainable` solve their own goals, so they never inherit the backup's — only its game state and solver settings.
+
+A backup's browser-only blocks (pane preferences, the mastery-snapshot history) are ignored. A file that isn't a backup, or one written by a newer version of the app than this build knows, is refused by name rather than half-read.
+
 To force specific items to a given held amount regardless of what the inventory file says, use `--override-inventory`, e.g. `--override-inventory "Medium Chest:0,Arnold Palmer:100"`. It's applied after the inventory file is loaded, so it replaces whatever amount the file gave those items (and adds the item if the file didn't have it at all); everything else from the file is left alone.
 
 Instead of naming a fixed file, you can point `data_directory` at a folder of dated exports (e.g. `mastery-2026-07-08.txt`, `inventory-2026-07-08.txt`) and let the solver pick the newest one for whichever of `mastery_file` / `inventory_file` is left unset:
@@ -35,6 +57,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
     [--mastery-costs [--sort time|gold]] [--self-sourced] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
+    [--backup-file <file>] \
     [--empty-mastery] [--empty-inventory] [--override-inventory item:amount] \
     [--format text|markdown|json] [--pager]
 ```
