@@ -1323,12 +1323,9 @@ works because *we* launch the pager as a subprocess after rendering -- piping
 this process's own stdout to a pager externally makes stdout a non-tty before
 `.finish()` ever runs, so it takes the raw-source branch instead of the styled one.
 
-### JSON output (`--format json` / `--json`, report.JsonReporter)
+### JSON output (`--format json`, report.JsonReporter)
 
-`--json` is shorthand for `--format json` (argparse `store_const` onto
-`--format`'s own dest with `default=SUPPRESS`, so the two spellings are one
-setting and the last one given wins). It is deliberately **not** a fourth set
-of report functions: `JsonReporter` calls the same `markdown_*` functions as
+`--format json` is deliberately **not** a fourth set of report functions: `JsonReporter` calls the same `markdown_*` functions as
 `MarkdownReporter` -- so every row, wording and decision is theirs -- and
 serializes the `Block`s they produce via `Block.as_json()` instead of rendering
 them to Markdown source. Adding a report section therefore needs no JSON work

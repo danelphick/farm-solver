@@ -1,4 +1,4 @@
-"""Tests for ``--format json`` / ``--json``: report.py's :class:`JsonReporter`
+"""Tests for ``--format json``: report.py's :class:`JsonReporter`
 and the structured :class:`Block`s :class:`MarkdownDoc` now keeps.
 
 The point of the design is that JSON is *the same report*, not a second one:
@@ -252,11 +252,7 @@ def test_parse_format_rejects_an_unknown_format():
         raise AssertionError("expected an ArgumentTypeError")
 
 
-def test_json_flag_is_shorthand_for_the_format():
+def test_format_json_parses_off_the_command_line():
     parser = main.build_parser()
     assert parser.parse_args([]).format == "text"
-    assert parser.parse_args(["--json"]).format == "json"
-    # One setting under two spellings: whichever comes last on the command
-    # line wins, rather than --json's absence clobbering an explicit --format.
-    assert parser.parse_args(["--json", "--format", "md"]).format == "markdown"
-    assert parser.parse_args(["--format", "md", "--json"]).format == "json"
+    assert parser.parse_args(["--format", "json"]).format == "json"

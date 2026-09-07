@@ -1160,18 +1160,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        # Shorthand for the format most likely to be reached for from a script.
-        # store_const on --format's own dest, so the two spellings are one
-        # setting and the last one given wins; SUPPRESS keeps this action's
-        # (absent) default from competing with --format's "text".
-        "--json",
-        action="store_const",
-        const="json",
-        dest="format",
-        default=argparse.SUPPRESS,
-        help="shorthand for --format json: the whole report as one JSON document",
-    )
-    parser.add_argument(
         "--pager",
         action="store_true",
         help=(

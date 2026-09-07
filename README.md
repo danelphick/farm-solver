@@ -36,7 +36,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [--mastery-costs [--sort time|gold]] [--self-sourced] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
     [--empty-mastery] [--empty-inventory] [--override-inventory item:amount] \
-    [--format text|markdown|json] [--json] [--pager]
+    [--format text|markdown|json] [--pager]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -164,10 +164,10 @@ python main.py --passive-limit 100y --max-ln 0    # no fishing, finish within a 
 
 Pass `--format markdown` (`md` also accepted) to get the same report as Markdown, with a table for the frontier and for each tabular section of the expanded plan (Fishing, Exploring, Farming, Passive production, Buy, Surplus, ...); narrative bits like the critical path stay plain text. `--format text` (`txt`) is the default. When stdout is a terminal, Markdown is rendered through it via [rich](https://github.com/Textualize/rich) rather than printed as raw source; redirected to a file (`python main.py --format markdown > report.md`) it prints the Markdown source itself, so the file is a real `.md` document.
 
-Pass `--json` (or `--format json`) to get the whole report as one JSON document instead — every section a normal run prints, machine-readable, so you can pipe a solve into `jq` or a script:
+Pass `--format json` to get the whole report as one JSON document instead — every section a normal run prints, machine-readable, so you can pipe a solve into `jq` or a script:
 
 ```bash
-python main.py -i Corn:5000 --json | jq -r '.sections[] | select(.name=="frontier") | .blocks[] | select(.kind=="table") | .rows[] | "\(.["#"])  \(.Time)  \(.Gold)"'
+python main.py -i Corn:5000 --format json | jq -r '.sections[] | select(.name=="frontier") | .blocks[] | select(.kind=="table") | .rows[] | "\(.["#"])  \(.Time)  \(.Gold)"'
 ```
 
 The document is `{"sections": [{"name": ..., "blocks": [...]}]}`. `sections` is a **list**, not an object, because the order is the report's own and a name can repeat (a run emits several `notes`; an `--ascend` run a `plan` per stage). Names are `solution`, `unobtainable`, `mastery_costs`, `notes`, `frontier`, `plan` and `crafts`; a section a run leaves empty is omitted, exactly as the other formats print nothing for it. Each block is one of:
@@ -180,7 +180,7 @@ The document is `{"sections": [{"name": ..., "blocks": [...]}]}`. `sections` is 
 | `table` | `columns` (the column names, in order), `rows` (one object per row, keyed by column name) |
 | `graph` | `x_label`, `y_label`, `points` (`{"x", "y"}` objects) — the `--graph` impact plot, as its points rather than the SVG the Markdown format draws |
 
-Every other value is the **report's own formatted string** — `"6d 5h 16m"`, `"1,234 g"`, `"4,616"` — not a raw number: this is the report in JSON, so what you read is exactly what the text and Markdown formats show, down to the `✗` on an unreachable goal. `--json` works with every mode, including `--unobtainable`, `--mastery-costs` and `--ascend`. `--pager` needs `--format markdown` and so does not apply.
+Every other value is the **report's own formatted string** — `"6d 5h 16m"`, `"1,234 g"`, `"4,616"` — not a raw number: this is the report in JSON, so what you read is exactly what the text and Markdown formats show, down to the `✗` on an unreachable goal. `--format json` works with every mode, including `--unobtainable`, `--mastery-costs` and `--ascend`. `--pager` needs `--format markdown` and so does not apply.
 
 Add `--pager` (with `--format markdown`, on a terminal) to page the rendered report through the system pager (`$PAGER`/`$MANPAGER`, else `less`) instead of dumping it straight to the scrollback — reports with a lot of sections (a full tower solve) can be long. This pages the *rendered* tables and styling; piping the command's own output to a pager yourself (`python main.py --format markdown | less`) doesn't work for that, since the pipe makes stdout a non-terminal before the report is ever rendered, so it falls back to raw Markdown source instead.
 
