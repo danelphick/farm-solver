@@ -40,6 +40,15 @@ DEFAULT_MASTERY_BONUS = 1.1
 # are never reported, gathered, or expanded (keys are lower-cased).
 IGNORED_MATERIALS = frozenset({"iron", "nails"})
 
+# Materials bought from the Country Store for Silver. The solver treats them as
+# free like IGNORED_MATERIALS (never gathered or expanded, and Silver is not on
+# the gold axis), but unlike those they are real purchases, so the plan report
+# lists how many to buy (see :func:`store_purchases`). Keys are lower-cased.
+STORE_MATERIALS = frozenset({"corn seeds", "sunflower seeds"})
+
+# Every material the solver's recipe graph leaves out.
+FREE_MATERIALS = IGNORED_MATERIALS | STORE_MATERIALS
+
 
 def load_workshop(path: Path | None = None) -> Workshop:
     """Load workshop recipes from ``path``, or the bundled file if None."""
@@ -107,7 +116,7 @@ def required_materials(
         divisor = crafting_bonus * mastery_bonus if is_mastery else crafting_bonus
         crafts = _round_to_nearest(count / divisor)
         for material, quantity in recipe.materials.items():
-            if material.lower() in IGNORED_MATERIALS:
+            if material.lower() in FREE_MATERIALS:
                 continue
             materials[material] = materials.get(material, 0) + crafts * quantity
     return materials
@@ -123,8 +132,8 @@ def _required_materials_recursive(
     totals: dict[str, float] = {}
 
     def expand(item: str, items_needed: float) -> None:
-        if item.lower() in IGNORED_MATERIALS:
-            return  # supplied automatically; never gathered
+        if item.lower() in FREE_MATERIALS:
+            return  # supplied automatically or bought at the store; never gathered
         recipe = workshop.get(item)
         if recipe is None:
             # A base material: nothing to craft, so record the quantity needed.
@@ -148,19 +157,40 @@ def _required_materials_recursive(
 def recipe_flows(workshop: Workshop) -> dict[str, dict[str, float]]:
     """Each recipe as ``lower-cased item -> {lower-cased material: quantity}``.
 
-    Auto-supplied materials (iron, nails) are stripped, since they are never
-    gathered or counted. This is the crafting the sourcing optimiser folds into
-    its LP (see :mod:`optimizer`), so it can choose to craft an item instead of
-    gathering it.
+    Auto-supplied materials (iron, nails) and Country Store purchases (see
+    :data:`STORE_MATERIALS`) are stripped, since they are never gathered. This
+    is the crafting the sourcing optimiser folds into its LP (see
+    :mod:`optimizer`), so it can choose to craft an item instead of gathering it.
     """
     flows: dict[str, dict[str, float]] = {}
     for key, recipe in workshop.recipes.items():
         flows[key] = {
             material.lower(): float(quantity)
             for material, quantity in recipe.materials.items()
-            if material.lower() not in IGNORED_MATERIALS
+            if material.lower() not in FREE_MATERIALS
         }
     return flows
+
+
+def store_purchases(
+    crafts: dict[str, float], workshop: Workshop
+) -> dict[str, float]:
+    """The :data:`STORE_MATERIALS` a plan's ``crafts`` consume, lower-cased.
+
+    ``crafts`` is ``{lower-cased item: craft count}`` (``SourcingPlan.crafts``).
+    :func:`recipe_flows` strips these materials, so the LP never sees them; this
+    puts back what the crafts it chose actually use, for the report.
+    """
+    totals: dict[str, float] = {}
+    for item, count in crafts.items():
+        recipe = workshop.get(item)
+        if recipe is None:
+            continue
+        for material, quantity in recipe.materials.items():
+            key = material.lower()
+            if key in STORE_MATERIALS:
+                totals[key] = totals.get(key, 0.0) + count * quantity
+    return totals
 
 
 def top_level_demand(

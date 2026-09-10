@@ -4,7 +4,7 @@ from datetime import timedelta
 import pytest
 from rich.console import Console
 
-from crafting import Workshop, WorkshopRecipe
+from crafting import Workshop, WorkshopRecipe, recipe_flows, store_purchases
 from crops import Farm
 from farm_solver import (
     GameState,
@@ -736,6 +736,37 @@ def test_print_plan_splits_gold_buys_from_arnold_palmer_trades(capsys):
     assert "total 40 AP (2 g)" in out
     # Red Dye is a trade, not a gold buy -- it must not appear in the gold section.
     assert "red dye = 2 g" not in out
+
+
+FEEDER_WORKSHOP = Workshop(
+    recipes={
+        "pinecone bird feeder": WorkshopRecipe(
+            "Pinecone Bird Feeder",
+            {"Corn Seeds": 2, "Pine Cone": 4, "Sunflower Seeds": 2, "Iron": 1},
+        )
+    }
+)
+
+
+def test_store_materials_are_free_to_the_solver_but_counted_for_the_report():
+    # The LP never sees Country Store seeds (or Iron), only the gathered Pine Cone...
+    assert recipe_flows(FEEDER_WORKSHOP) == {"pinecone bird feeder": {"pine cone": 4.0}}
+    # ...but the crafts it chooses still say how many seeds to buy.
+    assert store_purchases({"pinecone bird feeder": 10}, FEEDER_WORKSHOP) == {
+        "corn seeds": 20.0,
+        "sunflower seeds": 20.0,
+    }
+
+
+def test_print_plan_lists_country_store_buys_net_of_held_seeds(capsys):
+    plan = SourcingPlan(crafts={"pinecone bird feeder": 10})
+    print_plan(
+        plan, {}, Farm(), FEEDER_WORKSHOP, 1.0, inventory={"corn seeds": 5}
+    )
+    out = capsys.readouterr().out
+    assert "Buy (at the Country Store):" in out
+    assert "15x Corn Seeds (needs 20, 5 held)" in out
+    assert "20x Sunflower Seeds\n" in out
 
 
 def test_print_plan_names_the_acorn_pies_a_pie_explore_eats(capsys):

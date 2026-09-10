@@ -1280,7 +1280,7 @@ def obtainable_items(
     the fishing/exploring drops (from the built models, when given), and the
     materials the game supplies automatically.
     """
-    items = set(crafting.IGNORED_MATERIALS) | set(farming.FARMING_ITEMS)
+    items = set(crafting.FREE_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
         items |= set(producer.outputs)
     if farm is not None:

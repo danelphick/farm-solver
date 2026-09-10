@@ -276,6 +276,8 @@ Whatever is already in your **inventory** is drawn on before anything is gathere
 
 A few materials (Iron and Nails) are supplied automatically by the game whenever a craft needs them, so they are never counted, gathered, or expanded.
 
+Corn Seeds and Sunflower Seeds (used by the Pinecone Bird Feeder) are bought from the Country Store for Silver. The solver treats them as free, but the plan lists how many to buy under **Buy (at the Country Store)**, net of any you already hold.
+
 Pass `-b`/`--breakdown` to list every craft that needs to happen, each with the materials it consumes. Every craftable item gets its own entry (quantities aggregated across everywhere it is used), while base and gathered materials appear only inline. Each craft also notes how many of the item those crafts produce and how much mastery that adds:
 
 ```text

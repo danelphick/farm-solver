@@ -89,8 +89,8 @@ and drives the `Reporter` off their results:
    balance in `optimizer.minimize` adds on top regardless — an `-i` floor on a
    pure material (never itself a mastery goal) still means "this many spare
    after whatever crafting consumes";
-   `crafting.recipe_flows` gives the craft graph (IGNORED_MATERIALS stripped,
-   lower-cased).
+   `crafting.recipe_flows` gives the craft graph (`FREE_MATERIALS` =
+   IGNORED_MATERIALS + STORE_MATERIALS stripped, lower-cased).
 3. **Build channels** — `config.passive_production` (buildings + pets),
    `fishing/exploring/crops` loaders, then `optimizer.all_offers` folds them into
    one `list[Offer]`; `sources.open_flows` builds the Locksmith `OpenFlow`s.
@@ -216,7 +216,7 @@ save) because each per-item reachable subtree is small.
 | `farm_solver.py` | game state, goal→needs | `GameState`, `Inventory`, `Solution`, `solve_tower`/`solve_mastery`/`solve_acquire`/`solve_goals`/`solve_target`, `has_tower_level` |
 | `ascension.py` | AK/chore/mega arithmetic, stage splitting, reward deltas -- pure domain, no solver imports (only `farm_solver` + stdlib) | `ak_cost`, `megas_required_by`, `chore_rate_per_day`/`chore_ak`, `candidates`/`StepCandidate`, `mega_count`, `advance`, `AscensionSpec`/`AscensionOutcome` (the milestone-3 optimiser handoff), `REWARD_LEVELS`, `stage_bounds`, `apply_rewards`; milestone 6 (levels 101-200): `mega_remaining`, `schedule_megas`, `mega_stage_floors` |
 | `parsing.py` | parse pasted mastery/inventory text | `_split_blocks`, `_parse_mastery_block` |
-| `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `non_mastery_goal_items` (items demanded only as a plain `-i` count -- trade-satisfiable, see AP trading below), `IGNORED_MATERIALS` |
+| `crafting.py` | workshop recipes, demand expansion | `Workshop`, `recipe_flows`, `top_level_demand`, `non_mastery_goal_items` (items demanded only as a plain `-i` count -- trade-satisfiable, see AP trading below), `IGNORED_MATERIALS` (auto-supplied Iron/Nails), `STORE_MATERIALS` (Country Store seeds -- free to the LP, but `store_purchases` recounts them from `plan.crafts` for `report._store_buys`' "Buy (at the Country Store)" section, net of held stock), `FREE_MATERIALS` (their union, what the LP strips) |
 | `crops.py` | farming model (grow time, GJ, cookies, instant-grow, Dewstar, limited seeds) | `Crop` (`seed_item`), `Farm` (`dewstar_bonus`, `dewstar_cookie_bonus`, `cookie_day_yield`/`cookie_day_harvests` (the latter reporting-only: a cookie day's `(natural, boosted)` Harvest All *counts*, vs. the former's boosted-equivalent yield), `cookie_burst_yield`/`cookie_burst_plantings`/`dewstar_cookie_burst_bonus`), `COOKIE_*` (incl. `COOKIE_WINDOW`), `INSTANT_GROW_MAX_BASE`, `PLOTS_PER_ROW`, `per_row_rate`, `SEED_ITEM_SUFFIX`, `DEWSTAR_EXCLUDED` |
 | `passive.py` | passive producers, durations, deposit schedules | `PassiveProducer`, `PassiveProduction` (`producer_rates`, `rate_per_minute`, `per_cycle`, `quantized_wait`), `parse_duration`, `format_duration` |
 | `pets.py` | pets as (seasonal) passive producers | `Pet`, `Pets`, `seasonal_fraction` |
@@ -1640,8 +1640,8 @@ information survives elsewhere in the document:
   row.
 - `Draw.produced` overproduces fast passive items — use `passive_residuals` for
   "how much passive actually needs to make", not `produced`.
-- `recipe_flows`/optimizer recipes are already lower-cased and IGNORED_MATERIALS
-  (iron, nails) stripped.
+- `recipe_flows`/optimizer recipes are already lower-cased and `FREE_MATERIALS`
+  (iron, nails, and the Country Store's corn/sunflower seeds) stripped.
 - The frontier's whole tradeoff is `(time, net gold)` where net gold =
   `gold − surplus_gold`; that pair is `SourcingPlan.cost` and (rounded) the dedup
   key. A consumable's spend is not itself a Pareto axis — only the gold spent buying

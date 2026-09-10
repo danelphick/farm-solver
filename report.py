@@ -1848,6 +1848,26 @@ def _build_plan_context(
     )
 
 
+def _store_buys(
+    plan: optimizer.SourcingPlan,
+    workshop: crafting.Workshop,
+    inventory: dict[str, float],
+) -> list[tuple[str, int, int, int]]:
+    """``(item, needed, held, to buy)`` per Country Store material the crafts use.
+
+    Held stock covers what it can; the rest is the purchase. Sorted largest buy
+    first; items needing less than one are dropped.
+    """
+    rows = []
+    for item, units in crafting.store_purchases(plan.crafts, workshop).items():
+        needed = round(units)
+        if needed < 1:
+            continue
+        held = round(inventory.get(item, 0.0))
+        rows.append((item, needed, held, max(0, needed - held)))
+    return sorted(rows, key=lambda row: (-row[3], row[0]))
+
+
 def _wanted_items(ctx: _PlanContext, offer: sources.Offer) -> list[str]:
     """The items ``offer`` yields that the plan actually wants, display-named."""
     return sorted(
@@ -2312,6 +2332,18 @@ def print_plan(
             )
         print(f"  total {round(total_ap):,} AP ({round(total_gold):,} g)")
 
+    # Buy (at the Country Store): seeds a craft needs, bought for Silver. The solver
+    # treats them as free (crafting.STORE_MATERIALS), so only the report names them.
+    store = _store_buys(plan, workshop, inventory)
+    if store:
+        print("\nBuy (at the Country Store):")
+        width = _num_width(buy for _, _, _, buy in store)
+        for item, needed, held, buy in store:
+            line = f"  {buy:>{width},}x {display.get(item, item)}"
+            if held:
+                line += f" (needs {needed:,}, {held:,} held)"
+            print(line)
+
     # Pumpkin Juice: a bought mastery boost, listed apart from the consumable buys
     # since it covers a goal's mastery directly rather than feeding a channel. Each
     # line names the goal it boosts, how many juices, and the gold and mastery gained.
@@ -2701,6 +2733,15 @@ def markdown_plan(
         doc.heading("Trade (for Arnold Palmers)")
         doc.table(["Item", "Qty", "Arnold Palmers", "Gold value"], rows)
         doc.para(f"Total: {round(total_ap):,} AP ({round(total_gold):,} g)")
+
+    store = _store_buys(plan, workshop, inventory)
+    if store:
+        rows = [
+            [display.get(item, item), Cell.num(needed), Cell.num(held), Cell.num(buy)]
+            for item, needed, held, buy in store
+        ]
+        doc.heading("Buy (at the Country Store)")
+        doc.table(["Item", "Needed", "Held", "Buy"], rows)
 
     juices = [
         (item, units) for item, units in plan.pumpkin_juices.items() if round(units) >= 1
