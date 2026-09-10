@@ -1,11 +1,18 @@
 11th Leaf Centerpiece
+Acid Extract
 Acorn Butter
 Acorn Pie
 Amber Cane
 Amethyst Necklace
+Ancient Bird Fossil
+Ancient Pickaxe
+Ancient Ram Fossil
+Ancient Rune
 Ant Apple
 Apple Ant
 Apple Cider
+Aquacite
+Aquacite Ring
 Aquamarine Ring
 Arnold Palmer
 Awl
@@ -21,6 +28,7 @@ Barracuda
 Basic Pillow
 Beet
 Belt Drive
+Bird Skull 01
 Black Bag
 Black Cloak
 Black Dye
@@ -31,6 +39,7 @@ Black Shield
 Black Shirt
 Black Twine
 Block of Wood
+Blood Crystal
 Blubberfish
 Blue Butterfly
 Blue Catfish
@@ -49,13 +58,24 @@ Bluegill
 Board
 Bog Barnacle
 Boghead Snapper
+Bone 02
+Bone 03
+Bone 04
+Bone 05
+Bone 06
 Bone Broth
 Bone Fish
+Bone Fragments
 Bone Pickaxe
 Bottle Rocket
 Bouquet of Flowers
+Brain Fungus
 Breakfast Boost
+Bright Lantern
+Briomine
 Broccoli
+Broken Bangle
+Broken Sword
 Broom
 Brown Bag
 Brown Cloak
@@ -68,6 +88,10 @@ Butter
 Butter Churn
 Cabbage
 Cabbage Stew
+Calcifite
+Calmine Composite
+Calmine Lotion
+Calmine Statue
 Candy Corn
 Cannon
 Canoe
@@ -75,6 +99,9 @@ Carp
 Carrot
 Cat's Meow
 Catfish
+Cave Mushroom
+Cave Paste
+Chisel
 Christmas Tree
 Chum
 Cicada
@@ -86,6 +113,7 @@ Coin Purse
 Compass
 Conch Shell
 Concord Grape Pie
+Condensed Gravicite
 Control Box
 Cooking Pot
 Corn
@@ -101,14 +129,22 @@ Crown of Clover
 Crunchy Omelette
 Crystal Pickaxe
 Cucumber
+Deep Ocean Ring
 Drum
 Eggplant
+Embershard
+Embershard Ring
+Embershard Staff
 Emerald
 Emerald Ring
 Energy Coil
 Engine
+Esperium
+Esperium Band
 Essence of Slime
 Explosive
+Fairy Crystal
+Fairy Ring
 Fancy Chair
 Fancy Clock
 Fancy Drum
@@ -119,17 +155,26 @@ Fancy Sword
 Fancy Table
 Fancy Violin
 Feed
+Fenrir's Coin
 Festive Eggnog
 Fire Ant Farm
+Fire Crystal
 Fish Bones
 Fishing Net
 Flamejack
 Flarefin
+Flarite
+Flarite Ring
 Flier
 Flour
 Fluorifish
 Flying Machine
 Flywheel
+Fossilized Frog
+Fossilized Leaf
+Fossilized Print
+Fossilized Shell
+Fossilized Viper
 Frost Shield
 Frosteye
 Frozen Angelfish
@@ -164,6 +209,7 @@ Fuzzy Trout
 Gainite
 Garnet
 Garnet Ring
+Garnet Walking Stick
 Gazebo
 Ghost Jelly
 Giant Squid
@@ -204,12 +250,18 @@ Goldjack
 Goldray
 Grand Piano
 Grape Juice
+Gravicite
+Gravity Orb
 Green Barracuda
 Green Butterfly
 Green Chromis
 Green Cloak
 Green Diary
 Green Dye
+Green Gel
+Green Halite
+Green Halite Earrings
+Green Halite Ring
 Green Jellyfish
 Green Parchment
 Green Scarf
@@ -220,10 +272,12 @@ Green Twine
 Hammer
 Handsaw
 Heart Necklace
+Heavy Pickaxe
 Hickory Omelette
 Holiday Wreath
 Hops
 Horn Canteen
+Horn Powder
 Horseshoe
 Hot Potato
 Hourglass
@@ -236,12 +290,15 @@ Iron Ring
 Jack-o-lantern
 Jade
 Jade Charm
+Jadeite
 Jellyfish
+Joyful Ring
 Jumbo Fish
 Kill Switch
 King Apple
 Ladder
 Lantern
+Lapis Lazuli
 Large Net
 Largemouth Bass
 Lava Sphere
@@ -264,6 +321,7 @@ Machine Press
 Mackerel
 Magenta Growth
 Magicite
+Magmastone
 Magnifying Glass
 Magus Hat
 Marlin
@@ -273,6 +331,11 @@ MIAB
 Milk Carton
 Mini Slime Squid
 Molasses
+Monarch Butterfly
+Mossroom
+Mossy Bone
+Mossy Cog
+Mossy Stone
 Mulberry Snapper
 Mushroom
 Mushroom Paste
@@ -281,17 +344,22 @@ Mussel
 Mystic Ring
 Nailed Board
 Neigh
+Nightshade Cap
 Oak Table
+Ocean Stone
+Oceanite
 Octopus
 Onion
 Onion Soup
 Orange Butterfly
+Orange Calcite
 Orange Dye
 Orange Juice
 Orange Scarf
 Orange Shirt
 Orange Twine
 Orcafish
+Ornate Anvil
 Over The Moon
 Pair of Boots
 Peach Juice
@@ -300,19 +368,27 @@ Pearl
 Pearl Necklace
 Peas
 Peppers
+Peridot
+Pestle and Mortar
 Pickaxe
 Pie Pan
 Pine Board
 Pine Shavings
 Pine Shelf
 Pine Tree
+Pinecone Bird Feeder
 Pink Jelly
 Pitchfork
+Pitviper Tail
 Piñata Whop Stick
+Plum Goblet
+Plum Iron
+Plum Ore
 Plumbfish
 Polished Boot
 Potato
 Potato Battery
+Potion of Clarity
 Power Monitor
 Propeller Hat
 Puffer
@@ -323,12 +399,17 @@ Purple Butterfly
 Purple Butterfly Fish
 Purple Diary
 Purple Dye
+Purple Mushroom
 Purple Parchment
 Purple Shirt
 Purple Twine
+Pyredrop
+Pyrite
 QED Cell
 Quandary Chowder
+Quench
 Radish
+Ram Skull 01
 Re'taw Pail
 Reaver Claw
 Red Berry Pie
@@ -337,6 +418,7 @@ Red Butterfly
 Red Diamond Fish
 Red Diary
 Red Dye
+Red Mushrooms
 Red Parchment
 Red Scarf
 Red Shield
@@ -345,7 +427,11 @@ Red Starfish
 Red Trunk
 Red Twine
 Red Velvet Cake
+Redbrook Patch
 Redgill
+Refined Esperium
+Refined Plum Ore
+Reforged Sword
 Reinforced Helmet
 Rice
 Rope
@@ -354,6 +440,7 @@ Ruby Coral
 Ruby Fish
 Ruby Ring
 Rucksack
+Rune Shard
 Runestone 01
 Runestone 02
 Runestone 03
@@ -374,6 +461,7 @@ Runestone 17
 Runestone 18
 Runestone 19
 Runestone 20
+Runestone 27
 Sail Cloth
 Salt
 Sand
@@ -395,6 +483,7 @@ Shimmer Ring
 Shimmer Stone
 Shimmer Topaz
 Shinefish
+Shining Earrings
 Ship in a Bottle
 Ship Mast
 Shovel
@@ -410,6 +499,8 @@ Small Prawn
 Snow Globe
 Snow Shoes
 Snowman
+Sol Orb
+Sparkle Dust
 Speckled Grouper
 Spiked Shell
 Spiky Bracelet
@@ -418,6 +509,7 @@ Splatfish
 Spooky Scarecrow
 Spool of Copper
 Spoon
+Stained Glass Art
 Starfish
 Steel
 Steel Buckle
@@ -428,7 +520,9 @@ Steel Wire
 Step Ladder
 Stingray
 Stone Jelly
+Stone Shell
 Strong Paste
+Strong Wire
 Sturdy Bow
 Sturdy Box
 Sturdy Pickaxe
@@ -439,9 +533,12 @@ Sugar Cube
 Sunfish
 Sunflower
 Sunflower Oil
+Sunstone
+Sunstone Ring
 Swordfish
 Tie Dye Scarf
 Tin Can
+Tin Goblet
 Tin Scraps
 Toilet Paper
 Tomato
@@ -453,11 +550,16 @@ Twilight Squid
 Twine
 Ugly Buddy Sweater
 Unicorn Shell
+Unpolished Aquacite
+Unpolished Flarite
+Unpolished Peridot
+Unpolished Pyrite
 Unpolished Shimmer Stone
 Unrefined Sugar
 Valentines Card
 Valve
 Veggie Juice
+Veinshard
 Wagon Wheel
 Water Lily
 Watermelon
@@ -479,6 +581,7 @@ Wooden Barrel
 Wooden Bow
 Wooden Box
 Wooden Button
+Wooden Footstool
 Wooden Plank
 Wooden Shield
 Wooden Spear
