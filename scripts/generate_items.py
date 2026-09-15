@@ -1,20 +1,17 @@
 """Generate the item-name catalogues served to the web UI's goal pickers.
 
-Writes two files under ``web/solverapp/static/solverapp/`` (Django's
-staticfiles finder serves anything dropped there with no settings change):
+Writes two files under the repo-root ``data/`` directory, which
+``farmweb.settings.STATICFILES_DIRS`` serves at ``/static/solverapp/``:
 
 * ``mastery_items.txt`` -- items the Mastery goal picker suggests. Sourced
   from a single snapshot, the newest ``mydata/mastery-*.txt`` file: the
   user's own mastery history already tracks nearly every masterable item, so
   one snapshot is enough, and unioning the CSVs would pull in plenty of
-  non-masterable items (fish, chest drops, ...). No longer web-only: the
-  ascension mode's candidate universe is this same catalogue, so the
-  CANONICAL copy now lives at the repo root alongside the other solver data
-  files (``main.load_mastery_catalogue``); the static one is written from
-  the same set purely so the browser can fetch it (app.js hits the static
-  URL at runtime, and a plain text file can't carry a "generated" comment
-  without the pickers treating it as an item -- keep the two in sync by
-  always regenerating with this script, never editing either by hand).
+  non-masterable items (fish, chest drops, ...). Not web-only: the ascension
+  mode's candidate universe is this same file
+  (``main.load_mastery_catalogue``). A plain text file can't carry a
+  "generated" comment without the pickers treating it as an item, so always
+  regenerate with this script, never edit by hand.
 * ``items.txt`` -- items the Item goal picker suggests. The broad union of
   every ``mydata/mastery-*.txt``/``inventory-*.txt`` snapshot plus every
   per-domain data file (crops, seed drops, fishing, exploring, pets,
@@ -40,7 +37,7 @@ import crafting  # noqa: E402
 import parsing  # noqa: E402
 
 MYDATA_DIR = REPO_ROOT / "mydata"
-STATIC_DIR = REPO_ROOT / "web" / "solverapp" / "static" / "solverapp"
+DATA_DIR = REPO_ROOT / "data"
 
 
 def _latest_dated_file(directory: Path, prefix: str) -> Path | None:
@@ -105,14 +102,9 @@ def broad_items() -> set[str]:
 
 
 def main() -> None:
-    STATIC_DIR.mkdir(parents=True, exist_ok=True)
-    masterable = mastery_items()
-    # Canonical solver data file (the ascension candidate universe) plus the
-    # web picker's static copy, always written together -- see the module
-    # docstring's sync note.
-    _write_sorted(REPO_ROOT / "mastery_items.txt", masterable)
-    _write_sorted(STATIC_DIR / "mastery_items.txt", masterable)
-    _write_sorted(STATIC_DIR / "items.txt", broad_items())
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _write_sorted(DATA_DIR / "mastery_items.txt", mastery_items())
+    _write_sorted(DATA_DIR / "items.txt", broad_items())
 
 
 if __name__ == "__main__":

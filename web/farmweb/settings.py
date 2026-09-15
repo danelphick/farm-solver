@@ -66,3 +66,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The item catalogues (mastery_items.txt, items.txt) live in the repo-root
+# data/ directory, shared with the solver, and are served under the app's own
+# static prefix -- /static/solverapp/items.txt -- which catalogue.js fetches.
+STATICFILES_DIRS = [("solverapp", BASE_DIR.parent / "data")]

@@ -1,0 +1,3935 @@
+Bone Broth
+21,438
+
+Onion Soup
+13,830
+
+Breakfast Boost
+4,221
+
+Shrimp-a-Plenty
+2,310
+
+Crunchy Omelette
+2,095
+
+Over The Moon
+1,630
+
+Cabbage Stew
+1,528
+
+Festive Eggnog
+1,261
+
+Acorn Pie
+1,152
+
+Neigh
+692
+
+Quandary Chowder
+669
+
+Red Velvet Cake
+588
+
+Lemon Cream Pie
+507
+
+Sea Pincher Special
+269
+
+Lemon Seltzer
+233
+
+Cat's Meow
+214
+
+Mushroom Stew
+177
+
+Happy Cookies
+52
+
+Spooky Cookies
+48
+
+Lovely Cookies
+37
+
+Spooky Pie
+32
+
+Gravy Boat
+26
+
+Fish and Chips
+14
+
+Board
+52,190
+
+Iron
+52,190
+
+Bucket
+52,190
+
+Wood
+52,190
+
+Wooden Plank
+52,190
+
+Nails
+52,190
+
+Stone
+52,190
+
+Wooden Barrel
+52,190
+
+Green Parchment
+52,190
+
+Looking Glass
+52,190
+
+Lemon Quartz
+52,190
+
+White Parchment
+52,190
+
+Sweet Root
+52,190
+
+Iron Ring
+52,190
+
+Bottle Rocket
+52,190
+
+Explosive
+52,190
+
+Arrowhead
+52,190
+
+Straw
+52,190
+
+Iron Cup
+52,190
+
+Steel
+52,190
+
+Twine
+52,190
+
+Strange Letter
+52,190
+
+Iced Tea
+52,190
+
+Rope
+52,190
+
+Sandstone
+52,190
+
+Green Dye
+52,190
+
+Horseshoe
+52,190
+
+Ladder
+52,190
+
+Feed
+52,190
+
+Flour
+52,190
+
+Shiny Beetle
+52,190
+
+Wagon Wheel
+52,190
+
+Yarn
+52,190
+
+Tea Leaves
+52,190
+
+Butter Churn
+52,190
+
+Nailed Board
+52,190
+
+Awl
+52,190
+
+Pine Shelf
+52,190
+
+Brown Dye
+52,190
+
+Tin Scraps
+52,190
+
+Chisel
+52,190
+
+Slimestone
+52,170
+
+Red Berries
+52,170
+
+Thorns
+52,170
+
+Square Key
+52,170
+
+Scrap Wire
+52,170
+
+Green Scarf
+52,150
+
+Blue Twine
+52,150
+
+Green Twine
+52,150
+
+Brown Twine
+52,150
+
+Joyful Ring
+52,130
+
+Orange Twine
+52,125
+
+Green Diary
+52,110
+
+Green Shield
+52,110
+
+Glass Jar
+52,103
+
+Giant Centipede
+52,095
+
+Wooden Mask
+52,090
+
+Scissors
+52,090
+
+Belt Drive
+52,090
+
+Wooden Button
+52,090
+
+Re'taw Pail
+52,090
+
+Bamboo Rope
+52,090
+
+Bamboo Flute
+52,090
+
+Sour Root
+52,083
+
+Kill Switch
+52,070
+
+Steel Buckle
+52,070
+
+Wooden Table
+52,068
+
+Treasure Chest
+52,050
+
+Chum
+52,050
+
+Wrench
+52,050
+
+Brown Cloak
+52,050
+
+Wooden Box
+52,046
+
+Wooden Spear
+52,031
+
+Fancy Pipe
+52,030
+
+Ruby Scorpion
+51,977
+
+Frog
+51,973
+
+Purple Diary
+51,970
+
+Garnet
+51,968
+
+Wooden Sword
+51,954
+
+Yellow Purse
+51,930
+
+Orange Scarf
+51,927
+
+Amethyst Necklace
+51,880
+
+Shimmer Topaz
+51,840
+
+Blue Parchment
+51,840
+
+Pickaxe
+51,825
+
+Sturdy Box
+51,780
+
+Broom
+51,750
+
+Energy Coil
+51,710
+
+Pearl Necklace
+51,700
+
+MIAB
+51,682
+
+Candy
+51,610
+
+Lollipop
+51,610
+
+Fancy Pan Flute
+51,610
+
+Purple Parchment
+51,608
+
+Blue Gel
+51,595
+
+Spectacles
+51,591
+
+Gold Garnet Ring
+51,590
+
+Dice
+51,589
+
+Orange Shirt
+51,587
+
+Brown Bag
+51,560
+
+Aquamarine Ring
+51,540
+
+Essence of Slime
+51,529
+
+Garnet Ring
+51,520
+
+Pitchfork
+51,500
+
+Yellow Bag
+51,490
+
+Yellow Scarf
+51,487
+
+Wooden Shield
+51,449
+
+Blue Purse
+51,440
+
+Blue Diary
+51,380
+
+Red Diary
+51,380
+
+Gold Emerald Ring
+51,252
+
+Mystic Ring
+51,250
+
+Red Shield
+51,250
+
+White Scarf
+51,234
+
+Black Scarf
+51,190
+
+Red Parchment
+51,170
+
+Jade Charm
+51,154
+
+Spiky Bracelet
+51,152
+
+Purple Bag
+51,150
+
+Honey
+51,100
+
+Seaweed
+51,070
+
+Sturdy Shield
+51,050
+
+Axe
+51,048
+
+Red Trunk
+51,015
+
+Bogslug
+50,942
+
+Magnifying Glass
+50,903
+
+White Shirt
+50,860
+
+Snail
+50,561
+
+Yellow Dye
+50,408
+
+Black Powder
+50,345
+
+Lantern
+50,302
+
+Pine Board
+50,164
+
+Sturdy Sword
+50,050
+
+Eggs
+49,995
+
+Tin Can
+49,910
+
+Emerald Ring
+49,670
+
+Frost Shield
+49,645
+
+Broken Pipe
+49,575
+
+Wooden Bow
+49,566
+
+Herbs
+49,529
+
+Hourglass
+49,415
+
+Fern Leaf
+49,304
+
+Sea Dragon
+49,300
+
+Black Shirt
+49,245
+
+Purple Shirt
+49,214
+
+Pestle and Mortar
+49,155
+
+Unpolished Garnet
+49,075
+
+Cannon
+49,046
+
+Purple Dye
+48,873
+
+Pie Pan
+48,790
+
+Mudcap
+48,592
+
+Shimmer Ring
+48,573
+
+Green Shirt
+48,547
+
+Crossbow
+48,480
+
+Taffy
+48,390
+
+Candy Cane
+48,384
+
+Candy Roll
+48,384
+
+Ruby Ring
+48,135
+
+Beary Squishies
+48,098
+
+Strawberry Good Goods
+47,883
+
+Fire Ant Farm
+47,767
+
+Grand Piano
+47,632
+
+Canoe
+47,589
+
+Red Twine
+47,550
+
+Purple Twine
+47,530
+
+Yellow Twine
+47,450
+
+B for Buddies
+47,428
+
+Seashell Necklace
+47,277
+
+Skeleton Key
+47,273
+
+Wizard Hat
+47,120
+
+Red Shirt
+46,743
+
+Shovel
+46,156
+
+Mushroom Paste
+46,142
+
+Amethyst
+46,080
+
+Valve
+46,015
+
+Mayonnaise
+45,990
+
+Gold Diamond Ring
+45,788
+
+Reinforced Helmet
+45,710
+
+4-leaf Clover
+45,699
+
+Old Boot
+45,484
+
+Hammer
+45,443
+
+Cheese
+45,349
+
+Glass Bottle
+45,288
+
+Grape Juice
+45,276
+
+Valentines Card
+44,863
+
+Sunflower Oil
+44,847
+
+White Purse
+44,846
+
+Linked Lantern
+44,753
+
+Black Purse
+44,556
+
+Green Top Hat
+44,422
+
+Water Lily
+44,215
+
+Fancy Violin
+43,806
+
+Engine
+43,676
+
+Milk Carton
+43,626
+
+Lemon Quartz Ring
+43,356
+
+Sturdy Bow
+43,299
+
+Crab Claw
+43,242
+
+Fancy Guitar
+43,217
+
+Heart Necklace
+43,045
+
+Chattering Teeth
+42,920
+
+Leather Waterskin
+42,269
+
+Cooking Pot
+42,225
+
+Leather Diary
+42,110
+
+Pear Grease
+41,813
+
+Dragonfly
+41,423
+
+Salt
+41,225
+
+Blue Shirt
+41,064
+
+Bamboo Chair
+40,884
+
+Orange Dye
+40,659
+
+Magus Hat
+40,557
+
+Sand
+40,488
+
+Fancy Table
+40,231
+
+Sinkroot
+40,053
+
+Pinecone Bird Feeder
+39,186
+
+Holiday Wreath
+38,805
+
+Ugly Buddy Sweater
+38,673
+
+Handsaw
+38,637
+
+Christmas Tree
+38,311
+
+Unpolished Ruby
+38,154
+
+Rucksack
+37,827
+
+Red Brick
+37,709
+
+Butter
+37,432
+
+Witch Hat
+37,425
+
+Bat Wing
+37,410
+
+Unpolished Jade
+37,342
+
+Pumpkin Spiced Milk
+36,858
+
+Spool of Copper
+36,785
+
+Pirate Flag
+36,534
+
+Eye Patch
+36,168
+
+Potato Battery
+35,930
+
+Bone Pickaxe
+35,826
+
+Blue Butterfly
+35,790
+
+Toilet Paper
+35,663
+
+Bird Egg
+35,600
+
+Gold Lemon Quartz Ring
+35,557
+
+Gold Aquamarine Ring
+35,232
+
+Spoon
+35,098
+
+Gazebo
+34,741
+
+Metal Spool
+34,624
+
+Pyredrop
+34,044
+
+Flywheel
+33,772
+
+Green Cloak
+33,744
+
+Amber Cane
+33,408
+
+Fancy Drum
+33,312
+
+Small Gear
+33,296
+
+Barbed Wire
+33,177
+
+Grasshopper
+33,151
+
+Spooky Scarecrow
+33,004
+
+Candy Corn
+32,928
+
+Oak Table
+32,640
+
+Snow Globe
+32,495
+
+Bamboo Fence
+31,494
+
+Tin Goblet
+31,448
+
+Leather Belt
+30,960
+
+Purple Ornament
+30,509
+
+Orange Ornament
+30,505
+
+Yellow Ornament
+30,491
+
+Red Ornament
+30,467
+
+Blue Ornament
+30,448
+
+Green Ornament
+30,432
+
+Leather Helmet
+30,100
+
+Star
+29,554
+
+Yellow Butterfly
+29,439
+
+Monster Skull
+29,225
+
+Blue Dye
+29,112
+
+Gold Feather
+29,081
+
+Pirate Bandana
+28,969
+
+Cyclops Spider
+28,827
+
+Mittens
+28,826
+
+Aquamarine
+28,750
+
+Fancy Sword
+28,728
+
+Redbrook Patch
+28,699
+
+Fairy Crystal
+28,447
+
+Small Key
+28,395
+
+Veggie Juice
+27,974
+
+Feathers
+27,641
+
+Large Net
+27,422
+
+Acorn Butter
+27,040
+
+Green Butterfly
+26,573
+
+Red Scarf
+26,475
+
+Esperium Band
+26,289
+
+Orange Gecko
+26,181
+
+Sewing Needle
+25,776
+
+Purple Butterfly
+25,499
+
+Steel Wire
+24,786
+
+Popcorn
+24,615
+
+Wine
+24,480
+
+Glacierstone
+23,567
+
+Bouquet of Flowers
+23,514
+
+Glass Eyes
+22,671
+
+Unrefined Sugar
+22,462
+
+Black Twine
+21,774
+
+Horn Canteen
+21,699
+
+Small Spring
+21,591
+
+Corn Husk Doll
+21,486
+
+Control Box
+20,754
+
+Black Shield
+20,084
+
+Ship Mast
+19,169
+
+QED Cell
+18,768
+
+Black Cloak
+18,554
+
+Shark Tooth
+18,391
+
+Fruit Punch
+17,774
+
+Shimmer Quartz
+17,597
+
+Red Dye
+17,591
+
+Yellow Shirt
+17,554
+
+Orange Butterfly
+17,210
+
+White Twine
+16,784
+
+Black Bag
+16,385
+
+Re'taw
+16,365
+
+Small Bolt
+16,263
+
+Machine Part
+15,816
+
+Ancient Coin
+15,481
+
+Block of Wood
+15,459
+
+Machine Press
+15,207
+
+Wood Planer
+15,051
+
+Horn Powder
+15,035
+
+Red Butterfly
+14,867
+
+Acid Extract
+14,826
+
+Flying Machine
+14,380
+
+Witch's Broom
+14,285
+
+Tie Dye Scarf
+13,875
+
+Magna Quartz
+13,827
+
+White Dye
+13,792
+
+Sporefly
+13,490
+
+Basic Pillow
+13,446
+
+Gouda
+13,331
+
+Plum Goblet
+13,191
+
+Gold Feed
+13,057
+
+Magicite
+12,682
+
+Soap
+12,531
+
+Fireworks
+12,464
+
+Bell
+12,443
+
+Pine Shavings
+12,069
+
+Spiked Shell
+11,903
+
+Briomine
+11,588
+
+Leather Bag
+11,473
+
+Sunstone
+11,416
+
+Gold Leaf
+11,288
+
+Bamboo Trellis
+11,034
+
+Gold Jade Ring
+10,965
+
+Shimmer Stone
+10,890
+
+Egyptian Necklace
+10,890
+
+Deep Ocean Ring
+10,802
+
+Fancy Clock
+10,432
+
+White Cloak
+10,182
+
+Pocket Watch
+10,022
+
+Steel Plate
+10,022
+
+Gold Ruby Ring
+10,008
+
+Steel Vise
+9,964
+
+Garnet Walking Stick
+9,854
+
+Calmine Lotion
+9,349
+
+Aquacite Ring
+9,264
+
+Bone 02
+9,241
+
+Pine Cone
+9,154
+
+Cutlass
+8,816
+
+Quench
+8,767
+
+Fancy Chair
+8,052
+
+Embershard Staff
+8,019
+
+Coal
+8,005
+
+Snowball
+7,899
+
+Fancy Box
+7,770
+
+Green Halite Ring
+7,755
+
+Piñata Whop Stick
+7,637
+
+Rubber Duckie
+7,630
+
+Power Monitor
+7,573
+
+Unicorn Shell
+7,485
+
+Sturdy Pickaxe
+7,284
+
+Propeller Hat
+7,175
+
+Ornate Anvil
+7,171
+
+Carved Rhino
+7,071
+
+Swamp Algae
+7,011
+
+White Truffle
+6,734
+
+Steak
+6,730
+
+Event Token
+6,667
+
+Treasure Key
+6,628
+
+Green Halite Earrings
+6,349
+
+Sparkle Dust
+6,262
+
+Carbon Sphere
+6,261
+
+White Flowers
+6,213
+
+Ocean Stone
+6,158
+
+Horned Beetle
+6,153
+
+Crown of Clover
+6,120
+
+Teapot
+6,066
+
+Bone 03
+5,812
+
+Pink Jelly
+5,628
+
+Wax Candle
+5,589
+
+Red Flowers
+5,567
+
+Fossilized Frog
+5,359
+
+Polished Boot
+5,321
+
+Yule Goat
+5,312
+
+Emerald
+5,296
+
+Esperium
+5,220
+
+Strong Paste
+5,217
+
+Small Screw
+5,035
+
+Sail Cloth
+5,002
+
+Carved Squirrel
+4,997
+
+Ruby
+4,714
+
+Fossilized Print
+4,651
+
+Bright Lantern
+4,610
+
+Ancient Bird Fossil
+4,607
+
+Blue Milk
+4,484
+
+Stone Shell
+4,403
+
+Orange Flowers
+4,387
+
+Crystal Pickaxe
+4,386
+
+Monarch Butterfly
+4,356
+
+Yellow Flowers
+4,354
+
+Carved Owl
+4,302
+
+Freaky Picture
+4,249
+
+Spider
+4,022
+
+Carved Rabbit
+3,958
+
+Sugar Cube
+3,952
+
+Fossilized Leaf
+3,940
+
+Fire Crystal
+3,887
+
+Snow Shoes
+3,882
+
+Captains Log
+3,876
+
+Carved Warthog
+3,867
+
+Jadeite
+3,850
+
+Ram Skull 01
+3,731
+
+Ancient Ram Fossil
+3,249
+
+Steel Pickaxe
+3,212
+
+Mug of Beer
+3,119
+
+Carved Camel
+3,050
+
+Brown Sugar
+3,027
+
+Carved Moose
+3,014
+
+Transistor
+3,010
+
+Arnold Palmer
+3,003
+
+Fuzzy Chick 03
+2,962
+
+Potion of Clarity
+2,948
+
+Pitviper Tail
+2,883
+
+Condensed Gravicite
+2,838
+
+Heart Necklace Right Piece
+2,812
+
+Apple Cider
+2,807
+
+Ancient Pickaxe
+2,744
+
+Purple Mushroom
+2,717
+
+Plum Ore
+2,592
+
+Bone Fragments
+2,544
+
+Cooked Fish
+2,524
+
+Milk
+2,514
+
+Strong Wire
+2,367
+
+Carved Bear
+2,349
+
+Bird Skull 01
+2,252
+
+Bone 04
+2,224
+
+Peach Juice
+2,171
+
+Calmine Composite
+2,149
+
+Sunstone Ring
+2,088
+
+Cave Paste
+2,079
+
+Snowman
+2,052
+
+Gold Ring
+2,018
+
+Fossilized Shell
+1,994
+
+Refined Esperium
+1,978
+
+Witch's Brew
+1,937
+
+Reforged Sword
+1,894
+
+Cave Mushroom
+1,809
+
+Teddy Bear
+1,801
+
+Barnacle Shell
+1,741
+
+Magna Core
+1,740
+
+Fairy Ring
+1,734
+
+Embershard Ring
+1,733
+
+Molasses
+1,722
+
+Borgen Buck
+1,719
+
+Ghost Jelly
+1,707
+
+Flarite Ring
+1,684
+
+Bitten Apple
+1,658
+
+Bacon
+1,656
+
+Shamrock Milk
+1,647
+
+Veinshard
+1,642
+
+Blood Crystal
+1,641
+
+Sea Urchin
+1,633
+
+Fuzzy Chick 02
+1,570
+
+Potted Flower
+1,473
+
+Step Ladder
+1,469
+
+Fuzzy Chick 04
+1,433
+
+Honeysuckle
+1,432
+
+Mossroom
+1,409
+
+Rune Shard
+1,373
+
+Fall Leaves
+1,274
+
+Shining Earrings
+1,255
+
+Nightshade Cap
+1,251
+
+Gainite
+1,226
+
+Bomb
+1,192
+
+Hot Cocoa
+1,107
+
+Calmine Statue
+1,088
+
+Green Rubee
+1,080
+
+Raw Meat
+1,056
+
+Egg 05
+1,051
+
+Snowflakes
+1,040
+
+Green Gel
+981
+
+Mossy Cog
+962
+
+Piñata
+956
+
+Small Flute
+868
+
+Carved Squisquatch
+848
+
+Carved Chicken
+804
+
+King Apple
+744
+
+Broken Bangle
+738
+
+Gravity Orb
+679
+
+Black Truffle
+674
+
+Waffle
+660
+
+Egg of Life
+654
+
+Expired Ticket
+630
+
+Mossy Bone
+619
+
+Ship in a Bottle
+599
+
+Ghost Candy
+585
+
+Broken Sword
+527
+
+Carved Kitty
+518
+
+Carved Cow
+485
+
+Ancient Rune
+473
+
+Heavy Pickaxe
+470
+
+Pair of Boots
+452
+
+Oceanite
+422
+
+Pet Treat
+417
+
+Egg 03
+402
+
+Carved Fox
+400
+
+Fuzzy Chick 06
+388
+
+Carved Pig
+386
+
+Carved Dragon
+384
+
+Bone 05
+382
+
+Rudolph
+381
+
+Fenrir's Coin
+353
+
+Fossilized Viper
+348
+
+Cotton Candy
+335
+
+Carved Mouse
+322
+
+Mossy Stone
+309
+
+Piece 30
+303
+
+Jar of Pickles
+288
+
+Mini Marshmallows
+276
+
+Egg 12
+271
+
+Painite
+269
+
+Wooden Footstool
+268
+
+Green Halite
+257
+
+Silk
+255
+
+Refined Plum Ore
+250
+
+Pencil
+219
+
+Christmas Sweater
+210
+
+Cricket
+193
+
+Egg 11
+190
+
+Egg 04
+171
+
+Egg 02
+168
+
+Egg 09
+168
+
+Flarite
+167
+
+Egg 06
+157
+
+Egg 01
+156
+
+Egg 10
+155
+
+Egg 08
+143
+
+Donner
+136
+
+Apple Core
+134
+
+Mistletoe
+130
+
+Unpolished Aquacite
+130
+
+Gingerbread Man
+128
+
+Lapis Lazuli
+125
+
+Bone 06
+124
+
+Prancer
+120
+
+Egg 07
+119
+
+Red Berry Pie
+119
+
+Oak
+110
+
+Comet
+107
+
+Unpolished Pyrite
+104
+
+Fish Flakes
+102
+
+Cicada Shell
+100
+
+Buddy Doll
+96
+
+Raffle Ticket
+95
+
+Cicada
+93
+
+Calcifite
+86
+
+11th Leaf Centerpiece
+82
+
+Egg of Fire
+80
+
+Chocolate Bunny
+76
+
+Joker
+75
+
+Fuzzy Chick 10
+72
+
+Dasher
+71
+
+Cupid
+70
+
+Egg of Shadow
+68
+
+Fuzzy Chick 11
+68
+
+Corn Kabob
+67
+
+Acorn
+65
+
+Garlic
+65
+
+Dancer
+63
+
+Vixen
+62
+
+Thomas's Cup of PB
+62
+
+Egg of Space
+59
+
+Apple Ant
+57
+
+Blitzen
+55
+
+Jade
+54
+
+Spades
+50
+
+Egg of Tree
+50
+
+Planet Egg
+49
+
+Hearts
+47
+
+Egg of Light
+47
+
+Apple Turnover
+47
+
+Unpolished Peridot
+45
+
+Egg of Earth
+41
+
+Cogwheel
+40
+
+Whistle
+40
+
+Fuzzy Chick 05
+40
+
+Peridot
+39
+
+Gummy Globber
+37
+
+Fuzzy Chick 08
+37
+
+Wooden Pipe
+36
+
+Egg of Chaos
+36
+
+Ant Apple
+36
+
+PHR Voucher
+36
+
+Cooked Turkey
+35
+
+Travel Voucher
+34
+
+Baba Cola
+33
+
+Gingerbread House
+30
+
+Diamonds
+29
+
+Egg of Ages
+29
+
+Concord Grape Pie
+26
+
+Jester Buddy Doll
+26
+
+Day Off Voucher
+26
+
+Grapes
+25
+
+Egg of Water
+25
+
+Orange
+24
+
+Protein Bar
+23
+
+Lemon
+22
+
+Pumpkin Juice
+22
+
+Mana Scarab
+22
+
+Bouquet of Roses
+21
+
+Salt Rock
+20
+
+Taco
+20
+
+Blue Spritz
+20
+
+Egg of Air
+20
+
+Beach Umbrella
+20
+
+Adventure Buddy Doll
+20
+
+Maverick Chip
+20
+
+Glowing Lantern
+20
+
+Safety Pin
+19
+
+Spooky Doll
+19
+
+Spooky Slime
+19
+
+Heart Candies
+19
+
+Prune Juice
+18
+
+Fuzzy Chick 01
+18
+
+Fuzzy Chick 07
+18
+
+Bamboo
+18
+
+Apple
+17
+
+3-leaf Clover
+17
+
+Clubs
+17
+
+Honeycomb
+17
+
+Spring Cave Charm
+17
+
+Book of Spells
+16
+
+Fuzzy Chick 12
+16
+
+Thankful Notes
+15
+
+Holiday Garland
+15
+
+Highland Hollow Charm
+15
+
+Notebook
+14
+
+Calavera 01
+14
+
+Calavera 02
+14
+
+Piece of Cake
+14
+
+Tombstone
+14
+
+Cloth
+14
+
+Pie
+13
+
+Water Bottle
+13
+
+Fuzzy Chick 09
+13
+
+Sol Grotto Charm
+13
+
+Ember Caverns Charm
+13
+
+Lemonade
+12
+
+Sand Dollar
+12
+
+Peafowl Feather
+12
+
+Pizza Slice
+12
+
+Temple Voucher
+12
+
+Piece 11
+11
+
+Frozen Large Net
+11
+
+Gloorp
+11
+
+Paper Receipt
+10
+
+Onion Rings
+10
+
+Event Key
+10
+
+Lucky Spiral Belt
+10
+
+Party Hat
+10
+
+Safety Goggles
+10
+
+Lucky Cat Buddy Doll
+10
+
+Nebula Egg
+10
+
+Prickly Pear
+9
+
+Supply Voucher
+9
+
+Shark Jaws
+9
+
+Stone Fragment
+9
+
+Sun Egg
+9
+
+Fenrir's Den Charm
+9
+
+Mossrock Mine Charm
+9
+
+Purple Flower
+8
+
+Unpolished Emerald
+8
+
+Fire Ant
+8
+
+Scrap Metal
+8
+
+Bread
+8
+
+Reindeer Headband
+8
+
+Apple Slicer
+8
+
+Turkey Buddy Doll
+8
+
+Toothbrush
+7
+
+Nut Cracker Buddy
+7
+
+Snowman Buddy Doll
+7
+
+The Big One
+7
+
+Ice Scraper
+7
+
+Glyph Sphere
+7
+
+Santa Hat
+6
+
+Frozen Fishing Net
+6
+
+Frozen Bouquet
+6
+
+Boltonic Love Potion 4
+6
+
+Sand Shovel
+6
+
+Sand Castle Bucket
+6
+
+Consumption Belt
+6
+
+Two Hearts Belt
+6
+
+Bar of Silver
+6
+
+Piece 12
+6
+
+Sealed Letter
+5
+
+Shillelagh
+5
+
+Coconut
+5
+
+Rudolph Buddy Doll
+5
+
+Bunny Buddy Doll
+5
+
+Sunscreen
+5
+
+Sun Shades
+5
+
+Uncle Sam Buddy Doll
+5
+
+Moon Egg
+5
+
+Comet Egg
+5
+
+Bunny Ears
+4
+
+Onyx Scorpion
+4
+
+Pearl Berries
+4
+
+Mixed Nuts
+4
+
+Vampire Buddy Doll
+4
+
+Movember Buddy Doll
+4
+
+Tanooki Buddy Doll
+4
+
+Nirumdivar
+4
+
+Safety Mask
+4
+
+Apple Picker
+4
+
+Buddy Elf on a Shelf
+4
+
+Lucky Bacon
+4
+
+Black Hole Egg
+4
+
+Strange Mushroom
+3
+
+Pulley
+3
+
+Mark of Knowledge
+3
+
+Piece 03
+3
+
+Werewolf Buddy Doll
+3
+
+Krampus Buddy Doll
+3
+
+Frozen Buddy Doll
+3
+
+Cupid Buddy Doll
+3
+
+Gold Laurel
+3
+
+frank's Bunny Mask
+3
+
+Corn Buddy Doll
+3
+
+Party Horn
+3
+
+Smart Buddy Doll
+3
+
+Apple Belt
+3
+
+Mist Lily
+3
+
+Lovely Rose
+3
+
+Leprechaun Hat
+3
+
+Asteroid Egg
+3
+
+Garden Claw
+3
+
+Garden Trowel
+3
+
+Coconut Water
+3
+
+Stained Glass Art
+3
+
+Mushroom
+2
+
+Blue Feathers
+2
+
+Fishing Net
+2
+
+R.O.A.S.
+2
+
+Backstabbing Dagger
+2
+
+Carnevale
+2
+
+Peach
+2
+
+Desk Calendar
+2
+
+Fangs
+2
+
+Ghost Buddy Doll
+2
+
+Santa Buddy Doll
+2
+
+Hotdog Buddy Doll
+2
+
+School Buddy Doll
+2
+
+Apple Buddy Doll
+2
+
+Shadow Bloom
+2
+
+Scrap Cloth
+2
+
+Slime Buddy Doll
+2
+
+Safety Headgear
+2
+
+Robot Chicken
+2
+
+Detonator
+2
+
+Leather
+1
+
+Horn
+1
+
+Prism Shard
+1
+
+Ring of Renthisj
+1
+
+Star's Treasure Map
+1
+
+Wishbone Necklace
+1
+
+Gold Horseshoe
+1
+
+Sombrero
+1
+
+Copper Wire
+1
+
+Holger's Mushroom Stew
+1
+
+George's Onion Soup
+1
+
+Rosalie's Bone Broth
+1
+
+Thomas's Cat's Meow
+1
+
+Jill's Quandary Chowder
+1
+
+Vincent's Sea Pincher Special
+1
+
+Cecil's Shrimp-a-Plenty
+1
+
+Roomba's Over The Moon
+1
+
+Charles's Neigh
+1
+
+Lorn's Breakfast Boost
+1
+
+Fancy Shoe
+1
+
+Jack-o-key
+1
+
+Pumpkin Pie
+1
+
+Keyglobe
+1
+
+Cepathorf's Case
+1
+
+Frozen Playground Key
+1
+
+Bananas
+1
+
+Rosalie's Red Berry Pie
+1
+
+Rosalie's Concord Grape Pie
+1
+
+King Cake
+1
+
+Blue Flowers
+1
+
+Mariya's Hickory Omelette
+1
+
+Mariya's Crunchy Omelette
+1
+
+Piece 09
+1
+
+Baba Gec's Cabbage Stew
+1
+
+Anchor
+1
+
+Ship Wheel
+1
+
+Sling Blade
+1
+
+Green Apple
+1
+
+Belt of Commander Uteer
+1
+
+Velocity Belt
+1
+
+Belt of Truth
+1
+
+Buddy's Old Pirate Belt
+1
+
+Broken Memory Belt
+1
+
+Raptor Wrangler Belt
+1
+
+Utal's Sabre
+1
+
+QED Pack
+1
+
+Cleaver
+1
+
+Horseman's Belt
+1
+
+Owl Feather
+1
+
+Circuit Breaker Belt
+1
+
+Owl Guard Belt
+1
+
+Embershard
+1
+
+Unpolished Flarite
+1
+
+Santa's Travel Belt
+1
+
+Borgen's Dancing Belt
+1
+
+Certificate of Pepper Giving
+1
+
+Certificate of Carrot Giving
+1
+
+Certificate of Pea Giving
+1
+
+Certificate of Cucumber Giving
+1
+
+Certificate of Eggplant Giving
+1
+
+Certificate of Radish Giving
+1
+
+Certificate of Onion Giving
+1
+
+Certificate of Hops Giving
+1
+
+Certificate of Potato Giving
+1
+
+Certificate of Tomato Giving
+1
+
+Certificate of Leek Giving
+1
+
+Certificate of Watermelon Giving
+1
+
+Certificate of Corn Giving
+1
+
+Certificate of Cabbage Giving
+1
+
+Certificate of Pine Giving
+1
+
+Certificate of Pumpkin Giving
+1
+
+Certificate of Wheat Giving
+1
+
+Certificate of Broccoli Giving
+1
+
+Certificate of Cotton Giving
+1
+
+Certificate of Sunflower Giving
+1
+
+Certificate of Beet Giving
+1
+
+Certificate of Rice Giving
+1
+
+Kite Kite
+1
+
+Beach Towel
+1
+
+Buddy's Beach Ball
+1
+
+Belt of Freedom
+1
+
+YoYo
+1
+
+Strange Temple Necklace
+1
+
+Bird Key
+1
+
+Zombie Buddy Doll
+1
+
+Nut Cracker Buddy Doll
+1
+
+Mariya's Festive Eggnog
+1
+
+Fish Biscuit
+1
+
+Strange Key 01
+1
+
+Gary's Crushroom Key
+1
+
+Groundhog Buddy Doll
+1
+
+Leprechaun Buddy Doll
+1
+
+Banana Peel
+1
+
+Cockatrice Ether Source
+1
+
+Birthday Suit Buddy Doll
+1
+
+Fantastic Buddy Doll
+1
+
+Mermaid's Scale
+1
+
+Dino Buddy Doll
+1
+
+Vacation Buddy Doll
+1
+
+Mermaid's Necklace
+1
+
+Fishing Hook
+1
+
+Dewstar's Journal
+1
+
+Apple Ant Buddy Doll
+1
+
+George's Acorn Pie
+1
+
+Certificate of Sugar Cane Giving
+1
+
+Labubuddy Doll
+1
+
+Cursed Shield
+1
+
+Parade Balloon Buddy Doll
+1
+
+Gingerbread Buddy Doll
+1
+
+Wampa Buddy Doll
+1
+
+Swamp Puzzle
+1
+
+Bear Buddy Doll
+1
+
+Toga Buddy Doll
+1
+
+Lucky Eggs
+1
+
+Egg Buddy Doll
+1
+
+Slimed Buddy Doll
+1
+
+Thomas's Red Velvet Cake
+1
+
+Camping Buddy Doll
+1
+
+Crowbar
+1
+
+Cake
+1
+
+Gardening Buddy Doll
+1
+
+Blitz Buddy Doll
+1
+
+Croissant
+1
+
+Cid Buddy Doll
+1
+
+Grubs
+52,190
+
+Minnows
+52,190
+
+Gummy Worms
+52,190
+
+Mealworms
+52,190
+
+Drum
+52,190
+
+Yellow Perch
+52,190
+
+Worms
+52,190
+
+Trout
+52,171
+
+Largemouth Bass
+52,170
+
+Bluegill
+52,170
+
+Catfish
+52,170
+
+Conch Shell
+52,150
+
+Pearl
+52,150
+
+Clam Shell
+52,040
+
+Crappie
+51,885
+
+Sunfish
+51,350
+
+Shinefish
+51,330
+
+Globber
+51,306
+
+Bone Fish
+51,170
+
+Blue Catfish
+51,169
+
+Fish Bones
+50,630
+
+Gold Sea Crest
+49,931
+
+Goldgill
+48,933
+
+Gold Coral
+48,791
+
+Gold Catfish
+46,287
+
+Goldjack
+42,171
+
+Frozen Boot
+40,972
+
+Gold Drum
+40,490
+
+Frozen Starfish
+37,892
+
+Frozen Book
+37,605
+
+Gold Crab
+37,335
+
+Gold Sea Bass
+36,795
+
+Skipjack
+36,709
+
+Large Clam Shell
+36,420
+
+Frozen Feather
+36,127
+
+Gold Jelly
+36,004
+
+Goldray
+35,755
+
+Gold Trout
+35,099
+
+Goldfin
+34,781
+
+Anglerfish
+34,158
+
+Red Starfish
+33,026
+
+Clownfish
+32,817
+
+Gold Flier
+31,809
+
+Swordfish
+30,939
+
+Goldfish
+29,455
+
+Small Prawn
+27,129
+
+Mackerel
+27,121
+
+Frozen Wheel
+23,509
+
+Frozen Squid
+23,344
+
+Frozen Skull
+20,259
+
+Blue Tiger Fish
+18,810
+
+Red Diamond Fish
+18,582
+
+Swamp Gourd
+15,742
+
+Stingray
+14,237
+
+Green Chromis
+12,236
+
+Seahorse
+11,450
+
+Shrimp
+11,252
+
+Puffer
+11,204
+
+Blue Crab
+10,230
+
+Blue Shell
+8,064
+
+Lucky Trout
+7,885
+
+Marlin
+7,733
+
+Twilight Squid
+7,201
+
+Green Jellyfish
+6,859
+
+Frozen Crab Claw
+6,851
+
+Jellyfish
+6,037
+
+Flarefin
+4,635
+
+Fuzzy Trout
+4,325
+
+Sea Turtle
+4,023
+
+Fluorifish
+3,043
+
+Mussel
+2,968
+
+Ruby Fish
+2,685
+
+Gold Slimeback
+2,341
+
+Frozen Coin
+1,978
+
+Carp
+1,420
+
+Slimeback
+1,238
+
+Giant Squid
+1,070
+
+Magenta Growth
+961
+
+Flier
+959
+
+Splatfish
+951
+
+Bog Barnacle
+891
+
+Reaver Claw
+696
+
+Slime Egg Shell
+643
+
+Boghead Snapper
+554
+
+Blubberfish
+474
+
+Glass Eye Urchin
+445
+
+Slobster
+357
+
+Toxic Tendrils
+272
+
+Starfish
+210
+
+Lobster
+202
+
+Mini Slime Squid
+147
+
+Blue Sea Bass
+82
+
+Octopus
+29
+
+Mega Trout
+20
+
+Eggplant
+52,190
+
+Cucumber
+52,190
+
+Gold Cucumber
+52,170
+
+Peppers
+52,148
+
+Gold Peppers
+51,651
+
+Wheat
+51,303
+
+Gold Peas
+50,254
+
+Gold Eggplant
+50,159
+
+Rice
+49,812
+
+Leek
+49,539
+
+Gold Carrot
+48,986
+
+Peas
+47,672
+
+Hops
+47,238
+
+Onion
+45,476
+
+Carrot
+41,988
+
+Pumpkin
+41,868
+
+Tomato
+33,574
+
+Broccoli
+28,914
+
+Yellow Watermelon
+19,077
+
+Watermelon
+19,011
+
+Radish
+15,441
+
+Frozen Peas
+14,616
+
+Sugar Cane
+9,409
+
+Hot Potato
+7,813
+
+Potato
+7,316
+
+Pine Tree
+6,536
+
+Frozen Radish
+5,964
+
+Frozen Corn
+5,551
+
+Frozen Pine
+3,177
+
+Frozen Tomato
+3,029
+
+Frozen Hops
+2,879
+
+Jack-o-lantern
+2,728
+
+Inferno Pepper
+2,067
+
+Frozen Cabbage
+1,518
+
+Cabbage
+1,280
+
+Lucky Potato
+563
+
+Lucky Corn
+397
+
+Corn
+41
+
+Sunflower
+4
+
+Beet
+3
+
+Cotton
+2
+
+Corn Seeds
+52,190
+
+Mushroom Spores
+52,190
+
+Sunflower Seeds
+52,190
+
+Pine Seeds
+52,190
+
+Broccoli Seeds
+52,190
+
+Beet Seeds
+52,190
+
+Rice Seeds
+52,190
+
+Sugar Cane Seeds
+52,190
+
+Pepper Seeds
+52,190
+
+Wheat Seeds
+52,190
+
+Pumpkin Seeds
+52,190
+
+Cabbage Seeds
+52,190
+
+Watermelon Seeds
+52,190
+
+Leek Seeds
+52,190
+
+Potato Seeds
+52,190
+
+Hops Seeds
+52,190
+
+Onion Seeds
+52,190
+
+Radish Seeds
+52,190
+
+Cucumber Seeds
+52,190
+
+Pea Seeds
+52,190
+
+Carrot Seeds
+52,190
+
+Tomato Seeds
+52,190
+
+Eggplant Seeds
+52,190
+
+Cotton Seeds
+51,982
+
+Gold Pepper Seeds
+33,238
+
+Mega Beet Seeds
+30,207
+
+Gold Carrot Seeds
+20,424
+
+Mega Sunflower Seeds
+13,011
+
+Spring Seeds
+11,409
+
+Gold Pea Seeds
+9,136
+
+Gold Eggplant Seeds
+5,827
+
+Gold Cucumber Seeds
+2,304
+
+Mega Pine Seeds
+133
+
+Grab Bag 01
+47,170
+
+Grab Bag 08
+43,302
+
+Medium Chest 02
+32,891
+
+Grab Bag 02
+21,339
+
+Mystical Chest 02
+19,932
+
+Large Chest 02
+18,627
+
+Small Chest 01
+17,387
+
+Small Chest 02
+15,105
+
+Treat Bag 02
+14,523
+
+Large Chest 03
+11,046
+
+Large Chest 01
+10,119
+
+Medium Chest 03
+8,655
+
+Grab Bag 07
+4,860
+
+Void Bag 01
+4,144
+
+Treat Bag 03
+4,081
+
+Grab Bag 05
+2,814
+
+Mystical Chest 01
+2,718
+
+Grab Bag 04
+2,605
+
+Medium Chest 01
+2,030
+
+Grab Bag 03
+1,405
+
+Grab Bag 06
+1,103
+
+Mining Bag 01
+729
+
+Bag of Spring Seeds
+706
+
+Egg Basket
+395
+
+Corn Prize Bag
+340
+
+Bait Bag 01
+320
+
+Gold Seed Bag 01
+255
+
+Mining Bag 02
+250
+
+Treat Bag 01
+200
+
+Magical Egg Basket
+147
+
+Mining Bag 04
+115
+
+Mining Bag 05
+34
+
+Fuzzy Egg
+21
+
+Buddy Doll Bag 01
+18
+
+10 Gold
+15
+
+Galactic Egg Basket
+14
+
+Bug Bag 01
+10
+
+Buddy Doll Bag 02
+8
+
+Friendship Bag 01
+7
+
+Christmas Stocking
+7
+
+5 Gold
+3
+
+Treat Bag 06
+2
+
+Borgen Bag 01
+1
+
+Runestone 04
+49,259
+
+Runestone 09
+48,662
+
+Runestone 05
+46,919
+
+Runestone 17
+46,708
+
+Runestone 13
+46,398
+
+Runestone 12
+43,011
+
+Runestone 02
+42,544
+
+Runestone 18
+40,275
+
+Runestone 03
+37,346
+
+Runestone 14
+31,412
+
+Runestone 06
+30,758
+
+Runestone 01
+26,259
+
+Runestone 08
+17,044
+
+Runestone 15
+11,846
+
+Runestone 19
+9,758
+
+Runestone 11
+2,756
+
+Runestone 27
+602
+
+Runestone 10
+468
+
+Runestone 20
+370
+
+Runestone 07
+25
+
+Runestone Necklace
+15
+
+Runestone 16
+7
+
+Runestone 23
+1
+
+Book of Flora
+2
+
+Book of Skill
+2
+
+Book of Schemas
+1
+
+Book of Knots
+1
+
+Book of Clues
+1
+
+Book of Maps
+1
+
+Book of Time
+1
+
+Book of Insects
+1
+
+Book of Fish
+1
+
+Welcome Card
+9,310
+
+4th Birthday Card
+714
+
+Thank You Card
+107
+
+Christmas Card
+33
+
+Congratulations Card
+14
+
+You Rock Card
+13
+
+Buddy Loves You Card
+12
+
+Clawed Card
+11
+
+5th Birthday Card
+10
+
+3rd Birthday Card
+9
+
+Sappy Christmas Card
+9
+
+Good Luck Card
+9
+
+Happy Farmiversary Card
+4
+
+Capy Birthday Card
+3
+
+Get Well Soon Card
+3
+
+We Know Card
+1
+
+Happy Halloween Card
+1
+
+Lava Sphere
+48,270
+
+Inferno Sphere
+44,556
+
+Skull Coin
+34,900
+
+Pirate Hook
+27,644
+
+Compass
+14,603
+
+Magic Conch Shell
+13,619
+
+Raptor Egg
+11,326
+
+Diving Helmet
+10,305
+
+Winged Amulet
+9,923
+
+Langstaff Crest
+2,741
+
+Buddystone
+2,669
+
+Lavos Shard
+2,526
+
+U'ral Talisman
+1,373
+
+Strange Ring
+1,103
+
+Tribal Staff
+800
+
+Dragon Skull
+765
+
+Lima Bean
+680
+
+Model Ship
+249
+
+Frost Snapper Shell
+189
+
+Holiday Candles
+109
+
+Raptor Chicken Egg
+90
+
+Milk and Cookies
+89
+
+Gold Boot
+73
+
+Piece of Heart
+60
+
+Raptor Claw
+55
+
+Diamond
+35
+
+Heart Container
+27
+
+Pair of Gold Boots
+24
+
+Coderanger's Missing Semicolon
+19
+
+Firestream's Magic Wire
+19
+
+Gold Potato
+18
+
+Amber
+17
+
+Support's Ticket
+15
+
+Quicksilver's Ring
+15
+
+Apple Slice
+14
+
+Gold Shamrock
+12
+
+Tenfoo's Lost Sock
+10
+
+Mizzem's Daisies
+9
+
+Forcepath's Book of Quest Requirements
+8
+
+Boobun's Spray Bottle
+8
+
+Hensods's Bonsai
+7
+
+Schoolbook
+6
+
+Ramjoram's Mask
+5
+
+Ancient Stone Cicada
+4
+
+Cid's Stone Ale
+2
+
+Pink Ribbon
+2
+
+Beach Ball
+2
+
+World Globe
+2
+
+Gold Rudolph
+2
+
+Gold King Apple
+2
+
+Alien Fuzzy Chick
+2
+
+Koala's Corgi
+2
+
+Prism Shell
+2
+
+Tribal Mask
+1
+
+Mystical Staff
+1
+
+Flame Orb
+1
+
+Hockey Mask
+1
+
+Trident of Poseidon
+1
+
+Lucky Rabbit Foot
+1
+
+Tower Key
+1
+
+Opposition Hourglass
+1
+
+Mapping Compass
+1
+
+Gold Egg
+1
+
+Y73841 Detector
+1
+
+Runecorn
+1
+
+Water Orb
+1
+
+Brooch of the Bahltruvian Elite
+1
+
+Buddy Cushion
+1
+
+VIP Card
+1
+
+Sturdy Saw
+1
+
+Rune Dice
+1
+
+Keeper Trapper
+1
+
+Harpoon
+1
+
+Music Box
+1
+
+Notary Stamp
+1
+
+VIP Platinum Card
+1
+
+Skull-in-the-box
+1
+
+Hessian's Axe
+1
+
+Snowball Cup
+1
+
+Cursed Effigy
+1
+
+Corn Ball
+1
+
+Buddy's Sleeping Cap
+1
+
+Egg of Zeal
+1
+
+Lorn Bobblehead
+1
+
+Charles Bobblehead
+1
+
+Jill Bobblehead
+1
+
+Beatrix Bobblehead
+1
+
+Borgen Bobblehead
+1
+
+Buddy Bobblehead
+1
+
+CptThomas Bobblehead
+1
+
+Cecil Bobblehead
+1
+
+frank Bobblehead
+1
+
+Gary Bobblehead
+1
+
+Geist Bobblehead
+1
+
+George Bobblehead
+1
+
+Holger Bobblehead
+1
+
+Mariya Bobblehead
+1
+
+Mummy Bobblehead
+1
+
+Ric Ryph Bobblehead
+1
+
+Roomba Bobblehead
+1
+
+Rosalie Bobblehead
+1
+
+Star Bobblehead
+1
+
+Thomas Bobblehead
+1
+
+Vincent Bobblehead
+1
+
+Baba Bobblehead
+1
+
+Cid Bobblehead
+1
+
+Gold Mittens
+1
+
+Gold Wreath
+1
+
+Fungus Processing and You
+1
+
+Cockatrice Egg
+1
+
+Fuzzy Bunny
+1
+
+Blue Tang
+1
+
+Dream Nail
+1
+
+Sponge
+1
+
+List of Corn Puns
+1
+
+Corn Speedrun Trophy
+1
+
+Pearl Berry Jam
+1
+
+Santa Bobblehead
+1
+
+Gold Buddy Sweater
+1
+
+Goostav Bobblehead
+1
+
+Podcast Swear Jar
+1
+
+Slime Bucket
+1
+
+Chapiku
+1
+
+Astro Fuzzy Chick
+1
+
+Farmiversary Trophy 01
+1
+
+Farmiversary Trophy 02
+1
+
+Farmiversary Trophy 03
+1
+
+Farmiversary Trophy 04
+1
+
+Fuzzy Trophy
+1
+
+Blue Diamond Fish
+1
+
+Buddy Box
+1
+
+Goldfish Prize
+1
+
+Rocket Trophy
+1
+
+Roomba’s Locket
+1
+
+Veggie Juice Instruction Sheet
+1
+
+Mariya's Wheelbarrow
+1
+
+Cid's Spare Pickaxe
+1
+
+Gold Mega Trout
+1
+
+Meerif Crest
+1
+
+Pig Collar
+1

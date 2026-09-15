@@ -61,10 +61,12 @@ COPY --from=builder /app/.venv /app/.venv
 # The solver reads its game data from files sitting next to main.py, resolved
 # at import time via Path(__file__).with_name(...): crops.csv, exploring.csv,
 # fishing.csv, pets.csv, seed_drops.csv, openables.csv, tower.csv,
-# unmodelled.csv, workshop.txt, mastery_items.txt -- and webapi.py reads
+# unmodelled.csv, workshop.txt, data/mastery_items.txt -- and webapi.py reads
 # web_default_config.toml (WEB_CONFIG_PATH) the same way. So the root layer
-# needs the data files, not just the modules.
+# needs the data files, not just the modules. data/ also holds the goal
+# pickers' item catalogues, which collectstatic picks up via STATICFILES_DIRS.
 COPY *.py *.csv *.txt *.toml ./
+COPY data/ ./data/
 COPY deploy/ ./deploy/
 COPY web/ ./web/
 

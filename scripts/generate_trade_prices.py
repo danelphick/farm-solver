@@ -53,7 +53,7 @@ _NUMBER = re.compile(r"\d*\.?\d+")
 def solver_items() -> set[str]:
     """Every lower-cased item name the solver reasons about."""
     names: set[str] = set()
-    for line in (REPO_ROOT / "mastery_items.txt").read_text().splitlines():
+    for line in (REPO_ROOT / "data" / "mastery_items.txt").read_text().splitlines():
         if line.strip():
             names.add(line.strip().lower())
     workshop = crafting.load_workshop()

@@ -284,6 +284,7 @@ Chum
 Cicada
 Cicada Shell
 Cid Bobblehead
+Cid Buddy Doll
 Cid's Spare Pickaxe
 Cid's Stone Ale
 Cid’s Minecart 01
@@ -333,6 +334,7 @@ Crab Claw
 Cranberry Juice
 Crappie
 Cricket
+Croissant
 Crossbow
 Crowbar
 Crowfish
@@ -397,6 +399,7 @@ Eggplant
 Eggplant Seeds
 Eggs
 Egyptian Necklace
+Ember Caverns Charm
 Embershard
 Embershard Ring
 Embershard Staff
@@ -438,6 +441,7 @@ Farmiversary Trophy 04
 Feathers
 Feed
 Fenrir's Coin
+Fenrir's Den Charm
 Fern Leaf
 Festive Eggnog
 Fire Ant
@@ -591,6 +595,7 @@ Gold King Apple
 Gold Laurel
 Gold Leaf
 Gold Lemon Quartz Ring
+Gold Mega Trout
 Gold Mittens
 Gold Pea Seeds
 Gold Peas
@@ -808,6 +813,7 @@ Mega Cotton Seeds
 Mega Pine Seeds
 Mega Sunflower
 Mega Sunflower Seeds
+Mega Trout
 Mermaid's Necklace
 Mermaid's Scale
 Metal Spool
@@ -820,6 +826,8 @@ Mini Slime Squid
 Mining Bag 01
 Mining Bag 02
 Mining Bag 03
+Mining Bag 04
+Mining Bag 05
 Minnows
 Mist Lily
 Mistletoe
@@ -833,6 +841,7 @@ Monster Skull
 Moon Egg
 Moonbreaker
 Moonstone
+Mossrock Mine Charm
 Mossroom
 Mossy Bone
 Mossy Cog
@@ -1178,6 +1187,7 @@ Snowflakes
 Snowman
 Snowman Buddy Doll
 Soap
+Sol Grotto Charm
 Sol Orb
 Sombrero
 Sour Root
