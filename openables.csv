@@ -155,3 +155,19 @@ Bait Bag 01,random,Gummy Worms,10,250
 Bait Bag 01,random,Mealworms,10,250
 Bait Bag 01,random,Minnows,10,250
 Bait Bag 01,random,Worms,10,250
+Mining Bag 01,random,Bone Pickaxe,1,10
+Mining Bag 01,random,Pickaxe,1,10
+Mining Bag 02,random,Bone Pickaxe,10,15
+Mining Bag 02,random,Crystal Pickaxe,10,15
+Mining Bag 02,random,Explosive,10,15
+Mining Bag 03,random,Crystal Pickaxe,10,15
+Mining Bag 03,random,Explosive,10,15
+Mining Bag 04,random,Bomb,1,1
+Mining Bag 04,random,Steel Pickaxe,10,20
+Mining Bag 04,random,Sturdy Pickaxe,10,20
+Mining Bag 05,random,Bomb,1,5
+Mining Bag 05,random,Heavy Pickaxe,10,25
+Mining Bag 05,random,Steel Pickaxe,10,25
+Mining Bag 06,random,Ancient Pickaxe,10,25
+Mining Bag 06,random,Bomb,1,5
+Mining Bag 06,random,Heavy Pickaxe,10,25
