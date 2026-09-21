@@ -889,12 +889,18 @@ function positionGraphTooltip(tip, event) {
   tip.style.top = `${top}px`;
 }
 
+// Gold rounded to the nearest tenth, the way report.py's _gold_text prints it
+// ("1,234.5").
+function formatGold(value) {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 function hideGraphTooltip() {
   if (graphTooltipEl) graphTooltipEl.hidden = true;
 }
 
 function graphTooltipHtml(info) {
-  const gold = Math.round(info.net_gold).toLocaleString();
+  const gold = formatGold(info.net_gold);
   // info.index is the 0-based frontier position (webapi.render); +1 is the plan
   // number shown in the frontier table and what clicking the point selects.
   const rows = [

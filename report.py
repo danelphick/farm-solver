@@ -109,9 +109,29 @@ class Cell:
         return cls(f"{value:,}{suffix}", value)
 
     @classmethod
+    def gold(cls, value: float) -> Cell:
+        """Gold: rounded to the nearest tenth (see :func:`_gold`), "1,234.5 g"."""
+        return cls(f"{_gold_text(value)} g", _gold(value))
+
+    @classmethod
     def duration(cls, value: timedelta) -> Cell:
         """A span: the report's own "6d 5h 16m" for a human, whole seconds for JSON."""
         return cls(passive.format_duration(value), round(value.total_seconds()))
+
+
+def _gold(value: float) -> float:
+    """Gold as every report shows it: rounded to the nearest tenth.
+
+    Per-unit prices are fractions of a gold (``[trading]`` is quoted per 1000), so
+    a cheap mastery or buy costs a few gold and whole-gold rounding flattened it.
+    The ``+ 0.0`` folds a rounded ``-0.0`` into ``0.0``.
+    """
+    return round(value, 1) + 0.0
+
+
+def _gold_text(value: float) -> str:
+    """:func:`_gold`, comma-grouped with its one decimal: ``"1,234.5"``."""
+    return f"{_gold(value):,.1f}"
 
 
 def _cell_text(cell: str | Cell) -> str:
@@ -433,7 +453,7 @@ def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time")
         print("  (nothing left to master)")
     else:
         times = [passive.format_duration(r.time) for r in rows]
-        costs = [f"{round(r.gold):,} g" for r in rows]
+        costs = [f"{_gold_text(r.gold)} g" for r in rows]
         item_w = max(len("Item"), *(len(r.item) for r in rows))
         tier_w = max(len("Target"), *(len(r.tier) for r in rows))
         time_w = max(len("Time"), *(len(t) for t in times))
@@ -465,7 +485,7 @@ def markdown_mastery_costs(
     doc.para(_mastery_costs_caption(sort_key))
     if result.rows:
         rows = [
-            [r.item, r.tier, Cell.duration(r.time), Cell.num(round(r.gold), "g")]
+            [r.item, r.tier, Cell.duration(r.time), Cell.gold(r.gold)]
             for r in result.rows
         ]
         doc.table(["Item", "Target", "Time", "Cost"], rows)
@@ -509,19 +529,19 @@ def _net_gold_note(plan: optimizer.SourcingPlan) -> str:
     with none adds nothing. ``juice`` explains why net sits far below the gold cell
     (that gold still includes the juice buy; only net nets it out).
     """
-    banked = round(plan.surplus_gold)
-    stamina = round(plan.stamina_gold)
-    juice = 0 if plan.price_pumpkin_juice else round(plan.pumpkin_gold)
+    banked = _gold(plan.surplus_gold)
+    stamina = _gold(plan.stamina_gold)
+    juice = 0.0 if plan.price_pumpkin_juice else _gold(plan.pumpkin_gold)
     pieces = []
     if banked:
-        pieces.append(f"bank {banked:,}")
+        pieces.append(f"bank {_gold_text(banked)}")
     if juice:
-        pieces.append(f"juice {juice:,}")
+        pieces.append(f"juice {_gold_text(juice)}")
     if stamina:
-        pieces.append(f"stamina {stamina:,}")
+        pieces.append(f"stamina {_gold_text(stamina)}")
     if not pieces:
         return ""
-    return f" ({', '.join(pieces)}, net {round(plan.cost[1]):,})"
+    return f" ({', '.join(pieces)}, net {_gold_text(plan.cost[1])})"
 
 
 # Seconds per day, for turning `optimizer.efficiency`'s gold/second rate into a
@@ -545,9 +565,9 @@ def _efficiency_note(
     if eff is None:
         return ""
     dt = next_plan.time - plan.time
-    dgold = round(plan.cost[1] - next_plan.cost[1])
+    dgold = _gold_text(plan.cost[1] - next_plan.cost[1])
     per_day = round(eff * _SECONDS_PER_DAY)
-    return f"(saves {passive.format_duration(dt)} for {dgold:,} g = {per_day:,} g/day)"
+    return f"(saves {passive.format_duration(dt)} for {dgold} g = {per_day:,} g/day)"
 
 
 def _stamina_units(plan: optimizer.SourcingPlan, prices: dict[str, float] | None) -> float:
@@ -560,13 +580,13 @@ def _print_stamina_cost(
     plan: optimizer.SourcingPlan, prices: dict[str, float] | None
 ) -> None:
     """Text ``Stamina (opportunity cost)`` section, skipped when the cost rounds to 0."""
-    if prices is None or round(plan.stamina_gold) < 1:
+    if prices is None or not _gold(plan.stamina_gold):
         return
     units = _stamina_units(plan, prices)
     print("\nStamina (opportunity cost):")
     print(
         f"  {round(units):,} banked/passive stamina"
-        f" = {round(plan.stamina_gold):,} g (at Orange-Juice value)"
+        f" = {_gold_text(plan.stamina_gold)} g (at Orange-Juice value)"
     )
 
 
@@ -708,7 +728,7 @@ def _svg_plot(
         lines = [f"Plan {i + 1}", f"{series.x_label}: {_format_axis_value(series.x_label, x)}"]
         if i < len(plans):
             plan = plans[i]
-            lines.append(f"Net gold: {round(plan.cost[1]):,} g")
+            lines.append(f"Net gold: {_gold_text(plan.cost[1])} g")
             lines.append(f"Time: {passive.format_duration(plan.time)}")
         circles.append(
             f'<circle class="pt" data-plan-index="{i}" cx="{px(x):.1f}" cy="{py(y):.1f}" r="5">'
@@ -857,10 +877,13 @@ def print_frontier(
         gold = ""
         if prices is not None:
             if golds is not None:
-                buy, passv = (round(g) for g in golds[i])
-                gold = f" -> {buy:,} + {passv:,} = {buy + passv:,} g"
+                buy, passv = (_gold(g) for g in golds[i])
+                gold = (
+                    f" -> {_gold_text(buy)} + {_gold_text(passv)}"
+                    f" = {_gold_text(buy + passv)} g"
+                )
             else:
-                gold = f" -> {round(optimizer.plan_gold(plan, prices)):,} g"
+                gold = f" -> {_gold_text(optimizer.plan_gold(plan, prices))} g"
             # Credit the surplus the plan banks and charge the free stamina it
             # drains: its net cost (what the frontier trades against time) is what
             # it buys, less what it can sell, plus the Orange-Juice-equivalent of
@@ -959,12 +982,12 @@ def markdown_frontier(
             row.append(Cell.num(round(_pumpkin_juices(plan))))
         if prices is not None:
             if golds is not None:
-                buy, passv = (round(g) for g in golds[i])
-                total_gold = buy + passv
-                gold = f"{buy:,} + {passv:,} = {total_gold:,} g"
+                buy, passv = (_gold(g) for g in golds[i])
+                total_gold = _gold(buy + passv)
+                gold = f"{_gold_text(buy)} + {_gold_text(passv)} = {_gold_text(total_gold)} g"
             else:
-                total_gold = round(optimizer.plan_gold(plan, prices))
-                gold = f"{total_gold:,} g"
+                total_gold = _gold(optimizer.plan_gold(plan, prices))
+                gold = f"{_gold_text(total_gold)} g"
             gold += _net_gold_note(plan)
             # The buy/passive split and the net-gold note annotate the headline
             # figure for a reader; the value is that headline total.
@@ -1701,9 +1724,9 @@ def _print_surplus_value(
     width = _num_width(round(count) for _, count, _ in rows)
     for item, count, gold in rows:
         print(
-            f"  {round(count):>{width},}x {display.get(item, item)} = {round(gold):,} g"
+            f"  {round(count):>{width},}x {display.get(item, item)} = {_gold_text(gold)} g"
         )
-    print(f"  nominal value = {round(total):,} g")
+    print(f"  nominal value = {_gold_text(total)} g")
     print(
         "  banked byproduct: what the plan produces past the goal (loot from the"
         " exploring/passive it runs), already credited into its net gold on the"
@@ -1732,11 +1755,11 @@ def markdown_surplus_value(
     total = sum(gold for _, _, gold in rows)
     doc.heading("Surplus (accumulates past the goal), craftable into sellable goods")
     table_rows = [
-        [display.get(item, item), Cell.num(round(count)), Cell.num(round(gold), "g")]
+        [display.get(item, item), Cell.num(round(count)), Cell.gold(gold)]
         for item, count, gold in rows
     ]
     doc.table(["Item", "Qty", "Gold"], table_rows, align=["left", "right", "right"])
-    doc.para(f"Nominal value: {round(total):,} g")
+    doc.para(f"Nominal value: {_gold_text(total)} g")
     doc.para(
         "Banked byproduct: what the plan produces past the goal (loot from the "
         "exploring/passive it runs), already credited into its net gold on the "
@@ -2304,13 +2327,13 @@ def print_plan(
         width = _num_width(round(units) for _, units in gold_buys)
         total = 0.0
         for item, units in ordered:
-            cost = round(units * prices.get(item, 0.0))
-            total += units * prices.get(item, 0.0)
+            cost = units * prices.get(item, 0.0)
+            total += cost
             print(
                 f"  {round(units):>{width},}x {display.get(item, item)}"
-                f" = {cost:,} g"
+                f" = {_gold_text(cost)} g"
             )
-        print(f"  total {round(total):,} g")
+        print(f"  total {_gold_text(total)} g")
 
     # Trade (for Arnold Palmers): the resources bought with AP rather than gold.
     # Each line shows the AP it costs and the gold that AP is worth (its ranking
@@ -2328,9 +2351,9 @@ def print_plan(
             total_gold += gold
             print(
                 f"  {round(units):>{width},}x {display.get(item, item)}"
-                f" = {round(ap):,} AP ({round(gold):,} g)"
+                f" = {round(ap):,} AP ({_gold_text(gold)} g)"
             )
-        print(f"  total {round(total_ap):,} AP ({round(total_gold):,} g)")
+        print(f"  total {round(total_ap):,} AP ({_gold_text(total_gold)} g)")
 
     # Buy (at the Country Store): seeds a craft needs, bought for Silver. The solver
     # treats them as free (crafting.STORE_MATERIALS), so only the report names them.
@@ -2359,9 +2382,9 @@ def print_plan(
         print("\nPumpkin Juice (mastery boost):")
         width = _num_width(round(units) for _, units in juices)
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
-            cost = round(units * per_juice)
+            cost = _gold_text(units * per_juice)
             name = display.get(item, item)
-            line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost:,} g"
+            line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost} g"
             # A juice grants 10% of the current tier, so it only lands its full boost
             # drunk late, in the goal's final tier -- name those mastery levels.
             levels = (pumpkin_schedule or {}).get(item)
@@ -2369,7 +2392,7 @@ def print_plan(
                 drink = " / ".join(f"{level:,}" for level in levels)
                 line += f"\n    drink at {name} mastery {drink}"
             print(line)
-        print(f"  total {round(plan.pumpkin_gold):,} g")
+        print(f"  total {_gold_text(plan.pumpkin_gold)} g")
 
     # Stamina opportunity cost: the free (banked + passive) stamina spent on Apple
     # Cider explores, valued at the Orange-Juice equivalent (see
@@ -2708,14 +2731,14 @@ def markdown_plan(
             [
                 display.get(item, item),
                 Cell.num(round(units)),
-                Cell.num(round(units * prices.get(item, 0.0)), "g"),
+                Cell.gold(units * prices.get(item, 0.0)),
             ]
             for item, units in ordered
         ]
         total = sum(units * prices.get(item, 0.0) for item, units in gold_buys)
         doc.heading("Buy (with gold)")
         doc.table(["Item", "Qty", "Gold"], rows)
-        doc.para(f"Total: {round(total):,} g")
+        doc.para(f"Total: {_gold_text(total)} g")
 
     if trades:
         ordered = sorted(trades, key=lambda kv: kv[1] * ap_prices.get(kv[0], 0.0), reverse=True)
@@ -2724,7 +2747,7 @@ def markdown_plan(
                 display.get(item, item),
                 Cell.num(round(units)),
                 Cell.num(round(units * ap_prices.get(item, 0.0)), "AP"),
-                Cell.num(round(units * (prices or {}).get(item, 0.0)), "g"),
+                Cell.gold(units * (prices or {}).get(item, 0.0)),
             ]
             for item, units in ordered
         ]
@@ -2732,7 +2755,7 @@ def markdown_plan(
         total_gold = sum(units * (prices or {}).get(item, 0.0) for item, units in trades)
         doc.heading("Trade (for Arnold Palmers)")
         doc.table(["Item", "Qty", "Arnold Palmers", "Gold value"], rows)
-        doc.para(f"Total: {round(total_ap):,} AP ({round(total_gold):,} g)")
+        doc.para(f"Total: {round(total_ap):,} AP ({_gold_text(total_gold)} g)")
 
     store = _store_buys(plan, workshop, inventory)
     if store:
@@ -2754,29 +2777,29 @@ def markdown_plan(
         per_juice = plan.pumpkin_gold / total_juices if total_juices else 0.0
         rows = []
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
-            cost = round(units * per_juice)
+            cost = units * per_juice
             name = display.get(item, item)
             levels = (pumpkin_schedule or {}).get(item) or []
             drink = " / ".join(f"{level:,}" for level in levels)
             rows.append([
                 name,
                 Cell.num(round(units)),
-                Cell.num(cost, "g"),
+                Cell.gold(cost),
                 # A schedule of mastery levels: one string for a reader, the
                 # levels themselves for JSON.
                 Cell(drink, list(levels)),
             ])
         doc.heading("Pumpkin Juice (mastery boost)")
         doc.table(["Goal", "Juices", "Gold", "Drink at mastery"], rows)
-        doc.para(f"Total: {round(plan.pumpkin_gold):,} g")
+        doc.para(f"Total: {_gold_text(plan.pumpkin_gold)} g")
 
     # Stamina opportunity cost (see print_plan's matching section / _build_base).
-    if prices is not None and round(plan.stamina_gold) >= 1:
+    if prices is not None and _gold(plan.stamina_gold):
         units = _stamina_units(plan, prices)
         doc.heading("Stamina (opportunity cost)")
         doc.para(
             f"{round(units):,} banked/passive stamina"
-            f" = {round(plan.stamina_gold):,} g (at Orange-Juice value)"
+            f" = {_gold_text(plan.stamina_gold)} g (at Orange-Juice value)"
         )
 
     if prices is not None:
@@ -3012,7 +3035,7 @@ def print_ascension_frontier(
         note = "  " + f"[{', '.join(tags)}]" if tags else ""
         print(
             f" {marker} {i + 1}. {passive.format_duration(plan.time)}"
-            f" -> {round(plan.gold):,} g (net {round(net_gold):,} g),"
+            f" -> {_gold_text(plan.gold)} g (net {_gold_text(net_gold)} g),"
             f" masters {masters}, GMs {grandmasters}, megas {megas},"
             f" chore AK {chore_ak:,.1f}{note}"
         )
@@ -3040,8 +3063,8 @@ def markdown_ascension_frontier(
         rows.append([
             Cell(str(i + 1), i + 1),
             Cell.duration(plan.time),
-            Cell.num(round(plan.gold), "g"),
-            Cell.num(round(net_gold), "g"),
+            Cell.gold(plan.gold),
+            Cell.gold(net_gold),
             Cell(str(masters), masters),
             Cell(str(grandmasters), grandmasters),
             Cell(str(megas), megas),

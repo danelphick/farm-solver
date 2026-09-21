@@ -129,9 +129,9 @@ describe("mastery-costs page", () => {
     });
 
     expect(rowText()).toEqual([
-      ["Fast Cheap", "M", "1d", "100 g"],
-      ["Fast Dear", "GM", "1d", "900 g"],
-      ["Slow", "MM", "5d", "10 g"],
+      ["Fast Cheap", "M", "1d", "100.0 g"],
+      ["Fast Dear", "GM", "1d", "900.0 g"],
+      ["Slow", "MM", "5d", "10.0 g"],
     ]);
     expect(document.querySelector("#mastery-costs-section").hidden).toBe(false);
     expect(document.querySelector("#empty-state").hidden).toBe(true);

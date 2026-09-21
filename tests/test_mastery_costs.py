@@ -141,7 +141,7 @@ def test_print_mastery_costs_renders_table_and_unmasterable(capsys):
     print_mastery_costs(result, "time")
     out = capsys.readouterr().out
     assert "Item" in out and "Target" in out and "Time" in out and "Cost" in out
-    assert "Valve" in out and "2d" in out and "100 g" in out
+    assert "Valve" in out and "2d" in out and "100.0 g" in out
     assert "cannot be mastered" in out
     assert "Unpolished Flarite (unobtainable)" in out
 
@@ -156,7 +156,7 @@ def test_markdown_mastery_costs_builds_table():
     rendered = doc.render()
     assert "## Mastery costs" in rendered
     assert "| Item | Target | Time | Cost |" in rendered
-    assert "| Valve | GM | 2d | 100 g |" in rendered
+    assert "| Valve | GM | 2d | 100.0 g |" in rendered
     assert "Cicada (unobtainable)" in rendered
 
 

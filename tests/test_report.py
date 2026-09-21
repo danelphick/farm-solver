@@ -145,13 +145,13 @@ def test_efficiency_note_empty_when_eff_is_none():
 
 
 def test_efficiency_note_formats_time_gold_and_rate():
-    # 3 days saved (4d - 1d) for 100,000 g more spent -> 100,000 / 3 g/s,
+    # 3 days saved (4d - 1d) for 100,000.0 g more spent -> 100,000 / 3 g/s,
     # which at *86400 s/day is exactly 33,300 g/day (rounded).
     eff = (PLANS[0].cost[1] - PLANS[1].cost[1]) / (
         (PLANS[1].time - PLANS[0].time).total_seconds()
     )
     note = _efficiency_note(PLANS[0], PLANS[1], eff)
-    assert note.startswith("(saves 3d for 100,000 g = ")
+    assert note.startswith("(saves 3d for 100,000.0 g = ")
     assert note.endswith("g/day)")
     # Sanity-check the day conversion is in the right ballpark (not e.g. left
     # as a per-second or per-minute figure).
@@ -169,7 +169,7 @@ def test_print_frontier_efficiency_note_only_with_spread_axis(capsys):
 
     print_frontier(PLANS, selected=0, cheapest=1, spread_axis="time")
     out = capsys.readouterr().out
-    assert "saves 3d for 100,000 g" in out
+    assert "saves 3d for 100,000.0 g" in out
 
 
 def test_print_frontier_efficiency_note_absent_on_slowest_row(capsys):
@@ -190,7 +190,7 @@ def test_markdown_frontier_efficiency_note_only_with_spread_axis():
     doc = MarkdownDoc()
     markdown_frontier(doc, PLANS, selected=0, cheapest=1, spread_axis="time")
     text = doc.render()
-    assert "saves 3d for 100,000 g" in text
+    assert "saves 3d for 100,000.0 g" in text
 
 
 # --- _ascii_plot ------------------------------------------------------------
@@ -315,7 +315,7 @@ def test_sectioned_reporter_graph_section_populated_when_requested():
     # The graph must NOT also land inline in the frontier table's own doc.
     assert "<svg" not in reporter.docs["frontier"].render()
     # But the efficiency note does land in the table, same as the CLI.
-    assert "saves 3d for 100,000 g" in reporter.docs["frontier"].render()
+    assert "saves 3d for 100,000.0 g" in reporter.docs["frontier"].render()
 
 
 # --- Regression: defaults are byte-identical to before -----------------------

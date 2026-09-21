@@ -344,7 +344,7 @@ def test_pumpkin_juice_section_drops_the_gold_suffix_and_lists_the_levels():
         plan, {}, prices={"butter": 10.0},
         pumpkin_schedule={"butter": [18000, 19000, 20000]},
     )
-    assert "| butter | 3 | 690 g | 18,000 / 19,000 / 20,000 |" in text
+    assert "| butter | 3 | 690.0 g | 18,000 / 19,000 / 20,000 |" in text
     (row,) = _only_table(sections, ["Goal", "Juices", "Gold", "Drink at mastery"])["rows"]
     assert row["Juices"] == 3
     assert row["Gold"] == 690
@@ -357,7 +357,7 @@ def test_trade_section_drops_the_ap_and_gold_suffixes():
     text, sections = _plan_docs(
         plan, {}, prices={"magicite": 100.0}, ap_prices={"magicite": 2.0}
     )
-    assert "| 5 | 10 AP | 500 g |" in text
+    assert "| 5 | 10 AP | 500.0 g |" in text
     (row,) = _only_table(
         sections, ["Item", "Qty", "Arnold Palmers", "Gold value"]
     )["rows"]
@@ -368,7 +368,7 @@ def test_trade_section_drops_the_ap_and_gold_suffixes():
 def test_buy_section_drops_the_gold_suffix():
     plan = SourcingPlan(bought={"arnold palmer": 12.0}, gold=1200.0)
     text, sections = _plan_docs(plan, {}, prices={"arnold palmer": 100.0})
-    assert "| 12 | 1,200 g |" in text
+    assert "| 12 | 1,200.0 g |" in text
     (row,) = _only_table(sections, ["Item", "Qty", "Gold"])["rows"]
     assert row["Qty"] == 12
     assert row["Gold"] == 1200

@@ -35,6 +35,12 @@ function $(selector) {
   return document.querySelector(selector);
 }
 
+// Gold rounded to the nearest tenth, the way report.py's _gold_text prints it
+// ("1,234.5").
+function formatGold(value) {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
@@ -167,7 +173,7 @@ function renderTable() {
         ` title="Mastery timeline for ${escapeHtml(row.item)}">timeline</a></td>` +
         `<td>${escapeHtml(row.tier)}</td>` +
         `<td class="num">${escapeHtml(row.time)}</td>` +
-        `<td class="num">${Math.round(row.gold).toLocaleString()} g</td>` +
+        `<td class="num">${formatGold(row.gold)} g</td>` +
         `</tr>`
     )
     .join("");

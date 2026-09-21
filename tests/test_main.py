@@ -729,13 +729,13 @@ def test_print_plan_splits_gold_buys_from_arnold_palmer_trades(capsys):
     )
     out = capsys.readouterr().out
     assert "Buy (with gold):" in out
-    assert "200x large net = 2 g" in out
+    assert "200x large net = 2.0 g" in out
     assert "Trade (for Arnold Palmers):" in out
-    # 5000 red dye * 0.008 AP = 40 AP; * 0.06 g/AP = 2 g.
-    assert "5,000x red dye = 40 AP (2 g)" in out
-    assert "total 40 AP (2 g)" in out
+    # 5000 red dye * 0.008 AP = 40 AP; * 0.06 g/AP = 2.4 g.
+    assert "5,000x red dye = 40 AP (2.4 g)" in out
+    assert "total 40 AP (2.4 g)" in out
     # Red Dye is a trade, not a gold buy -- it must not appear in the gold section.
-    assert "red dye = 2 g" not in out
+    assert "red dye = 2.4 g" not in out
 
 
 FEEDER_WORKSHOP = Workshop(
@@ -1695,7 +1695,7 @@ def test_print_frontier_shows_a_gold_column_when_priced(capsys):
     print_frontier(plans, 0, 0, None, _GOLD)
     out = capsys.readouterr().out
     assert "gold" in out
-    assert "60 g" in out  # 1000 * 0.06
+    assert "60.0 g" in out  # 1000 * 0.06
 
 
 def test_print_frontier_omits_gold_column_without_prices(capsys):
@@ -1719,8 +1719,8 @@ def test_print_plan_reports_surplus_sale_value_when_grounded_and_priced(capsys):
     print_plan(plan, {}, Farm(), workshop, 1.0, prices=_GOLD)
     out = capsys.readouterr().out
     assert "Surplus (accumulates past the goal)" in out
-    assert "500x Large Net = 5 g" in out
-    assert "nominal value = 5 g" in out
+    assert "500x Large Net = 5.0 g" in out
+    assert "nominal value = 5.0 g" in out
     # The surplus is byproduct already credited into net gold, not conjured on top:
     # a caption says so, so a big banked figure does not read as free money.
     assert "already credited into its net gold" in out
@@ -1750,8 +1750,8 @@ def test_print_plan_surplus_excludes_already_held_inventory(capsys):
         inventory={"large net": 300.0},
     )
     out = capsys.readouterr().out
-    assert "500x Large Net = 5 g" in out  # only the accumulated 500, not 800
-    assert "nominal value = 5 g" in out
+    assert "500x Large Net = 5.0 g" in out  # only the accumulated 500, not 800
+    assert "nominal value = 5.0 g" in out
     assert "800x Large Net" not in out  # the held 300 is not folded into surplus
 
 
@@ -1762,7 +1762,7 @@ def test_print_frontier_splits_gold_into_buy_and_self_sourced(capsys):
     print_frontier(plans, 0, 0, None, _GOLD, golds=[(48.0, 12.0)])
     out = capsys.readouterr().out
     assert "gold, as buy + self-sourced" in out
-    assert "-> 48 + 12 = 60 g" in out
+    assert "-> 48.0 + 12.0 = 60.0 g" in out
 
 
 def test_print_frontier_shows_banked_surplus_and_net_gold(capsys):
@@ -1773,7 +1773,7 @@ def test_print_frontier_shows_banked_surplus_and_net_gold(capsys):
     )
     print_frontier([plan], 0, 0, None, _GOLD, golds=[(12.0, 48.0)])
     out = capsys.readouterr().out
-    assert "-> 12 + 48 = 60 g (bank 50, net -38)" in out
+    assert "-> 12.0 + 48.0 = 60.0 g (bank 50.0, net -38.0)" in out
 
 
 # --- Pumpkin Juice ---
@@ -2153,9 +2153,9 @@ def test_print_plan_shows_the_pumpkin_juice_section(capsys):
     )
     out = capsys.readouterr().out
     assert "Pumpkin Juice (mastery boost):" in out
-    assert "3x Pumpkin Juice on Butter = 690 g" in out
+    assert "3x Pumpkin Juice on Butter = 690.0 g" in out
     assert "drink at Butter mastery 700,000 / 800,000 / 900,000" in out
-    assert "total 690 g" in out
+    assert "total 690.0 g" in out
 
 
 def test_print_plan_shows_the_pumpkin_juice_section_when_juice_is_free(capsys):
@@ -2172,8 +2172,8 @@ def test_print_plan_shows_the_pumpkin_juice_section_when_juice_is_free(capsys):
     print_plan(plan, demand, Farm(), Workshop(), 1.0)
     out = capsys.readouterr().out
     assert "Pumpkin Juice (mastery boost):" in out
-    assert "3x Pumpkin Juice on Butter = 0 g" in out
-    assert "total 0 g" in out
+    assert "3x Pumpkin Juice on Butter = 0.0 g" in out
+    assert "total 0.0 g" in out
 
 
 def test_print_plan_buy_total_excludes_pumpkin_gold(capsys):
@@ -2197,8 +2197,8 @@ def test_print_plan_buy_total_excludes_pumpkin_gold(capsys):
     print_plan(plan, demand, Farm(), Workshop(), 1.0, prices={"large net": 0.01})
     out = capsys.readouterr().out
     buy_section = out.split("Buy (with gold):")[1].split("Pumpkin Juice")[0]
-    assert "total 1 g" in buy_section
-    assert "total 690 g" in out
+    assert "total 1.0 g" in buy_section
+    assert "total 690.0 g" in out
 
 
 def test_sectioned_reporter_renders_each_section_independently():

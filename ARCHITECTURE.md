@@ -1355,7 +1355,9 @@ non-empty, being the printed column titles), and `{"kind": "graph", "x_label",
 (prose -- an Action, a Detail, a Notes tag, which serialize as themselves) or a
 `report.Cell`, which carries *both* the printed `text` and the machine-readable
 `value`. `Cell.num(x)` renders `"1,234"` (or `"1,234 g"` / `"1,234 AP"` with a
-unit) and emits `x`; `Cell.duration(td)` renders the report's own `"6d 5h 16m"`
+unit) and emits `x`; `Cell.gold(x)` renders gold to the nearest tenth
+(`"1,234.5 g"`, via `_gold`/`_gold_text`, which every gold figure in the text
+reports also goes through) and emits that rounded value; `Cell.duration(td)` renders the report's own `"6d 5h 16m"`
 and emits whole **seconds**. `MarkdownDoc.table` keeps `Cell`s intact,
 `Table.markdown()` renders their text (and runs the `_column_is_numeric`
 alignment heuristic over that text, so alignment still follows what a reader
