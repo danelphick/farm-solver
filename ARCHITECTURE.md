@@ -2085,6 +2085,29 @@ that imports it without going through `manage.py`.
   `M`/`GM`/`MM` as the absolute 10k/100k/1M threshold), which is exactly the
   cumulative target the row was solved for -- so the drill-down reproduces its
   own row.
+- **Focus: the solver page drills into its own goals the same way.** When the
+  rendered Goal table (`report.markdown_solution`'s Purpose/Item/Have/Target/
+  Still needed) has more than one row -- a tower run expands to dozens of
+  required masteries -- `app.js`'s `addGoalFocusLinks` appends a small "Focus"
+  link to each row's Item cell, built by `focusGoalHref` (exported, unit
+  tested): `Inventory` reproduces as `?items=`, a tower level (`T240`) or
+  `Mastery` as `?mastery=`, seeded with that row's own **Target** (commas
+  stripped; a non-numeric target means no link). A sole goal gets none -- it is
+  already focused. Plain `<a>`s, so Back returns to the original goals natively,
+  and `localStorage` still holds them (the seeded page saves nothing). The
+  Goal table is located by `findGoalSection`, shared with `collapseGoalSection`
+  so both agree which table is the goal's -- "Materials with no known source"
+  is a later `<h2>` section and never gets buttons.
+- **"Make Sole Goal"** (`#seeded-adopt` in the banner, `adoptSeededGoal`) is the
+  other half: the seeded page's form already holds that goal and nothing else,
+  so `saveState()` **is** the substitution into the main parameters (every other
+  setting, restored as usual, is untouched). It does not re-solve -- the results
+  on screen are already that goal's -- hides the banner, and drops the
+  `?mastery=`/`?items=` query with `replaceState` (not `pushState`, so Back is
+  left alone) to stop a reload re-seeding what is now the saved goal.
+  `seededOrigin` reads the `from=goal` the Focus links add, which is what points
+  the banner's way back at `/` ("back to your goals") instead of the
+  mastery-costs table every older seeded link came from.
 - **Mastery history (`static/solverapp/history.js`) and the timeline page** —
   the one feature with **no server side at all**. The settings popover's
   **"Save dated snapshot"** button (in the `#paste-details` pane, under the

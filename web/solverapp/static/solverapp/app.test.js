@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
+  focusGoalHref,
   parseGoalSpec,
   parseSeededGoal,
+  seededOrigin,
   serializeGoalEntries,
 } from "./app.js";
 
@@ -109,5 +111,53 @@ describe("parseSeededGoal", () => {
       kind: "mastery",
       item: "Compass",
     });
+  });
+});
+
+describe("focusGoalHref", () => {
+  // The three Purpose values report.markdown_solution writes: a tower level, a
+  // plain -m goal, and a plain -i one. Only the last is an item count; the
+  // other two reproduce as mastery goals, seeded with the row's own absolute
+  // Target (commas stripped -- report.py groups its numbers).
+  test("a tower requirement seeds a mastery goal at that row's target", () => {
+    expect(focusGoalHref("T240", "Gold Bar", "100,000")).toBe(
+      "/?mastery=Gold%20Bar%3A100000&from=goal"
+    );
+  });
+
+  test("a Mastery row seeds a mastery goal", () => {
+    expect(focusGoalHref("Mastery", "Compass", "10,000")).toBe(
+      "/?mastery=Compass%3A10000&from=goal"
+    );
+  });
+
+  test("an Inventory row seeds an item-count goal", () => {
+    expect(focusGoalHref("Inventory", "Rope", "500")).toBe(
+      "/?items=Rope%3A500&from=goal"
+    );
+  });
+
+  test("a colon-bearing item name is encoded, not split", () => {
+    expect(focusGoalHref("Mastery", "Time: A Gift", "10,000")).toBe(
+      "/?mastery=Time%3A%20A%20Gift%3A10000&from=goal"
+    );
+  });
+
+  test("no link for a row with no item or no plain-number target", () => {
+    expect(focusGoalHref("Mastery", "", "10,000")).toBeNull();
+    expect(focusGoalHref("Mastery", "Compass", "")).toBeNull();
+    expect(focusGoalHref("Mastery", "Compass", "done")).toBeNull();
+  });
+});
+
+describe("seededOrigin", () => {
+  test("a Focus link off the Goal table is flagged as such", () => {
+    expect(seededOrigin("?mastery=Compass%3AGM&from=goal")).toBe("goal");
+  });
+
+  test("every other seeded link keeps the mastery-costs wording", () => {
+    expect(seededOrigin("?mastery=Compass%3AGM")).toBe("masteries");
+    expect(seededOrigin("")).toBe("masteries");
+    expect(seededOrigin("?from=elsewhere")).toBe("masteries");
   });
 });

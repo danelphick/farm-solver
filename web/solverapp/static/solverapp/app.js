@@ -167,6 +167,31 @@ export function parseSeededGoal(search) {
   return null;
 }
 
+// Where a seeded link came from, for the banner's way back. The Goal table's
+// own "Focus" links (focusGoalHref below) add `from=goal`, so the banner can
+// point at the goal the user actually had; every other seeded link (the
+// mastery-costs table, the timeline's next-tier links) predates the param and
+// keeps the original mastery-costs wording.
+export function seededOrigin(search) {
+  const from = new URLSearchParams(search || "").get("from");
+  return from === "goal" ? "goal" : "masteries";
+}
+
+// The seeded-goal URL for one row of the rendered Goal table (see
+// report.markdown_solution's Purpose/Item/Have/Target/Still needed columns):
+// "solve for this item alone". Purpose says which kind of goal reproduces the
+// row -- "Inventory" is a plain -i count, a tower level ("T240") or "Mastery"
+// is an -m goal -- and Target is the absolute figure that need was solved for,
+// which parsing.parse_amount reads as-is. Returns null for a row whose target
+// isn't a plain number (nothing sensible to seed), so its cell keeps no button.
+export function focusGoalHref(purpose, item, target) {
+  const name = String(item || "").trim();
+  const amount = String(target || "").replace(/,/g, "").trim();
+  if (!name || !/^\d+(\.\d+)?$/.test(amount)) return null;
+  const kind = String(purpose || "").trim() === "Inventory" ? "items" : "mastery";
+  return `/?${kind}=${encodeURIComponent(`${name}:${amount}`)}&from=goal`;
+}
+
 // --- Goal lists: DOM (row render/read/wire) ---------------------------------
 
 function createGoalRow(entry, datalistId) {
@@ -476,6 +501,7 @@ function renderResult(data) {
 
   $("#solution-section").innerHTML = data.solution_html;
   markUnreachableGoalRows();
+  addGoalFocusLinks();
   collapseGoalSection();
 
   const noteBlocks = [];
@@ -527,6 +553,58 @@ function markUnreachableGoalRows() {
   });
 }
 
+// report.markdown_solution's Goal section: its <h2> heading, the nodes up to
+// the next <h2> (the goal table plus any note paragraphs), and that table.
+// Null when the solve produced no Goal section at all. Shared by the two things
+// that rework it after render -- the Focus buttons and the collapse -- so both
+// agree on which table is the goal's: only the goal table sits in `body`, the
+// "Materials with no known source" one is a later <h2> section, outside it.
+function findGoalSection() {
+  const container = $("#solution-section");
+  if (!container) return null;
+  const heading = Array.from(container.querySelectorAll(":scope > h2")).find(
+    (h) => h.textContent.trim() === "Goal"
+  );
+  if (!heading) return null;
+
+  const body = [];
+  for (let node = heading.nextElementSibling; node && node.tagName !== "H2"; ) {
+    const next = node.nextElementSibling;
+    body.push(node);
+    node = next;
+  }
+  return { heading, body, table: body.find((el) => el.tagName === "TABLE") || null };
+}
+
+// A drill-down per goal row: "Focus" re-opens this page seeded with that one
+// item (focusGoalHref -> "/?mastery=Item:N&from=goal", the same seeded-goal
+// entry point the mastery-costs table uses), so a tower run's long list of
+// required masteries can be costed one item at a time. A plain <a>, not a
+// button, so it is an ordinary navigation: Back returns to the original goals,
+// which are still what localStorage holds (the seeded page deliberately does
+// not save -- see applySeededGoal / the banner's "Make Sole Goal").
+//
+// Only when the goal has more than one row: a sole goal is already focused.
+function addGoalFocusLinks() {
+  const section = findGoalSection();
+  if (!section || !section.table) return;
+  const rows = Array.from(section.table.querySelectorAll("tbody tr"));
+  if (rows.length < 2) return;
+  rows.forEach((row) => {
+    const cells = row.querySelectorAll("td");
+    if (cells.length < 4) return;
+    const item = cells[1].textContent.trim();
+    const href = focusGoalHref(cells[0].textContent, item, cells[3].textContent);
+    if (!href) return;
+    const link = document.createElement("a");
+    link.className = "focus-link";
+    link.href = href;
+    link.textContent = "Focus";
+    link.title = `Solve for ${item} on its own`;
+    cells[1].append(" ", link);
+  });
+}
+
 // Persists the Goal section's open/closed state across re-renders within this
 // page load (#solution-section is rebuilt every solve, so the <details> itself
 // doesn't survive). Session-only, like planGroupOpenState; defaults open.
@@ -542,23 +620,9 @@ let goalSectionOpen = true;
 // the highest tower level named (the Purpose column's "T<level>" cells), echoed
 // into a `.summary-detail` span that existing CSS hides once expanded.
 function collapseGoalSection() {
-  const container = $("#solution-section");
-  if (!container) return;
-  const heading = Array.from(container.querySelectorAll(":scope > h2")).find(
-    (h) => h.textContent.trim() === "Goal"
-  );
-  if (!heading) return;
-
-  const body = [];
-  for (let node = heading.nextElementSibling; node && node.tagName !== "H2"; ) {
-    const next = node.nextElementSibling;
-    body.push(node);
-    node = next;
-  }
-
-  // Only the goal table sits in `body`; the "Materials with no known source"
-  // table is a later <h2> section, outside it.
-  const table = body.find((el) => el.tagName === "TABLE");
+  const section = findGoalSection();
+  if (!section) return;
+  const { heading, body, table } = section;
   const rows = table ? table.querySelectorAll("tbody tr") : [];
   const count = rows.length;
   let maxLevel = 0;
@@ -956,7 +1020,9 @@ function init() {
   // one mastery. Deliberately no saveState() -- merely following a link must
   // not overwrite the goal the user had saved; their first edit persists this
   // one as usual, via onAnyChange.
-  const seeded = applySeededGoal(parseSeededGoal(window.location.search));
+  const search = window.location.search;
+  const seeded = applySeededGoal(parseSeededGoal(search), seededOrigin(search));
+  $("#seeded-adopt").addEventListener("click", adoptSeededGoal);
   if (restored || seeded) {
     solve();
   }
@@ -970,10 +1036,24 @@ function seededAmount(amount) {
   return Number.isFinite(number) ? number.toLocaleString() : amount;
 }
 
+// The goal currently seeded from the URL, or null once it has been adopted (or
+// when the page was opened normally). Only "Make Sole Goal" reads it.
+let seededGoal = null;
+
+// The banner's label for a mastery goal: a tier token spells out ("Compass →
+// Grandmaster"), while a plain figure -- what a Focus link off the Goal table
+// carries, since that table's Target column is the absolute threshold -- reads
+// as the amount it is ("Compass → 100,000 mastery").
+function masteryGoalLabel(item, amount) {
+  const label = tierLabel(amount);
+  const target = label === amount ? `${seededAmount(amount)} mastery` : label;
+  return `${item} → ${target}`;
+}
+
 // Point the form at a single goal and nothing else, and say so in the header
 // banner. Returns whether anything was seeded, so init() knows to solve even
 // when there was no saved state to restore.
-function applySeededGoal(goal) {
+function applySeededGoal(goal, origin) {
   if (!goal) return false;
   const mastery = goal.kind === "mastery";
   $("#target").value = "none";  // just this goal, no tower goal
@@ -981,11 +1061,36 @@ function applySeededGoal(goal) {
   renderGoalRows("mastery-rows", mastery ? [goal] : [], GOAL_LISTS["mastery-rows"]);
   renderGoalRows("items-rows", mastery ? [] : [goal], GOAL_LISTS["items-rows"]);
   $("#seeded-goal").textContent = mastery
-    ? `${goal.item} → ${tierLabel(goal.amount)}`
+    ? masteryGoalLabel(goal.item, goal.amount)
     : `${seededAmount(goal.amount)} × ${goal.item}`;
+  // A Focus drill-down came from this page's own goals, so point back at them
+  // ("/" restores the saved state) rather than at the mastery-costs table the
+  // banner's older callers came from. Plain links either way -- the browser's
+  // Back button gets there too, since every seeded page is a real navigation.
+  if (origin === "goal") {
+    $("#seeded-back").textContent = "← back to your goals";
+    $("#seeded-back").href = "/";
+  }
   $("#seeded-banner").hidden = false;
+  seededGoal = goal;
   updateGoalSummary();
   return true;
+}
+
+// "Make Sole Goal": substitute the seeded goal into the saved parameters. The
+// form already holds it and nothing else (applySeededGoal pointed every goal
+// control at it), so saving the form IS the substitution -- every other
+// setting, restored from localStorage as usual, is untouched. No re-solve: the
+// results on screen are already this goal's. The ?mastery=/?items= query is
+// dropped with replaceState so a reload doesn't re-seed a goal that is now the
+// saved one; replacing rather than pushing leaves the Back button alone.
+function adoptSeededGoal() {
+  if (!seededGoal) return;
+  seededGoal = null;
+  saveState();
+  $("#seeded-banner").hidden = true;
+  window.history.replaceState({}, "", window.location.pathname);
+  setStatus("Saved as your only goal.", "ok");
 }
 
 // `once`: init() wires the page exactly one time. DOMContentLoaded only fires

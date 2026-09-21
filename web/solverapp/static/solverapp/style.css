@@ -1078,6 +1078,13 @@ details[open] > summary .summary-detail {
   font-size: 0.85rem;
 }
 
+/* "Make Sole Goal" sits inline in that banner's sentence, so it drops the
+   .btn-add block padding for something that lines up with the text around it. */
+.seeded-banner .btn-add {
+  padding: 0.1rem 0.45rem;
+  font-size: 0.8rem;
+}
+
 /* --- Mastery-costs page --------------------------------------------------- */
 
 /* Per-column sort button, sitting just after its header label (sizing borrowed
@@ -1283,6 +1290,26 @@ details[open] > summary .summary-detail {
 .solver-link:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* The Goal table's per-row drill-down: a small outlined "Focus" link in the
+   Item cell (shown only when the goal has more than one row -- see app.js's
+   addGoalFocusLinks), reading as a button without being one, so Back still
+   works the way an ordinary link's does. */
+.focus-link {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  padding: 0 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.focus-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* The tier name beside its token in the timeline table ("GM (Grandmaster)"). */

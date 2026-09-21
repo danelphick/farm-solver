@@ -10,11 +10,16 @@
 <header>
   <div class="page-nav"><a href="/masteries">Mastery costs &rarr;</a> <a href="/timeline">Timeline &rarr;</a></div>
   <h1>Farm Solver</h1>
-  <!-- Shown only when the page was opened from the mastery-costs table's
-       "?mastery=Item:TIER" link (see app.js's parseSeededGoal). -->
+  <!-- Shown only when the page was opened seeded with one goal: the
+       mastery-costs table's "?mastery=Item:TIER" link, the timeline's
+       next-tier links, or this page's own per-goal "Focus" buttons, which add
+       "&from=goal" (see app.js's parseSeededGoal/seededOrigin). The goal is
+       not saved by merely following such a link -- "Make Sole Goal" is what
+       substitutes it into the saved parameters. -->
   <p id="seeded-banner" class="seeded-banner" hidden>
     Plan for <strong id="seeded-goal"></strong>
-    &middot; <a href="/masteries">&larr; back to mastery costs</a>
+    &middot; <button type="button" id="seeded-adopt" class="btn-add">Make Sole Goal</button>
+    &middot; <a id="seeded-back" href="/masteries">&larr; back to mastery costs</a>
   </p>
   <p class="tagline">
     Paste your masteries and inventory from FarmRPG under the
