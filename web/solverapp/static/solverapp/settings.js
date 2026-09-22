@@ -22,7 +22,13 @@ import {
   readFileText,
 } from "./backup.js";
 import { createHelpIcon } from "./help.js";
-import { getSnapshots, parseMasteryText, putSnapshot, putSnapshots } from "./history.js";
+import {
+  getSnapshots,
+  parseMasteryText,
+  putSnapshot,
+  putSnapshots,
+  splitBlocks,
+} from "./history.js";
 
 // Solver state ({mastery_text, inventory_text, params}, mirroring POST
 // /api/solve's body) and, under its own key, UI-only preferences (which panes
@@ -803,6 +809,32 @@ export function applySettingsParams(params) {
   applyMaterialTrading(params.ap_trading);
 }
 
+// How many of `item` a pasted inventory holds (0 when it has none), matched
+// case-insensitively. The JS mirror of parsing.parse_inventory's reading of a
+// block: the name is its first line, the quantity its last -- after dropping a
+// trailing "<Category> chevron_down" header that belongs to the next items. A
+// block it cannot read is skipped rather than thrown on: this only labels a
+// field, and the solver reports a bad paste itself.
+export function inventoryQuantity(text, item) {
+  const wanted = item.toLowerCase();
+  for (const block of splitBlocks(text)) {
+    if (block[block.length - 1].endsWith(" chevron_down")) block.pop();
+    if (!block.length || block[0].toLowerCase() !== wanted) continue;
+    const quantity = block[block.length - 1];
+    if (/^[\d,]+$/.test(quantity)) return Number(quantity.replace(/,/g, ""));
+  }
+  return 0;
+}
+
+// "22 in inventory" beside the Pumpkin Juice cap, so the cap can be set to the
+// juice actually on hand. Blank until an inventory is pasted.
+function showPumpkinJuiceHeld() {
+  const text = $("#inventory-text").value;
+  $("#pumpkin-juice-held").textContent = text.trim()
+    ? `${inventoryQuantity(text, "Pumpkin Juice").toLocaleString()} in inventory`
+    : "";
+}
+
 // The pasted game state lives in the panel too, so a snapshot (and a save) is
 // the whole state bar the goal.
 export function readSettingsState() {
@@ -817,6 +849,7 @@ export function applySettingsState(state) {
   state = state || {};
   $("#mastery-text").value = state.mastery_text || "";
   $("#inventory-text").value = state.inventory_text || "";
+  showPumpkinJuiceHeld();
   applySettingsParams(state.params);
 }
 
@@ -1072,6 +1105,7 @@ function wireSettingsControls() {
     event.target.value = "";
     if (file) restoreFromFile(file);
   });
+  $("#inventory-text").addEventListener("input", showPumpkinJuiceHeld);
   $("#use-pumpkin-juice").addEventListener("change", () => {
     $("#pumpkin-juice-cap").disabled = !$("#use-pumpkin-juice").checked;
   });

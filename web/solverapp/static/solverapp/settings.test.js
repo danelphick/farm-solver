@@ -7,6 +7,7 @@ import { describe, expect, test } from "vitest";
 import {
   computeApTradingParam,
   computeDefaultAllowed,
+  inventoryQuantity,
   mergeSettingsIntoState,
 } from "./settings.js";
 
@@ -108,5 +109,35 @@ describe("mergeSettingsIntoState", () => {
 
   test("no saved state at all is just the popover's own values", () => {
     expect(mergeSettingsIntoState(null, PANEL)).toEqual(PANEL);
+  });
+});
+
+describe("inventoryQuantity", () => {
+  const paste = [
+    "Items chevron_down",
+    "",
+    "Lemon",
+    "22",
+    "",
+    "Pumpkin Juice",
+    "Drink to boost a mastery",
+    "1,234",
+    "Fish chevron_down",
+    "",
+    "Trout",
+    "5",
+  ].join("\n");
+
+  test("reads the last line of the item's block, commas and all", () => {
+    expect(inventoryQuantity(paste, "Pumpkin Juice")).toBe(1234);
+  });
+
+  test("matches case-insensitively", () => {
+    expect(inventoryQuantity(paste, "pumpkin juice")).toBe(1234);
+  });
+
+  test("is 0 for an item the paste does not hold", () => {
+    expect(inventoryQuantity(paste, "Grape Juice")).toBe(0);
+    expect(inventoryQuantity("", "Pumpkin Juice")).toBe(0);
   });
 });

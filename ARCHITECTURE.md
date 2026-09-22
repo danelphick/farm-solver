@@ -1915,7 +1915,9 @@ that imports it without going through `manage.py`.
   keystroke, and no control inside the panel gets a change listener that
   solves (only the UI-only side effects: the juice cap's enable, the calendar's
   `#start-date` enable, the spread range row, the material filter/bulk
-  buttons). `readSettingsParams`/`applySettingsParams` are exact inverses (both
+  buttons, and the "N in inventory" count beside the juice cap, which
+  `inventoryQuantity` -- a pure, unit-tested JS reading of a pasted inventory,
+  on `history.js`'s exported `splitBlocks` -- recomputes as the paste changes). `readSettingsParams`/`applySettingsParams` are exact inverses (both
   run on every page load), which is what makes Cancel a one-liner.
   `GOAL_PARAM_KEYS` names what the panel does *not* own and
   `mergeSettingsIntoState` (pure, unit-tested) is how a page folds a Save back

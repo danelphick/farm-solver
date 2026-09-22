@@ -40,7 +40,7 @@ export const TIER_THRESHOLDS = [
 const PROGRESS_RE = /^([\d,]+)\s*\/\s*([\d,]+|∞)\s+Progress$/;
 
 // Mirrors parsing._split_blocks: blank-line separated runs of non-blank lines.
-function splitBlocks(text) {
+export function splitBlocks(text) {
   const blocks = [];
   let current = [];
   for (const raw of String(text).split("\n")) {
