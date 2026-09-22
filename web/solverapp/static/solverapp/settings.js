@@ -826,13 +826,18 @@ export function inventoryQuantity(text, item) {
   return 0;
 }
 
-// "22 in inventory" beside the Pumpkin Juice cap, so the cap can be set to the
-// juice actually on hand. Blank until an inventory is pasted.
+// "You have 22 in inventory." appended to the Pumpkin Juice cap's help tooltip,
+// so the cap can be set to the juice actually on hand. Only the base text until
+// an inventory is pasted. help.js reads data-help on each hover, so rewriting it
+// here is enough.
+let pumpkinJuiceHelp = null;
 function showPumpkinJuiceHeld() {
+  const icon = $("#pumpkin-juice-help");
+  if (pumpkinJuiceHelp === null) pumpkinJuiceHelp = icon.dataset.help;
   const text = $("#inventory-text").value;
-  $("#pumpkin-juice-held").textContent = text.trim()
-    ? `${inventoryQuantity(text, "Pumpkin Juice").toLocaleString()} in inventory`
-    : "";
+  icon.dataset.help = text.trim()
+    ? `${pumpkinJuiceHelp} You have ${inventoryQuantity(text, "Pumpkin Juice").toLocaleString()} in inventory.`
+    : pumpkinJuiceHelp;
 }
 
 // The pasted game state lives in the panel too, so a snapshot (and a save) is
