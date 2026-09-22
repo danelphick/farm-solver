@@ -1317,6 +1317,11 @@ details[open] > summary .summary-detail {
   color: var(--muted);
 }
 
+/* "22 in inventory" beside the settings' Pumpkin Juice cap. */
+.held-count {
+  font-size: 0.85rem;
+}
+
 /* A checkbox and its own label sitting inline in a filter row -- unlike
    `.field-row label`, which is the row's 11rem label gutter. */
 .field-row label.check {
