@@ -911,6 +911,9 @@ function settingsOpen() {
 
 function openSettings() {
   snapshot = readSettingsState();
+  // Refreshed here, not only in applySettingsState: the solver page restores the
+  // paste with its own restoreState, which never goes through this module.
+  showPumpkinJuiceHeld();
   popoverEl.hidden = false;
   buttonEl.setAttribute("aria-expanded", "true");
   popoverEl.focus();
