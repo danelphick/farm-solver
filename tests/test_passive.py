@@ -128,6 +128,21 @@ def test_parse_duration_rejects_garbage(text):
     ],
 )
 def test_format_duration(duration, expected):
+    assert format_duration(duration, units=3) == expected
+
+
+@pytest.mark.parametrize(
+    "duration, expected",
+    [
+        (timedelta(days=75, hours=5, minutes=48), "75d 5h"),
+        (timedelta(days=75, minutes=48), "75d"),
+        (timedelta(hours=5, minutes=48), "5h 48m"),
+        (timedelta(minutes=48), "48m"),
+        (timedelta(0), "0m"),
+        (timedelta(days=400, hours=5), "1y 35d"),
+    ],
+)
+def test_format_duration_defaults_to_two_unit_levels(duration, expected):
     assert format_duration(duration) == expected
 
 

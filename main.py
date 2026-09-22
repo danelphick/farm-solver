@@ -1577,8 +1577,8 @@ def limit_shortfall(
         fastest = min(p.time for p in plans)
         if fastest > time_limit:
             parts.append(
-                f"under {passive.format_duration(time_limit)}"
-                f" (fastest is {passive.format_duration(fastest)})"
+                f"under {passive.format_duration(time_limit, units=3)}"
+                f" (fastest is {passive.format_duration(fastest, units=3)})"
             )
     if max_ap is not None:
         fewest = round(min(p.arnold_palmers for p in plans))

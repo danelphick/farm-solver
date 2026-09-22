@@ -321,11 +321,16 @@ def parse_duration(text: str) -> timedelta:
 DAYS_PER_YEAR = 365
 
 
-def format_duration(duration: timedelta) -> str:
+def format_duration(duration: timedelta, units: int = 2) -> str:
     """Render a duration as ``"5d 3h 20m"``, dropping zero components.
 
     A year or longer is shown as years and days (e.g. ``"2y 40d"``), dropping
     the finer hours and minutes since they are noise at that scale.
+
+    ``units`` caps how many unit levels are shown, counted down from the largest
+    non-zero one and truncating the rest. The default two keep reports readable
+    -- ``"75d 5h 48m"`` reads ``"75d 5h"`` and ``"75d 0h 48m"`` just ``"75d"`` --
+    so pass ``units=3`` where the minutes matter.
     """
     minutes_total = int(duration.total_seconds() + 30) // 60  # round to minutes
     days, rem = divmod(minutes_total, 24 * 60)
@@ -336,11 +341,7 @@ def format_duration(duration: timedelta) -> str:
         if days:
             parts.append(f"{days}d")
         return " ".join(parts)
-    parts = []
-    if days:
-        parts.append(f"{days}d")
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes or not parts:
-        parts.append(f"{minutes}m")
-    return " ".join(parts)
+    levels = [(days, "d"), (hours, "h"), (minutes, "m")]
+    first = next((i for i, (value, _) in enumerate(levels) if value), len(levels))
+    parts = [f"{value}{unit}" for value, unit in levels[first:first + units] if value]
+    return " ".join(parts) or "0m"
