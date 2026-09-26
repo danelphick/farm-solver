@@ -2113,15 +2113,15 @@ def test_print_frontier_omits_the_pumpkin_juice_column_when_unused(capsys):
     assert "Pumpkin Juice" not in capsys.readouterr().out
 
 
-def test_pumpkin_juice_schedule_names_the_drink_levels():
-    # Two juices step down from the goal by the LP's gain (1,000,000 / 1.1 per juice
-    # for an MM item), so the last lands the item on target and the one before a step
-    # below -- both above the current 750,000 progress.
+def test_pumpkin_juice_schedule_names_the_start_level():
+    # Two juices start two of the LP's gains (1,000,000 / 1.1 per juice for an MM
+    # item) below the goal, so drunk back to back the last lands the item on target
+    # -- the start above the current 750,000 progress.
     gain = 0.1 * 1_000_000 / 1.1  # 90,909.09, matching pumpkin_juice_gains
     needs = [ItemNeed("Butter", have=750_000, target=1_000_000, is_mastery=True)]
     plan = SourcingPlan(pumpkin_juices={"butter": 2})
     assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {
-        "butter": [round(1_000_000 - 2 * gain), round(1_000_000 - gain)]
+        "butter": round(1_000_000 - 2 * gain)
     }
 
 
@@ -2131,7 +2131,7 @@ def test_pumpkin_juice_schedule_clamps_to_current_progress():
     gain = 0.1 * 1_000_000 / 1.1
     needs = [ItemNeed("Butter", have=960_000, target=1_000_000, is_mastery=True)]
     plan = SourcingPlan(pumpkin_juices={"butter": 1})
-    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {"butter": [960_000]}
+    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {"butter": 960_000}
 
 
 def test_pumpkin_juice_schedule_skips_items_with_no_juice():
@@ -2149,12 +2149,12 @@ def test_print_plan_shows_the_pumpkin_juice_section(capsys):
     )
     print_plan(
         plan, demand, Farm(), Workshop(), 1.0,
-        pumpkin_schedule={"butter": [700_000, 800_000, 900_000]},
+        pumpkin_schedule={"butter": 700_000},
     )
     out = capsys.readouterr().out
     assert "Pumpkin Juice (mastery boost):" in out
     assert "3x Pumpkin Juice on Butter = 690.0 g" in out
-    assert "drink at Butter mastery 700,000 / 800,000 / 900,000" in out
+    assert "start drinking at Butter mastery 700,000\n" in out
     assert "total 690.0 g" in out
 
 

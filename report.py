@@ -2020,15 +2020,15 @@ def print_plan(
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
-    pumpkin_schedule: dict[str, list[int]] | None = None,
+    pumpkin_schedule: dict[str, int] | None = None,
     skip_critical_path: bool = False,
     ap_prices: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials.
 
     ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
-    item, the mastery levels at which to drink its Pumpkin Juices so each lands its
-    intended tier boost; the Pumpkin Juice section names them. ``skip_critical_path``
+    item, the mastery level at which to start drinking its Pumpkin Juices (back to
+    back) so each lands its intended tier boost; the Pumpkin Juice section names it. ``skip_critical_path``
     (ascension mode only, see :func:`print_ascension_plan`) omits the usual
     :func:`print_critical_path` call -- a stage waiting on daily chores prints its
     own override line instead, ahead of this call; :func:`print_critical_path`'s
@@ -2386,11 +2386,12 @@ def print_plan(
             name = display.get(item, item)
             line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost} g"
             # A juice grants 10% of the current tier, so it only lands its full boost
-            # drunk late, in the goal's final tier -- name those mastery levels.
-            levels = (pumpkin_schedule or {}).get(item)
-            if levels:
-                drink = " / ".join(f"{level:,}" for level in levels)
-                line += f"\n    drink at {name} mastery {drink}"
+            # drunk late, in the goal's final tier -- name the mastery level to start
+            # at; each juice lifts mastery to the next one's point, so they go back
+            # to back from there.
+            start = (pumpkin_schedule or {}).get(item)
+            if start is not None:
+                line += f"\n    start drinking at {name} mastery {start:,}"
             print(line)
         print(f"  total {_gold_text(plan.pumpkin_gold)} g")
 
@@ -2429,7 +2430,7 @@ def markdown_plan(
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
-    pumpkin_schedule: dict[str, list[int]] | None = None,
+    pumpkin_schedule: dict[str, int] | None = None,
     skip_critical_path: bool = False,
     ap_prices: dict[str, float] | None = None,
 ) -> None:
@@ -2779,18 +2780,15 @@ def markdown_plan(
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
             cost = units * per_juice
             name = display.get(item, item)
-            levels = (pumpkin_schedule or {}).get(item) or []
-            drink = " / ".join(f"{level:,}" for level in levels)
+            start = (pumpkin_schedule or {}).get(item)
             rows.append([
                 name,
                 Cell.num(round(units)),
                 Cell.gold(cost),
-                # A schedule of mastery levels: one string for a reader, the
-                # levels themselves for JSON.
-                Cell(drink, list(levels)),
+                Cell("" if start is None else f"{start:,}", start),
             ])
         doc.heading("Pumpkin Juice (mastery boost)")
-        doc.table(["Goal", "Juices", "Gold", "Drink at mastery"], rows)
+        doc.table(["Goal", "Juices", "Gold", "Start drinking at mastery"], rows)
         doc.para(f"Total: {_gold_text(plan.pumpkin_gold)} g")
 
     # Stamina opportunity cost (see print_plan's matching section / _build_base).
@@ -3334,7 +3332,7 @@ class Reporter:
         sourceable_elsewhere: set[str] | None = None,
         max_passive_residuals: dict[str, float] | None = None,
         prices: dict[str, float] | None = None,
-        pumpkin_schedule: dict[str, list[int]] | None = None,
+        pumpkin_schedule: dict[str, int] | None = None,
         skip_critical_path: bool = False,
         ap_prices: dict[str, float] | None = None,
     ) -> None:

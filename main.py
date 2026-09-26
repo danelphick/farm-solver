@@ -562,34 +562,32 @@ def pumpkin_juice_schedule(
     plan: optimizer.SourcingPlan,
     needs: list[farm_solver.ItemNeed],
     pj_gain: dict[str, float],
-) -> dict[str, list[int]]:
-    """The mastery levels at which to drink each of ``plan``'s Pumpkin Juices.
+) -> dict[str, int]:
+    """The mastery level at which to start drinking ``plan``'s Pumpkin Juices.
 
     A juice only lands its intended boost drunk late, in the goal's final tier. It
     covers ``pj_gain`` of the item's shortfall -- the same demand units the LP credits
     (``0.1 * threshold / mastery_bonus``, see :func:`pumpkin_juice_gains`) -- so the
-    drink points step down from the target by that: the last lands the item on target,
-    the one before a step below, and so on. They all sit above the current progress --
-    the LP caps juice at the shortfall, so ``count * gain`` never exceeds ``target -
-    have`` -- and are clamped there anyway. Using the LP's own ``pj_gain`` keeps the
-    schedule from drifting from the crediting. Returns ``{lower-cased item: [level,
-    ...]}`` ascending (the order you reach them), for the items the plan drinks on.
+    first of ``count`` juices is drunk ``count * gain`` below the target; each juice
+    then lifts mastery to the next one's drink point, so they are drunk back to back
+    and the last lands the item on target. The start sits above the current progress
+    -- the LP caps juice at the shortfall, so ``count * gain`` never exceeds ``target -
+    have`` -- and is clamped there anyway. Using the LP's own ``pj_gain`` keeps the
+    schedule from drifting from the crediting. Returns ``{lower-cased item: level}``
+    for the items the plan drinks on.
     """
     targets = {
         need.item.lower(): (need.have, need.target)
         for need in needs
         if need.is_mastery
     }
-    schedule: dict[str, list[int]] = {}
+    schedule: dict[str, int] = {}
     for item, count in plan.pumpkin_juices.items():
         whole = round(count)
         if whole < 1 or item not in targets or item not in pj_gain:
             continue
         have, target = targets[item]
-        gain = pj_gain[item]
-        schedule[item] = [
-            max(have, round(target - step * gain)) for step in range(whole, 0, -1)
-        ]
+        schedule[item] = max(have, round(target - whole * pj_gain[item]))
     return schedule
 
 
@@ -3477,8 +3475,9 @@ def run(args: argparse.Namespace) -> int:
     chosen = fr.shown[selected]
     inputs.solution.arnold_palmers = round(chosen.arnold_palmers)
     inputs.solution.large_nets = round(chosen.large_nets)
-    # When to drink each Pumpkin Juice: the mastery levels (near the goal, in the
-    # item's final tier) that land its intended boost -- shown in the plan's report.
+    # When to start drinking the Pumpkin Juices: the mastery level (near the goal, in
+    # the item's final tier) from which, drunk back to back, they land their intended
+    # boost -- shown in the plan's report.
     pj_schedule = pumpkin_juice_schedule(
         chosen, inputs.solution.needs, inputs.pj_gain
     )

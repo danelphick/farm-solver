@@ -338,18 +338,17 @@ def test_passive_section_wait_in_seconds():
     assert row["Time"] == 600
 
 
-def test_pumpkin_juice_section_drops_the_gold_suffix_and_lists_the_levels():
+def test_pumpkin_juice_section_drops_the_gold_suffix_and_names_the_start_level():
     plan = SourcingPlan(pumpkin_juices={"butter": 3.0}, pumpkin_gold=690.0, gold=690.0)
     text, sections = _plan_docs(
         plan, {}, prices={"butter": 10.0},
-        pumpkin_schedule={"butter": [18000, 19000, 20000]},
+        pumpkin_schedule={"butter": 18000},
     )
-    assert "| butter | 3 | 690.0 g | 18,000 / 19,000 / 20,000 |" in text
-    (row,) = _only_table(sections, ["Goal", "Juices", "Gold", "Drink at mastery"])["rows"]
+    assert "| butter | 3 | 690.0 g | 18,000 |" in text
+    (row,) = _only_table(sections, ["Goal", "Juices", "Gold", "Start drinking at mastery"])["rows"]
     assert row["Juices"] == 3
     assert row["Gold"] == 690
-    # A schedule of mastery levels, not one pre-joined string.
-    assert row["Drink at mastery"] == [18000, 19000, 20000]
+    assert row["Start drinking at mastery"] == 18000
 
 
 def test_trade_section_drops_the_ap_and_gold_suffixes():

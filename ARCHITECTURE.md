@@ -1382,8 +1382,6 @@ the structure the printed sentence flattens:
   sentence off the same data (`print_plan`'s Opening yields was folded onto
   `_open_yields` too, removing a duplicated comprehension). Fishing's
   quantity-less variant emits the plain list of names (`_wanted_items`).
-- **"Drink at mastery"** (Pumpkin Juice) emits the list of mastery levels, not
-  the `"18,000 / 19,000"` joined string.
 - **Graph** carries the `optimizer.GraphSeries` points where Markdown needs the
   inline SVG (`_svg_plot`) -- which is why `markdown_frontier` and
   `SectionedReporter` append a graph via `doc.graph(series, plans)` rather than
@@ -1409,9 +1407,10 @@ information survives elsewhere in the document:
   the pipeline's "Print" step.) The Buy total is `plan.gold` **net of `pumpkin_gold`** (the
   juice is listed apart); the frontier table gains a **Pumpkin Juice** column
   (`_pumpkin_juices`) when a plan drinks any. The Pumpkin Juice section names the
-  **mastery levels to drink each juice at** (`main.pumpkin_juice_schedule`: `target −
-  k·pj_gain`, the LP's own `pj_gain = 0.1·threshold/mastery_bonus`, clamped ≥ progress)
-  so each lands its boost and the last hits the goal; no wall-clock time
+  **mastery level to start drinking at** (`main.pumpkin_juice_schedule`: `target −
+  count·pj_gain`, the LP's own `pj_gain = 0.1·threshold/mastery_bonus`, clamped ≥
+  progress); each juice lifts mastery to the next one's point, so they are drunk back
+  to back from there and the last hits the goal -- only the start is shown; no wall-clock time
   is given (mastery accrues from instant crafts, so there is no reliable per-juice
   time to attach). Counts
   are **right-aligned per section** (`_num_width`; the `x` lines up; not shared

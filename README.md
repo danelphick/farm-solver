@@ -206,7 +206,7 @@ The document is `{"sections": [{"name": ..., "blocks": [...]}]}`. `sections` is 
 
 **Values are machine-readable, not the printed text.** A quantity is a bare number — no thousands separators and no unit suffix, so the frontier's `1,234 g` is `1234` and a count of `148,290` is `148290`. **Every duration is in whole seconds**: `6d 5h 16m` is `538560`, and an instant plan's `0m` is `0`. The text and Markdown reports are unchanged — they still print for a reader; only the JSON drops the formatting.
 
-Some cells carry more than a number, since JSON has room for the structure the printed sentence flattens: a **Yields** cell is an item→quantity object (`{"Wood": 148290}`, or a plain list of names where the report shows no counts), and **Drink at mastery** is the list of mastery levels rather than `"18,000 / 19,000"`. Columns that are genuinely prose — Action, Detail, Source, Notes, Materials used — stay strings.
+Some cells carry more than a number, since JSON has room for the structure the printed sentence flattens: a **Yields** cell is an item→quantity object (`{"Wood": 148290}`, or a plain list of names where the report shows no counts). Columns that are genuinely prose — Action, Detail, Source, Notes, Materials used — stay strings.
 
 Two cells drop a human annotation, but nothing is lost from the document: the Goal table's **Still needed** is the shortfall itself (`0` where the report prints `done`, and no `✗` — the unreachable items are named in full by the *Materials with no known source* table right below it), and the frontier's **Gold** is the headline total the report's `buy + passive = total g` cell adds up to.
 
@@ -250,16 +250,16 @@ python main.py -m "Butter:1000000" --use-pumpkin-juice      # any number
 python main.py --use-pumpkin-juice=20                       # at most 20 for the tower
 ```
 
-A plan that drinks juice shows a **Pumpkin Juice** column in the frontier table and a **Pumpkin Juice (mastery boost)** section in its breakdown, naming each goal boosted, how many juices, the gold, and — since a juice only grants 10% of the item's *current* tier — the **mastery levels to drink each at**, late in the goal's final tier so each lands its full boost and the last hits the goal:
+A plan that drinks juice shows a **Pumpkin Juice** column in the frontier table and a **Pumpkin Juice (mastery boost)** section in its breakdown, naming each goal boosted, how many juices, the gold, and — since a juice only grants 10% of the item's *current* tier — the **mastery level to start drinking at**, late in the goal's final tier so each lands its full boost and the last hits the goal:
 
 ```text
 Pumpkin Juice (mastery boost):
   1x Pumpkin Juice on Butter = 258 g
-    drink at Butter mastery 909,091
+    start drinking at Butter mastery 909,091
   total 258 g
 ```
 
-Each juice steps the drink point down from the goal by the mastery it is worth (`0.1 × tier ÷ mastery-bonus` — the same amount the solver credits it, `1,000,000 ÷ 1.1 ≈ 90,909` for an `MM` item), so the last juice lands the item on target, the one before a step below, and so on — all above your current progress.
+The start sits below the goal by the mastery the juices are worth (`0.1 × tier ÷ mastery-bonus` each — the same amount the solver credits them, `1,000,000 ÷ 1.1 ≈ 90,909` for an `MM` item). Each juice lifts mastery exactly to the next one's drink point, so you drink them all back to back from there and the last lands the item on target.
 
 (No wall-clock time is given for each juice: mastery is earned by crafting, which the model treats as instant, so there is no reliable time-of-day to attach — the mastery level is the actionable cue.) A juice can only ever cover up to 100% of a goal's mastery (ten juices fill a fresh tier), so the count is naturally bounded per item even with no cap. Its gold folds into each plan's **buy** total (there is no self-sourced alternative), so it is part of the net cost the frontier trades against time. Juice held in inventory is not credited — every juice is costed at its nominal price.
 
