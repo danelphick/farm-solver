@@ -33,3 +33,6 @@
   Fishing pane, six more rows in Exploring, Resource Saver in Resources, and grapes/price_stamina
   in Trading values — all through the settings popover's generated `config` channel, so no
   server-side wiring was needed.
+
+- Mining - Need to store mining levels/charms, calculate average drop rates and then model both
+  manual mining and automatic mining.
