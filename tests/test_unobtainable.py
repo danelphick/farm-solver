@@ -72,3 +72,13 @@ def test_obtainable_items_include_crop_drops_from_the_farm():
     obtainable = obtainable_items(passive_production({}), farm)
     assert "carrot" in obtainable
     assert "runestone 01" in obtainable
+
+
+def test_materials_with_an_unmodelled_source_are_flagged():
+    # A material unmodelled.csv names is flagged with its real source; one it
+    # does not name stays bare.
+    reasons = {"painite": "Mining not modelled"}
+    assert unobtainable_materials(WORKSHOP, set(), reasons) == [
+        "Painite (Mining not modelled)",
+        "Wood",
+    ]

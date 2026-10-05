@@ -61,7 +61,10 @@ let fetchMock;
 async function loadPage({ saved = SAVED } = {}) {
   document.body.innerHTML =
     pageBody("index") +
-    '<script id="config-defaults" type="application/json">{}</script>';
+    // The server lists every pets.csv pet under [pets] (webapi.config_defaults);
+    // the Pets pane is built from those keys.
+    '<script id="config-defaults" type="application/json">' +
+    '{"pets": {"use_crunchy_omelette": true, "Cat": 8, "Miner": 0}}</script>';
   window.history.replaceState({}, "", "/");
   const store = installLocalStorage(saved);
   fetchMock = vi.fn(async (url) =>
@@ -202,6 +205,7 @@ describe("settings popover", () => {
       "workshop.resource_saver",            // resources
       "trading.price_stamina",              // trading values
       "pets.Cat",                           // pets
+      "pets.Miner",                         // pets (level 0 default)
       "sawmill.wood",                       // buildings
     ].forEach((key) => {
       expect($(`[data-config-key="${key}"]`)).not.toBeNull();

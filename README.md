@@ -301,6 +301,15 @@ Pass `--unobtainable` to list every workshop material that currently has no know
 python main.py --unobtainable
 ```
 
+A material that is really obtainable in game by a route the solver does not model is flagged with that route, from [`unmodelled.csv`](unmodelled.csv) (see [Mastery costs](#mastery-costs)), so the bare names are the ones still lacking any known source:
+
+```text
+The following materials are required for some crafts but are unobtainable:
+  Esperium
+  Fairy Crystal (Mining not modelled)
+  White Sugar (Sugar Cane Mill not modelled)
+```
+
 ## Mastery costs
 
 Pass `--mastery-costs` to see, for **every** item you have not finished mastering, how much effort each remaining tier still takes. For each masterable item and each tier it has not yet reached — **Master** (10,000 mastery), **Grandmaster** (100,000) and **Megamaster** (1,000,000) — the solver finds the single *fastest* plan to get there from your current progress and reports that plan's makespan and the **gold it spends buying** (the consumables it purchases at the [trading](#trading-gold-prices) exchange rates; a tier it self-sources entirely — a farmed crop, say — costs no gold). Each tier is measured cumulatively from where the item stands now, so a Grandmaster row already includes the work Master needed. It reads your mastery and inventory files like a normal run (the catalogue supplies every masterable item, so items you have never touched appear at progress 0), but solves its own per-item goals instead of the tower/`-m`/`-i` demand, and so conflicts with `--ascend`, `--unobtainable`, `--target`, `-m` and `-i`.
@@ -341,7 +350,9 @@ Gold Feed,unknown         # -> "not modelled" (route known, numbers not)
 Lobster,none              # -> "unobtainable" (genuinely)
 ```
 
-An item may have several rows (a seasonal item you also have to cook reads `seasonal; Cooking not modelled`). Naming an item there also stops the chain descending into its recipe — the reason *is* the explanation, and Magna Core's paper recipe is a red herring. Anything not listed keeps the plain `(unobtainable)`, so the file is purely additive: append a row when a new one turns up.
+Event items are flagged in [`items.csv`](items.csv) instead (the full game item list, `item,event`): a non-blank `event` column marks an item only available at certain times of year, and both reports print its window — `King Apple (seasonal: September Apple Bobbing Event)`, or just `(seasonal)` while the window is `true` (unknown). The `event` text is free-form and never parsed, so fill it in however suits the event. Keep `seasonal` rows in `unmodelled.csv` for seasonal items outside the museum's Event section only.
+
+An item may have several rows (a seasonal item you also have to cook reads `Cooking not modelled; seasonal`). Naming an item there also stops the chain descending into its recipe — the reason *is* the explanation, and Magna Core's paper recipe is a red herring. Anything not listed keeps the plain `(unobtainable)`, so the file is purely additive: append a row when a new one turns up.
 
 A second, different failure gets its own list: an item whose sources exist but
 cannot supply the **quantity** a tier needs — a finitely bounded supply, like a

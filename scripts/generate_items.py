@@ -15,7 +15,8 @@ Writes two files under the repo-root ``data/`` directory, which
 * ``items.txt`` -- items the Item goal picker suggests. The broad union of
   every ``mydata/mastery-*.txt``/``inventory-*.txt`` snapshot plus every
   per-domain data file (crops, seed drops, fishing, exploring, pets,
-  openables, tower, workshop recipes + materials).
+  openables, tower, workshop recipes + materials), plus the full game
+  catalogue in ``items.csv`` (see ``scripts/import_museum_items.py``).
 
 This is a one-time/occasional generation step (run again after mastery or
 inventory data changes, or new game content) -- the output is checked into
@@ -92,6 +93,7 @@ def broad_items() -> set[str]:
     names |= _csv_column(REPO_ROOT / "pets.csv", "Item")
     names |= _csv_column(REPO_ROOT / "openables.csv", "Item")
     names |= _csv_column(REPO_ROOT / "tower.csv", "Mastery Required")
+    names |= _csv_column(REPO_ROOT / "items.csv", "item")
 
     workshop = crafting.load_workshop()
     for recipe in workshop.recipes.values():

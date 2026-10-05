@@ -337,7 +337,7 @@ def test_the_shipped_reasons_file_parses_and_covers_the_named_features():
     assert reasons["stone shell"] == "Mining not modelled"
     assert reasons["gold feed"] == "not modelled"
     assert reasons["lobster"] == "unobtainable"
-    assert reasons["yule goat"] == "seasonal"
+    assert reasons["frozen cabbage"] == "seasonal"
 
 
 def test_chain_reports_the_reason_instead_of_bare_unobtainable():
@@ -365,3 +365,54 @@ def test_an_item_with_no_reason_keeps_the_old_wording():
     assert unmasterable_chain("sturdy pickaxe", RECIPES, {"board"}, DISPLAY) == (
         "Sturdy Pickaxe needs Stone Shell (unobtainable)"
     )
+
+
+def _items_file(tmp_path, body):
+    path = tmp_path / "items.csv"
+    path.write_text(body)
+    return path
+
+
+def test_load_event_windows_keeps_only_flagged_rows(tmp_path):
+    path = _items_file(
+        tmp_path,
+        "item,event\nWood,\nKing Apple,September Apple Bobbing Event\n"
+        "Yule Goat,true\nStone,false\n",
+    )
+    assert main.load_event_windows(path) == {
+        "king apple": "September Apple Bobbing Event",
+        "yule goat": "true",
+    }
+
+
+def test_load_item_reasons_adds_the_season_window(tmp_path):
+    unmodelled = _reasons_file(
+        tmp_path,
+        "item,source\nNeigh,Cooking\nFestive Eggnog,Cooking\nSnowman,seasonal\n",
+    )
+    items = _items_file(
+        tmp_path,
+        "item,event\nFestive Eggnog,December\nSnowman,true\nFall Leaves,September-October\n",
+    )
+    assert main.load_item_reasons(unmodelled, items) == {
+        "neigh": "Cooking not modelled",
+        # Appended after the item's other reasons...
+        "festive eggnog": "Cooking not modelled; seasonal: December",
+        # ...a plain seasonal row is not doubled up when the window is unknown...
+        "snowman": "seasonal",
+        # ...and an event item needs no unmodelled.csv row at all.
+        "fall leaves": "seasonal: September-October",
+    }
+
+
+def test_load_item_reasons_replaces_a_plain_seasonal_row_with_the_window(tmp_path):
+    unmodelled = _reasons_file(tmp_path, "item,source\nKing Apple,seasonal\n")
+    items = _items_file(tmp_path, "item,event\nKing Apple,September\n")
+    assert main.load_item_reasons(unmodelled, items) == {"king apple": "seasonal: September"}
+
+
+def test_the_shipped_files_flag_event_items_with_their_season():
+    reasons = main.load_item_reasons()
+    assert reasons["king apple"] == "seasonal: September Apple Bobbing Event"
+    assert reasons["yule goat"] == "seasonal"
+    assert reasons["neigh"] == "Cooking not modelled"

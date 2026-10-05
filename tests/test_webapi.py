@@ -469,6 +469,27 @@ def test_config_defaults_exposes_game_sections_without_solver():
     assert defaults["pets"]["Cat"] == 8
 
 
+def test_config_defaults_lists_every_pets_csv_pet(monkeypatch):
+    # The Pets panel is built from these keys, so every pet in the game data
+    # must appear -- an unconfigured one at level 0 (what the solver assumes).
+    import pets
+
+    real_load = webapi.load_web_config
+
+    def without_miner():
+        cfg = real_load()
+        cfg["pets"].pop("Miner", None)
+        return cfg
+
+    monkeypatch.setattr(webapi, "load_web_config", without_miner)
+    defaults = webapi.config_defaults()["pets"]
+    for name in pets.read_pet_tiers(pets.DEFAULT_PETS_CSV):
+        assert name in defaults
+    assert defaults["Miner"] == 0  # in pets.csv, not in the (patched) config
+    assert defaults["Cat"] == 8  # the configured level is kept
+    assert defaults["use_crunchy_omelette"] is True  # flags pass through
+
+
 def test_params_to_args_config_knobs_follow_free_text_overrides():
     # An explicit control wins over a conflicting free-text line: both land in
     # args.override, the dedicated knob last, and apply_overrides is last-wins.

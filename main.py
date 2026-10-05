@@ -1293,14 +1293,21 @@ def obtainable_items(
 
 
 def unobtainable_materials(
-    workshop: crafting.Workshop, obtainable: set[str]
+    workshop: crafting.Workshop,
+    obtainable: set[str],
+    reasons: dict[str, str] | None = None,
 ) -> list[str]:
     """Workshop materials that are neither obtainable nor craftable.
 
     These have no known source: they are not produced passively, fished,
     explored, farmed, fetched by pets, auto-supplied, nor made from a recipe of
     their own.
+
+    ``reasons`` (:func:`load_item_reasons`) flags the ones that are really
+    obtainable in game by a route the solver does not model: such a material is
+    listed as ``"Unpolished Flarite (Mining not modelled)"`` rather than bare.
     """
+    known = reasons or {}
     craftable = set(workshop.recipes)
     found: dict[str, str] = {}  # lower-cased key -> display name
     for recipe in workshop.recipes.values():
@@ -1308,7 +1315,10 @@ def unobtainable_materials(
             key = material.lower()
             if key not in obtainable and key not in craftable:
                 found[key] = material
-    return sorted(found.values())
+    return [
+        f"{found[key]} ({known[key]})" if key in known else found[key]
+        for key in sorted(found, key=lambda k: found[k])
+    ]
 
 
 def _latest_dated_file(directory: Path, prefix: str) -> Path | None:
@@ -2370,6 +2380,65 @@ def load_unmodelled_reasons(path: Path | None = None) -> dict[str, str]:
     return {item: "; ".join(parts) for item, parts in reasons.items()}
 
 
+ITEMS_PATH = Path(__file__).with_name("items.csv")
+
+
+def load_event_windows(path: Path | None = None) -> dict[str, str]:
+    """``{lower-cased item: event text}`` for the game's event items.
+
+    Reads :data:`ITEMS_PATH` (or ``path``), the full game catalogue
+    (``scripts/import_museum_items.py``), keeping the rows whose ``event`` is
+    set. The text is free-form and never parsed (``March-April``, ``September
+    Apple Bobbing Event``), with ``true`` meaning "an event item, window not
+    yet known". A missing file returns ``{}``.
+    """
+    source = path if path is not None else ITEMS_PATH
+    try:
+        text = source.read_text()
+    except FileNotFoundError:
+        return {}
+    lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+    windows: dict[str, str] = {}
+    for row in csv.DictReader(lines):
+        item = (row.get("item") or "").strip()
+        event = (row.get("event") or "").strip()
+        if item and event and event.lower() != "false":
+            windows[item.lower()] = event
+    return windows
+
+
+def _seasonal_reason(event: str) -> str:
+    """The reason text for an event item: ``"seasonal: <window>"``.
+
+    A bare ``true`` (window unknown) reads just ``"seasonal"``, matching an
+    unmodelled.csv ``seasonal`` row.
+    """
+    return "seasonal" if event.lower() == "true" else f"seasonal: {event}"
+
+
+def load_item_reasons(
+    unmodelled_path: Path | None = None, items_path: Path | None = None
+) -> dict[str, str]:
+    """:func:`load_unmodelled_reasons` plus each event item's season.
+
+    An event item (:func:`load_event_windows`) gains a ``"seasonal: <window>"``
+    reason -- replacing a plain ``seasonal`` one from unmodelled.csv, else
+    appended after its other reasons ("Cooking not modelled; seasonal:
+    December"). This is what the ``--unobtainable`` and ``--mastery-costs``
+    reports annotate with.
+    """
+    reasons = load_unmodelled_reasons(unmodelled_path)
+    for item, event in load_event_windows(items_path).items():
+        season = _seasonal_reason(event)
+        parts = reasons[item].split("; ") if item in reasons else []
+        if "seasonal" in parts:
+            parts[parts.index("seasonal")] = season
+        else:
+            parts.append(season)
+        reasons[item] = "; ".join(parts)
+    return reasons
+
+
 # The three mastery tiers, as (absolute progress threshold, short label), in
 # climbing order -- the targets --mastery-costs solves each remaining item to.
 _MASTERY_TIERS: tuple[tuple[int, str], ...] = (
@@ -2484,7 +2553,7 @@ def unmasterable_chain(
     "needs", nested craftable-but-stuck links take "(which needs ...)", and a
     material with no recipe of its own is a bare "(unobtainable)" leaf.
 
-    ``reasons`` (:func:`load_unmodelled_reasons`) replaces that bare wording
+    ``reasons`` (:func:`load_item_reasons`) replaces that bare wording
     wherever it knows *why*: most of these items are perfectly obtainable in game
     by a route the solver does not model, so "(Cooking not modelled)" is the
     truth and "(unobtainable)" is not. A named item also **ends** the descent --
@@ -2572,7 +2641,7 @@ def solve_mastery_costs(
         return recipe is not None and all(m in available for m in recipe)
 
     catalogue = load_mastery_catalogue()
-    reasons = load_unmodelled_reasons()
+    reasons = load_item_reasons()
     # Display names: catalogue first, then every workshop item/material (recipe
     # flows are lower-cased, so the casing comes from the workshop model).
     display: dict[str, str] = dict(catalogue)
@@ -3420,7 +3489,9 @@ def run(args: argparse.Namespace) -> int:
             has_mariyas_wheelbarrow=resolve_mariyas_wheelbarrow(cfg),
         )
         obtainable = obtainable_items(production, farm, fish, explore)
-        reporter.unobtainable(unobtainable_materials(workshop, obtainable))
+        reporter.unobtainable(
+            unobtainable_materials(workshop, obtainable, load_item_reasons())
+        )
         reporter.finish()
         return 0
 

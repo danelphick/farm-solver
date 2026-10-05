@@ -1,5 +1,7 @@
 10 Gold
+100 Gold
 11th Leaf Centerpiece
+25 Gold
 3-leaf Clover
 3rd Birthday Card
 4-leaf Clover
@@ -25,17 +27,22 @@ Ancient Pickaxe
 Ancient Ram Fossil
 Ancient Rune
 Ancient Stone Cicada
+Ancient Treasure Belt
 Anglerfish
 Ant Apple
 Antler
 Apple
 Apple Ant
 Apple Ant Buddy Doll
+Apple Basket
 Apple Belt
 Apple Buddy Doll
 Apple Cider
 Apple Core
+Apple Crate 01
+Apple Crate 02
 Apple Picker
+Apple Pie
 Apple Slice
 Apple Slicer
 Apple Turnover
@@ -45,6 +52,7 @@ Aquamarine
 Aquamarine Ring
 Arnold Palmer
 Arrowhead
+Ashes of Pentagorn
 Asteroid Egg
 Astro Fuzzy Chick
 Awl
@@ -53,9 +61,17 @@ B for Buddies
 Baba Bobblehead
 Baba Cola
 Baba Gec's Cabbage Stew
+Baba's Snack Pack
+Backpack
 Backstabbing Dagger
 Bacon
+Bag of Ghost Candy
+Bag of Presents 01
+Bag of Presents 02
+Bag of Re'taw
+Bag of Snowballs
 Bag of Spring Seeds
+Bahltruvian Scales
 Bait Bag 01
 Bamboo
 Bamboo Chair
@@ -77,17 +93,27 @@ Beach Umbrella
 Bear Buddy Doll
 Beary Squishies
 Beatrix Bobblehead
+Beatrix's Big Box of Boom
+Beatrix's Booming Brawl Box 01
+Beatrix's Booming Brawl Box 02
+Beatrix's Booming Brawl Box 03
 Beet
 Beet Seeds
 Bell
 Belt Drive
 Belt of Commander Uteer
 Belt of Freedom
+Belt of Menace
 Belt of Truth
+Bessi Gan Belt
 Bird Egg
 Bird Key
 Bird Skull 01
+Birthday Present
 Birthday Suit Buddy Doll
+Birthday Surprise Box 03
+Birthday Surprise Box 04
+Birthday Surprise Box 05
 Bitten Apple
 Black Bag
 Black Cloak
@@ -161,6 +187,9 @@ Borgen's Dancing Belt
 Bottle Rocket
 Bouquet of Flowers
 Bouquet of Roses
+Box of Chocolate 01
+Box of Chocolate 02
+Box of Holiday Cakes
 Brain Fungus
 Bread
 Breakfast Boost
@@ -188,8 +217,10 @@ Buddy Doll Bag 01
 Buddy Doll Bag 02
 Buddy Elf on a Shelf
 Buddy Loves You Card
+Buddy's Beach Bag
 Buddy's Beach Ball
 Buddy's Old Pirate Belt
+Buddy's School Bag
 Buddy's Sleeping Cap
 Buddystone
 Bug Bag 01
@@ -216,6 +247,7 @@ Candy Roll
 Cannon
 Canoe
 Captains Log
+Captured Ghost
 Capy Birthday Card
 Carbon Sphere
 Carnevale
@@ -241,6 +273,7 @@ Carved Warthog
 Cat's Meow
 Caterpillar
 Catfish
+Cave Key
 Cave Mushroom
 Cave Paste
 Cecil Bobblehead
@@ -274,9 +307,22 @@ Charles Bobblehead
 Charles's Neigh
 Chattering Teeth
 Cheese
+Cheese Wheel
 Chisel
 Chocolate Bunny
 Christmas Card
+Christmas Present 01
+Christmas Present 02
+Christmas Present 03
+Christmas Present 04
+Christmas Present 05
+Christmas Present 06
+Christmas Present 07
+Christmas Present 08
+Christmas Present 09
+Christmas Present 10
+Christmas Present 11
+Christmas Present 12
 Christmas Stocking
 Christmas Sweater
 Christmas Tree
@@ -318,6 +364,7 @@ Cooking Pot
 Copper Wire
 Corn
 Corn Ball
+Corn Bread
 Corn Buddy Doll
 Corn Husk Doll
 Corn Kabob
@@ -325,6 +372,9 @@ Corn Oil
 Corn Prize Bag
 Corn Seeds
 Corn Speedrun Trophy
+Cornucopia 01
+Cornucopia 02
+Cornucopia 03
 Cotton
 Cotton Candy
 Cotton Seeds
@@ -346,6 +396,10 @@ Cucumber Seeds
 Cupid
 Cupid Buddy Doll
 Cursed Effigy
+Cursed Effigy Body
+Cursed Effigy Gem
+Cursed Effigy Hair
+Cursed Effigy Head
 Cursed Shield
 Cutlass
 Cyclops Spider
@@ -358,15 +412,18 @@ Detonator
 Dewstar's Journal
 Diamond
 Diamonds
+Diary of O'Dynn
 Dice
 Dino Buddy Doll
 Diving Helmet
 Donner
+Dragon Heart
 Dragon Skull
 Dragonfly
 Dream Nail
 Drink Bundle
 Drum
+Duck Egg
 Duck Feather
 Egg 01
 Egg 02
@@ -386,6 +443,7 @@ Egg of Ages
 Egg of Air
 Egg of Chaos
 Egg of Chicken
+Egg of Duck
 Egg of Earth
 Egg of Fire
 Egg of Life
@@ -398,6 +456,7 @@ Egg of Zeal
 Eggplant
 Eggplant Seeds
 Eggs
+Eggypalchi
 Egyptian Necklace
 Ember Caverns Charm
 Embershard
@@ -407,6 +466,7 @@ Emberstone
 Emerald
 Emerald Ring
 Energy Coil
+Energy Core
 Engine
 Esperium
 Esperium Band
@@ -419,6 +479,7 @@ Explosive
 Eye Patch
 Fairy Crystal
 Fairy Ring
+Fall Basket
 Fall Leaves
 Fancy Box
 Fancy Chair
@@ -428,6 +489,7 @@ Fancy Guitar
 Fancy Pan Flute
 Fancy Pillow
 Fancy Pipe
+Fancy Present
 Fancy Shoe
 Fancy Sword
 Fancy Table
@@ -438,6 +500,8 @@ Farmiversary Trophy 01
 Farmiversary Trophy 02
 Farmiversary Trophy 03
 Farmiversary Trophy 04
+Farmiversary Trophy 05
+Farmiversary Trophy 06
 Feathers
 Feed
 Fenrir's Coin
@@ -455,6 +519,7 @@ Fish Bones
 Fish Flakes
 Fishing Hook
 Fishing Net
+Five Point Mace
 Flame Orb
 Flamejack
 Flarefin
@@ -472,9 +537,11 @@ Fossilized Print
 Fossilized Shell
 Fossilized Viper
 frank Bobblehead
+frank's Basket
 frank's Bunny Mask
 Freaky Picture
 Friendship Bag 01
+Friendship Bracelet
 Frog
 Frost Shield
 Frost Snapper Shell
@@ -488,6 +555,9 @@ Frozen Bouquet
 Frozen Buddy Doll
 Frozen Cabbage
 Frozen Catfish
+Frozen Chest 01
+Frozen Chest 02
+Frozen Chest 03
 Frozen Coin
 Frozen Corn
 Frozen Crab Claw
@@ -512,6 +582,7 @@ Frozen Starfish
 Frozen Tomato
 Frozen Wheel
 Fruit Punch
+Fuji Apple
 Fungus Processing and You
 Fuzzy Bunny
 Fuzzy Chick 01
@@ -532,16 +603,20 @@ Fuzzy Trout
 Gainite
 Galactic Egg Basket
 Garden Claw
+Garden Crate 01
 Garden Trowel
 Gardening Buddy Doll
+Gare Bear
 Garlic
 Garnet
 Garnet Ring
 Garnet Walking Stick
 Gary Bobblehead
 Gary's Crushroom Key
+Gary's Diary Page 12
 Gary's Diary Page 36
 Gary's Diary Page 77
+Gary's Diary Page 86
 Gazebo
 Geist Bobblehead
 George Bobblehead
@@ -553,9 +628,12 @@ Ghost Candy
 Ghost Jelly
 Giant Centipede
 Giant Squid
+Gift Basket 01
+Gift Basket 02
 Gingerbread Buddy Doll
 Gingerbread House
 Gingerbread Man
+Giving Box 01
 Glacierstone
 Glass Bottle
 Glass Eye Urchin
@@ -568,6 +646,7 @@ Gloorp
 Glowing Lantern
 Glowshroom
 Glyph Sphere
+Gold Apple
 Gold Aquamarine Ring
 Gold Boot
 Gold Buddy Sweater
@@ -637,6 +716,7 @@ Gravicite
 Gravity Orb
 Gravy Boat
 Green Apple
+Green Backpack
 Green Barracuda
 Green Butterfly
 Green Chromis
@@ -658,6 +738,8 @@ Green Top Hat
 Green Torpedo
 Green Twine
 Groundhog Buddy Doll
+Growth Medallion I
+Growth Medallion II
 Grubs
 Gummy Globber
 Gummy Worms
@@ -667,11 +749,17 @@ Happy Cookies
 Happy Farmiversary Card
 Happy Halloween Card
 Harpoon
+Harvest Bundle 01
+Headdress of Luna
 Heart Candies
 Heart Container
 Heart Necklace
 Heart Necklace Left Piece
 Heart Necklace Right Piece
+Heart-shaped Box 01
+Heart-shaped Box 02
+Heart-shaped Box 03
+Heart-shaped Gem
 Hearts
 Heavy Pickaxe
 Hensods's Bonsai
@@ -682,8 +770,11 @@ Hide
 Highland Hollow Charm
 Hockey Mask
 Holger Bobblehead
+Holger's Lunch Box
 Holger's Mushroom Stew
+Holiday Cake
 Holiday Candles
+Holiday Cheer Bundle 01
 Holiday Garland
 Holiday Wreath
 Honey
@@ -702,10 +793,12 @@ Hot Cocoa
 Hot Potato
 Hotdog Buddy Doll
 Hourglass
+Hummingbird Feeder
 Ice Scraper
 Ice Shark
 Iced Tea
 Inferno Pepper
+Inferno Ring
 Inferno Sphere
 Iron
 Iron Cup
@@ -742,6 +835,7 @@ Large Chest 03
 Large Clam Shell
 Large Net
 Largemouth Bass
+Lava Ring
 Lava Sphere
 Lavos Shard
 Leather
@@ -768,7 +862,9 @@ Lollipop
 Looking Glass
 Lorn Bobblehead
 Lorn's Breakfast Boost
+Lorn's Expedition Kit
 Lovely Cookies
+Lovely Present
 Lovely Rose
 Lucky Bacon
 Lucky Cat Buddy Doll
@@ -781,8 +877,13 @@ Lucky Trout
 Machine Part
 Machine Press
 Mackerel
+Maduin's Cup
 Magenta Growth
 Magic Conch Shell
+Magic Lamp
+Magic Mirror
+Magical Chest 01
+Magical Chest 02
 Magical Egg Basket
 Magicite
 Magmastone
@@ -802,6 +903,7 @@ Marlin
 Maverick Chip
 Mayonnaise
 Mealworms
+Mechanical Heart
 Medium Chest 01
 Medium Chest 02
 Medium Chest 03
@@ -823,11 +925,13 @@ Milk and Cookies
 Milk Carton
 Mini Marshmallows
 Mini Slime Squid
+Mini Time Egg
 Mining Bag 01
 Mining Bag 02
 Mining Bag 03
 Mining Bag 04
 Mining Bag 05
+Mining Bag 06
 Minnows
 Mist Lily
 Mistletoe
@@ -867,6 +971,7 @@ Nebula Egg
 Neigh
 Nightshade Cap
 Nirumdivar
+Notary Certificate
 Notary Stamp
 Notebook
 Nut Cracker Buddy
@@ -876,6 +981,8 @@ Oak Table
 Ocean Stone
 Oceanite
 Octopus
+Odthorin's Charm
+Official Share
 Old Boot
 Onion
 Onion Rings
@@ -917,15 +1024,20 @@ Pearl Berries
 Pearl Berry Jam
 Pearl Necklace
 Peas
+Peculiar Gem
+Peg Leg
 Pencil
 Pepper Seeds
 Peppers
+Perfect Paint Palette
 Peridot
 Pestle and Mortar
 Pet Treat
 PHR Voucher
 Pickaxe
+Picnic Basket 01
 Pie
+Pie Machine
 Pie Pan
 Piece 01
 Piece 03
@@ -945,12 +1057,14 @@ Piece 31
 Piece of Cake
 Piece of Heart
 Pig Collar
+Pillow Case 01
 Pine Board
 Pine Cone
 Pine Seeds
 Pine Shavings
 Pine Shelf
 Pine Tree
+Pineapple
 Pinecone Bird Feeder
 Pink Jelly
 Pink Ribbon
@@ -971,6 +1085,9 @@ Pocket Watch
 Podcast Swear Jar
 Polished Boot
 Popcorn
+Pot of Gold (Large)
+Pot of Gold (Medium)
+Pot of Gold (Small)
 Potato
 Potato Battery
 Potato Seeds
@@ -978,6 +1095,8 @@ Potion of Clarity
 Potted Flower
 Power Monitor
 Prancer
+Present 01
+Present 02
 Prickly Pear
 Prism Shard
 Prism Shell
@@ -1030,6 +1149,7 @@ Red Butterfly
 Red Diamond Fish
 Red Diary
 Red Dye
+Red Envelope
 Red Flowers
 Red Mushrooms
 Red Ornament
@@ -1044,6 +1164,7 @@ Red Twine
 Red Velvet Cake
 Redbrook Patch
 Redgill
+Refined Corn Quartz
 Refined Esperium
 Refined Plum Ore
 Reforged Sword
@@ -1060,6 +1181,7 @@ Roomba's Over The Moon
 Roomba’s Locket
 Rope
 Rosalie Bobblehead
+Rosalie's Beach Tote
 Rosalie's Bone Broth
 Rosalie's Concord Grape Pie
 Rosalie's Red Berry Pie
@@ -1072,9 +1194,12 @@ Ruby Scorpion
 Rucksack
 Rudolph
 Rudolph Buddy Doll
+Ruined Ether Drill
+Ruined Ether Hammer
 Rune Dice
 Rune Shard
 Runecorn
+Runecube
 Runestone 01
 Runestone 02
 Runestone 03
@@ -1121,6 +1246,7 @@ Scissors
 Scrap Cloth
 Scrap Metal
 Scrap Wire
+Scythe of Dewstar
 Sea Catfish
 Sea Crest
 Sea Dragon
@@ -1134,6 +1260,7 @@ Seaweed
 Seeing Stone
 Seeker
 Serpent Eel
+Serpent of Trym
 Sewing Needle
 Shadow Bloom
 Shamrock Milk
@@ -1147,6 +1274,7 @@ Shimmer Topaz
 Shinefish
 Shining Earrings
 Shiny Beetle
+Shiny Present
 Ship in a Bottle
 Ship Mast
 Ship Wheel
@@ -1210,19 +1338,26 @@ Spool of Copper
 Spoon
 Sporefly
 Spring
+Spring Bangle
+Spring Basket 01
+Spring Basket 02
+Spring Basket 03
 Spring Cave Charm
 Spring Seeds
 Square Key
+Stack of Cards
 Stained Glass Art
 Star
 Star Bobblehead
 Star's Treasure Map
 Starfish
 Steak
+Steak Kabob
 Steel
 Steel Buckle
 Steel Pickaxe
 Steel Plate
+Steel Soap Belt
 Steel Vise
 Steel Wire
 Step Ladder
@@ -1230,7 +1365,10 @@ Stingray
 Stone
 Stone Fragment
 Stone Jelly
+Stone Key
 Stone Shell
+Stones of Gallodor
+Strange Gem
 Strange Key 01
 Strange Letter
 Strange Mushroom
@@ -1250,6 +1388,7 @@ Sturdy Sword
 Sugar Cane
 Sugar Cane Seeds
 Sugar Cube
+Summer Basket
 Sun Egg
 Sun Shades
 Sunfish
@@ -1260,7 +1399,9 @@ Sunscreen
 Sunstone
 Sunstone Ring
 Supply Bag 01
+Supply Bag 02
 Supply Crate 01
+Supply Crate 02
 Supply Voucher
 Support's Ticket
 Swamp Algae
@@ -1285,8 +1426,10 @@ Thomas Bobblehead
 Thomas's Cat's Meow
 Thomas's Cup of PB
 Thomas's Red Velvet Cake
+Thomas's Tavern Tote
 Thorns
 Tie Dye Scarf
+Time Egg
 Tin Can
 Tin Goblet
 Tin Scraps
@@ -1298,18 +1441,24 @@ Tombstone
 Toothbrush
 Torch Fish
 Tower Key
+Tower Prep Pack 01
 Toxic Tendrils
 Transistor
 Travel Voucher
+Traveler's Bag 01
 Treasure Chest
 Treasure Key
 Treat Bag 01
 Treat Bag 02
 Treat Bag 03
+Treat Bag 04
+Treat Bag 05
 Treat Bag 06
+Tree of Life Statue
 Tribal Mask
 Tribal Staff
 Trident of Poseidon
+Trigon Knot
 Trout
 Turkey Buddy Doll
 Twilight Squid
@@ -1318,6 +1467,7 @@ Two Hearts Belt
 U'ral Talisman
 Ugly Buddy Sweater
 Uncle Sam Buddy Doll
+Unicorn Key
 Unicorn Shell
 Unpolished Aquacite
 Unpolished Emerald
@@ -1329,6 +1479,7 @@ Unpolished Pyrite
 Unpolished Ruby
 Unpolished Shimmer Stone
 Unrefined Sugar
+Unusual Gem
 Utal's Sabre
 Vacation Buddy Doll
 Valentines Card
@@ -1371,11 +1522,13 @@ White Truffle
 White Twine
 Wine
 Winged Amulet
+Winter Basket
 Wishbone Necklace
 Witch Hat
 Witch's Brew
 Witch's Broom
 Wizard Hat
+Wizard's Second Favorite Feather
 Wood
 Wood Planer
 Wooden Barrel
@@ -1410,4 +1563,5 @@ Yellow Watermelon
 You Rock Card
 YoYo
 Yule Goat
+Zho's Dagger
 Zombie Buddy Doll

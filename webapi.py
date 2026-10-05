@@ -365,9 +365,25 @@ def config_defaults() -> dict:
     placeholder (and a bool checkbox's initial on/off state), so a control left
     at its default sends no override. The ``[solver]`` section is withheld -- it
     holds server-side file paths, nothing a control maps to.
+
+    ``[pets]`` is completed from ``pets.csv``: every pet the game data knows
+    gets a level (0 where the config does not list it -- what the solver
+    assumes for an unlisted pet), in pets.csv order. The Pets panel builds its
+    controls from these keys, so a pet added to pets.csv appears without a UI
+    change.
     """
     cfg = load_web_config()
     cfg.pop("solver", None)
+    configured = cfg.get("pets", {})
+    by_lower = {key.lower(): key for key in configured}
+    # The non-pet flags (use_crunchy_omelette) first, then every pet.
+    section = {key: value for key, value in configured.items() if isinstance(value, bool)}
+    for name in pets.read_pet_tiers(pets.DEFAULT_PETS_CSV):
+        key = by_lower.get(name.lower(), name)
+        section[key] = configured.get(key, 0)
+    for key, value in configured.items():
+        section.setdefault(key, value)
+    cfg["pets"] = section
     return cfg
 
 

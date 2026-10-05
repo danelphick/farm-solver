@@ -109,12 +109,14 @@ const EXPLORING_ZONES = [
   "Whispering Creek", "Jundland Desert", "Gary's Crushroom", "Sinking Swamp",
 ];
 
-const PET_NAMES = [
-  "Cat", "Wolf", "Owl", "Dog", "Squirrel", "Swine", "Snake", "Lemur", "Baboon",
-  "Frog", "Hedgehog", "Fox", "Armadillo", "Spider", "Pet Rock", "Bird",
-  "Penguin", "Green Dragon", "Red Dragon", "Blue Dragon", "Bear", "Capybara",
-  "Strange Onion", "Seal", "Critter", "Polar Bear", "Hummingbird", "Shark",
-];
+// The Pets pane's pets: every numeric (level) key of the injected [pets]
+// defaults, which the server completes from pets.csv (webapi.config_defaults)
+// -- so a pet added to the game data needs no change here. Its boolean keys
+// (use_crunchy_omelette) are flags, not pets.
+function petNames() {
+  const section = configDefault("pets") || {};
+  return Object.keys(section).filter((key) => typeof section[key] === "number");
+}
 
 // Flat field lists (one control each), keyed by the container's data-config
 // attribute in the template.
@@ -386,7 +388,7 @@ function buildConfigPanels() {
     }));
     const grid = document.createElement("div");
     grid.className = "pet-grid";
-    PET_NAMES.forEach((name) => grid.appendChild(createConfigField({
+    petNames().forEach((name) => grid.appendChild(createConfigField({
       key: `pets.${name}`, label: name, type: "int", compact: true,
     })));
     pets.appendChild(grid);
