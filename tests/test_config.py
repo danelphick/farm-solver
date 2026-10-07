@@ -237,31 +237,34 @@ def test_tree_shaker_is_a_separate_offset_producer():
     assert shaker.outputs == {"apple": 801, "orange": 802, "lemon": 801}
 
 
-def test_oddvocado_trees_split_evenly_across_seven_fruit():
-    # Each tree bears one of seven fruit at random, so the separate daily
-    # producer deposits the expected trees / 7 of each, unscaled by the bonus
-    # or the shaker.
+def test_oddvocado_trees_split_by_observed_weights():
+    # Each tree bears one fruit, drawn by the observed drop weights, so the
+    # separate daily producer deposits each fruit's expected share of the
+    # trees, unscaled by the bonus or the shaker.
     production = passive_production(
         {
             "orchard": {
                 "lemon_trees": 100,
                 "bonus": 1.3,
                 "have_tree_shaker": True,
-                "oddvocado_trees": 700,
+                "oddvocado_trees": 120,
             }
         }
     )
     odd = next(p for p in production.producers if p.name == "orchard_oddvocado")
     assert odd.period == DAILY
-    assert odd.outputs == {
-        "pear": 100,
-        "avocado": 100,
-        "cherries": 100,
-        "lemon": 100,
-        "raspberries": 100,
-        "orange": 100,
-        "blueberries": 100,
-    }
+    assert odd.outputs == pytest.approx(
+        {
+            "avocado": 33,
+            "orange": 24,
+            "lemon": 20,
+            "cherries": 16,
+            "raspberries": 14,
+            "pear": 8,
+            "blueberries": 5,
+        }
+    )
+    assert sum(odd.outputs.values()) == pytest.approx(120)
     shaker = next(p for p in production.producers if p.name == "orchard_shaker")
     assert shaker.outputs == {"lemon": 13}
 

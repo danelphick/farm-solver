@@ -434,8 +434,8 @@ orange_trees = 6175
 lemon_trees = 6165
 bonus = 1.3
 have_tree_shaker = true    # separate 10% deposit of each fruit, like the snare
-oddvocado_trees = 0    # one random fruit each a day at noon: Pear, Avocado, Cherries,
-                       # Lemon, Raspberries, Orange or Blueberries (expected trees/7 of each)
+oddvocado_trees = 0    # one random fruit each a day at noon, weighted by observed drops:
+                       # Avocado > Orange > Lemon > Cherries > Raspberries > Pear > Blueberries
 
 [raptor_pen]    # antlers daily, plus a separate 10% deposit with the snare
 antlers = 2617810

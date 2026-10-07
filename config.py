@@ -56,17 +56,20 @@ FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
 # flag the builders take.
 COW_HORN_MULTIPLIER = 3
 
-# What an Oddvocado Tree bears: one of these a day, each equally likely. Names
-# are the game's own (lower-cased), plural or not as it spells them.
-ODDVOCADO_FRUIT = (
-    "pear",
-    "avocado",
-    "cherries",
-    "lemon",
-    "raspberries",
-    "orange",
-    "blueberries",
-)
+# What an Oddvocado Tree bears: one of these a day at noon, weighted by how
+# often each has dropped. The odds are not uniform and not published, so the
+# weights are observed drop counts (20 trees over 6 days, 120 fruit); add new
+# tallies to sharpen them. Names are the game's own (lower-cased), plural or not
+# as it spells them.
+ODDVOCADO_FRUIT: dict[str, int] = {
+    "avocado": 33,
+    "orange": 24,
+    "lemon": 20,
+    "cherries": 16,
+    "raspberries": 14,
+    "pear": 8,
+    "blueberries": 5,
+}
 
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
@@ -258,9 +261,9 @@ def passive_production(
       scaled by the multiplicative ``bonus`` and floored; with
       ``have_tree_shaker`` a separate daily deposit adds a further 10%
       (floored) of each fruit twelve hours later, like the raptor snare.
-      ``oddvocado_trees`` each bear one random fruit a day at noon, an equal
-      chance of each of :data:`ODDVOCADO_FRUIT`; that separate daily producer
-      deposits the expected ``trees / 7`` of each, unscaled by ``bonus`` or
+      ``oddvocado_trees`` each bear one random fruit a day at noon, drawn by
+      the observed weights in :data:`ODDVOCADO_FRUIT`; that separate daily
+      producer deposits the expected share of each, unscaled by ``bonus`` or
       the shaker.
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
@@ -424,14 +427,17 @@ def passive_production(
             )
         oddvocado_trees = int(orchard.get("oddvocado_trees", 0))
         if oddvocado_trees:
-            # Each Oddvocado Tree bears one fruit a day at noon, an equal
-            # chance of each kind, so the expected haul is trees / 7 of each.
-            share = oddvocado_trees / len(ODDVOCADO_FRUIT)
+            # Each Oddvocado Tree bears one fruit a day at noon, so the
+            # expected haul of each is its weighted share of the trees.
+            total = sum(ODDVOCADO_FRUIT.values())
             producers.append(
                 PassiveProducer(
                     name="orchard_oddvocado",
                     period=DAILY,
-                    outputs={fruit: share for fruit in ODDVOCADO_FRUIT},
+                    outputs={
+                        fruit: oddvocado_trees * weight / total
+                        for fruit, weight in ODDVOCADO_FRUIT.items()
+                    },
                 )
             )
 
