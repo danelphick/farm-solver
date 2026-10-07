@@ -126,6 +126,12 @@ class ItemNeed:
     ``-m``/``-i`` goals which are not tied to a tower level. ``is_mastery`` marks
     whether the shortfall is measured in mastery (tower, ``-m``) rather than a
     plain item count (``-i``); only mastery shortfalls earn the mastery bonus.
+
+    ``ignored`` marks a need the solver is deliberately not pursuing
+    (``--ignore-goal``, see ``main.build_inputs``): it is kept here so the Goal
+    report still lists it -- greyed out, rather than silently vanishing -- but
+    it contributes no demand. The flag is set after solving, never by the
+    ``solve_*`` functions, which know nothing about it.
     """
 
     item: str
@@ -133,6 +139,7 @@ class ItemNeed:
     target: int
     level: int | None = None
     is_mastery: bool = False
+    ignored: bool = False
 
     @property
     def extra(self) -> int:

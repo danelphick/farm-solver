@@ -325,6 +325,12 @@ class MarkdownDoc:
 # detecting this glyph client-side (see app.js's ``markUnreachableGoalRows``).
 UNREACHABLE_GOAL_MARK = "✗"  # ✗
 
+# What a goal the solver was told to skip (``--ignore-goal``) reads as in the
+# "Still needed" cell/line: it demands nothing, whatever its shortfall, and the
+# Have/Target columns beside it still say how much is being skipped. The web UI
+# greys the whole row (see app.js's markIgnoredGoalRows).
+IGNORED_GOAL_TEXT = "ignored"
+
 
 def print_solution(
     solution: farm_solver.Solution, remainder: dict[str, int] | None = None
@@ -333,7 +339,12 @@ def print_solution(
     unreachable = {item.lower() for item in remainder}
     for need in solution.needs:
         prefix = f"T{need.level}: " if need.level is not None else ""
-        if need.extra > 0:
+        if need.ignored:
+            print(
+                f"{prefix}{need.item}: {IGNORED_GOAL_TEXT} "
+                f"(have {need.have:,} of {need.target:,})"
+            )
+        elif need.extra > 0:
             mark = f" {UNREACHABLE_GOAL_MARK}" if need.item.lower() in unreachable else ""
             print(
                 f"{prefix}{need.item}: need {need.extra:,} more "
@@ -384,7 +395,11 @@ def markdown_solution(
                 purpose = "Mastery"
             else:
                 purpose = "Inventory"
-            if need.extra > 0:
+            if need.ignored:
+                # Ignored wins over both other states: an ignored goal demands
+                # nothing, so it can be neither short nor unreachable.
+                still_needed = IGNORED_GOAL_TEXT
+            elif need.extra > 0:
                 still_needed = f"{need.extra:,}"
                 if need.item.lower() in unreachable:
                     still_needed += f" {UNREACHABLE_GOAL_MARK}"
@@ -395,11 +410,13 @@ def markdown_solution(
                 need.item,
                 Cell.num(need.have),
                 Cell.num(need.target),
-                # "done" and the mark annotate the shortfall for a reader; the
-                # value is the shortfall itself (0 when done). JSON loses
-                # nothing by dropping the mark -- the unreachable items are
-                # named in the "no known source" table right below.
-                Cell(still_needed, need.extra),
+                # "done"/"ignored" and the mark annotate the shortfall for a
+                # reader; the value is the demand the shortfall places on the
+                # plan (0 when done, and 0 when ignored -- that is what being
+                # ignored means). JSON loses nothing by dropping the mark --
+                # the unreachable items are named in the "no known source"
+                # table right below.
+                Cell(still_needed, 0 if need.ignored else need.extra),
             ])
         doc.table(headers, rows)
     for note in solution.notes:

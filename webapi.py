@@ -46,7 +46,7 @@ import report
 # Args fields that change what gets solved -- part of the cache key (see
 # fingerprint). A change to any of these invalidates the cached frontier.
 RESOLVE_FIELDS = (
-    "target", "level", "mastery", "items", "use_pumpkin_juice",
+    "target", "level", "mastery", "items", "ignore_goals", "use_pumpkin_juice",
     "current_stamina", "cookie_sets", "plans", "spread", "graph", "start_date",
     "model_calendar", "average_calendar", "ignore_calendar", "crafting_bonus",
     "mastery_bonus", "override_inventory", "override", "price_pumpkin_juice",
@@ -82,7 +82,7 @@ REFILTER_FIELDS = (
 # request error (params_to_args fails loud rather than silently ignoring a
 # typo'd or client/server-version-mismatched key).
 _KNOWN_PARAM_KEYS = frozenset({
-    "target", "level", "mastery", "items", "override_inventory",
+    "target", "level", "mastery", "items", "ignore_goals", "override_inventory",
     "use_pumpkin_juice", "max_gold", "cookie_sets", "current_stamina",
     "plans", "spread", "graph", "start_date", "calendar", "plan_select",
     "max_ap", "max_ln", "max_ac", "passive_limit", "overrides",
@@ -303,6 +303,8 @@ def args_to_command(
         add("-m", args.mastery)
     if args.items:
         add("-i", args.items)
+    if args.ignore_goals:
+        add("--ignore-goal", args.ignore_goals)
     if args.override_inventory:
         add("--override-inventory", args.override_inventory)
     if args.max_gold is not None:
@@ -509,6 +511,11 @@ def params_to_args(params: dict) -> argparse.Namespace:
         raw = params["items"]
         parsing.parse_item_amounts(raw)
         args.items = raw
+    if "ignore_goals" in params and params["ignore_goals"] is not None:
+        # Item names only, no amounts -- nothing to validate beyond the raw
+        # string the CLI's own --ignore-goal carries (main.parse_ignored_goals
+        # splits it, and a name matching no goal simply does nothing).
+        args.ignore_goals = str(params["ignore_goals"]) or None
     if "override_inventory" in params and params["override_inventory"] is not None:
         raw = params["override_inventory"]
         parsing.parse_item_amounts(raw)

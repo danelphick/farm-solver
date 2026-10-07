@@ -100,6 +100,16 @@ climbs the whole tower *and* masters Grand Piano to 1,000,000. A found item coun
 python main.py --target=tower -i "Steel Wire:50"
 ```
 
+### Skipping a goal (`--ignore-goal`)
+
+One goal item can be dropped from the plan without changing the rest of it, for something you intend to source a way the solver does not model (cooking, the Wishing Well, mining — see `--mastery-costs` and `unmodelled.csv`), or simply are not doing yet:
+
+```shell
+python main.py --target=tower --ignore-goal "Magna Core,Yule Goat"
+```
+
+Names only, no amounts, comma-separated and case-insensitive: one entry drops **every** need for that item, however many tower levels ask for it. The Goal table still lists each ignored item, marked `ignored` beside its Have/Target, so what you have set aside stays visible — it just demands nothing of the plan. An ignored item is still crafted when some *other* goal needs it as a material; only the goal goes. In the web app the same thing is a per-row **Ignore** toggle in the Goal table.
+
 ## Sourcing plans
 
 Every item you still need can be obtained several ways, and the ways differ in what they cost:

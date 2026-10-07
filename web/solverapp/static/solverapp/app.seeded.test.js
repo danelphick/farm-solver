@@ -270,3 +270,74 @@ describe("Make Sole Goal", () => {
     expect(back.textContent).toContain("back to mastery costs");
   });
 });
+
+// --- Ignore: switching one goal off without losing sight of it ---------------
+
+describe("the per-row Ignore toggle", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test("toggling one on sends ignore_goals and re-solves immediately", async () => {
+    const store = await loadPage({
+      search: "/", saved: SAVED, solutionHtml: TWO_GOALS,
+    });
+    await vi.waitFor(() => expect(focusLinks().length).toBe(2));
+    expect(solveCalls().length).toBe(1);
+
+    const toggles = [...document.querySelectorAll("#solution-section .ignore-toggle")];
+    expect(toggles.length).toBe(2);
+    toggles[0].click();
+
+    await vi.waitFor(() => expect(solveCalls().length).toBe(2));
+    const body = JSON.parse(solveCalls()[1][1].body);
+    expect(body.params.ignore_goals).toBe("Gold Bar");
+    // Persisted, so a reload keeps the goal switched off.
+    expect(JSON.parse(store.get("farm-solver.v1")).params.ignore_goals).toBe("Gold Bar");
+  });
+
+  test("the row comes back greyed, with its toggle pressed, and toggles off again", async () => {
+    // The server keeps an ignored need and marks its "Still needed" cell, so
+    // the row survives the re-solve -- that is what makes this reversible.
+    await loadPage({
+      search: "/",
+      saved: { ...SAVED, params: { ...SAVED.params, ignore_goals: "Gold Bar" } },
+      solutionHtml: goalTableHtml([
+        ["T240", "Gold Bar", "1,200", "100,000", "ignored"],
+        ["Inventory", "Rope", "5", "500", "495"],
+      ]),
+    });
+    await vi.waitFor(() => expect(focusLinks().length).toBe(2));
+
+    const rows = [...document.querySelectorAll("#solution-section tbody tr")];
+    expect(rows[0].classList.contains("ignored-goal")).toBe(true);
+    expect(rows[1].classList.contains("ignored-goal")).toBe(false);
+    const toggle = rows[0].querySelector(".ignore-toggle");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    toggle.click();
+    await vi.waitFor(() => expect(solveCalls().length).toBe(2));
+    // Switched back on: the param goes away entirely rather than going empty.
+    expect(JSON.parse(solveCalls()[1][1].body).params.ignore_goals).toBeUndefined();
+  });
+
+  test("a sole goal gets no toggle -- there would be nothing left to solve", async () => {
+    const single = goalTableHtml([["Mastery", "Compass", "0", "100,000", "100,000"]]);
+    await loadPage({ search: "/", saved: SAVED, solutionHtml: single });
+    await vi.waitFor(() =>
+      expect(document.querySelector("#solution-section table")).not.toBeNull()
+    );
+    expect(document.querySelectorAll("#solution-section .ignore-toggle").length).toBe(0);
+  });
+
+  test("a Focus drill-down drops the ignore list", async () => {
+    // Otherwise an ignore naming the very item being focused would leave the
+    // seeded page solving for nothing.
+    await loadPage({
+      search: "/?mastery=Gold%20Bar%3A100000&from=goal",
+      saved: { ...SAVED, params: { ...SAVED.params, ignore_goals: "Gold Bar" } },
+    });
+    await vi.waitFor(() => expect(solveCalls().length).toBeGreaterThan(0));
+    expect(JSON.parse(solveCalls()[0][1].body).params.ignore_goals).toBeUndefined();
+  });
+});

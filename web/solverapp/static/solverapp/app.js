@@ -167,6 +167,33 @@ export function parseSeededGoal(search) {
   return null;
 }
 
+// --- Ignored goals: "Item,Item" <-> a name list -----------------------------
+//
+// --ignore-goal's spec (names only, no amounts -- ignoring is per item, so one
+// entry covers every row for it, e.g. a tower requirement repeated across
+// levels). Pure, like parseGoalSpec; the toggle itself is DOM wiring below.
+export function parseIgnoreSpec(spec) {
+  return (spec || "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+// Does `item` appear in `names`? Case-insensitively, the way
+// main.parse_ignored_goals matches it server-side, so a name captured from one
+// render still matches a later one however the state capitalises it.
+export function isIgnoredItem(names, item) {
+  const key = String(item || "").trim().toLowerCase();
+  return names.some((name) => name.toLowerCase() === key);
+}
+
+// Add `item` to `names`, or drop it if it is already there: the "Ignore"
+// button is a toggle, and this is the whole of its state change.
+export function toggleIgnoreSpec(names, item) {
+  const kept = names.filter((name) => !isIgnoredItem([name], item));
+  return kept.length === names.length ? [...names, String(item).trim()] : kept;
+}
+
 // Where a seeded link came from, for the banner's way back. The Goal table's
 // own "Focus" links (focusGoalHref below) add `from=goal`, so the banner can
 // point at the goal the user actually had; every other seeded link (the
@@ -286,6 +313,10 @@ function readParams() {
   if (mastery) params.mastery = mastery;
   const items = serializeGoalEntries(readGoalRows("items-rows"));
   if (items) params.items = items;
+  // The Goal table's "Ignore" toggles (--ignore-goal): goal items the solver
+  // should list but not work towards. Omitted entirely when nothing is
+  // ignored, so an untouched state keeps the shape it always had.
+  if (ignoredGoals.length) params.ignore_goals = ignoredGoals.join(",");
 
   // The craft breakdown renders into its own collapsible pane, so it is
   // always requested (a refilter field -- asking costs no extra solve).
@@ -319,6 +350,7 @@ function applyParams(params) {
   }
   renderGoalRows("mastery-rows", parseGoalSpec(params.mastery || ""), GOAL_LISTS["mastery-rows"]);
   renderGoalRows("items-rows", parseGoalSpec(params.items || ""), GOAL_LISTS["items-rows"]);
+  ignoredGoals = parseIgnoreSpec(params.ignore_goals);
   applySettingsParams(params);
   updateGoalSummary();
 }
@@ -428,6 +460,10 @@ function hideResults() {
 // --- Solving -------------------------------------------------------------
 
 let sequence = 0;
+// Goal items the "Ignore" toggles have switched off (the ignore_goals param).
+// Module state rather than a form control: the toggles live in the *rendered*
+// Goal table, which every solve tears down and rebuilds.
+let ignoredGoals = [];
 // The frontier row explicitly clicked, or null for the default (fastest)
 // plan. Reset whenever anything else changes -- a stale plan number could
 // point past the end of a differently-filtered frontier.
@@ -501,7 +537,7 @@ function renderResult(data) {
 
   $("#solution-section").innerHTML = data.solution_html;
   markUnreachableGoalRows();
-  addGoalFocusLinks();
+  addGoalRowActions();
   collapseGoalSection();
 
   const noteBlocks = [];
@@ -576,16 +612,25 @@ function findGoalSection() {
   return { heading, body, table: body.find((el) => el.tagName === "TABLE") || null };
 }
 
-// A drill-down per goal row: "Focus" re-opens this page seeded with that one
-// item (focusGoalHref -> "/?mastery=Item:N&from=goal", the same seeded-goal
-// entry point the mastery-costs table uses), so a tower run's long list of
-// required masteries can be costed one item at a time. A plain <a>, not a
-// button, so it is an ordinary navigation: Back returns to the original goals,
-// which are still what localStorage holds (the seeded page deliberately does
-// not save -- see applySeededGoal / the banner's "Make Sole Goal").
+// Two per-row controls in each goal's Item cell, both only when the goal has
+// more than one row (with a sole goal there is nothing to focus on and nothing
+// left to solve if you ignore it):
 //
-// Only when the goal has more than one row: a sole goal is already focused.
-function addGoalFocusLinks() {
+//  - **Focus** re-opens this page seeded with that one item (focusGoalHref ->
+//    "/?mastery=Item:N&from=goal", the same seeded-goal entry point the
+//    mastery-costs table uses), so a tower run's long list of required
+//    masteries can be costed one item at a time. A plain <a>, not a button, so
+//    it is an ordinary navigation: Back returns to the original goals, which
+//    are still what localStorage holds (the seeded page deliberately does not
+//    save -- see applySeededGoal / the banner's "Make Sole Goal").
+//  - **Ignore** toggles the item into the ignore_goals param (--ignore-goal)
+//    and re-solves. The server keeps the need and marks it, so the row stays
+//    put -- greyed out, and still carrying its own toggle to switch back on.
+//
+// The row is greyed from `ignoredGoals` rather than by reading the server's
+// "ignored" cell text: the same list drives the button's pressed state, so one
+// source of truth decides both.
+function addGoalRowActions() {
   const section = findGoalSection();
   if (!section || !section.table) return;
   const rows = Array.from(section.table.querySelectorAll("tbody tr"));
@@ -594,15 +639,42 @@ function addGoalFocusLinks() {
     const cells = row.querySelectorAll("td");
     if (cells.length < 4) return;
     const item = cells[1].textContent.trim();
+    if (!item) return;
+    const ignored = isIgnoredItem(ignoredGoals, item);
+    row.classList.toggle("ignored-goal", ignored);
+
     const href = focusGoalHref(cells[0].textContent, item, cells[3].textContent);
-    if (!href) return;
-    const link = document.createElement("a");
-    link.className = "focus-link";
-    link.href = href;
-    link.textContent = "Focus";
-    link.title = `Solve for ${item} on its own`;
-    cells[1].append(" ", link);
+    if (href) {
+      const link = document.createElement("a");
+      link.className = "focus-link";
+      link.href = href;
+      link.textContent = "Focus";
+      link.title = `Solve for ${item} on its own`;
+      cells[1].append(" ", link);
+    }
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "ignore-toggle";
+    toggle.textContent = "Ignore";
+    toggle.setAttribute("aria-pressed", ignored ? "true" : "false");
+    toggle.title = ignored
+      ? `Solve for ${item} again`
+      : `Leave ${item} out of the plan`;
+    toggle.addEventListener("click", () => toggleIgnoredGoal(item));
+    cells[1].append(" ", toggle);
   });
+}
+
+// Switch one goal item off (or back on) and re-solve. Immediate, not debounced
+// -- a click is a finished decision, unlike typing in the Goal pane -- and it
+// drops any explicitly selected frontier row, which a differently-demanded
+// frontier would leave pointing at the wrong plan (see onAnyChange).
+function toggleIgnoredGoal(item) {
+  ignoredGoals = toggleIgnoreSpec(ignoredGoals, item);
+  planSelect = null;
+  saveState();
+  solve();
 }
 
 // Persists the Goal section's open/closed state across re-renders within this
@@ -1066,6 +1138,9 @@ function applySeededGoal(goal, origin) {
   $("#level").hidden = true;
   renderGoalRows("mastery-rows", mastery ? [goal] : [], GOAL_LISTS["mastery-rows"]);
   renderGoalRows("items-rows", mastery ? [] : [goal], GOAL_LISTS["items-rows"]);
+  // "Just this goal" includes dropping the ignore list: a saved ignore naming
+  // the very item being focused would otherwise leave nothing to solve.
+  ignoredGoals = [];
   $("#seeded-goal").textContent = mastery
     ? masteryGoalLabel(goal.item, goal.amount)
     : `${seededAmount(goal.amount)} × ${goal.item}`;

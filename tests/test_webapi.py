@@ -119,6 +119,18 @@ def test_params_to_args_rejects_malformed_mastery_spec():
         webapi.params_to_args({"mastery": "not-a-valid-spec"})
 
 
+def test_params_to_args_stores_ignored_goals_as_the_raw_name_list():
+    args = webapi.params_to_args({"ignore_goals": "Yule Goat,Wood"})
+    assert args.ignore_goals == "Yule Goat,Wood"  # names only, split by main
+    # Nothing ignored sends an empty string, which must read as the CLI default.
+    assert webapi.params_to_args({"ignore_goals": ""}).ignore_goals is None
+
+
+def test_args_to_command_includes_ignored_goals():
+    args = webapi.params_to_args({"target": "tower", "ignore_goals": "Yule Goat"})
+    assert "--ignore-goal 'Yule Goat'" in webapi.args_to_command(args)
+
+
 def test_params_to_args_use_pumpkin_juice_maps_none_and_unlimited_and_cap():
     assert webapi.params_to_args({}).use_pumpkin_juice is None
     assert webapi.params_to_args({"use_pumpkin_juice": -1}).use_pumpkin_juice == -1
@@ -531,6 +543,7 @@ def test_fingerprint_changes_with_every_resolve_field():
         "level": {"level": 42},
         "mastery": {"mastery": "Gold Bar:100"},
         "items": {"items": "Steel:100"},
+        "ignore_goals": {"ignore_goals": "Yule Goat"},
         "use_pumpkin_juice": {"use_pumpkin_juice": 5},
         "current_stamina": {"current_stamina": 500},
         "cookie_sets": {"cookie_sets": 3},

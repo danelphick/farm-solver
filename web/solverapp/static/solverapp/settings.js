@@ -36,10 +36,14 @@ import {
 export const STORAGE_KEY = "farm-solver.v1";
 export const UI_STORAGE_KEY = "farm-solver.ui.v1";
 
-// The params the panel does NOT own: the solver page's Goal pane (and the
-// frontier row it has selected, which app.js tracks in module state). Anything
-// else in a saved state is the panel's to replace -- see mergeSettingsIntoState.
-export const GOAL_PARAM_KEYS = ["target", "mastery", "items", "plan_select"];
+// The params the panel does NOT own: the solver page's Goal pane, the goals its
+// results table has switched off ("ignore_goals") and the frontier row it has
+// selected -- the last two live in app.js's module state, not in any control.
+// Anything else in a saved state is the panel's to replace -- see
+// mergeSettingsIntoState.
+export const GOAL_PARAM_KEYS = [
+  "target", "mastery", "items", "ignore_goals", "plan_select",
+];
 
 function $(selector) {
   return document.querySelector(selector);

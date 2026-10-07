@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   focusGoalHref,
+  isIgnoredItem,
   parseGoalSpec,
+  parseIgnoreSpec,
   parseSeededGoal,
   seededOrigin,
   serializeGoalEntries,
+  toggleIgnoreSpec,
 } from "./app.js";
 
 describe("parseGoalSpec", () => {
@@ -159,5 +162,34 @@ describe("seededOrigin", () => {
     expect(seededOrigin("?mastery=Compass%3AGM")).toBe("masteries");
     expect(seededOrigin("")).toBe("masteries");
     expect(seededOrigin("?from=elsewhere")).toBe("masteries");
+  });
+});
+
+describe("the ignored-goals spec", () => {
+  test("parses a comma list, trimming blanks", () => {
+    expect(parseIgnoreSpec("Yule Goat, Wood")).toEqual(["Yule Goat", "Wood"]);
+    expect(parseIgnoreSpec("")).toEqual([]);
+    expect(parseIgnoreSpec(undefined)).toEqual([]);
+    expect(parseIgnoreSpec(" , Wood , ")).toEqual(["Wood"]);
+  });
+
+  // main.parse_ignored_goals lower-cases both sides, so the client must too --
+  // the name is captured from a table cell and matched against a list saved
+  // from an earlier render.
+  test("matches an item case-insensitively", () => {
+    expect(isIgnoredItem(["Yule Goat"], "yule goat")).toBe(true);
+    expect(isIgnoredItem(["Yule Goat"], " Yule Goat ")).toBe(true);
+    expect(isIgnoredItem(["Yule Goat"], "Wood")).toBe(false);
+    expect(isIgnoredItem([], "Wood")).toBe(false);
+  });
+
+  test("toggles an item on and back off again", () => {
+    expect(toggleIgnoreSpec([], "Wood")).toEqual(["Wood"]);
+    expect(toggleIgnoreSpec(["Yule Goat"], "Wood")).toEqual(["Yule Goat", "Wood"]);
+    expect(toggleIgnoreSpec(["Yule Goat", "Wood"], "wood")).toEqual(["Yule Goat"]);
+    // Pure: the list it was given is left alone.
+    const names = ["Wood"];
+    toggleIgnoreSpec(names, "Wood");
+    expect(names).toEqual(["Wood"]);
   });
 });

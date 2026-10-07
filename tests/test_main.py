@@ -4,6 +4,7 @@ from datetime import timedelta
 import pytest
 from rich.console import Console
 
+import main
 from crafting import Workshop, WorkshopRecipe, recipe_flows, store_purchases
 from crops import Farm
 from farm_solver import (
@@ -20,12 +21,14 @@ from main import (
     MONTHLY_GRANT_TOWER_LEVEL,
     _parse_spread,
     _should_model_calendar,
+    apply_ignored_goals,
     apply_inventory_overrides,
     build_parser,
     cheapest_plan,
     cookie_sets_available,
     limit_shortfall,
     parse_gold_budget,
+    parse_ignored_goals,
     parse_target,
     price_pumpkin_juice_enabled,
     price_stamina_enabled,
@@ -51,6 +54,7 @@ from main import (
 from optimizer import SourcingPlan, SpreadSpec
 from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from report import (
+    IGNORED_GOAL_TEXT,
     UNREACHABLE_GOAL_MARK,
     MarkdownDoc,
     SectionedReporter,
@@ -691,6 +695,89 @@ def test_markdown_solution_flags_a_goal_with_no_known_source():
     goal_index = text.index("## Goal")
     assert goal_index < heading_index
     assert "| Yule Goat | 1,826 |" in text
+
+
+def test_parse_ignored_goals_reads_a_comma_list_case_insensitively():
+    assert parse_ignored_goals("Yule Goat, wood") == {"yule goat", "wood"}
+    assert parse_ignored_goals("") == set()
+    assert parse_ignored_goals(None) == set()
+    assert parse_ignored_goals(" , Wood , ") == {"wood"}
+
+
+def test_apply_ignored_goals_flags_every_need_for_the_named_item():
+    # One item, two needs (two tower levels want it): ignoring the item drops
+    # both, since ignoring is per item, not per row.
+    solution = Solution(
+        needs=[
+            ItemNeed(item="Yule Goat", have=0, target=50, level=201, is_mastery=True),
+            ItemNeed(item="Yule Goat", have=0, target=90, level=210, is_mastery=True),
+            ItemNeed(item="Wood", have=10, target=100),
+        ]
+    )
+    result = apply_ignored_goals(solution, "yule goat")
+
+    assert [need.ignored for need in result.needs] == [True, True, False]
+    # The needs themselves survive -- the Goal report still lists them.
+    assert [need.item for need in result.needs] == ["Yule Goat", "Yule Goat", "Wood"]
+    # Nothing ignored: the same object back, untouched.
+    assert apply_ignored_goals(solution, None) is solution
+
+
+def test_markdown_solution_marks_an_ignored_goal_rather_than_hiding_it():
+    doc = MarkdownDoc()
+    solution = Solution(
+        needs=[
+            ItemNeed(
+                item="Yule Goat", have=17991, target=20000, is_mastery=True,
+                ignored=True,
+            ),
+            ItemNeed(item="Wood", have=10, target=100),
+        ]
+    )
+    markdown_solution(doc, solution)
+    text = doc.render()
+
+    assert f"| Yule Goat | 17,991 | 20,000 | {IGNORED_GOAL_TEXT} |" in text
+    # The goal that is still being solved for reads as it always did.
+    assert "| Wood | 10 | 100 | 90 |" in text
+
+
+def test_print_solution_says_an_ignored_goal_is_ignored(capsys):
+    solution = Solution(
+        needs=[
+            ItemNeed(
+                item="Yule Goat", have=17991, target=20000, is_mastery=True,
+                ignored=True,
+            )
+        ]
+    )
+    print_solution(solution)
+
+    assert "Yule Goat: ignored (have 17,991 of 20,000)" in capsys.readouterr().out
+
+
+def test_ignore_goal_end_to_end_leaves_the_solver_nothing_to_do(tmp_path, capsys):
+    # The whole wiring in one run: the Goal section still names the item (as
+    # ignored, so it is visibly skipped rather than missing), and the frontier
+    # it would otherwise have driven collapses to a single do-nothing plan.
+    mastery = tmp_path / "m.txt"
+    inventory = tmp_path / "i.txt"
+    mastery.write_text("Corn\n1,500 / 10,000 Progress\n15% Track\n")
+    inventory.write_text("Crops chevron_down\n\nCorn\nA yellow vegetable\nMastered\n384\n")
+    argv = [
+        "--mastery-file", str(mastery), "--inventory-file", str(inventory),
+        "--target", "none", "-i", "Corn:5000", "--start-date", "2026-09-01",
+    ]
+
+    main.run(build_parser().parse_args(argv))
+    wanted = capsys.readouterr().out
+    assert "Corn: need 4,616 more (have 384 of 5,000)" in wanted
+
+    # Case-insensitively, like every other item name on the command line.
+    main.run(build_parser().parse_args([*argv, "--ignore-goal", "corn"]))
+    ignored = capsys.readouterr().out
+    assert "Corn: ignored (have 384 of 5,000)" in ignored
+    assert "0m + 0 AP + 0 LN -> 0.0 + 0.0 = 0.0 g" in ignored
 
 
 def test_highlight_unreachable_rows_colours_only_the_flagged_line():

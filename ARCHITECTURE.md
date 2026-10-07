@@ -76,7 +76,12 @@ and drives the `Reporter` off their results:
    with no tower (each just contributes its own need list; empty when neither is
    set). Otherwise (`--target tower`/`N`, or a bare tower run),
    `farm_solver.solve_target` concatenates the tower's needs with `solve_goals`'
-   extra `-m`/`-i` need list. `parse_target` accepts `tower`/`none`/`N`/`TN`. `crafting.top_level_demand` is
+   extra `-m`/`-i` need list. `parse_target` accepts `tower`/`none`/`N`/`TN`.
+   `--ignore-goal` then subtracts from whatever that produced:
+   `apply_ignored_goals` flags the named items' needs (`ItemNeed.ignored`,
+   kept on the `Solution` so the Goal report still lists them, marked) and
+   `build_inputs` feeds only the unflagged `active_needs` to demand — see the
+   web section's Ignore bullet for the whole round trip. `crafting.top_level_demand` is
    what reduces same-item needs (whatever the mix of tower/`-m`/`-i`) to one
    demand figure: converted to a common "items produced" unit (a mastery
    shortfall of `n` becomes `n / mastery_bonus`, a plain `-i` count stays `n`),
@@ -2107,7 +2112,7 @@ that imports it without going through `manage.py`.
 - **Focus: the solver page drills into its own goals the same way.** When the
   rendered Goal table (`report.markdown_solution`'s Purpose/Item/Have/Target/
   Still needed) has more than one row -- a tower run expands to dozens of
-  required masteries -- `app.js`'s `addGoalFocusLinks` appends a small "Focus"
+  required masteries -- `app.js`'s `addGoalRowActions` appends a small "Focus"
   link to each row's Item cell, built by `focusGoalHref` (exported, unit
   tested): `Inventory` reproduces as `?items=`, a tower level (`T240`) or
   `Mastery` as `?mastery=`, seeded with that row's own **Target** (commas
@@ -2127,6 +2132,31 @@ that imports it without going through `manage.py`.
   `seededOrigin` reads the `from=goal` the Focus links add, which is what points
   the banner's way back at `/` ("back to your goals") instead of the
   mastery-costs table every older seeded link came from.
+- **Ignore: a goal the plan should skip** (`--ignore-goal`, web param
+  `ignore_goals`). The second control `addGoalRowActions` puts in each Item cell,
+  beside Focus and under the same more-than-one-row rule (ignoring a sole goal
+  would leave nothing to solve). It is a `<button>`, not a link: it toggles the
+  item in `app.js`'s module-level `ignoredGoals` (pure helpers `parseIgnoreSpec`/
+  `isIgnoredItem`/`toggleIgnoreSpec`, unit tested), saves and re-solves at once,
+  undebounced. **The row has to survive the re-solve for the toggle to be
+  reversible**, which is why ignoring is not a filter: `main.apply_ignored_goals`
+  flags the matching needs with `ItemNeed.ignored` and leaves them on the
+  `Solution`, and `build_inputs` passes only the *unflagged* ones
+  (`active_needs`) to `crafting.top_level_demand`/`non_mastery_goal_items`/
+  `pumpkin_juice_gains`. So the Goal table still lists the item --
+  `report.IGNORED_GOAL_TEXT` in its "Still needed" cell, value 0 in JSON -- while
+  the LP never sees it. Ignoring is per **item**, not per row
+  (`main.parse_ignored_goals` lower-cases a comma list of names), so one toggle
+  covers a tower requirement repeated across levels. Only the *goal* goes: an
+  ignored item is still crafted when another goal needs it as a material, which
+  is the LP's own balance and not a demand figure. The greying
+  (`tr.ignored-goal`, a muted line-through; `.focus-link` is an `inline-block` so
+  the strike does not propagate into it) and the button's pressed state both come
+  from `ignoredGoals`, not from the server's cell text -- one source of truth.
+  `ignore_goals` is a `RESOLVE_FIELDS` member (it changes the solve, so it
+  re-keys the cache) and a `GOAL_PARAM_KEYS` member (the settings popover must
+  not drop it on Save). `applySeededGoal` clears it: a seeded page is "just this
+  goal", and an ignore naming that very item would otherwise solve for nothing.
 - **Mastery history (`static/solverapp/history.js`) and the timeline page** —
   the one feature with **no server side at all**. The settings popover's
   **"Save dated snapshot"** button (in the `#paste-details` pane, under the

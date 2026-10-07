@@ -22,7 +22,7 @@ import sys
 import tomllib
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -1158,6 +1158,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--ignore-goal",
+        dest="ignore_goals",
+        metavar="ITEM[,...]",
+        help=(
+            "drop the given item(s) from the goal: every need for them (a "
+            "tower level's requirement, -m or -i) is still listed in the Goal "
+            "report, marked ignored, but demands nothing -- for an item you "
+            "will source some other way. Ignoring a goal does not stop the "
+            "item being crafted as a material for another one"
+        ),
+    )
+    parser.add_argument(
         "--format",
         type=parse_format,
         default="text",
@@ -1916,6 +1928,40 @@ def _build_channel_setup(
     )
 
 
+def parse_ignored_goals(spec: str | None) -> set[str]:
+    """Parse ``--ignore-goal``'s ``"Item,Item"`` spec into lower-cased names.
+
+    Names only (no amounts): ignoring is per *item*, so one entry drops every
+    need for it -- a tower requirement that repeats across levels goes in one
+    go. Blank entries are skipped and an unknown name simply matches nothing,
+    which keeps the flag forgiving: a goal the state has since met (so it never
+    reached the need list) is not an error.
+    """
+    if not spec:
+        return set()
+    return {name.strip().lower() for name in spec.split(",") if name.strip()}
+
+
+def apply_ignored_goals(
+    solution: farm_solver.Solution, spec: str | None
+) -> farm_solver.Solution:
+    """Flag the needs named by ``--ignore-goal``, keeping them on the solution.
+
+    The needs stay so the Goal report can still list them (marked ignored --
+    see :func:`report.markdown_solution`); it is :func:`build_inputs` that
+    holds the flagged ones out of demand. Returns ``solution`` itself when
+    nothing is ignored, so the common path allocates nothing.
+    """
+    ignored = parse_ignored_goals(spec)
+    if not ignored:
+        return solution
+    needs = [
+        replace(need, ignored=True) if need.item.lower() in ignored else need
+        for need in solution.needs
+    ]
+    return replace(solution, needs=needs)
+
+
 def build_inputs(
     args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
 ) -> SolveInputs:
@@ -1964,15 +2010,23 @@ def build_inputs(
             # caller can display the level actually targeted.
             target_level = requirements.max_level
 
-    demand = crafting.top_level_demand(solution.needs, args.mastery_bonus)
-    non_mastery_goals = crafting.non_mastery_goal_items(solution.needs)
+    # --ignore-goal: flag the matching needs and keep them on the solution (the
+    # Goal report still lists them, marked ignored), but hold them out of
+    # everything that drives the solve. Only the *goal* goes: an ignored item
+    # still gets crafted if another goal needs it as a material, which is the
+    # LP's own balance, not a demand figure.
+    solution = apply_ignored_goals(solution, args.ignore_goals)
+    active_needs = [need for need in solution.needs if not need.ignored]
+
+    demand = crafting.top_level_demand(active_needs, args.mastery_bonus)
+    non_mastery_goals = crafting.non_mastery_goal_items(active_needs)
 
     # Pumpkin Juice: an optional bought mastery boost. Each juice covers part of a
     # mastery goal's shortfall directly, trading gold for a faster (or cheaper) plan;
     # the optimiser decides how many (up to an optional cap) each frontier plan uses.
     pj_enabled, pj_limit, pj_price = resolve_pumpkin_juice(args.use_pumpkin_juice, cfg)
     pj_gain = (
-        pumpkin_juice_gains(solution.needs, state, args.mastery_bonus)
+        pumpkin_juice_gains(active_needs, state, args.mastery_bonus)
         if pj_enabled
         else {}
     )
