@@ -1624,15 +1624,15 @@ def test_print_plan_passive_breaks_down_multiple_sources(capsys):
 
 def test_print_plan_passive_names_a_producer_without_its_config_underscores(capsys):
     # Producers are named after their config section ([hay_field]), which is not
-    # how a report should spell them -- and the single-source branch and the
-    # multi-source breakdown have to agree on that.
+    # how a report should spell them: underscores out, title case in -- and the
+    # single-source branch and the multi-source breakdown have to agree on that.
     demand = {"Straw": 100}
     plan = SourcingPlan(
         draws=[Draw(Offer("passive", "passive", {"straw": 4}, time_per_unit=MINUTE), 25)]
     )
     one = PassiveProduction(producers=[PassiveProducer("hay_field", MINUTE, {"straw": 4})])
     print_plan(plan, demand, Farm(), Workshop(), 1.0, one)
-    assert "100x Straw in 25m (from hay field)" in capsys.readouterr().out
+    assert "100x Straw in 25m (from Hay Field)" in capsys.readouterr().out
 
     two = PassiveProduction(
         producers=[
@@ -1642,7 +1642,7 @@ def test_print_plan_passive_names_a_producer_without_its_config_underscores(caps
     )
     print_plan(plan, demand, Farm(), Workshop(), 1.0, two)
     out = capsys.readouterr().out
-    assert "100x Straw in 25m (75 from hay field, 25 from cow pasture)" in out
+    assert "100x Straw in 25m (75 from Hay Field, 25 from Cow Pasture)" in out
 
 
 def test_print_plan_passive_splits_pets_by_rate(capsys):
@@ -1660,7 +1660,7 @@ def test_print_plan_passive_splits_pets_by_rate(capsys):
     )
     print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
     out = capsys.readouterr().out
-    assert "100x Flower in 25m (75 from pet Squirrel, 25 from pet Fox)" in out
+    assert "100x Flower in 25m (75 from Pet Squirrel, 25 from Pet Fox)" in out
 
 
 def test_print_plan_passive_flags_seasonal_pets(capsys):
@@ -1675,7 +1675,7 @@ def test_print_plan_passive_flags_seasonal_pets(capsys):
     )
     print_plan(plan, demand, Farm(), Workshop(), 1.0, production)
     out = capsys.readouterr().out
-    assert "10x Flower in 2m (from pet Hummingbird [seasonal: Mar–Apr])" in out
+    assert "10x Flower in 2m (from Pet Hummingbird [seasonal: Mar–Apr])" in out
 
 
 def test_print_plan_passive_excludes_items_covered_elsewhere(capsys):

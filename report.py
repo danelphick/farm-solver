@@ -1602,16 +1602,23 @@ def _smeared_note(producer_name: str) -> str:
 
 
 def _producer_label(producer_name: str) -> str:
-    """A passive producer's name as a reader should see it.
+    """A passive producer's name as a reader should see it: ``Hay Field``.
 
     Most producers are named after their config section (``[hay_field]``,
     ``[cow_pasture]``, ``[raptor_pen]``), so the raw name carries underscores
-    that have no business in a report; the pet producers (``pet Hedgehog``) and
-    :data:`config.MONTHLY_GRANT_PRODUCER` already read as prose and pass through
-    unchanged. Display only -- :func:`_season_note`/:func:`_smeared_note` and
-    every rate lookup still key on the raw name.
+    that have no business in a report, and the sections are lower-cased where
+    the game's own names are not. Underscores become spaces and every word is
+    capitalised -- including the pet producers' ``pet `` prefix, so one table
+    does not mix ``Hay Field`` with ``pet Hedgehog``.
+
+    Capitalising the first letter rather than ``str.title()``: that lower-cases
+    the rest of each word, which would mangle a name already capitalised its
+    own way (``Mechanical Heart`` survives either way, ``Dewstar's`` would not).
+    Display only -- :func:`_season_note`/:func:`_smeared_note` and every rate
+    lookup still key on the raw name.
     """
-    return producer_name.replace("_", " ")
+    words = producer_name.replace("_", " ").split(" ")
+    return " ".join(word[:1].upper() + word[1:] for word in words)
 
 
 def _passive_sources(
