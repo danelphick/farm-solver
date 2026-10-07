@@ -1622,6 +1622,29 @@ def test_print_plan_passive_breaks_down_multiple_sources(capsys):
     assert "100x Flower in 25m (75 from Windmill, 25 from Greenhouse)" in out
 
 
+def test_print_plan_passive_names_a_producer_without_its_config_underscores(capsys):
+    # Producers are named after their config section ([hay_field]), which is not
+    # how a report should spell them -- and the single-source branch and the
+    # multi-source breakdown have to agree on that.
+    demand = {"Straw": 100}
+    plan = SourcingPlan(
+        draws=[Draw(Offer("passive", "passive", {"straw": 4}, time_per_unit=MINUTE), 25)]
+    )
+    one = PassiveProduction(producers=[PassiveProducer("hay_field", MINUTE, {"straw": 4})])
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, one)
+    assert "100x Straw in 25m (from hay field)" in capsys.readouterr().out
+
+    two = PassiveProduction(
+        producers=[
+            PassiveProducer("hay_field", MINUTE, {"straw": 3}),
+            PassiveProducer("cow_pasture", MINUTE, {"straw": 1}),
+        ]
+    )
+    print_plan(plan, demand, Farm(), Workshop(), 1.0, two)
+    out = capsys.readouterr().out
+    assert "100x Straw in 25m (75 from hay field, 25 from cow pasture)" in out
+
+
 def test_print_plan_passive_splits_pets_by_rate(capsys):
     # Two pets return the same item at different hauls; the split follows their
     # rates (3-to-1 of 100 is 75/25), largest share first.

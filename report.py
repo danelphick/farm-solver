@@ -1601,6 +1601,19 @@ def _smeared_note(producer_name: str) -> str:
     return " (smeared)" if producer_name == config.MONTHLY_GRANT_PRODUCER else ""
 
 
+def _producer_label(producer_name: str) -> str:
+    """A passive producer's name as a reader should see it.
+
+    Most producers are named after their config section (``[hay_field]``,
+    ``[cow_pasture]``, ``[raptor_pen]``), so the raw name carries underscores
+    that have no business in a report; the pet producers (``pet Hedgehog``) and
+    :data:`config.MONTHLY_GRANT_PRODUCER` already read as prose and pass through
+    unchanged. Display only -- :func:`_season_note`/:func:`_smeared_note` and
+    every rate lookup still key on the raw name.
+    """
+    return producer_name.replace("_", " ")
+
+
 def _passive_sources(
     production: passive.PassiveProduction, item: str, quantity: int
 ) -> str:
@@ -1618,14 +1631,18 @@ def _passive_sources(
         return ""
     if len(contributors) == 1:
         name = contributors[0][1]
-        return f" (from {name}{_season_note(name)}{_smeared_note(name)})"
+        return (
+            f" (from {_producer_label(name)}"
+            f"{_season_note(name)}{_smeared_note(name)})"
+        )
     counts = _apportion(quantity, [rate for rate, _ in contributors])
     labelled = sorted(
         ((count, rate, name) for count, (rate, name) in zip(counts, contributors)),
         key=lambda t: (-t[0], -t[1], t[2]),  # biggest share, then rate, then name
     )
     parts = [
-        f"{count:,} from {name}{_season_note(name)}{_smeared_note(name)}"
+        f"{count:,} from {_producer_label(name)}"
+        f"{_season_note(name)}{_smeared_note(name)}"
         for count, _, name in labelled
     ]
     return " (" + ", ".join(parts) + ")"
