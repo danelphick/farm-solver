@@ -643,6 +643,14 @@ function addGoalRowActions() {
     const ignored = isIgnoredItem(ignoredGoals, item);
     row.classList.toggle("ignored-goal", ignored);
 
+    // One wrapper holding both controls, with NO whitespace text nodes around
+    // or between them: an ignored row is struck through, and while the strike
+    // skips the controls themselves (atomic inline boxes), it would be drawn
+    // straight across any spacing text node beside them. The gaps are the
+    // wrapper's own margin and flex gap instead (see .goal-actions).
+    const actions = document.createElement("span");
+    actions.className = "goal-actions";
+
     const href = focusGoalHref(cells[0].textContent, item, cells[3].textContent);
     if (href) {
       const link = document.createElement("a");
@@ -650,7 +658,7 @@ function addGoalRowActions() {
       link.href = href;
       link.textContent = "Focus";
       link.title = `Solve for ${item} on its own`;
-      cells[1].append(" ", link);
+      actions.append(link);
     }
 
     const toggle = document.createElement("button");
@@ -662,7 +670,8 @@ function addGoalRowActions() {
       ? `Solve for ${item} again`
       : `Leave ${item} out of the plan`;
     toggle.addEventListener("click", () => toggleIgnoredGoal(item));
-    cells[1].append(" ", toggle);
+    actions.append(toggle);
+    cells[1].append(actions);
   });
 }
 

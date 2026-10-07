@@ -1026,10 +1026,17 @@ details[open] > summary .summary-detail {
   text-decoration: line-through;
 }
 
-/* The row's own controls stay legible and un-struck. `text-decoration`
-   propagates into descendants and a child cannot cancel it, so .focus-link is
-   an inline-block (below) -- that is what takes it out of the strike; the
-   <button> is one already. */
+/* The row's own controls stay legible and un-struck: `text-decoration`
+   propagates into descendants and a child cannot cancel it, but the line is not
+   drawn across an atomic inline box, which .goal-actions (inline-flex) is. It
+   also carries the spacing itself -- a literal space beside the buttons would be
+   a text node of the struck row, and the strike would run through it. */
+.goal-actions {
+  display: inline-flex;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
+  vertical-align: baseline;
+}
 
 /* A Goal row with no known source at all (report.UNREACHABLE_GOAL_MARK, "✗",
    flagged client-side by markUnreachableGoalRows). Reuses the error palette,
@@ -1310,9 +1317,6 @@ details[open] > summary .summary-detail {
    addGoalFocusLinks), reading as a button without being one, so Back still
    works the way an ordinary link's does. */
 .focus-link {
-  /* inline-block, not inline: it stops the ignored row's line-through
-     propagating into the link (see .ignored-goal above). */
-  display: inline-block;
   font-size: 0.7rem;
   line-height: 1.4;
   padding: 0 0.35rem;
