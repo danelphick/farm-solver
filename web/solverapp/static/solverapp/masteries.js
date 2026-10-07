@@ -16,8 +16,9 @@
 // re-requests. The only thing this page adds is `self_sourced`.
 //
 // One request per (state, self-sourced) pair -- the server caches the sweep
-// under its own key (webapi.mastery_costs_fingerprint) -- and the sort is
-// applied client-side over the rows already loaded, so toggling it is instant.
+// under its own key (webapi.mastery_costs_fingerprint) -- and the sort and the
+// filters are applied client-side over the rows already loaded, so changing
+// either is instant.
 
 import { initHelpTooltips } from "./help.js";
 import {
@@ -123,6 +124,27 @@ export function timelineHref(item) {
   return "/timeline?item=" + encodeURIComponent(item);
 }
 
+// The filters pane, as data: `name` is matched case-insensitively anywhere in
+// the item's name; `showEvents` false drops event items; `categories` and
+// `statuses` are the ticked type / obtainability boxes. An item is kept when it
+// has ANY ticked type (an item can have several -- see main.item_categories).
+export function itemMatches(item, info, filter) {
+  const needle = filter.name.trim().toLowerCase();
+  if (needle && !item.toLowerCase().includes(needle)) return false;
+  // An item the server sent no facts for (it always should) is never hidden by
+  // the facts it lacks -- only by its name.
+  if (!info) return true;
+  if (info.event && !filter.showEvents) return false;
+  if (!info.categories.some((category) => filter.categories.has(category))) return false;
+  return filter.statuses.has(info.status);
+}
+
+// `entries` are anything with an `item` (table rows, "cannot" notes); `items`
+// the response's {name: {categories, event, status}} map.
+export function filterEntries(entries, items, filter) {
+  return entries.filter((entry) => itemMatches(entry.item, items[entry.item], filter));
+}
+
 // --- Rendering --------------------------------------------------------------
 
 function setStatus(text, kind) {
@@ -132,6 +154,32 @@ function setStatus(text, kind) {
 }
 
 let loadedRows = [];
+let loadedItems = {};
+let loadedUnmasterable = [];
+let loadedLimited = [];
+// Whether any response has arrived yet: before one, an empty table is "not
+// loaded", not "filtered to nothing".
+let loaded = false;
+
+// Event items are shown until the button hides them (restored in init()).
+let showEvents = true;
+
+function checkedValues(selector) {
+  return new Set(
+    [...document.querySelectorAll(`${selector} input[type="checkbox"]`)]
+      .filter((box) => box.checked)
+      .map((box) => box.value)
+  );
+}
+
+function readFilter() {
+  return {
+    name: $("#filter-name").value,
+    showEvents,
+    categories: checkedValues("#filter-categories"),
+    statuses: checkedValues("#filter-statuses"),
+  };
+}
 
 // The active sort, restored from the UI key in init() and flipped by the
 // header buttons. Purely display state: the rows are already loaded.
@@ -158,9 +206,9 @@ function renderSortIndicators() {
   });
 }
 
-function renderTable() {
+function renderTable(filter) {
   renderSortIndicators();
-  const rows = sortRows(loadedRows, sortKey, sortDirection);
+  const rows = sortRows(filterEntries(loadedRows, loadedItems, filter), sortKey, sortDirection);
   // Built in JS, not markdown->HTML like the solver page's report sections:
   // each <tr> has to carry its own item/tier to become a link, which reading
   // them back out of rendered table cells would make fragile.
@@ -178,25 +226,57 @@ function renderTable() {
     )
     .join("");
   $("#mastery-costs-section").hidden = rows.length === 0;
+  return rows.length;
 }
 
 // One of the two collapsed "cannot" sections: items with no source at all
 // (unmasterable), and items whose sources cannot supply a tier's quantity
-// (limited). Both are plain formatted lines from the server.
-function renderChainList(prefix, lines) {
-  $(`#${prefix}-details`).hidden = lines.length === 0;
-  if (!lines.length) return;
-  $(`#${prefix}-summary`).textContent = ` (${lines.length})`;
-  $(`#${prefix}-list`).innerHTML = lines
-    .map((line) => `<li>${escapeHtml(line)}</li>`)
+// (limited). Each entry is a formatted line from the server plus its item,
+// which the filters match on.
+function renderChainList(prefix, entries, filter) {
+  const shown = filterEntries(entries, loadedItems, filter);
+  $(`#${prefix}-details`).hidden = shown.length === 0;
+  if (!shown.length) return 0;
+  $(`#${prefix}-summary`).textContent =
+    shown.length === entries.length
+      ? ` (${entries.length})`
+      : ` (${shown.length} of ${entries.length})`;
+  $(`#${prefix}-list`).innerHTML = shown
+    .map((entry) => `<li>${escapeHtml(entry.text)}</li>`)
     .join("");
+  return shown.length;
+}
+
+// Every section, through the current filters. The pane's collapsed summary
+// says how much of the table they leave; "No masteries match" covers the case
+// where they leave nothing at all, in any section.
+function renderFiltered() {
+  if (!loaded) return;
+  const filter = readFilter();
+  const shownRows = renderTable(filter);
+  const shownNotes =
+    renderChainList("unmasterable", loadedUnmasterable, filter) +
+    renderChainList("limited", loadedLimited, filter);
+  const total = loadedRows.length;
+  $("#mastery-filter-summary").textContent =
+    shownRows === total ? "" : ` (${shownRows.toLocaleString()} of ${total.toLocaleString()} rows)`;
+  const anything = total + loadedUnmasterable.length + loadedLimited.length > 0;
+  $("#filter-empty").hidden = !anything || shownRows + shownNotes > 0;
+}
+
+function renderEventsButton() {
+  $("#filter-events").textContent = showEvents ? "Hide event items" : "Show event items";
+  $("#filter-events").setAttribute("aria-pressed", String(!showEvents));
 }
 
 function renderResult(data) {
   loadedRows = data.rows || [];
-  renderTable();
-  renderChainList("unmasterable", data.unmasterable || []);
-  renderChainList("limited", data.limited || []);
+  loadedItems = data.items || {};
+  loadedUnmasterable = data.unmasterable || [];
+  loadedLimited = data.limited || [];
+  loaded = true;
+  $("#mastery-filter-details").hidden = false;
+  renderFiltered();
   const count = loadedRows.length;
   const timing = data.cached
     ? `cached (${data.solved_ms} ms)`
@@ -251,6 +331,7 @@ async function load() {
   if (!masteryText.trim() && !inventoryText.trim()) {
     $("#empty-state").hidden = false;
     $("#mastery-controls").hidden = true;
+    $("#mastery-filter-details").hidden = true;
     setStatus("Nothing pasted yet.");
     return;
   }
@@ -306,6 +387,41 @@ async function load() {
 
 // --- Wiring -----------------------------------------------------------------
 
+// The filters persist in the UI key like the sort. The boxes are stored as the
+// values left UNticked, so a type added later starts ticked rather than hidden.
+function wireFilters() {
+  const ui = readUi();
+  if (typeof ui.mastery_filter_name === "string") $("#filter-name").value = ui.mastery_filter_name;
+  if (ui.mastery_hide_events === true) showEvents = false;
+  renderEventsButton();
+
+  $("#filter-name").addEventListener("input", () => {
+    writeUi({ mastery_filter_name: $("#filter-name").value });
+    renderFiltered();
+  });
+  $("#filter-events").addEventListener("click", () => {
+    showEvents = !showEvents;
+    writeUi({ mastery_hide_events: !showEvents });
+    renderEventsButton();
+    renderFiltered();
+  });
+
+  [
+    ["#filter-categories", "mastery_hidden_categories"],
+    ["#filter-statuses", "mastery_hidden_statuses"],
+  ].forEach(([selector, key]) => {
+    const boxes = [...document.querySelectorAll(`${selector} input[type="checkbox"]`)];
+    const hidden = Array.isArray(ui[key]) ? ui[key] : [];
+    boxes.forEach((box) => {
+      box.checked = !hidden.includes(box.value);
+      box.addEventListener("change", () => {
+        writeUi({ [key]: boxes.filter((b) => !b.checked).map((b) => b.value) });
+        renderFiltered();
+      });
+    });
+  });
+}
+
 function init() {
   // The popover builds its generated panels here, so applySettingsState below
   // has controls to restore the saved settings into -- without that, opening it
@@ -333,8 +449,9 @@ function init() {
         : "asc";
     sortKey = button.dataset.sort;
     writeUi({ mastery_sort: sortKey, mastery_sort_dir: sortDirection });
-    renderTable();
+    renderFiltered();
   });
+  wireFilters();
   // Self-sourcing changes what gets solved, so it re-requests.
   $("#self-sourced").addEventListener("change", () => {
     writeUi({ mastery_self_sourced: $("#self-sourced").checked });

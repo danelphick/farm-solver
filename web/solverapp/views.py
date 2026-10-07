@@ -289,4 +289,5 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
         "rows": payload.rows,
         "unmasterable": payload.unmasterable,
         "limited": payload.limited,
+        "items": payload.items,
     })

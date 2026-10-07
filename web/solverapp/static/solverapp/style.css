@@ -1378,7 +1378,8 @@ details[open] > summary .summary-detail {
 /* The filter row's controls grow to fill the pane otherwise, which leaves an
    item-name box the width of the page. */
 #material-input,
-#zone-select {
+#zone-select,
+#filter-name {
   max-width: 18rem;
   flex: 1 1 12rem;
 }

@@ -486,12 +486,12 @@ def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time")
             )
     if result.unmasterable:
         print("\nItems that cannot be mastered (a material has no source):")
-        for chain in result.unmasterable:
-            print(f"  {chain}")
+        for note in result.unmasterable:
+            print(f"  {note.text}")
     if result.limited:
         print("\nTiers that cannot be reached (sourceable, but not that many):")
-        for line in result.limited:
-            print(f"  {line}")
+        for note in result.limited:
+            print(f"  {note.text}")
 
 
 def markdown_mastery_costs(
@@ -511,11 +511,11 @@ def markdown_mastery_costs(
     if result.unmasterable:
         doc.heading("Items that cannot be mastered")
         doc.para("Each needs a material with no source:")
-        doc.bullets(result.unmasterable)
+        doc.bullets([note.text for note in result.unmasterable])
     if result.limited:
         doc.heading("Tiers that cannot be reached")
         doc.para("Sourceable, but no plan can supply the quantity that tier needs:")
-        doc.bullets(result.limited)
+        doc.bullets([note.text for note in result.limited])
 
 
 def _cookie_sets_used(plan: optimizer.SourcingPlan) -> int:

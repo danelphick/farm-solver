@@ -33,8 +33,24 @@ const PAYLOAD = {
   cached: false,
   solved_ms: 12,
   rows: ROWS,
-  unmasterable: ["Awl needs Flarite (which needs Unpolished Flarite (unobtainable))"],
-  limited: ["Bouquet of Flowers cannot reach Megamaster: its sources cannot supply that many"],
+  unmasterable: [
+    { item: "Awl", text: "Awl needs Flarite (which needs Unpolished Flarite (unobtainable))" },
+    { item: "Cicada", text: "Cicada (seasonal)" },
+  ],
+  limited: [
+    {
+      item: "Bouquet of Flowers",
+      text: "Bouquet of Flowers cannot reach Megamaster: its sources cannot supply that many",
+    },
+  ],
+  items: {
+    Slow: { categories: ["Fishing"], event: false, status: "obtainable" },
+    "Fast Dear": { categories: ["Exploring", "Crafting"], event: false, status: "obtainable" },
+    "Fast Cheap": { categories: ["Farming"], event: true, status: "obtainable" },
+    Awl: { categories: ["Crafting"], event: false, status: "materials-unobtainable" },
+    Cicada: { categories: ["Other"], event: true, status: "unobtainable" },
+    "Bouquet of Flowers": { categories: ["Crafting"], event: false, status: "obtainable" },
+  },
 };
 
 let fetchMock;
@@ -291,7 +307,7 @@ describe("mastery-costs page", () => {
   test("both 'cannot' sections populate and unhide", async () => {
     await loadPage({ state: SAVED });
     expect(document.querySelector("#unmasterable-details").hidden).toBe(false);
-    expect(document.querySelector("#unmasterable-summary").textContent).toBe(" (1)");
+    expect(document.querySelector("#unmasterable-summary").textContent).toBe(" (2)");
     expect(document.querySelector("#unmasterable-list").textContent).toContain(
       "Unpolished Flarite (unobtainable)"
     );
@@ -382,5 +398,118 @@ describe("mastery-costs settings popover", () => {
       expect(document.querySelector("#empty-state").hidden).toBe(true)
     );
     expect(document.querySelector("#mastery-controls").hidden).toBe(false);
+  });
+});
+
+describe("mastery-costs filters", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    installLocalStorage();
+  });
+
+  const items = () => rowText().map((row) => row[0]);
+  const notes = (prefix) =>
+    [...document.querySelectorAll(`#${prefix}-list li`)].map((li) => li.textContent);
+  const box = (value) => document.querySelector(`input[type="checkbox"][value="${value}"]`);
+  const toggle = (value) => {
+    box(value).checked = !box(value).checked;
+    box(value).dispatchEvent(new Event("change"));
+  };
+
+  test("everything shows until a filter is set, without another request", async () => {
+    const requests = await loadPage({ state: SAVED });
+    expect(document.querySelector("#mastery-filter-details").hidden).toBe(false);
+    expect(items()).toEqual(["Fast Cheap", "Fast Dear", "Slow"]);
+    expect(document.querySelector("#mastery-filter-summary").textContent).toBe("");
+
+    toggle("Fishing");
+    expect(items()).toEqual(["Fast Cheap", "Fast Dear"]);
+    expect(document.querySelector("#mastery-filter-summary").textContent).toBe(
+      " (2 of 3 rows)"
+    );
+    expect(fetchMock.mock.calls.length).toBe(requests);
+  });
+
+  test("the name filter matches anywhere in the name, ignoring case", async () => {
+    await loadPage({ state: SAVED });
+    const name = document.querySelector("#filter-name");
+    name.value = "EAR";
+    name.dispatchEvent(new Event("input"));
+    expect(items()).toEqual(["Fast Dear"]);
+    // The "cannot" lists filter too, and hide when emptied.
+    expect(document.querySelector("#unmasterable-details").hidden).toBe(true);
+    expect(document.querySelector("#limited-details").hidden).toBe(true);
+
+    name.value = "wl";
+    name.dispatchEvent(new Event("input"));
+    expect(document.querySelector("#mastery-costs-section").hidden).toBe(true);
+    expect(notes("unmasterable")).toEqual([
+      "Awl needs Flarite (which needs Unpolished Flarite (unobtainable))",
+    ]);
+    expect(document.querySelector("#unmasterable-summary").textContent).toBe(" (1 of 2)");
+    expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+      mastery_filter_name: "wl",
+    });
+  });
+
+  test("the event button hides and shows event items everywhere", async () => {
+    await loadPage({ state: SAVED });
+    const button = document.querySelector("#filter-events");
+    expect(button.textContent).toBe("Hide event items");
+
+    button.click();
+    expect(button.textContent).toBe("Show event items");
+    expect(items()).toEqual(["Fast Dear", "Slow"]);
+    expect(notes("unmasterable")).toEqual([
+      "Awl needs Flarite (which needs Unpolished Flarite (unobtainable))",
+    ]);
+
+    button.click();
+    expect(items()).toEqual(["Fast Cheap", "Fast Dear", "Slow"]);
+  });
+
+  test("an item with several types shows while any of them is ticked", async () => {
+    await loadPage({ state: SAVED });
+    toggle("Exploring");
+    expect(items()).toContain("Fast Dear"); // still Crafting
+    toggle("Crafting");
+    expect(items()).not.toContain("Fast Dear");
+    // Awl and Bouquet of Flowers are Crafting too.
+    expect(notes("unmasterable")).toEqual(["Cicada (seasonal)"]);
+    expect(document.querySelector("#limited-details").hidden).toBe(true);
+  });
+
+  test("each obtainability class has its own box", async () => {
+    await loadPage({ state: SAVED });
+    toggle("materials-unobtainable");
+    expect(notes("unmasterable")).toEqual(["Cicada (seasonal)"]);
+    toggle("unobtainable");
+    expect(document.querySelector("#unmasterable-details").hidden).toBe(true);
+    expect(items()).toEqual(["Fast Cheap", "Fast Dear", "Slow"]);
+
+    toggle("obtainable");
+    expect(document.querySelector("#mastery-costs-section").hidden).toBe(true);
+    expect(document.querySelector("#limited-details").hidden).toBe(true);
+    expect(document.querySelector("#filter-empty").hidden).toBe(false);
+    // Stored as what is unticked, so a box added later starts ticked.
+    expect(JSON.parse(localStorage.getItem("farm-solver.ui.v1"))).toMatchObject({
+      mastery_hidden_statuses: ["obtainable", "materials-unobtainable", "unobtainable"],
+    });
+  });
+
+  test("the filters are restored on the next visit", async () => {
+    await loadPage({
+      state: SAVED,
+      ui: {
+        mastery_filter_name: "fast",
+        mastery_hide_events: true,
+        mastery_hidden_categories: ["Farming"],
+      },
+    });
+    await vi.waitFor(() => expect(items()).toEqual(["Fast Dear"]));
+    expect(document.querySelector("#filter-name").value).toBe("fast");
+    expect(document.querySelector("#filter-events").textContent).toBe("Show event items");
+    expect(box("Farming").checked).toBe(false);
+    expect(box("Fishing").checked).toBe(true);
   });
 });

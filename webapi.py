@@ -29,7 +29,7 @@ import hashlib
 import json
 import shlex
 import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -811,8 +811,10 @@ class MasteryCostsPayload:
     """The mastery-costs table, ready to serialise (see :func:`mastery_costs`)."""
 
     rows: list[dict]
-    unmasterable: list[str]
-    limited: list[str]
+    unmasterable: list[dict]  # {item, text}
+    limited: list[dict]  # {item, text}
+    # {display name: {categories, event, status}} -- the page's filters
+    items: dict[str, dict] = field(default_factory=dict)
 
 
 def mastery_costs(
@@ -829,7 +831,10 @@ def mastery_costs(
     :func:`render`'s sections are: the client sorts them itself (no round trip)
     and turns each into a link to the solver page seeded with that goal, both of
     which need the item and tier as data rather than as table cells. ``time`` is
-    carried twice -- preformatted for display and in seconds for that sort.
+    carried twice -- preformatted for display and in seconds for that sort. The
+    two "cannot" lists carry their item for the same reason: ``items`` holds
+    each item's type/event/obtainability facts, which the page filters every
+    section on without a round trip.
     """
     cfg, state = _prepare(mastery_text, inventory_text, args)
     result = main.solve_mastery_costs(args, cfg, state)
@@ -844,8 +849,18 @@ def mastery_costs(
             }
             for row in result.rows
         ],
-        unmasterable=list(result.unmasterable),
-        limited=list(result.limited),
+        unmasterable=[
+            {"item": note.item, "text": note.text} for note in result.unmasterable
+        ],
+        limited=[{"item": note.item, "text": note.text} for note in result.limited],
+        items={
+            name: {
+                "categories": list(info.categories),
+                "event": info.event,
+                "status": info.status,
+            }
+            for name, info in result.items.items()
+        },
     )
 
 

@@ -763,6 +763,20 @@ settings up (your goal there is left alone).
   [`unmodelled.csv`](unmodelled.csv) above. **Tiers that cannot be reached** is
   the second collapsed list: items that *can* be sourced, just not in the
   quantity that tier needs.
+- **Filters** narrow the table and both collapsed lists at once, instantly
+  (no re-solve), and are remembered for your next visit:
+  - **Name** matches any part of the item's name (`wood` finds Driftwood).
+  - **Hide/Show event items** toggles the items only around at certain times
+    of year (the event column of [`items.csv`](items.csv)).
+  - **Type**: Farming, Fishing, Exploring, Mining, Cooking, Crafting, plus
+    Pets, Locksmith and Other for items none of those gives you (Other is the
+    Wishing Well and anything with no known source). An item can have several
+    types and shows if any is ticked. Mining and Cooking come from
+    [`unmodelled.csv`](unmodelled.csv), so a mining item missing from it reads
+    as Other until it gets a `Mining` row.
+  - **Obtainable**: *Yes* (the solver can make it), *Materials aren't* (it has
+    a recipe, but some material, maybe several steps down, has no source) or
+    *No* (no source and no recipe). Only *Yes* items have table rows.
 - **Clicking a row** opens the solver page for that one mastery, seeded exactly
   as `-m <Item>:<tier>` would (no tower goal, every other setting kept), so you
   get the full frontier and plan breakdown for it. The browser's Back button

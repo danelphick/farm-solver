@@ -178,6 +178,11 @@ class ApiMasteryCostsTests(SimpleTestCase):
         )
         self.assertIn(row["tier"], {"M", "GM", "MM"})
         self.assertIsInstance(body["unmasterable"], list)
+        # The filters' facts: one entry per item, rows included.
+        self.assertIn(row["item"], body["items"])
+        self.assertEqual(
+            set(body["items"][row["item"]]), {"categories", "event", "status"}
+        )
 
     def test_identical_repost_is_a_cache_hit(self):
         self.assertFalse(self._post({}).json()["cached"])
@@ -308,3 +313,13 @@ class SessionCacheTests(SimpleTestCase):
         CACHE.put("k", session)
         self.assertIs(CACHE.get("k"), session)
         self.assertIsNone(CACHE.get("missing-key"))
+
+    def test_masteries_page_has_a_filter_box_per_type_and_class(self):
+        # The boxes are written out in the template (no Django loop, so the JS
+        # page tests can strip the tags); this keeps them in step with main.
+        response = self.client.get("/masteries")
+        for value in (
+            *main.ITEM_CATEGORIES,
+            main.OBTAINABLE, main.MATERIALS_UNOBTAINABLE, main.UNOBTAINABLE,
+        ):
+            self.assertContains(response, f'type="checkbox" value="{value}"', count=1)

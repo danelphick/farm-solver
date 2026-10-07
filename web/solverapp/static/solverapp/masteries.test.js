@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { masteryHref, sortRows, timelineHref, SORT_COLUMNS } from "./masteries.js";
+import {
+  filterEntries,
+  itemMatches,
+  masteryHref,
+  sortRows,
+  timelineHref,
+  SORT_COLUMNS,
+} from "./masteries.js";
 import { tierForProgress, tierLabel, tierRank } from "./tiers.js";
 
 const row = (item, tier, seconds, gold) => ({
@@ -196,5 +203,52 @@ describe("tierForProgress", () => {
     expect(tierForProgress(100_000)).toBe("GM");
     expect(tierForProgress(1_000_000)).toBe("MM");
     expect(tierForProgress(893_793_719)).toBe("MM");
+  });
+});
+
+describe("itemMatches", () => {
+  const ALL = {
+    name: "",
+    showEvents: true,
+    categories: new Set(["Farming", "Crafting", "Other"]),
+    statuses: new Set(["obtainable", "materials-unobtainable", "unobtainable"]),
+  };
+  const info = { categories: ["Crafting"], event: false, status: "obtainable" };
+
+  test("matches the name anywhere, case-insensitively", () => {
+    expect(itemMatches("Iron Ring", info, { ...ALL, name: "ON R" })).toBe(true);
+    expect(itemMatches("Iron Ring", info, { ...ALL, name: "  ring " })).toBe(true);
+    expect(itemMatches("Iron Ring", info, { ...ALL, name: "gold" })).toBe(false);
+  });
+
+  test("hides event items only when asked", () => {
+    const event = { ...info, event: true };
+    expect(itemMatches("Candy Corn", event, ALL)).toBe(true);
+    expect(itemMatches("Candy Corn", event, { ...ALL, showEvents: false })).toBe(false);
+  });
+
+  test("needs any one of its types ticked", () => {
+    const two = { ...info, categories: ["Fishing", "Crafting"] };
+    expect(itemMatches("X", two, ALL)).toBe(true);
+    expect(itemMatches("X", two, { ...ALL, categories: new Set(["Fishing"]) })).toBe(true);
+    expect(itemMatches("X", two, { ...ALL, categories: new Set(["Farming"]) })).toBe(false);
+  });
+
+  test("needs its obtainability ticked", () => {
+    expect(itemMatches("X", info, { ...ALL, statuses: new Set(["unobtainable"]) })).toBe(false);
+  });
+
+  test("an item with no facts is filtered on its name alone", () => {
+    const none = { ...ALL, categories: new Set(), statuses: new Set(), showEvents: false };
+    expect(itemMatches("Mystery", undefined, none)).toBe(true);
+    expect(itemMatches("Mystery", undefined, { ...none, name: "zzz" })).toBe(false);
+  });
+
+  test("filterEntries keeps entry order and looks facts up by item", () => {
+    const items = { A: info, B: { ...info, status: "unobtainable" } };
+    const entries = [{ item: "B" }, { item: "A" }, { item: "B" }];
+    expect(
+      filterEntries(entries, items, { ...ALL, statuses: new Set(["unobtainable"]) })
+    ).toEqual([{ item: "B" }, { item: "B" }]);
   });
 });

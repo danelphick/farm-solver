@@ -2403,16 +2403,15 @@ _UNMODELLED_REASON_TEXT = {
 }
 
 
-def load_unmodelled_reasons(path: Path | None = None) -> dict[str, str]:
-    """``{lower-cased item: reason}`` for items the solver cannot source.
+def load_unmodelled_sources(path: Path | None = None) -> dict[str, list[str]]:
+    """``{lower-cased item: [source, ...]}``, unmodelled.csv's raw ``source`` cells.
 
     Reads :data:`UNMODELLED_PATH` (or ``path``), whose rows name the game
-    feature that really supplies each item -- cooking, the Wishing Well, mining
-    -- so the report can say *why* rather than a bare "unobtainable". Several
-    rows for one item are joined with "; " in file order (a seasonal item you
-    also have to cook reads "seasonal; Cooking not modelled"). ``#`` comment
-    lines and blanks are skipped; a missing file returns ``{}``, so the report
-    simply falls back to the old wording.
+    feature that really supplies each item -- cooking, the Wishing Well, mining.
+    Several rows for one item keep file order. ``#`` comment lines and blanks
+    are skipped; a missing file returns ``{}``. :func:`load_unmodelled_reasons`
+    renders these as report text; :func:`item_categories` maps them to the
+    mastery-costs page's item types.
     """
     source = path if path is not None else UNMODELLED_PATH
     try:
@@ -2423,15 +2422,32 @@ def load_unmodelled_reasons(path: Path | None = None) -> dict[str, str]:
         line for line in text.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    reasons: dict[str, list[str]] = {}
+    sources_by_item: dict[str, list[str]] = {}
     for row in csv.DictReader(lines):
         item = (row.get("item") or "").strip()
         feature = (row.get("source") or "").strip()
         if not item or not feature:
             continue
-        text_for = _UNMODELLED_REASON_TEXT.get(feature, f"{feature} not modelled")
-        reasons.setdefault(item.lower(), []).append(text_for)
-    return {item: "; ".join(parts) for item, parts in reasons.items()}
+        sources_by_item.setdefault(item.lower(), []).append(feature)
+    return sources_by_item
+
+
+def load_unmodelled_reasons(path: Path | None = None) -> dict[str, str]:
+    """``{lower-cased item: reason}`` for items the solver cannot source.
+
+    The rows of :func:`load_unmodelled_sources`, rendered so the report can say
+    *why* rather than a bare "unobtainable". Several rows for one item are
+    joined with "; " in file order (a seasonal item you also have to cook reads
+    "seasonal; Cooking not modelled"). A missing file returns ``{}``, so the
+    report simply falls back to the old wording.
+    """
+    return {
+        item: "; ".join(
+            _UNMODELLED_REASON_TEXT.get(feature, f"{feature} not modelled")
+            for feature in features
+        )
+        for item, features in load_unmodelled_sources(path).items()
+    }
 
 
 ITEMS_PATH = Path(__file__).with_name("items.csv")
@@ -2506,6 +2522,131 @@ _MASTERY_TIERS: tuple[tuple[int, str], ...] = (
 _MASTERY_TIER_NAMES = {"M": "Master", "GM": "Grandmaster", "MM": "Megamaster"}
 
 
+# The item types the mastery-costs page filters on, in display order (see
+# item_categories). The last three are fallbacks, given only to an item none of
+# the first six claims: a pet or a chest mostly hands out items that have a
+# "real" type of their own, and tagging a fish "Pets" too would stop unticking
+# Fishing from hiding it.
+ITEM_CATEGORIES: tuple[str, ...] = (
+    "Farming", "Fishing", "Exploring", "Mining", "Cooking", "Crafting",
+    "Pets", "Locksmith", "Other",
+)
+
+# unmodelled.csv sources that name an activity with a type of its own. The
+# rest (Wishing Well, unknown, none, seasonal) say nothing about the type.
+_UNMODELLED_CATEGORY = {
+    "cooking": "Cooking",
+    "mining": "Mining",
+    "manual fishing": "Fishing",
+    "sugar cane mill": "Farming",
+}
+
+
+def item_categories(
+    items: Iterable[str],
+    production: passive.PassiveProduction,
+    recipes: dict[str, dict[str, float]],
+    unmodelled: dict[str, list[str]] | None = None,
+) -> dict[str, tuple[str, ...]]:
+    """``{lower item: categories}`` for each of ``items`` (see :data:`ITEM_CATEGORIES`).
+
+    An item's type is where it comes from, read off the game data rather than
+    the player's unlocks (the CSVs, not the config-filtered channels), so a zone
+    not yet reached does not change what kind of item a fish is. The one
+    exception is the farm buildings, whose outputs live only in config code:
+
+    - **Farming**: a crop (its primary item) or seed drop, a farm building's
+      output (``production``'s non-pet, non-grant producers -- so only the
+      buildings the config has), or the Sugar Cane Mill's unmodelled products.
+    - **Fishing** / **Exploring**: in a fishing zone's / exploring location's
+      drop table (flagged tables included), plus unmodelled manual fishing.
+    - **Mining** / **Cooking**: unmodelled.csv's ``Mining`` / ``Cooking`` rows.
+    - **Crafting**: has a workshop recipe (``recipes``).
+
+    An item none of those claims falls back to **Pets** (some pet fetches it),
+    else **Locksmith** (some openable holds it), else **Other** -- the Wishing
+    Well, and anything with no known source. An item can have several types.
+    """
+    claimed: dict[str, set[str]] = {}
+
+    def tag(names: Iterable[str], category: str) -> None:
+        for name in names:
+            claimed.setdefault(name.lower(), set()).add(category)
+
+    tag(
+        (crop.primary or crop.name for crop in crops.read_crops(crops.DEFAULT_CROPS_CSV).values()),
+        "Farming",
+    )
+    for drops in crops.read_drops(crops.DEFAULT_DROPS_CSV).values():
+        tag(drops, "Farming")
+    for producer in production.producers:
+        if producer.name != "farmhouse" and not config.is_smeared_producer(producer.name):
+            tag(producer.outputs, "Farming")
+    for zone in fishing.read_zones(fishing.DEFAULT_FISHING_CSV).values():
+        tag(zone.drop_rates, "Fishing")
+    for location in exploring.read_locations(exploring.DEFAULT_EXPLORING_CSV).values():
+        tag(location.drop_rates, "Exploring")
+        for flagged in location.flagged_drop_rates.values():
+            tag(flagged, "Exploring")
+    tag(recipes, "Crafting")
+    for item, features in (unmodelled or {}).items():
+        for feature in features:
+            category = _UNMODELLED_CATEGORY.get(feature.lower())
+            if category is not None:
+                tag([item], category)
+
+    pet_items = {
+        item.lower()
+        for tiers in pets.read_pet_tiers(pets.DEFAULT_PETS_CSV).values()
+        for tier in tiers
+        for item in tier
+    }
+    openable_items: set[str] = set()
+    for openable in locksmith.load_openables().openables.values():
+        openable_items |= set(openable.fixed)
+        openable_items |= {entry.item.lower() for entry in openable.pool}
+
+    result: dict[str, tuple[str, ...]] = {}
+    for item in items:
+        found = claimed.get(item.lower())
+        if found:
+            result[item] = tuple(c for c in ITEM_CATEGORIES if c in found)
+        elif item.lower() in pet_items:
+            result[item] = ("Pets",)
+        elif item.lower() in openable_items:
+            result[item] = ("Locksmith",)
+        else:
+            result[item] = ("Other",)
+    return result
+
+
+# An item's obtainability on the mastery-costs page: three disjoint classes.
+# OBTAINABLE is masterable (gathered/opened, or crafted from sourceable
+# materials -- see solve_mastery_costs); MATERIALS_UNOBTAINABLE has a recipe,
+# but some material (perhaps several layers down) has no source; UNOBTAINABLE
+# has neither a usable source nor a recipe.
+OBTAINABLE = "obtainable"
+MATERIALS_UNOBTAINABLE = "materials-unobtainable"
+UNOBTAINABLE = "unobtainable"
+
+
+@dataclass(frozen=True)
+class MasteryItemInfo:
+    """What the mastery-costs page filters one item on (besides its name)."""
+
+    categories: tuple[str, ...]  # see item_categories
+    event: bool  # an event item (load_event_windows)
+    status: str  # OBTAINABLE / MATERIALS_UNOBTAINABLE / UNOBTAINABLE
+
+
+@dataclass(frozen=True)
+class MasteryNote:
+    """One line of a --mastery-costs "cannot" section, and the item it is about."""
+
+    item: str  # display name
+    text: str
+
+
 @dataclass(frozen=True)
 class MasteryCostRow:
     """One (item, tier) row of the --mastery-costs table.
@@ -2527,12 +2668,15 @@ class MasteryCostsResult:
     rows: list[MasteryCostRow]
     # Formatted "item needs ... (unobtainable)" chains for items no plan can
     # source at all (see unmasterable_chain); one per unmasterable item.
-    unmasterable: list[str]
+    unmasterable: list[MasteryNote]
     # Items that CAN be sourced but not in the quantity a tier needs -- a
     # finitely-bounded supply (a limited-seed crop, an allow-list that keeps a
     # material off the trading table) the LP calls infeasible rather than
     # unobtainable. One line per item, naming the lowest tier it cannot reach.
-    limited: list[str] = field(default_factory=list)
+    limited: list[MasteryNote] = field(default_factory=list)
+    # Every candidate item's filter facts, keyed by display name -- the web
+    # page's type/event/obtainability filters (the CLI report ignores it).
+    items: dict[str, MasteryItemInfo] = field(default_factory=dict)
 
 
 def _sorted_mastery_rows(
@@ -2696,6 +2840,7 @@ def solve_mastery_costs(
 
     catalogue = load_mastery_catalogue()
     reasons = load_item_reasons()
+    events = load_event_windows()
     # Display names: catalogue first, then every workshop item/material (recipe
     # flows are lower-cased, so the casing comes from the workshop model).
     display: dict[str, str] = dict(catalogue)
@@ -2705,16 +2850,30 @@ def solve_mastery_costs(
             display.setdefault(material.lower(), material)
 
     rows: list[MasteryCostRow] = []
-    unmasterable: list[str] = []
-    limited: list[str] = []
-    for candidate in ascension.candidates(state, catalogue.values()):
+    unmasterable: list[MasteryNote] = []
+    limited: list[MasteryNote] = []
+    items: dict[str, MasteryItemInfo] = {}
+    candidates = list(ascension.candidates(state, catalogue.values()))
+    categories = item_categories(
+        (c.item for c in candidates), production, recipes, load_unmodelled_sources()
+    )
+    for candidate in candidates:
         key = candidate.item
         mastery = state.mastery(key)
         name = display.get(key) or (mastery.item if mastery is not None else key.title())
-        if not masterable(key):
-            unmasterable.append(
-                unmasterable_chain(key, recipes, available, display, reasons)
-            )
+        if masterable(key):
+            status = OBTAINABLE
+        elif key in recipes:
+            status = MATERIALS_UNOBTAINABLE
+        else:
+            status = UNOBTAINABLE
+        items[name] = MasteryItemInfo(
+            categories=categories[key], event=key in events, status=status
+        )
+        if status != OBTAINABLE:
+            unmasterable.append(MasteryNote(
+                name, unmasterable_chain(key, recipes, available, display, reasons)
+            ))
             continue
         progress = mastery.progress if mastery is not None else 0
         for threshold, label in _MASTERY_TIERS:
@@ -2739,21 +2898,22 @@ def solve_mastery_costs(
                 # Record the tier and stop climbing: every higher one needs
                 # strictly more of the same, so it is infeasible too. One bad
                 # tier must not abort the whole sweep.
-                limited.append(
+                limited.append(MasteryNote(
+                    name,
                     f"{name} cannot reach "
                     f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
-                    "cannot supply that many"
-                )
+                    "cannot supply that many",
+                ))
                 break
             # Cost is the gold the plan actually spends buying (plan.gold), so
             # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
             # drop, not the market value of the tools it now self-sources instead.
             rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
 
-    unmasterable.sort()
-    limited.sort()
+    unmasterable.sort(key=lambda note: note.text)
+    limited.sort(key=lambda note: note.text)
     return MasteryCostsResult(rows=_sorted_mastery_rows(rows, args.sort),
-                             unmasterable=unmasterable, limited=limited)
+                             unmasterable=unmasterable, limited=limited, items=items)
 
 
 def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:

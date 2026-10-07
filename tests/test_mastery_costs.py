@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import config
 import main
 import optimizer
 from farm_solver import GameState
@@ -10,6 +11,7 @@ from main import (
     SELF_SOURCED_TOOLS,
     MasteryCostRow,
     MasteryCostsResult,
+    MasteryNote,
     _sorted_mastery_rows,
     build_parser,
     run,
@@ -136,7 +138,9 @@ def test_print_mastery_costs_renders_table_and_unmasterable(capsys):
             _row("Valve", "GM", 2, 100.0),
             _row("Ship in a Bottle", "MM", 50, 105.0),
         ],
-        unmasterable=["Awl needs Flarite (which needs Unpolished Flarite (unobtainable))"],
+        unmasterable=[MasteryNote(
+            "Awl", "Awl needs Flarite (which needs Unpolished Flarite (unobtainable))"
+        )],
     )
     print_mastery_costs(result, "time")
     out = capsys.readouterr().out
@@ -150,7 +154,7 @@ def test_markdown_mastery_costs_builds_table():
     doc = MarkdownDoc()
     result = MasteryCostsResult(
         rows=[_row("Valve", "GM", 2, 100.0)],
-        unmasterable=["Cicada (unobtainable)"],
+        unmasterable=[MasteryNote("Cicada", "Cicada (unobtainable)")],
     )
     markdown_mastery_costs(doc, result, "gold")
     rendered = doc.render()
@@ -231,9 +235,9 @@ def test_an_infeasible_tier_is_reported_instead_of_aborting_the_sweep(monkeypatc
     # ValueError escaping and killing every other item's row too.
     result, _ = _solve_with_failing_tier(monkeypatch, fail_on_call=3)
     assert [(r.item, r.tier) for r in result.rows] == [("Board", "M"), ("Board", "GM")]
-    assert result.limited == [
-        "Board cannot reach Megamaster: its sources cannot supply that many"
-    ]
+    assert result.limited == [MasteryNote(
+        "Board", "Board cannot reach Megamaster: its sources cannot supply that many"
+    )]
     assert result.unmasterable == []  # a different failure: this one HAS sources
 
 
@@ -243,9 +247,9 @@ def test_an_infeasible_tier_stops_the_climb(monkeypatch):
     result, calls = _solve_with_failing_tier(monkeypatch, fail_on_call=1)
     assert result.rows == []
     assert len(calls) == 1
-    assert result.limited == [
-        "Board cannot reach Master: its sources cannot supply that many"
-    ]
+    assert result.limited == [MasteryNote(
+        "Board", "Board cannot reach Master: its sources cannot supply that many"
+    )]
 
 
 def test_print_mastery_costs_renders_the_limited_section(capsys):
@@ -255,7 +259,8 @@ def test_print_mastery_costs_renders_the_limited_section(capsys):
     )
     print_mastery_costs(
         MasteryCostsResult(
-            rows=[_row("Valve", "GM", 2, 100.0)], unmasterable=[], limited=[line]
+            rows=[_row("Valve", "GM", 2, 100.0)], unmasterable=[],
+            limited=[MasteryNote("Bouquet of Flowers", line)],
         ),
         "time",
     )
@@ -269,7 +274,7 @@ def test_markdown_mastery_costs_renders_the_limited_section():
     doc = MarkdownDoc()
     markdown_mastery_costs(
         doc,
-        MasteryCostsResult(rows=[], unmasterable=[], limited=["Board cannot reach Master"]),
+        MasteryCostsResult(rows=[], unmasterable=[], limited=[MasteryNote("Board", "Board cannot reach Master")]),
         "time",
     )
     rendered = doc.render()
@@ -416,3 +421,81 @@ def test_the_shipped_files_flag_event_items_with_their_season():
     assert reasons["king apple"] == "seasonal: September Apple Bobbing Event"
     assert reasons["yule goat"] == "seasonal"
     assert reasons["neigh"] == "Cooking not modelled"
+
+
+# --- the web page's filter facts ----------------------------------------------
+
+
+def test_item_categories_reads_each_type_off_its_source():
+    production = config.passive_production(
+        {"chicken_coop": {"produces": 10}, "pets": {}}
+    )
+    categories = main.item_categories(
+        ["Peppers", "Gold Peppers", "Eggs", "Drum", "Amethyst", "Board",
+         "Neigh", "Stone Shell", "White Sugar"],
+        production,
+        {"board": {"wood": 5.0}},
+        main.load_unmodelled_sources(),
+    )
+    assert categories == {
+        "Peppers": ("Farming",),  # a crop
+        "Gold Peppers": ("Farming",),  # a seed drop
+        "Eggs": ("Farming",),  # a farm building's output
+        "Drum": ("Fishing",),
+        "Amethyst": ("Exploring",),
+        "Board": ("Crafting",),
+        "Neigh": ("Cooking",),  # from unmodelled.csv
+        "Stone Shell": ("Mining",),
+        "White Sugar": ("Farming",),  # the Sugar Cane Mill
+    }
+
+
+def test_item_categories_falls_back_to_pets_then_locksmith_then_other():
+    categories = main.item_categories(
+        ["Esperium", "Drum", "Magna Core", "Never Heard Of It"],
+        config.passive_production({}),
+        {},
+        main.load_unmodelled_sources(),
+    )
+    # A Miner find with no other source is Pets; Drum is a Cat find too, but its
+    # real type (Fishing) wins, so unticking Fishing still hides it.
+    assert categories["Esperium"] == ("Pets",)
+    assert categories["Drum"] == ("Fishing",)
+    # The Wishing Well, and no known source at all.
+    assert categories["Magna Core"] == ("Other",)
+    assert categories["Never Heard Of It"] == ("Other",)
+
+
+def test_item_categories_keeps_every_type_in_display_order():
+    categories = main.item_categories(
+        ["Wood"], config.passive_production({}), {"wood": {"stone": 1.0}}
+    )
+    assert categories["Wood"] == ("Exploring", "Crafting")
+
+
+def test_solve_mastery_costs_classifies_each_item(monkeypatch):
+    args = build_parser().parse_args(["--mastery-costs"])
+    cfg = main.load_config(Path("web_default_config.toml"))
+    main.resolve_crafting_bonus(args, cfg)
+    monkeypatch.setattr(main, "load_mastery_catalogue", lambda: {
+        "drum": "Drum", "compass": "Compass", "cicada": "Cicada",
+    })
+    result = main.solve_mastery_costs(args, cfg, GameState())
+    # The three obtainability classes are disjoint: gathered (Drum), a recipe
+    # with an unsourceable material (Compass <- Magna Core), neither (Cicada).
+    assert result.items == {
+        "Drum": main.MasteryItemInfo(("Fishing",), event=False, status=main.OBTAINABLE),
+        "Compass": main.MasteryItemInfo(
+            ("Crafting",), event=False, status=main.MATERIALS_UNOBTAINABLE
+        ),
+        "Cicada": main.MasteryItemInfo(("Other",), event=True, status=main.UNOBTAINABLE),
+    }
+    assert [note.item for note in result.unmasterable] == ["Cicada", "Compass"]
+    assert {row.item for row in result.rows} == {"Drum"}
+
+
+def test_load_unmodelled_sources_keeps_the_raw_cells_in_file_order(tmp_path):
+    path = _reasons_file(
+        tmp_path, "item,source\nFestive Eggnog,Cooking\nFestive Eggnog,seasonal\n"
+    )
+    assert main.load_unmodelled_sources(path) == {"festive eggnog": ["Cooking", "seasonal"]}

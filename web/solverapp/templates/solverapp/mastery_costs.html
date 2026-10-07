@@ -36,6 +36,52 @@
     </div>
   </div>
 
+  <!-- Filters over everything below -- the table and both "cannot" lists --
+       applied client-side to the rows already loaded, so no request. A
+       details.pane, so its open/closed state persists like every other one
+       (settings.restorePaneStates). The type boxes' values are
+       main.ITEM_CATEGORIES and the obtainability ones' main.OBTAINABLE /
+       MATERIALS_UNOBTAINABLE / UNOBTAINABLE. -->
+  <details id="mastery-filter-details" class="pane" open hidden>
+    <summary>Filters<span id="mastery-filter-summary" class="summary-detail"></span></summary>
+    <div class="pane-body">
+      <div class="field-row wide">
+        <label for="filter-name">Name</label>
+        <input id="filter-name" type="text" placeholder="Any part of the name"
+          autocomplete="off">
+        <button type="button" id="filter-events" class="btn-add">Hide event items</button>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="Show only items whose name contains this text, anywhere in the name (“wood” finds Driftwood). The button hides or shows event items — the ones only around at certain times of year.">?</button>
+      </div>
+
+      <div class="field-row wide" id="filter-categories">
+        <label>Type</label>
+        <label class="check"><input type="checkbox" value="Farming" checked> Farming</label>
+        <label class="check"><input type="checkbox" value="Fishing" checked> Fishing</label>
+        <label class="check"><input type="checkbox" value="Exploring" checked> Exploring</label>
+        <label class="check"><input type="checkbox" value="Mining" checked> Mining</label>
+        <label class="check"><input type="checkbox" value="Cooking" checked> Cooking</label>
+        <label class="check"><input type="checkbox" value="Crafting" checked> Crafting</label>
+        <label class="check"><input type="checkbox" value="Pets" checked> Pets</label>
+        <label class="check"><input type="checkbox" value="Locksmith" checked> Locksmith</label>
+        <label class="check"><input type="checkbox" value="Other" checked> Other</label>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="Where an item comes from. An item can have more than one type (a crafted item that is also an exploring drop) and is shown if any of them is ticked. Pets and Locksmith only cover items nothing else gives you; Other is the Wishing Well and anything with no known source.">?</button>
+      </div>
+
+      <div class="field-row wide" id="filter-statuses">
+        <label>Obtainable</label>
+        <label class="check"><input type="checkbox" value="obtainable" checked> Yes</label>
+        <label class="check"><input type="checkbox" value="materials-unobtainable" checked> Materials aren't</label>
+        <label class="check"><input type="checkbox" value="unobtainable" checked> No</label>
+        <button type="button" class="help-icon" aria-label="Help"
+          data-help="Yes: the solver can make it, by gathering it or crafting it from things it can get. Materials aren't: it has a recipe, but some material — maybe several steps down — has no source. No: no source and no recipe. Only Yes items have rows in the table; the other two are listed under “Cannot be mastered”.">?</button>
+      </div>
+    </div>
+  </details>
+
+  <p id="filter-empty" class="pane-hint" hidden>No masteries match the filters.</p>
+
   <p id="empty-state" class="pane-hint" hidden>
     Nothing pasted yet. Open <strong>&#9881; Settings</strong> (top right) and
     paste your masteries and inventory &mdash; the same saved state the

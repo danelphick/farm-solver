@@ -831,8 +831,25 @@ def test_mastery_costs_end_to_end_on_synthetic_paste_text():
     # reason -- "(unobtainable)" only where unmodelled.csv has nothing better to
     # say, otherwise the real one ("(Cooking not modelled)", "(seasonal)").
     assert payload.unmasterable
-    assert all(chain.endswith(")") for chain in payload.unmasterable)
-    assert any("not modelled" in chain for chain in payload.unmasterable)
+    assert all(note["text"].endswith(")") for note in payload.unmasterable)
+    assert any("not modelled" in note["text"] for note in payload.unmasterable)
+    # Every row and note names an item the page has filter facts for.
+    named = {row["item"] for row in payload.rows} | {
+        note["item"] for note in payload.unmasterable + payload.limited
+    }
+    assert named <= set(payload.items)
+    for info in payload.items.values():
+        assert set(info) == {"categories", "event", "status"}
+        assert info["categories"] and set(info["categories"]) <= set(main.ITEM_CATEGORIES)
+        assert info["status"] in {
+            main.OBTAINABLE, main.MATERIALS_UNOBTAINABLE, main.UNOBTAINABLE
+        }
+    # Only obtainable items get rows; the other two classes are the notes.
+    assert all(payload.items[row["item"]]["status"] == main.OBTAINABLE for row in payload.rows)
+    assert all(
+        payload.items[note["item"]]["status"] != main.OBTAINABLE
+        for note in payload.unmasterable
+    )
 
 
 def test_mastery_costs_ignores_the_goal_params_it_is_handed():
