@@ -55,6 +55,7 @@ Arrowhead
 Ashes of Pentagorn
 Asteroid Egg
 Astro Fuzzy Chick
+Avocado
 Awl
 Axe
 B for Buddies
@@ -152,6 +153,7 @@ Blue Star Stomper
 Blue Tang
 Blue Tiger Fish
 Blue Twine
+Blueberries
 Bluegill
 Board
 Bog Barnacle
@@ -308,6 +310,7 @@ Charles's Neigh
 Chattering Teeth
 Cheese
 Cheese Wheel
+Cherries
 Chisel
 Chocolate Bunny
 Christmas Card
@@ -1018,6 +1021,7 @@ Pea Seeds
 Peach
 Peach Juice
 Peafowl Feather
+Pear
 Pear Grease
 Pearl
 Pearl Berries
@@ -1138,6 +1142,7 @@ Raptor Chicken Egg
 Raptor Claw
 Raptor Egg
 Raptor Wrangler Belt
+Raspberries
 Raw Meat
 Re'taw
 Re'taw Pail

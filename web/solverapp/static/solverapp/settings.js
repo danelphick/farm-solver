@@ -254,6 +254,8 @@ const BUILDING_SECTIONS = [
       help: "Orchard yield multiplier from perks (e.g. 1.3 = +30% fruit)." },
     { key: "orchard.have_tree_shaker", label: "Tree Shaker", type: "bool",
       help: "Tree Shaker perk: an extra daily harvest with its own storehouse-cap window." },
+    { key: "orchard.oddvocado_trees", label: "Oddvocado trees", type: "int",
+      help: "Number of Oddvocado Trees; each bears one random fruit at noon daily (Pear, Avocado, Cherries, Lemon, Raspberries, Orange or Blueberries, equally likely)." },
   ] },
   { title: "Raptor pen", fields: [
     { key: "raptor_pen.antlers", label: "Antlers / day", type: "int",

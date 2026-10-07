@@ -56,6 +56,18 @@ FARMHOUSE_GAIN_CAP_APPLE_PIE = 1_000_000
 # flag the builders take.
 COW_HORN_MULTIPLIER = 3
 
+# What an Oddvocado Tree bears: one of these a day, each equally likely. Names
+# are the game's own (lower-cased), plural or not as it spells them.
+ODDVOCADO_FRUIT = (
+    "pear",
+    "avocado",
+    "cherries",
+    "lemon",
+    "raspberries",
+    "orange",
+    "blueberries",
+)
+
 # Bundled config, used when the user does not supply their own.
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
 
@@ -246,6 +258,10 @@ def passive_production(
       scaled by the multiplicative ``bonus`` and floored; with
       ``have_tree_shaker`` a separate daily deposit adds a further 10%
       (floored) of each fruit twelve hours later, like the raptor snare.
+      ``oddvocado_trees`` each bear one random fruit a day at noon, an equal
+      chance of each of :data:`ODDVOCADO_FRUIT`; that separate daily producer
+      deposits the expected ``trees / 7`` of each, unscaled by ``bonus`` or
+      the shaker.
     * ``[raptor_pen]`` -- antlers every day, plus (when ``have_antler_snare``)
       a separate daily deposit of a further 10% (floored) twelve hours later,
       so that extra is not lost to the storehouse cap of the main run.
@@ -404,6 +420,18 @@ def passive_production(
                     name="orchard_shaker",
                     period=DAILY,
                     outputs={name: qty // 10 for name, qty in outputs.items()},
+                )
+            )
+        oddvocado_trees = int(orchard.get("oddvocado_trees", 0))
+        if oddvocado_trees:
+            # Each Oddvocado Tree bears one fruit a day at noon, an equal
+            # chance of each kind, so the expected haul is trees / 7 of each.
+            share = oddvocado_trees / len(ODDVOCADO_FRUIT)
+            producers.append(
+                PassiveProducer(
+                    name="orchard_oddvocado",
+                    period=DAILY,
+                    outputs={fruit: share for fruit in ODDVOCADO_FRUIT},
                 )
             )
 

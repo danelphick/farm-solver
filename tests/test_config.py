@@ -237,6 +237,40 @@ def test_tree_shaker_is_a_separate_offset_producer():
     assert shaker.outputs == {"apple": 801, "orange": 802, "lemon": 801}
 
 
+def test_oddvocado_trees_split_evenly_across_seven_fruit():
+    # Each tree bears one of seven fruit at random, so the separate daily
+    # producer deposits the expected trees / 7 of each, unscaled by the bonus
+    # or the shaker.
+    production = passive_production(
+        {
+            "orchard": {
+                "lemon_trees": 100,
+                "bonus": 1.3,
+                "have_tree_shaker": True,
+                "oddvocado_trees": 700,
+            }
+        }
+    )
+    odd = next(p for p in production.producers if p.name == "orchard_oddvocado")
+    assert odd.period == DAILY
+    assert odd.outputs == {
+        "pear": 100,
+        "avocado": 100,
+        "cherries": 100,
+        "lemon": 100,
+        "raspberries": 100,
+        "orange": 100,
+        "blueberries": 100,
+    }
+    shaker = next(p for p in production.producers if p.name == "orchard_shaker")
+    assert shaker.outputs == {"lemon": 13}
+
+
+def test_no_oddvocado_trees_adds_no_producer():
+    production = passive_production({"orchard": {"apple_trees": 100}})
+    assert [p.name for p in production.producers] == ["orchard"]
+
+
 def test_passive_production_reads_raptor_pen():
     production = passive_production({"raptor_pen": {"antlers": 2617810}})
     pen = production.producers[0]
