@@ -894,11 +894,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--unobtainable",
-        action="store_true",
+        nargs="?",
+        const="crafting",
+        choices=UNOBTAINABLE_SCOPES,
+        metavar="{" + ",".join(UNOBTAINABLE_SCOPES) + "}",
         help=(
-            "list workshop materials with no known source (not produced "
-            "passively, fished, explored, farmed, fetched by pets, "
-            "auto-supplied, or craftable)"
+            "list items with no known source and stop. 'crafting' (the default "
+            "for a bare --unobtainable): workshop materials that are neither "
+            "gathered, opened, auto-supplied nor craftable. 'masterable': every "
+            "masterable item that cannot be had, directly or because some "
+            "material (at any depth) cannot. 'all': the same over every item in "
+            "the game"
         ),
     )
     parser.add_argument(
@@ -1310,6 +1316,69 @@ def obtainable_items(
             for flagged in location.flagged_drop_rates.values():
                 items |= set(flagged)
     return items
+
+
+# --unobtainable's scopes: which items the report checks (see run).
+UNOBTAINABLE_SCOPES = ("crafting", "masterable", "all")
+
+
+def sourceable_from_game_data(
+    obtainable: set[str],
+    recipes: dict[str, dict[str, float]],
+    open_flows: list[sources.OpenFlow],
+) -> set[str]:
+    """Everything ``obtainable`` (:func:`obtainable_items`) leads to.
+
+    The fixed point of :func:`optimizer._obtainable` seeded with the directly
+    obtainable items: plus whatever can be crafted from them (``recipes``,
+    :func:`crafting.recipe_flows`) or opened (``open_flows``), transitively.
+    """
+    return optimizer._obtainable([], recipes, open_flows, held=obtainable)
+
+
+def unobtainable_items(
+    universe: dict[str, str],
+    available: set[str],
+    recipes: dict[str, dict[str, float]],
+    display: dict[str, str],
+    reasons: dict[str, str] | None = None,
+) -> list[str]:
+    """The items of ``universe`` (``{lower key: display name}``) not in ``available``.
+
+    For ``--unobtainable masterable``/``all``: unlike
+    :func:`unobtainable_materials`, an item counts whether it has no source at
+    all or has a recipe some material of which -- at any depth -- has none.
+    Each is explained by :func:`unmasterable_chain`, so the second kind reads
+    ``"Compass needs Magna Core (Wishing Well not modelled)"``. Sorted by name.
+    """
+    return sorted(
+        (
+            unmasterable_chain(key, recipes, available, display, reasons)
+            for key in universe
+            if key not in available
+        ),
+        key=str.lower,
+    )
+
+
+def load_item_catalogue(path: Path | None = None) -> dict[str, str]:
+    """``{lower-cased item: display name}`` of every item in the game.
+
+    Reads :data:`ITEMS_PATH` (or ``path``), the ``items.csv`` catalogue; a
+    missing file returns ``{}``.
+    """
+    source = path if path is not None else ITEMS_PATH
+    try:
+        text = source.read_text()
+    except FileNotFoundError:
+        return {}
+    lines = [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+    names: dict[str, str] = {}
+    for row in csv.DictReader(lines):
+        item = (row.get("item") or "").strip()
+        if item:
+            names.setdefault(item.lower(), item)
+    return names
 
 
 def unobtainable_materials(
@@ -3710,10 +3779,30 @@ def run(args: argparse.Namespace) -> int:
             cfg, today=start, monthly_grants=resolve_monthly_grants(cfg),
             has_mariyas_wheelbarrow=resolve_mariyas_wheelbarrow(cfg),
         )
-        obtainable = obtainable_items(production, farm, fish, explore)
-        reporter.unobtainable(
-            unobtainable_materials(workshop, obtainable, load_item_reasons())
+        recipes = crafting.recipe_flows(workshop)
+        available = sourceable_from_game_data(
+            obtainable_items(production, farm, fish, explore),
+            recipes,
+            sources.open_flows(locksmith.load_openables()),
         )
+        reasons = load_item_reasons()
+        if args.unobtainable == "crafting":
+            found = unobtainable_materials(workshop, available, reasons)
+        else:
+            # Display names for the chains' nested materials, as in
+            # solve_mastery_costs: the catalogue, then the workshop's casing.
+            display = dict(load_mastery_catalogue())
+            if args.unobtainable == "all":
+                display = {**load_item_catalogue(), **display}
+            universe = dict(display)
+            for rkey, recipe in workshop.recipes.items():
+                display.setdefault(rkey, recipe.name)
+                for material in recipe.materials:
+                    display.setdefault(material.lower(), material)
+            if args.unobtainable == "all":
+                universe = {**display, **universe}
+            found = unobtainable_items(universe, available, recipes, display, reasons)
+        reporter.unobtainable(found, args.unobtainable)
         reporter.finish()
         return 0
 

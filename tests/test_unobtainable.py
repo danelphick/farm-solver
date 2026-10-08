@@ -98,3 +98,90 @@ def test_obtainable_items_include_every_flagged_exploring_table():
     assert "painite" in obtainable  # fungus_processing table only
     assert "hide" in obtainable  # acorn_pie table only
     assert "mushroom" in obtainable  # base table only
+
+
+# --- --unobtainable scopes ------------------------------------------------------
+
+
+RECIPES = {
+    "chair": {"board": 4.0, "painite": 1.0},
+    "board": {"wood": 5.0},
+    "ring": {"gem": 1.0},
+}
+DISPLAY = {
+    "chair": "Chair", "board": "Board", "painite": "Painite",
+    "wood": "Wood", "ring": "Ring", "gem": "Gem", "frozen fish": "Frozen Fish",
+}
+
+
+def test_sourceable_from_game_data_follows_crafts_and_opens():
+    from main import sourceable_from_game_data
+    from sources import OpenFlow
+
+    flows = [OpenFlow(name="Chest", consumes={"chest": 1.0}, yields={"gem": 2.0})]
+    available = sourceable_from_game_data({"wood", "chest"}, RECIPES, flows)
+    # Board is crafted from Wood; Gem comes out of the chest, so Ring crafts too.
+    assert {"wood", "board", "chest", "gem", "ring"} <= available
+    assert "chair" not in available  # Painite has no source
+
+
+def test_unobtainable_items_lists_direct_and_indirect_blockers():
+    from main import unobtainable_items
+
+    universe = {"chair": "Chair", "board": "Board", "frozen fish": "Frozen Fish"}
+    available = {"wood", "board"}
+    found = unobtainable_items(
+        universe, available, RECIPES, DISPLAY, {"frozen fish": "seasonal"}
+    )
+    assert found == [
+        "Chair needs Painite (unobtainable)",  # indirectly, through a material
+        "Frozen Fish (seasonal)",  # directly, with its reason
+    ]
+
+
+def test_load_item_catalogue_reads_items_csv(tmp_path):
+    from main import load_item_catalogue
+
+    path = tmp_path / "items.csv"
+    path.write_text("# comment\nitem,event\nFrozen Fish,true\nBoard,\n")
+    assert load_item_catalogue(path) == {"frozen fish": "Frozen Fish", "board": "Board"}
+    assert load_item_catalogue(tmp_path / "missing.csv") == {}
+
+
+def test_unobtainable_flag_takes_a_scope_defaulting_to_crafting():
+    import pytest
+
+    from main import build_parser
+
+    parser = build_parser()
+    assert parser.parse_args([]).unobtainable is None
+    assert parser.parse_args(["--unobtainable"]).unobtainable == "crafting"
+    assert parser.parse_args(["--unobtainable=masterable"]).unobtainable == "masterable"
+    assert parser.parse_args(["--unobtainable", "all"]).unobtainable == "all"
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--unobtainable=bogus"])
+
+
+def test_each_scope_has_its_own_title(capsys):
+    from report import MarkdownDoc, markdown_unobtainable, print_unobtainable
+
+    print_unobtainable(["Chair needs Painite (unobtainable)"], "masterable")
+    out = capsys.readouterr().out
+    assert out.startswith("The following masterable items are unobtainable")
+    doc = MarkdownDoc()
+    markdown_unobtainable(doc, [], "all")
+    assert "## Unobtainable items" in doc.render()
+
+
+def test_masterable_scope_covers_items_no_recipe_uses(capsys):
+    # The frozen fish are masterable but a material of nothing, so only the
+    # masterable scope (not crafting) reports them.
+    from main import build_parser, run
+
+    run(build_parser().parse_args(["--unobtainable=masterable"]))
+    masterable = capsys.readouterr().out
+    assert "Frozen Angelfish (seasonal)" in masterable
+    assert "Compass needs Magna Core" in masterable  # indirectly unobtainable
+
+    run(build_parser().parse_args(["--unobtainable"]))
+    assert "Frozen Angelfish" not in capsys.readouterr().out

@@ -172,9 +172,18 @@ gains `"seasonal: <window>"` (bare `"seasonal"` when its event is just `true`),
 replacing a plain unmodelled.csv `seasonal` row, else appended after its other
 reasons -- so unmodelled.csv keeps `seasonal` rows only for items outside the
 museum's Event section (the Polar Bear's frozen crops). The `--unobtainable`
-report uses the same reasons: `main.unobtainable_materials(workshop, obtainable,
-reasons)` suffixes a listed material with `" (<reason>)"`, so only the bare
-names lack a known route.
+report uses the same reasons. Its scope (`main.UNOBTAINABLE_SCOPES`, a bare
+flag meaning `crafting`) picks which items it checks, all against
+`main.sourceable_from_game_data` -- `obtainable_items` closed over crafts and
+opens via `optimizer._obtainable`. `crafting`: `main.unobtainable_materials`,
+workshop materials with no source and no recipe, a listed one suffixed
+`" (<reason>)"`, so only the bare names lack a known route. `masterable` (the
+mastery catalogue) and `all` (that plus `items.csv` via
+`main.load_item_catalogue`, plus every workshop item/material):
+`main.unobtainable_items`, which also counts an item blocked by a material at
+any depth and explains each with `unmasterable_chain`. The report's wording per
+scope is `report._UNOBTAINABLE_TITLES` (`Reporter.unobtainable(materials,
+scope)`).
 
 **Filter facts** (the web page's filters; the CLI report ignores them):
 `MasteryCostsResult.items` maps each candidate's display name to a

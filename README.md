@@ -54,7 +54,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [-i item:amount] [-m item:amount] \
     [-b] [--crafting-bonus num] [--mastery-bonus num] [--start-date YYYY-MM-DD] [--model-calendar | --average-calendar | --ignore-calendar] \
     [--solver highs|cbc|NAME] \
-    [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable] \
+    [--fastest-plan | --cheapest-plan | --plan N] [--passive-limit duration] [--unobtainable[=crafting|masterable|all]] \
     [--mastery-costs [--sort time|gold]] [--self-sourced] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
     [--backup-file <file>] \
@@ -305,10 +305,15 @@ Required Crafts:
   25x Wood
 ```
 
-Pass `--unobtainable` to list every workshop material that currently has no known source — one that is not produced passively, fished, explored, farmed, fetched by a pet, auto-supplied, nor craftable from a recipe of its own. This is a standalone report over the whole workshop: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data:
+Pass `--unobtainable` to list items that currently have no known source. This is a standalone report over the game data: it does not run the solver, so the mastery and inventory files are not needed. It is handy for spotting which items still need a source or more drop-rate data. It takes a scope saying which items to check:
+
+- `--unobtainable=crafting` (also a bare `--unobtainable`): every **workshop material** that is not produced passively, fished, explored (any drop table, including Fungus Processing and Acorn Pie ones), farmed, fetched by a pet, opened from a chest, auto-supplied, nor craftable from a recipe of its own.
+- `--unobtainable=masterable`: every **masterable item** that cannot be had — directly (no source, no recipe), or *indirectly*, because its recipe needs a material that cannot be had, at any depth. The indirect ones print the chain, e.g. `Compass needs Magna Core (Wishing Well not modelled)`. This is the one that catches items no recipe uses, like the frozen fish.
+- `--unobtainable=all`: the same, over **every item in the game** (`items.csv`, the mastery catalogue and the workshop).
 
 ```shell
 python main.py --unobtainable
+python main.py --unobtainable=masterable
 ```
 
 A material that is really obtainable in game by a route the solver does not model is flagged with that route, from [`unmodelled.csv`](unmodelled.csv) (see [Mastery costs](#mastery-costs)), so the bare names are the ones still lacking any known source:

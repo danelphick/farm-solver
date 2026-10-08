@@ -427,8 +427,29 @@ def markdown_solution(
         doc.table(["Material", "Qty"], rows)
 
 
-def print_unobtainable(materials: list[str]) -> None:
-    print("The following materials are required for some crafts but are unobtainable:")
+# --unobtainable's report wording per scope (main.UNOBTAINABLE_SCOPES):
+# (text-mode lead-in, markdown heading).
+_UNOBTAINABLE_TITLES = {
+    "crafting": (
+        "The following materials are required for some crafts but are unobtainable:",
+        "Unobtainable materials",
+    ),
+    "masterable": (
+        (
+            "The following masterable items are unobtainable, directly or "
+            "through a material:"
+        ),
+        "Unobtainable masterable items",
+    ),
+    "all": (
+        "The following items are unobtainable, directly or through a material:",
+        "Unobtainable items",
+    ),
+}
+
+
+def print_unobtainable(materials: list[str], scope: str = "crafting") -> None:
+    print(_UNOBTAINABLE_TITLES[scope][0])
     if not materials:
         print("  (none)")
         return
@@ -436,9 +457,11 @@ def print_unobtainable(materials: list[str]) -> None:
         print(f"  {material}")
 
 
-def markdown_unobtainable(doc: MarkdownDoc, materials: list[str]) -> None:
+def markdown_unobtainable(
+    doc: MarkdownDoc, materials: list[str], scope: str = "crafting"
+) -> None:
     """Markdown counterpart to :func:`print_unobtainable`."""
-    doc.heading("Unobtainable materials")
+    doc.heading(_UNOBTAINABLE_TITLES[scope][1])
     if not materials:
         doc.para("(none)")
         return
@@ -3309,7 +3332,7 @@ class Reporter:
     ) -> None:
         raise NotImplementedError
 
-    def unobtainable(self, materials: list[str]) -> None:
+    def unobtainable(self, materials: list[str], scope: str = "crafting") -> None:
         raise NotImplementedError
 
     def mastery_costs(
@@ -3400,8 +3423,8 @@ class TextReporter(Reporter):
     ) -> None:
         print_solution(solution, remainder)
 
-    def unobtainable(self, materials: list[str]) -> None:
-        print_unobtainable(materials)
+    def unobtainable(self, materials: list[str], scope: str = "crafting") -> None:
+        print_unobtainable(materials, scope)
 
     def mastery_costs(self, *args, **kwargs) -> None:
         print_mastery_costs(*args, **kwargs)
@@ -3474,8 +3497,8 @@ class MarkdownReporter(Reporter):
     ) -> None:
         markdown_solution(self.doc, solution, remainder)
 
-    def unobtainable(self, materials: list[str]) -> None:
-        markdown_unobtainable(self.doc, materials)
+    def unobtainable(self, materials: list[str], scope: str = "crafting") -> None:
+        markdown_unobtainable(self.doc, materials, scope)
 
     def mastery_costs(self, *args, **kwargs) -> None:
         markdown_mastery_costs(self.doc, *args, **kwargs)
@@ -3557,8 +3580,8 @@ class SectionedReporter(Reporter):
     ) -> None:
         markdown_solution(self.docs["solution"], solution, remainder)
 
-    def unobtainable(self, materials: list[str]) -> None:
-        markdown_unobtainable(self.docs["solution"], materials)
+    def unobtainable(self, materials: list[str], scope: str = "crafting") -> None:
+        markdown_unobtainable(self.docs["solution"], materials, scope)
 
     def note(self, text: str) -> None:
         self.notes.append(text)
@@ -3646,8 +3669,8 @@ class JsonReporter(Reporter):
     ) -> None:
         markdown_solution(self._doc("solution"), solution, remainder)
 
-    def unobtainable(self, materials: list[str]) -> None:
-        markdown_unobtainable(self._doc("unobtainable"), materials)
+    def unobtainable(self, materials: list[str], scope: str = "crafting") -> None:
+        markdown_unobtainable(self._doc("unobtainable"), materials, scope)
 
     def mastery_costs(self, *args, **kwargs) -> None:
         markdown_mastery_costs(self._doc("mastery_costs"), *args, **kwargs)
