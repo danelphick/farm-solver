@@ -357,7 +357,8 @@ Neigh,Cooking             # -> "Cooking not modelled"
 Magna Core,Wishing Well   # -> "Wishing Well not modelled"
 Yule Goat,seasonal        # -> "seasonal"
 Gold Feed,unknown         # -> "not modelled" (route known, numbers not)
-Lobster,none              # -> "unobtainable" (genuinely)
+Lobster,Mining            # -> "Mining not modelled"
+Some Item,none            # -> "unobtainable" (genuinely, no route at all)
 ```
 
 Event items are flagged in [`items.csv`](items.csv) instead (the full game item list, `item,event`): a non-blank `event` column marks an item only available at certain times of year, and both reports print its window — `King Apple (seasonal: September Apple Bobbing Event)`, or just `(seasonal)` while the window is `true` (unknown). The `event` text is free-form and never parsed, so fill it in however suits the event. Keep `seasonal` rows in `unmodelled.csv` for seasonal items outside the museum's Event section only.

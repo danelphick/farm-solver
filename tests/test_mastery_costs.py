@@ -341,7 +341,7 @@ def test_the_shipped_reasons_file_parses_and_covers_the_named_features():
     assert reasons["white sugar"] == "Sugar Cane Mill not modelled"
     assert reasons["stone shell"] == "Mining not modelled"
     assert reasons["gold feed"] == "not modelled"
-    assert reasons["lobster"] == "unobtainable"
+    assert reasons["lobster"] == "Mining not modelled"
     assert reasons["frozen cabbage"] == "seasonal"
 
 
