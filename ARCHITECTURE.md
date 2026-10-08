@@ -1542,6 +1542,10 @@ information survives elsewhere in the document:
   `main._build_channel_setup` resolves it **once** and passes the one bool to
   both `fishing_from_config` and `exploring_from_config`; the `--unobtainable`
   branch in `run` does the same (which is why it builds its own `fish`).
+  Fungus Processing needs no such default there: `main.obtainable_items` counts
+  every exploring location's **flagged** drop tables as well as the one in
+  force, since a flagged table holds items the base lacks (Painite, Hide at
+  Gary's Crushroom) and swapping one in would drop the base's Mushroom.
 - **Held-item flags** (`main.resolve_held_item`): Fungus Processing and You,
   the Swamp Puzzle, Dewstar's Journal and Mariya's Wheelbarrow are all
   *held items*, so each resolves the same way — `cfg[section][key]` when set

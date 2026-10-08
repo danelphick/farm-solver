@@ -1289,6 +1289,12 @@ def obtainable_items(
     items plus everything the crop model can grow, including rare seed drops),
     the fishing/exploring drops (from the built models, when given), and the
     materials the game supplies automatically.
+
+    Every exploring location's *flagged* drop tables count too, not just the one
+    in force: the ``--unobtainable`` report asks what the game data can source
+    at all, and a flagged table holds items the base one lacks -- Painite (Fungus
+    Processing and You) and Hide (an Acorn Pie) at Gary's Crushroom. Swapping one
+    table in instead would lose the base table's Mushroom.
     """
     items = set(crafting.FREE_MATERIALS) | set(farming.FARMING_ITEMS)
     for producer in production.producers:
@@ -1301,6 +1307,8 @@ def obtainable_items(
     if explore is not None:
         for location in explore.locations.values():
             items |= set(location.drop_rates)
+            for flagged in location.flagged_drop_rates.values():
+                items |= set(flagged)
     return items
 
 

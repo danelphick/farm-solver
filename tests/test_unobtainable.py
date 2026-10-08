@@ -82,3 +82,19 @@ def test_materials_with_an_unmodelled_source_are_flagged():
         "Painite (Mining not modelled)",
         "Wood",
     ]
+
+
+def test_obtainable_items_include_every_flagged_exploring_table():
+    # Painite drops only from Gary's Crushroom's Fungus Processing table, which
+    # the --unobtainable report never switches on (it reads no inventory). The
+    # report asks what can be sourced at all, so every flagged table counts --
+    # alongside the base one, whose Mushroom the fungus table lacks.
+    from config import passive_production
+    from exploring import exploring_from_config
+    from main import obtainable_items
+
+    explore = exploring_from_config({}, have_fungus_processing=False)
+    obtainable = obtainable_items(passive_production({}), explore=explore)
+    assert "painite" in obtainable  # fungus_processing table only
+    assert "hide" in obtainable  # acorn_pie table only
+    assert "mushroom" in obtainable  # base table only
