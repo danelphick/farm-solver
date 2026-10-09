@@ -223,6 +223,7 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         "plan": {
             "index": result.selected,
             "html": _section_html(result.sections["plan"]),
+            "note": result.plan_note,
         },
         # Rendered into its own collapsible pane after the plan; empty when
         # the request didn't ask for the breakdown.

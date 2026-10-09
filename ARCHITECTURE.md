@@ -1918,7 +1918,10 @@ that imports it without going through `manage.py`.
   individually collapsible `<details class="plan-group">`, closed by default
   the first time a group is seen; the "Expand all"/"Collapse all" buttons
   next to the "Selected plan" heading (`setAllPlanGroupsOpen`) toggle every
-  currently-shown one at once. `collapseGoalSection` (called after
+  currently-shown one at once. The calendar caveat ("starting <date>; seasonal
+  pets ... count only for the part of the plan they fall in") rides
+  `SolveResult.plan_note` → `plan.note` into `#plan-note`, a small
+  parenthetical inside that heading, not the notes area. `collapseGoalSection` (called after
   `solution_html` is set) does the same for `markdown_solution`'s Goal heading
   and its table -- one collapsible `<details class="goal-group">` whose summary,
   when collapsed, adds a `.summary-detail` stat of the goal-row count plus the

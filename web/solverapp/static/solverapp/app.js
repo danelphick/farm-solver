@@ -556,6 +556,7 @@ function renderResult(data) {
   wireGraphHover(data.frontier.plans || []);
 
   $("#plan-section").innerHTML = data.plan.html;
+  $("#plan-note").textContent = data.plan.note ? `(${data.plan.note})` : "";
   collapsePlanGroups();
 
   const craftsHtml = (data.crafts && data.crafts.html) || "";

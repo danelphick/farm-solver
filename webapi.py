@@ -738,6 +738,10 @@ class SolveResult:
     # reachable)" option label. Constant from the tower data -- independent of
     # what this solve actually targeted (a specific --level must not relabel it).
     tower_max_level: int | None = None
+    # The calendar caveat ("starting <date>; seasonal pets ... count only for
+    # the part of the plan they fall in"), shown as a small parenthetical
+    # beside the "Selected plan" heading; None when the calendar isn't modelled.
+    plan_note: str | None = None
 
 
 def _empty_plan_context() -> main.PlanContextData:
@@ -956,15 +960,16 @@ def render(
 
     reporter = report.SectionedReporter()
     reporter.solution(inputs.solution, fr.plans[0].remainder)
+    plan_note = None
     if inputs.model_calendar:
         dated = []
         if any(name.lower() in pets.SEASONAL_MONTHS for name in session.cfg.get("pets", {})):
             dated.append("seasonal pets")
         if inputs.monthly_grants:
             dated.append("the Mechanical Heart's grants")
-        reporter.note(
-            f"Starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only "
-            "for the part of the plan they fall in."
+        plan_note = (
+            f"starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only "
+            "for the part of the plan they fall in"
         )
     warnings = []
     if not within:
@@ -1049,5 +1054,6 @@ def render(
         selected=selected,
         resolved=resolved,
         tower_max_level=session.inputs.requirements.max_level,
+        plan_note=plan_note,
     )
     return result, session

@@ -855,6 +855,13 @@ details[open] > summary .summary-detail {
   padding-bottom: 0;
 }
 
+/* The calendar caveat beside the "Selected plan" heading. */
+.plan-note {
+  font-size: 0.8rem;
+  font-weight: normal;
+  color: var(--muted);
+}
+
 .plan-group-controls {
   display: flex;
   gap: 0.4rem;
