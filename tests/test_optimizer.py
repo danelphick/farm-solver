@@ -39,6 +39,7 @@ from sources import (
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
+    sugar_cane_mill_offers,
 )
 
 # Per-unit gold prices for the buyable consumables (see config.trading_prices).
@@ -111,6 +112,19 @@ def test_sawmill_boost_is_grounded_and_speeds_oak_for_omelette_gold():
     # Unpriced and unheld: the boost is ungroundable and simply unusable.
     none = minimize(offers, {"oak": 60000}, prices={}, gold_weight=BUY_FREELY)
     assert none.hickory_omelettes == 0
+
+
+def test_sugar_cane_mill_is_rate_limited_and_grounded_in_its_inputs():
+    # Both boosts: 4 unrefined sugar a minute from 14 sugar cane + 2 machine
+    # presses, all held. 100 sugar takes 25 mill-minutes and eats 350 + 50.
+    offers = sugar_cane_mill_offers(2, 2)
+    inventory = {"sugar cane": 1000, "machine press": 100}
+    plan = minimize(offers, {"unrefined sugar": 100}, inventory=inventory)
+    assert plan.time == pytest.approx(timedelta(minutes=25), abs=timedelta(seconds=1))
+    assert not plan.remainder
+    # Without the machine presses the mill cannot run at all.
+    starved = minimize(offers, {"unrefined sugar": 100}, inventory={"sugar cane": 1000})
+    assert starved.remainder
 
 
 def test_all_offers_grounds_consumables_and_adds_the_cider_channel():

@@ -187,9 +187,11 @@ def all_offers(
     consumable is self-sourced (costs time) or bought (costs gold) is the LP's
     call, set by the gold budget the frontier sweeps.
 
-    ``boost_offers`` (from :func:`sources.sawmill_boost_offers`) are the optional
-    Hickory Omelette sawmill-boost offers: each is grounded in an omelette the plan
-    holds or buys, so it too is just another gathering channel here.
+    ``boost_offers`` are the optional extra building offers: the Hickory Omelette
+    sawmill boost (:func:`sources.sawmill_boost_offers`, grounded in an omelette
+    the plan holds or buys) and the Sugar Cane Mill
+    (:func:`sources.sugar_cane_mill_offers`, grounded in sugar cane and machine
+    presses), so each is just another gathering channel here.
     """
     return [
         *passive_offers(production),

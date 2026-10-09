@@ -2072,6 +2072,36 @@ def _sawmill_boost_summary(
     return omelettes, hours, yields
 
 
+def _sugar_cane_mill_summary(
+    plan: optimizer.SourcingPlan,
+) -> tuple[timedelta, int, int, int] | None:
+    """The Sugar Cane Mill run this plan uses, or None if it uses none.
+
+    Returns ``(time, sugar, cane, presses)``: the mill's running time, the
+    Unrefined Sugar it presses and the Sugar Cane / Machine Presses it eats (see
+    :func:`sources.sugar_cane_mill_offers`). Both renderers print the same tuple.
+    """
+    draws = _draws_on(plan, sources.SUGAR_CANE_MILL_TRACK)
+    time = sum((d.time for d in draws), timedelta(0))
+    sugar = round(sum(d.produced.get(sources.UNREFINED_SUGAR, 0.0) for d in draws))
+    if sugar < 1:
+        return None
+    cane, presses = (
+        round(sum(d.offer.consumes.get(item, 0.0) * d.units for d in draws))
+        for item in (sources.SUGAR_CANE, sources.MACHINE_PRESS)
+    )
+    return time, sugar, cane, presses
+
+
+def _sugar_cane_mill_line(mill: tuple[timedelta, int, int, int]) -> str:
+    time, sugar, cane, presses = mill
+    return (
+        f"{sugar:,} Unrefined Sugar over {passive.format_duration(time)}"
+        f" from {cane:,} Sugar Cane and {presses:,} Machine"
+        f" Press{'es' if presses != 1 else ''}"
+    )
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
@@ -2361,6 +2391,11 @@ def print_plan(
             f"{'s' if omelettes != 1 else ''} over {passive.format_duration(hours)}:"
             f" {extra}"
         )
+
+    mill = _sugar_cane_mill_summary(plan)
+    if mill is not None:
+        print("\nSugar Cane Mill:")
+        print(f"  {_sugar_cane_mill_line(mill)}")
 
     # Consumable tools drawn from held stock (spent before any are crafted, opened
     # or bought). Surfacing these makes the spend tallies reconcile: a plan can burn
@@ -2770,6 +2805,11 @@ def markdown_plan(
             f"{'s' if omelettes != 1 else ''} over {passive.format_duration(hours)}:"
             f" {extra}"
         )
+
+    mill = _sugar_cane_mill_summary(plan)
+    if mill is not None:
+        doc.heading("Sugar Cane Mill")
+        doc.para(_sugar_cane_mill_line(mill))
 
     held = [
         (item, min(inventory.get(item, 0.0), spent))

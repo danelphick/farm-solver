@@ -1331,9 +1331,13 @@ def sourceable_from_game_data(
 
     The fixed point of :func:`optimizer._obtainable` seeded with the directly
     obtainable items: plus whatever can be crafted from them (``recipes``,
-    :func:`crafting.recipe_flows`) or opened (``open_flows``), transitively.
+    :func:`crafting.recipe_flows`), opened (``open_flows``) or pressed at the
+    Sugar Cane Mill (:func:`sources.sugar_cane_mill_offers`, game data like the
+    rest, so counted whether or not the config has the mill), transitively.
     """
-    return optimizer._obtainable([], recipes, open_flows, held=obtainable)
+    return optimizer._obtainable(
+        sources.sugar_cane_mill_offers(1, 1), recipes, open_flows, held=obtainable
+    )
 
 
 def unobtainable_items(
@@ -1792,8 +1796,9 @@ class SolveInputs:
     inventory: dict[str, float]
     cookie_sets: float | None
     prices: dict[str, float] | None
-    # Hickory Omelette sawmill-boost offers (empty unless [sawmill] hickory_omelette
-    # is set); static across the seasonal fixed point, so built once here.
+    # Extra building offers: the Hickory Omelette sawmill boost (empty unless
+    # [sawmill] hickory_omelette is set) and the Sugar Cane Mill (when configured);
+    # static across the seasonal fixed point, so built once here.
     boost_offers: list[sources.Offer]
     pj_gain: dict[str, float]
     pj_price: float
@@ -1984,6 +1989,10 @@ def _build_channel_setup(
         config.hickory_omelette_mode(cfg),
         config.storehouse_size(cfg, today=start),
     )
+    # The Sugar Cane Mill: a grounded sugar-cane + machine-press conversion on its
+    # own track (see sources.sugar_cane_mill_offers), riding along with the boost
+    # as another static extra-building offer.
+    boost_offers += sources.sugar_cane_mill_offers(*config.sugar_cane_mill_rates(cfg))
 
     return _ChannelSetup(
         requirements=requirements,
@@ -2634,7 +2643,8 @@ def item_categories(
 
     - **Farming**: a crop (its primary item) or seed drop, a farm building's
       output (``production``'s non-pet, non-grant producers -- so only the
-      buildings the config has), or the Sugar Cane Mill's unmodelled products.
+      buildings the config has), or the Sugar Cane Mill's products (Unrefined
+      Sugar, modelled as an offer, and its unmodelled ones).
     - **Fishing** / **Exploring**: in a fishing zone's / exploring location's
       drop table (flagged tables included), plus unmodelled manual fishing.
     - **Mining** / **Cooking**: unmodelled.csv's ``Mining`` / ``Cooking`` rows.
@@ -2659,6 +2669,7 @@ def item_categories(
     for producer in production.producers:
         if producer.name != "farmhouse" and not config.is_smeared_producer(producer.name):
             tag(producer.outputs, "Farming")
+    tag([sources.UNREFINED_SUGAR], "Farming")  # the Sugar Cane Mill's product
     for zone in fishing.read_zones(fishing.DEFAULT_FISHING_CSV).values():
         tag(zone.drop_rates, "Fishing")
     for location in exploring.read_locations(exploring.DEFAULT_EXPLORING_CSV).values():

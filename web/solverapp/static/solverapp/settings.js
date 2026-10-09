@@ -299,9 +299,9 @@ const BUILDING_SECTIONS = [
     { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool",
       help: "Feed Boost: the feed mill makes 2 feed/min instead of 1." },
     { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool",
-      help: "Sugar Boost I: doubles the sugar cane mill's output." },
+      help: "Sugar Boost I: the sugar cane mill presses two batches a minute (double the sugar cane and machine presses)." },
     { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool",
-      help: "Sugar Boost II: doubles the sugar cane mill's output again (needs Sugar Boost I)." },
+      help: "Sugar Boost II: doubles each batch's unrefined sugar for the same inputs (needs Sugar Boost I)." },
   ] },
 ];
 

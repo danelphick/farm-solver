@@ -234,6 +234,29 @@ def hickory_omelette_mode(config: dict[str, Any]) -> str:
     return mode
 
 
+def sugar_cane_mill_rates(config: dict[str, Any]) -> tuple[int, int]:
+    """The Sugar Cane Mill's ``(batches per minute, unrefined sugar per batch)``.
+
+    ``(0, 0)`` without a ``[sugar_cane_mill]`` section. A batch presses 7 Sugar
+    Cane and a Machine Press into Unrefined Sugar (see
+    :func:`sources.sugar_cane_mill_offers` -- a grounded conversion, not a free
+    passive producer). ``have_sugar_boost_i`` runs two batches a minute (double
+    the inputs); ``have_sugar_boost_ii`` doubles each batch's output for the same
+    inputs. So 1/min from 7+1 by default, 2/min from 14+2 with boost I and 4/min
+    from 14+2 with both. Boost II without boost I is an error.
+    """
+    mill = config.get("sugar_cane_mill")
+    if mill is None:
+        return 0, 0
+    boost_i = bool(mill.get("have_sugar_boost_i"))
+    boost_ii = bool(mill.get("have_sugar_boost_ii"))
+    if boost_ii and not boost_i:
+        raise ValueError(
+            "sugar_cane_mill: have_sugar_boost_ii requires have_sugar_boost_i"
+        )
+    return (2 if boost_i else 1), (2 if boost_ii else 1)
+
+
 def passive_production(
     config: dict[str, Any],
     today: date | None = None,
@@ -275,9 +298,6 @@ def passive_production(
     * ``[vineyard]`` -- grapes every day.
     * ``[flour_mill]`` -- one flour a minute, two with ``have_flour_power``.
     * ``[feed_mill]`` -- one feed a minute, two with ``have_feed_boost``.
-    * ``[sugar_cane_mill]`` -- one sugar cane a minute, doubling with each of
-      ``have_sugar_boost_i`` then ``have_sugar_boost_ii`` (1 -> 2 -> 4). Boost
-      II without boost I is an error.
     * ``[hay_field]`` -- straw every ten minutes.
     * ``[quarry]`` -- stone every ten minutes and coal every hour.
     * ``[steelworks]`` -- steel every hour, plus steel wire at a third of that
@@ -379,24 +399,6 @@ def passive_production(
         producers.append(
             PassiveProducer(
                 name="feed_mill", period=MINUTE, outputs={"feed": rate}
-            )
-        )
-
-    sugar_cane_mill = config.get("sugar_cane_mill")
-    if sugar_cane_mill is not None:
-        boost_i = bool(sugar_cane_mill.get("have_sugar_boost_i"))
-        boost_ii = bool(sugar_cane_mill.get("have_sugar_boost_ii"))
-        if boost_ii and not boost_i:
-            raise ValueError(
-                "sugar_cane_mill: have_sugar_boost_ii requires have_sugar_boost_i"
-            )
-        # One sugar cane a minute, doubling with each boost: 1 -> 2 -> 4.
-        rate = 4 if boost_ii else 2 if boost_i else 1
-        producers.append(
-            PassiveProducer(
-                name="sugar_cane_mill",
-                period=MINUTE,
-                outputs={"sugar cane": rate},
             )
         )
 

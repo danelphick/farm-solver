@@ -78,6 +78,16 @@ HICKORY_OMELETTE_FRACTION = 0.2
 # only lengthen the plan), which bounds the omelettes to the plan's span.
 SAWMILL_BOOST_TRACK = "sawmill boost"
 
+# The Sugar Cane Mill: each minute it presses Sugar Cane into Unrefined Sugar,
+# using up a Machine Press per batch. A grounded conversion on its own concurrent
+# track (see :func:`sugar_cane_mill_offers`), so one unit is one mill-minute.
+SUGAR_CANE_MILL_TRACK = "sugar cane mill"
+UNREFINED_SUGAR = "unrefined sugar"
+SUGAR_CANE = "sugar cane"
+MACHINE_PRESS = "machine press"
+# One batch: 1 Unrefined Sugar from 7 Sugar Cane and 1 Machine Press.
+SUGAR_CANE_PER_BATCH = 7
+
 
 @dataclass
 class Offer:
@@ -446,6 +456,33 @@ def sawmill_boost_offers(
             yields={item: y for item, y in yields.items() if y > 0},
             consumes={HICKORY_OMELETTE: 1.0},
             time_per_unit=timedelta(hours=1),
+        )
+    ]
+
+
+def sugar_cane_mill_offers(batches: int, output_per_batch: int) -> list[Offer]:
+    """The Sugar Cane Mill as a grounded conversion offer (or none).
+
+    ``batches`` and ``output_per_batch`` come from
+    :func:`config.sugar_cane_mill_rates` (``batches == 0`` means no mill). One
+    unit is one **minute** of the mill on its own :data:`SUGAR_CANE_MILL_TRACK`:
+    it runs ``batches`` batches, each eating :data:`SUGAR_CANE_PER_BATCH` Sugar
+    Cane and one Machine Press and yielding ``output_per_batch`` Unrefined Sugar.
+    The track runs concurrently with everything else but costs a minute of
+    makespan per unit, which bounds the mill's output to the plan's span.
+    """
+    if batches <= 0:
+        return []
+    return [
+        Offer(
+            name="sugar cane mill",
+            track=SUGAR_CANE_MILL_TRACK,
+            yields={UNREFINED_SUGAR: float(batches * output_per_batch)},
+            consumes={
+                SUGAR_CANE: float(batches * SUGAR_CANE_PER_BATCH),
+                MACHINE_PRESS: float(batches),
+            },
+            time_per_unit=timedelta(minutes=1),
         )
     ]
 

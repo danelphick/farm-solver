@@ -15,6 +15,7 @@ from config import (
     passive_production,
     passive_quantizer,
     storehouse_size,
+    sugar_cane_mill_rates,
     trading_prices,
 )
 from passive import DAILY, HOURLY, MINUTE, PassiveProducer, PassiveProduction
@@ -363,38 +364,38 @@ def test_feed_boost_doubles_feed():
     assert production.producers[0].outputs == {"feed": 2}
 
 
-def test_sugar_cane_mill_produces_one_a_minute_by_default():
-    production = passive_production({"sugar_cane_mill": {}})
-    mill = production.producers[0]
-    assert mill.name == "sugar_cane_mill"
-    assert mill.period == MINUTE
-    assert mill.outputs == {"sugar cane": 1}
+def test_sugar_cane_mill_is_not_a_free_passive_producer():
+    assert passive_production({"sugar_cane_mill": {}}).producers == []
 
 
-def test_sugar_boost_i_doubles_to_two():
-    production = passive_production(
+def test_sugar_cane_mill_rates_default_one_batch_of_one():
+    assert sugar_cane_mill_rates({"sugar_cane_mill": {}}) == (1, 1)
+
+
+def test_sugar_cane_mill_rates_absent_section_is_no_mill():
+    assert sugar_cane_mill_rates({}) == (0, 0)
+
+
+def test_sugar_boost_i_doubles_the_batches():
+    assert sugar_cane_mill_rates(
         {"sugar_cane_mill": {"have_sugar_boost_i": True}}
-    )
-    assert production.producers[0].outputs == {"sugar cane": 2}
+    ) == (2, 1)
 
 
-def test_sugar_boost_ii_quadruples_to_four():
-    production = passive_production(
+def test_sugar_boost_ii_doubles_each_batch_output():
+    assert sugar_cane_mill_rates(
         {
             "sugar_cane_mill": {
                 "have_sugar_boost_i": True,
                 "have_sugar_boost_ii": True,
             }
         }
-    )
-    assert production.producers[0].outputs == {"sugar cane": 4}
+    ) == (2, 2)
 
 
 def test_sugar_boost_ii_without_i_is_an_error():
     with pytest.raises(ValueError):
-        passive_production(
-            {"sugar_cane_mill": {"have_sugar_boost_ii": True}}
-        )
+        sugar_cane_mill_rates({"sugar_cane_mill": {"have_sugar_boost_ii": True}})
 
 
 def test_passive_production_reads_hay_field_as_straw():

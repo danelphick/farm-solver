@@ -18,6 +18,7 @@ from sources import (
     HICKORY_OMELETTE,
     HICKORY_OMELETTE_FRACTION,
     SAWMILL_BOOST_TRACK,
+    SUGAR_CANE_MILL_TRACK,
     Draw,
     Offer,
     aggregate,
@@ -29,6 +30,7 @@ from sources import (
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
+    sugar_cane_mill_offers,
 )
 
 
@@ -73,6 +75,25 @@ def test_sawmill_boost_caps_each_deposit_at_the_storehouse_size():
     assert offer.yields["oak"] == pytest.approx(6 * 0.2 * 6000)  # 7200, uncapped
     top = min(cap, 60000 * 1.2) + 5 * min(cap, 60000 * 0.2) - min(cap, 60000)
     assert offer.yields["wood"] == pytest.approx(top)  # 60000, top-of-hour lost
+
+
+def test_sugar_cane_mill_offers_no_mill_is_empty():
+    assert sugar_cane_mill_offers(0, 0) == []
+
+
+def test_sugar_cane_mill_default_presses_one_sugar_a_minute():
+    [offer] = sugar_cane_mill_offers(1, 1)
+    assert offer.track == SUGAR_CANE_MILL_TRACK
+    assert offer.time_per_unit == timedelta(minutes=1)
+    assert offer.yields == {"unrefined sugar": 1.0}
+    assert offer.consumes == {"sugar cane": 7.0, "machine press": 1.0}
+
+
+def test_sugar_cane_mill_with_both_boosts_makes_four_from_double_inputs():
+    # Boost I doubles the batches (and inputs); boost II doubles the output.
+    [offer] = sugar_cane_mill_offers(2, 2)
+    assert offer.yields == {"unrefined sugar": 4.0}
+    assert offer.consumes == {"sugar cane": 14.0, "machine press": 2.0}
 
 
 def test_units_for_is_driven_by_the_binding_item():
