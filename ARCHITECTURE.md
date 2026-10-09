@@ -1446,7 +1446,7 @@ information survives elsewhere in the document:
   Surplus. (`plan.remainder` — materials with no known source — is reported once, up
   in the Goal section via `print_solution`/`markdown_solution`, not repeated here; see
   the pipeline's "Print" step.) The Buy total is `plan.gold` **net of `pumpkin_gold`** (the
-  juice is listed apart); the frontier table gains a **Pumpkin Juice** column
+  juice is listed apart); the frontier table gains a **PJ** column
   (`_pumpkin_juices`) when a plan drinks any. The Pumpkin Juice section names the
   **mastery level to start drinking at** (`main.pumpkin_juice_schedule`: `target −
   count·pj_gain`, the LP's own `pj_gain = 0.1·threshold/mastery_bonus`, clamped ≥

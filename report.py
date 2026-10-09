@@ -989,15 +989,16 @@ def markdown_frontier(
     show_ciders = any(round(p.apple_ciders) >= 1 for p in plans)
     show_pumpkin = any(round(_pumpkin_juices(p)) >= 1 for p in plans)
 
-    headers = ["#", "Time", "AP", "LN"]
+    headers = ["#", "Time", "AP"]
+    if show_ciders:
+        headers.append("AC")
+    headers.append("LN")
     if show_cookies:
         headers.append("Cookie sets")
     if show_juices:
-        headers.append("Grape Juice")
-    if show_ciders:
-        headers.append("Apple Cider")
+        headers.append("GJ")
     if show_pumpkin:
-        headers.append("Pumpkin Juice")
+        headers.append("PJ")
     if prices is not None:
         headers.append("Gold")
     headers.append("Notes")
@@ -1010,14 +1011,14 @@ def markdown_frontier(
             Cell(str(i + 1), i + 1),
             Cell.duration(_plan_makespan(plan)),
             Cell.num(round(plan.arnold_palmers)),
-            Cell.num(round(plan.large_nets)),
         ]
+        if show_ciders:
+            row.append(Cell.num(round(plan.apple_ciders)))
+        row.append(Cell.num(round(plan.large_nets)))
         if show_cookies:
             row.append(Cell.num(_cookie_sets_used(plan)))
         if show_juices:
             row.append(Cell.num(round(plan.grape_juices)))
-        if show_ciders:
-            row.append(Cell.num(round(plan.apple_ciders)))
         if show_pumpkin:
             row.append(Cell.num(round(_pumpkin_juices(plan))))
         if prices is not None:
