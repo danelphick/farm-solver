@@ -3356,23 +3356,30 @@ def _frontier_sweeps(
     # but every returned plan is a real whole-juice plan. Skipped entirely when the
     # model has no integer variable at all -> the relaxation was already exact.
     if _has_integers(base_active):
-        # Each plan is re-solved on the base it came from; plans sharing a base
-        # take turns on it, plans on different bases (the sweeps' copies) run
-        # concurrently. A hand-built/remainder-only plan has nothing to re-solve.
+        # The plans are re-solved concurrently: the first plan from each base on
+        # that base, any other on a fresh copy of it (a base is one mutable LP) --
+        # the same cold solve of the same model either way. A hand-built/
+        # remainder-only plan has nothing to re-solve.
         finished = list(thinned)
-        by_base: dict[int, list[int]] = {}
+        claimed: set[int] = set()
+
+        def finish_exact(index: int, base: _Base | None) -> None:
+            kwargs = thinned[index]._origin[1]
+            if base is None:
+                base = make_base()
+            exact = _solve_configured(base, exact_integers=True, **kwargs)
+            post(exact)
+            finished[index] = exact
+
+        futures = []
         for index, plan in enumerate(thinned):
-            if plan._origin is not None:
-                by_base.setdefault(id(plan._origin[0]), []).append(index)
-
-        def finish_exact(indices: list[int]) -> None:
-            for index in indices:
-                base, kwargs = thinned[index]._origin
-                exact = _solve_configured(base, exact_integers=True, **kwargs)
-                post(exact)
-                finished[index] = exact
-
-        for future in [pool.submit(finish_exact, group) for group in by_base.values()]:
+            if plan._origin is None:
+                continue
+            origin = plan._origin[0]
+            reuse = id(origin) not in claimed
+            claimed.add(id(origin))
+            futures.append(pool.submit(finish_exact, index, origin if reuse else None))
+        for future in futures:
             future.result()
         # Two survivors can land on the same integer point once juice is whole; drop the
         # duplicate rows, keeping the first (fastest-first order is preserved).

@@ -46,6 +46,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 2. HiGHS without presolve before the CBC fallback | 0.684s | 3.019s | 0.703s | 2.365s |
 | 3. Mastery costs' items on a thread pool | 0.684s | 0.951s | 0.716s | 1.025s |
 | 4. The frontier's sweeps and exact finish on a thread pool | 0.486s | 0.943s | 0.497s | 1.032s |
+| 5. Every exact-finish plan concurrently | 0.426s | 0.943s | 0.466s | 1.032s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -140,3 +141,11 @@ count (solver page / CLI): 1 -> 0.684s / 0.705s, 2 -> 0.533s / 0.556s, 3 ->
 0.520s / 0.526s, 4 -> 0.474s / 0.489s, 6 -> 0.482s / 0.491s, 8 -> 0.497s /
 0.500s; past 4 each extra base copy's build (Python, so GIL-bound) costs more
 than the extra overlap saves.
+
+### 5. Every exact-finish plan concurrently -- output identical
+
+A timeline of the threads showed the exact finish's critical path was the
+plans sharing a base (the fast and cheap endpoints' plans both live on
+`base_active`), re-solved one after another as integer MIPs (~25-60ms each).
+Now every plan is its own task: the first plan from each base re-solves on
+that base, any other on a fresh copy -- the same cold solve of the same model.
