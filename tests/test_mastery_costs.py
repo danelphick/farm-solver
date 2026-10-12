@@ -6,7 +6,7 @@ import pytest
 import config
 import main
 import optimizer
-from farm_solver import GameState
+from farm_solver import GameState, Mastery
 from main import (
     SELF_SOURCED_TOOLS,
     MasteryCostRow,
@@ -202,7 +202,7 @@ def test_mastery_costs_conflicts_raise_before_solving(extra):
 # --- infeasible tiers ("limited") --------------------------------------------
 
 
-def _solve_with_failing_tier(monkeypatch, fail_on_call: int):
+def _solve_with_failing_tier(monkeypatch, fail_on_call: int, state=None):
     """Run solve_mastery_costs over a one-item catalogue, failing one tier's LP.
 
     An item can be perfectly sourceable and still not sourceable *in the
@@ -226,30 +226,30 @@ def _solve_with_failing_tier(monkeypatch, fail_on_call: int):
 
     monkeypatch.setattr(optimizer, "fastest_endpoint", failing)
     monkeypatch.setattr(main, "load_mastery_catalogue", lambda: {"board": "Board"})
-    return main.solve_mastery_costs(args, cfg, GameState()), calls
+    return main.solve_mastery_costs(args, cfg, state or GameState()), calls
+
+
+def test_only_the_next_tier_is_solved(monkeypatch):
+    # At 50,000 progress Master is done and Grandmaster is next: that one tier is
+    # solved (one call, to the 50,000 still needed), Megamaster is not attempted.
+    state = GameState(masteries={"board": Mastery("Board", progress=50_000, required=100_000)})
+    result, calls = _solve_with_failing_tier(monkeypatch, fail_on_call=0, state=state)
+    assert [(r.item, r.tier) for r in result.rows] == [("Board", "GM")]
+    assert len(calls) == 1
+    args = build_parser().parse_args(["--mastery-costs"])
+    assert calls[0]["Board"] == pytest.approx(50_000 / args.mastery_bonus)
 
 
 def test_an_infeasible_tier_is_reported_instead_of_aborting_the_sweep(monkeypatch):
-    # Master and Grandmaster solve; Megamaster is infeasible -> the rows already
-    # found survive and the failure becomes a `limited` line, rather than the
-    # ValueError escaping and killing every other item's row too.
-    result, _ = _solve_with_failing_tier(monkeypatch, fail_on_call=3)
-    assert [(r.item, r.tier) for r in result.rows] == [("Board", "M"), ("Board", "GM")]
-    assert result.limited == [MasteryNote(
-        "Board", "Board cannot reach Megamaster: its sources cannot supply that many"
-    )]
-    assert result.unmasterable == []  # a different failure: this one HAS sources
-
-
-def test_an_infeasible_tier_stops_the_climb(monkeypatch):
-    # Master fails, so Grandmaster and Megamaster -- which need strictly more of
-    # the same item -- are not even attempted.
+    # The next tier (Master) is infeasible -> it becomes a `limited` line, rather
+    # than the ValueError escaping and killing every other item's row too.
     result, calls = _solve_with_failing_tier(monkeypatch, fail_on_call=1)
     assert result.rows == []
     assert len(calls) == 1
     assert result.limited == [MasteryNote(
         "Board", "Board cannot reach Master: its sources cannot supply that many"
     )]
+    assert result.unmasterable == []  # a different failure: this one HAS sources
 
 
 def test_print_mastery_costs_renders_the_limited_section(capsys):

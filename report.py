@@ -472,14 +472,14 @@ def _mastery_costs_caption(sort_key: str) -> str:
     primary = "gold" if sort_key == "gold" else "time"
     other = "time" if sort_key == "gold" else "gold"
     return (
-        "Fastest plan to reach each remaining tier (Master 10k / Grandmaster "
+        "Fastest plan to reach each item's next tier (Master 10k / Grandmaster "
         f"100k / Megamaster 1M) from current progress, sorted by {primary} "
         f"(then {other})."
     )
 
 
 def print_mastery_costs(result: main.MasteryCostsResult, sort_key: str = "time") -> None:
-    """The --mastery-costs table: fastest plan + gold to each remaining tier.
+    """The --mastery-costs table: fastest plan + gold to each item's next tier.
 
     One ``Item | Target | Time | Cost`` row per (item, tier), already sorted by
     :func:`main.solve_mastery_costs`, then the two "cannot" lists it collects:

@@ -144,7 +144,8 @@ frontier as before.
 
 A standalone report dispatched from its own `run` branch (like `--unobtainable`,
 but it *does* read the mastery/inventory state): for every remaining masterable
-item, the fastest plan to reach each unfinished tier and that plan's gold. Driven
+item, the fastest plan to reach its **next** unfinished tier (only that one — an
+item at 50k gets a GM row, no MM) and that plan's gold. Driven
 by `main.solve_mastery_costs` → `MasteryCostsResult`; conflicts with
 `--ascend`/`--unobtainable`/`--target`/`-m`/`-i` (checked before any file load or
 solve). `--sort time|gold` picks the primary rank axis, the other the tie-breaker
@@ -205,9 +206,8 @@ source at all — `unmasterable_chain` explains it) and `limited` (sourceable, b
 the LP calls a tier's *quantity* infeasible — a finitely bounded supply, e.g. a
 limited-seed crop or a material an AP allow-list keeps off the trading table).
 The per-tier `fastest_endpoint` call catches that `ValueError` (see
-`optimizer._assert_optimal`), records the tier and **stops climbing** that item —
-every higher tier needs strictly more of the same, so it is infeasible too. One
-bad tier must never abort the whole sweep, which is what it did before: on the
+`optimizer._assert_optimal`) and records the tier (only the next tier is ever
+tried, so there is nothing further to climb). One bad tier must never abort the whole sweep, which is what it did before: on the
 web config, `Bouquet of Flowers` at Megamaster killed all 201 other rows.
 
 Mechanics: `_build_channel_setup` builds the goal-independent channels once, and
@@ -230,9 +230,8 @@ renewable source, so an item craftable only from held-but-unproduced materials
 row. A non-masterable item is explained by `unmasterable_chain` (a recursive walk
 over `crafting.recipe_flows`, descending only materials **not** in the sourceable
 set, with a cycle guard) as e.g. `A needs B (which needs C (unobtainable))`. A
-masterable item gets one row per tier not yet reached (`_MASTERY_TIERS`), demand
-`(threshold − progress) / mastery_bonus` (cumulative from current progress, so a
-GM row includes the M work), `non_mastery_goals` empty so the buy-floor forces
+masterable item gets one row, for the first tier in `_MASTERY_TIERS` it has not
+reached, demand `(threshold − progress) / mastery_bonus` (from current progress), `non_mastery_goals` empty so the buy-floor forces
 production; time is `plan.time`, cost is `plan.gold` (the gold the plan actually
 *spends buying*, not `plan_gold`'s market value of everything spent — so a
 self-sourced/farmed tier reads 0 g, and `--self-sourced` shows the real drop).

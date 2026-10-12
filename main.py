@@ -912,8 +912,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "mastery-costs mode: for every remaining masterable item, find the "
-            "fastest plan to reach each unfinished tier (Master 10k / Grandmaster "
-            "100k / Megamaster 1M, cumulative from current progress) and rank them "
+            "fastest plan to reach its next unfinished tier (Master 10k / Grandmaster "
+            "100k / Megamaster 1M, from current progress) and rank them "
             "by time and gold, then list items that cannot be mastered with their "
             "unobtainable-material chains. Reads the mastery/inventory files like a "
             "normal run; conflicts with --ascend/--unobtainable/--target/-m/-i"
@@ -2748,8 +2748,8 @@ class MasteryCostRow:
     """One (item, tier) row of the --mastery-costs table.
 
     ``time`` is the fastest plan's makespan to reach ``tier``'s absolute
-    threshold from the item's current progress (cumulative -- a GM row includes
-    the work Master needed); ``gold`` is that plan's cost at the [trading]
+    threshold from the item's current progress (only the next tier is solved);
+    ``gold`` is that plan's cost at the [trading]
     exchange rates (0.0 when nothing is priced).
     """
 
@@ -2880,10 +2880,11 @@ def unmasterable_chain(
 def solve_mastery_costs(
     args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
 ) -> MasteryCostsResult:
-    """The --mastery-costs mode: fastest plan + gold to each remaining tier.
+    """The --mastery-costs mode: fastest plan + gold to each item's next tier.
 
     For every masterable item (the catalogue unioned with the paste's progress,
-    via :func:`ascension.candidates`) and every tier it has not yet reached, one
+    via :func:`ascension.candidates`) and the **next** tier it has not yet reached
+    (only that one -- 50,000 progress asks for Grandmaster, not Megamaster), one
     :func:`optimizer.fastest_endpoint` solve gives the fastest plan to that
     tier's absolute threshold from current progress; its makespan and ``plan.gold``
     (the gold it actually spends buying) become a row. Items no plan can source are
@@ -2972,39 +2973,40 @@ def solve_mastery_costs(
             ))
             continue
         progress = mastery.progress if mastery is not None else 0
-        for threshold, label in _MASTERY_TIERS:
-            if progress >= threshold:
-                continue
-            demand = {name: (threshold - progress) / args.mastery_bonus}
-            try:
-                plan = optimizer.fastest_endpoint(
-                    offers, demand, recipes, args.crafting_bonus, prices=prices,
-                    openables=open_flows, inventory=setup.inventory,
-                    cookie_sets=setup.cookie_sets or 0.0,
-                    grape_juices_per_day=daily_grape_juices(setup.farm),
-                    quantize=quantize,
-                    ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
-                    no_buy=no_buy,
-                )
-            except ValueError:
-                # Sourceable, but not this many: a finitely-bounded supply (a
-                # limited-seed crop, or a material the AP allow-list keeps off
-                # the trading table) makes a large enough demand *infeasible*
-                # rather than unobtainable -- see optimizer._assert_optimal.
-                # Record the tier and stop climbing: every higher one needs
-                # strictly more of the same, so it is infeasible too. One bad
-                # tier must not abort the whole sweep.
-                limited.append(MasteryNote(
-                    name,
-                    f"{name} cannot reach "
-                    f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
-                    "cannot supply that many",
-                ))
-                break
-            # Cost is the gold the plan actually spends buying (plan.gold), so
-            # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
-            # drop, not the market value of the tools it now self-sources instead.
-            rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+        # Only the next tier not yet reached: the higher ones are a later concern,
+        # and each would be a solve of its own.
+        tier = next(((t, lb) for t, lb in _MASTERY_TIERS if progress < t), None)
+        if tier is None:
+            continue
+        threshold, label = tier
+        demand = {name: (threshold - progress) / args.mastery_bonus}
+        try:
+            plan = optimizer.fastest_endpoint(
+                offers, demand, recipes, args.crafting_bonus, prices=prices,
+                openables=open_flows, inventory=setup.inventory,
+                cookie_sets=setup.cookie_sets or 0.0,
+                grape_juices_per_day=daily_grape_juices(setup.farm),
+                quantize=quantize,
+                ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
+                no_buy=no_buy,
+            )
+        except ValueError:
+            # Sourceable, but not this many: a finitely-bounded supply (a
+            # limited-seed crop, or a material the AP allow-list keeps off
+            # the trading table) makes a large enough demand *infeasible*
+            # rather than unobtainable -- see optimizer._assert_optimal.
+            # Record the tier; one bad tier must not abort the whole sweep.
+            limited.append(MasteryNote(
+                name,
+                f"{name} cannot reach "
+                f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
+                "cannot supply that many",
+            ))
+            continue
+        # Cost is the gold the plan actually spends buying (plan.gold), so
+        # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
+        # drop, not the market value of the tools it now self-sources instead.
+        rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
 
     unmasterable.sort(key=lambda note: note.text)
     limited.sort(key=lambda note: note.text)

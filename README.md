@@ -327,7 +327,7 @@ The following materials are required for some crafts but are unobtainable:
 
 ## Mastery costs
 
-Pass `--mastery-costs` to see, for **every** item you have not finished mastering, how much effort each remaining tier still takes. For each masterable item and each tier it has not yet reached — **Master** (10,000 mastery), **Grandmaster** (100,000) and **Megamaster** (1,000,000) — the solver finds the single *fastest* plan to get there from your current progress and reports that plan's makespan and the **gold it spends buying** (the consumables it purchases at the [trading](#trading-gold-prices) exchange rates; a tier it self-sources entirely — a farmed crop, say — costs no gold). Each tier is measured cumulatively from where the item stands now, so a Grandmaster row already includes the work Master needed. It reads your mastery and inventory files like a normal run (the catalogue supplies every masterable item, so items you have never touched appear at progress 0), but solves its own per-item goals instead of the tower/`-m`/`-i` demand, and so conflicts with `--ascend`, `--unobtainable`, `--target`, `-m` and `-i`.
+Pass `--mastery-costs` to see, for **every** item you have not finished mastering, how much effort its next tier still takes. For each masterable item and the next tier it has not yet reached — **Master** (10,000 mastery), **Grandmaster** (100,000) or **Megamaster** (1,000,000); an item at 50,000 is solved for Grandmaster only — the solver finds the single *fastest* plan to get there from your current progress and reports that plan's makespan and the **gold it spends buying** (the consumables it purchases at the [trading](#trading-gold-prices) exchange rates; a tier it self-sources entirely — a farmed crop, say — costs no gold). It reads your mastery and inventory files like a normal run (the catalogue supplies every masterable item, so items you have never touched appear at progress 0), but solves its own per-item goals instead of the tower/`-m`/`-i` demand, and so conflicts with `--ascend`, `--unobtainable`, `--target`, `-m` and `-i`.
 
 The rows are ranked by `--sort time` (the default) or `--sort gold`, each falling back to the other as a tie-breaker:
 
@@ -799,9 +799,9 @@ settings up (your goal there is left alone).
 - The small **timeline** link beside each item name opens that item's
   [mastery timeline](#mastery-timeline-page) instead.
 
-Times use the steady-state (yearly-average) calendar, and each row is
-cumulative from where you are now — a Grandmaster row includes the work Master
-needed.
+Times use the steady-state (yearly-average) calendar, and each item has one row:
+its **next** tier, measured from where you are now (an item at 50,000 shows
+Grandmaster only).
 
 ### Mastery timeline page
 
