@@ -329,7 +329,8 @@ class SourcingPlan:
     # :func:`_solve_configured`. Stamped there on every plan; :func:`frontier` uses it
     # to re-solve the plans it returns with integer Pumpkin Juice after sweeping the
     # cheap continuous relaxation (see there). ``None`` on hand-built plans (tests) and
-    # never read except by the finish step. ``repr=False``/``compare=False`` so it does
+    # on the plans frontier returns (see _released), and never read except by the
+    # finish step. ``repr=False``/``compare=False`` so it does
     # not clutter reprs or perturb equality, and excluded from ``cost``-based ranking.
     _origin: tuple[_Base, dict] | None = field(
         default=None, repr=False, compare=False
@@ -3553,11 +3554,11 @@ def frontier(
                 )
             except ValueError:  # _assert_optimal: demand unsatisfiable pet-free
                 base_passive = probe = None
-        return _spread(
+        return _released(_spread(
             base_active, fast, cheap, spread, count, demand, recipes,
             crafting_bonus, openables, inventory, passive_pet_items, prices,
             quantize, base_passive=base_passive, probe=probe,
-        )
+        ))
 
     # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
     # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
@@ -3591,17 +3592,29 @@ def frontier(
 
     workers = solver_threads(FRONTIER_WORKERS)
     if workers < 2:
-        return _frontier_sweeps(
+        return _released(_frontier_sweeps(
             None, 1, make_base, post, base_active, fast, cheap, t_cheap_raw, count,
             demand, recipes, crafting_bonus, openables, inventory,
             passive_pet_items, prices, quantize,
-        )
+        ))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return _frontier_sweeps(
+        return _released(_frontier_sweeps(
             pool, workers, make_base, post, base_active, fast, cheap, t_cheap_raw,
             count, demand, recipes, crafting_bonus, openables, inventory,
             passive_pet_items, prices, quantize,
-        )
+        ))
+
+
+def _released(plans: list[SourcingPlan]) -> list[SourcingPlan]:
+    """``plans`` with their ``_origin`` dropped, as :func:`frontier` returns them.
+
+    The origin is only for the frontier's own exact finish, and it holds the
+    whole base -- the LP, its HiGHS instance, and (with solver threads) a copy
+    per sweep thread -- which a caller caching the plans (the web app's session
+    cache) would otherwise keep alive with them."""
+    for plan in plans:
+        plan._origin = None
+    return plans
 
 
 def _frontier_sweeps(

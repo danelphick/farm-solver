@@ -2196,13 +2196,17 @@ def _reference_endpoint(
     quantize = (
         config.passive_quantizer(production) if production is not None else None
     )
-    return optimizer.self_sourced_endpoint(
+    plan = optimizer.self_sourced_endpoint(
         offers, inputs.demand, inputs.recipes, args.crafting_bonus,
         openables=inputs.open_flows, inventory=inputs.inventory,
         cookie_sets=inputs.cookie_sets,
         grape_juices_per_day=daily_grape_juices(inputs.farm),
         prices=inputs.prices, quantize=quantize,
     )
+    # It can ride along on a cached FrontierResult (see solve_frontier): drop the
+    # LP it came from, which nothing reads once it is solved.
+    plan._origin = None
+    return plan
 
 
 def solve_frontier(

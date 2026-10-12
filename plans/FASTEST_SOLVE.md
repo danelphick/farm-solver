@@ -6,6 +6,43 @@ Goal: make the two web views -- the **solver page** (`/api/solve`:
 (`python main.py`, `python main.py --mastery-costs`) as fast as possible,
 **without changing any result**.
 
+## Summary
+
+| | solve | mastery | cli | cli-mc |
+| --- | --- | --- | --- | --- |
+| `main` | 1.079s | 5.646s | 1.068s | 2.904s |
+| branch, 14-core Mac (defaults) | 0.193s | 0.225s | 0.277s | 0.401s |
+| speed-up | **5.6x** | **25x** | **3.9x** | **7.2x** |
+| branch, one CPU (`--threads 1`; the 1-vCPU deployment) | 0.359s | 1.24s | 0.48s | 1.30s |
+| speed-up on one CPU | **3.0x** | **4.5x** | **2.2x** | **2.2x** |
+
+Where it came from: a PuLP -> HiGHS hand-over that converts each LP once and
+warm-starts the refinement stages (steps 1, 10); HiGHS's presolve failures sent
+to a presolve-free HiGHS instead of CBC (2) and its MIP feasibility-jump
+heuristic off (6); much less Python per model -- shared build work cached,
+leftovers in one pass, the surplus LP straight to HiGHS, the activity objective
+kept (7, 8, 14, 15); and the CPUs used -- threads for the frontier, worker
+processes for the mastery sweep, independent solves started early, all capped
+at the CPUs actually available (3-5, 9, 12, 13). Lazy imports help the CLI (11).
+
+What changed in the output: **every CLI scenario is byte-identical** to `main`
+(including the fresh-account `--ascend` climb). The **web views**, on their own
+config, differ in three ways, all explained below:
+
+* step 2 -- where HiGHS's presolve wrongly rejects a model, the presolve-free
+  HiGHS answer replaces CBC's: equally optimal, but on the mastery-costs page
+  one row's gold moves (Sunflower Oil -> Megamaster, 665,219.4 -> 665,249.6) and
+  the solver page's selected plan shifts by a few units in places;
+* step 6 -- two mastery-costs rows were **wrong** on `main` (HiGHS's presolve
+  returned a plan ~3x slower than optimal as "optimal") and are now right:
+  Runestone 10 -> Grandmaster 51d 2h -> 17d 9h, Runestone 16 -> Grandmaster 82d
+  23h -> 27d 22h;
+* step 10 -- some mastery-costs gold figures move in their last digits (at most
+  0.0002 gold, never visible).
+
+The Runestone rows are also wrong on `main` today -- the feasibility-jump fix
+(step 6, which needs step 2's fallback) is worth taking even without the rest.
+
 ## How it is measured
 
 `uv run python scripts/bench_solve.py` against the newest `mydata/` pastes:
@@ -22,7 +59,7 @@ on a 14-core Apple Silicon Mac, Python 3.14.2, highspy 1.15.1.
 
 ## How each step is verified
 
-Every step must leave the output byte-identical to `main`'s, checked three
+Every step must leave the output byte-identical to `main`'s, checked these
 ways:
 
 * a harness dumps **every LP `_build_base` builds** (every row in order, every
@@ -32,8 +69,12 @@ ways:
   `--mastery-costs` (both ways), `--ascend` (incl. the fresh-account 0->200
   climb) and Veggie Juice off -- run on `main` and on the branch with the same
   `PYTHONHASHSEED`, then diffed;
-* `uv run pytest -q`;
-* `uv run --group web python web/manage.py test solverapp`.
+* the two web views' payloads (the mastery-costs rows, the solver page's
+  rendered sections), dumped and diffed the same way;
+* `uv run pytest -q`, `uv run --group web python web/manage.py test solverapp`
+  and the web unit tests;
+* for the threaded and multi-process steps, repeated runs at high thread
+  counts compared with each other (no run-to-run differences).
 
 A step that cannot keep the output identical says so, and why, below.
 
@@ -374,3 +415,17 @@ call, though it is the same expression on every call on a base. `_Base.activity`
 now keeps it (built on first use; the stage only runs when the base has such
 variables, so the expression is never empty and PuLP never folds a dummy
 variable into it).
+
+### Memory: release the bases with the plans -- output identical
+
+The web app caches each solve's frontier (`SessionCache`, 64 entries), and every
+plan carried `_origin` -- its whole base: the LP, its `Highs` instance, and with
+solver threads one base copy per sweep thread -- though nothing reads it once
+`frontier` returns. Twelve cached sessions cost +198 MB of RSS at the default
+threads against +52 MB on `main`; on a multi-vCPU instance with the default
+512Mi a full cache would not fit. `frontier` now returns its plans with the
+origin dropped (`_released`), as does the early-started reference endpoint.
+Python-level memory held per cached session is now the same at any thread
+count (~1.6 MB), and 12 sessions cost +48 MB of RSS on one thread (below
+`main`); threads add a roughly constant ~50-60 MB of allocator arenas and
+stacks, which does not grow with the cache.
