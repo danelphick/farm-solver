@@ -2256,26 +2256,29 @@ def surplus_sale_value(
     problem = pulp.LpProblem("surplus_sale", pulp.LpMaximize)
     craft = {item: pulp.LpVariable(f"s{i}", lowBound=0) for i, item in enumerate(craftable)}
     # Net leftover of each item: what is on hand plus crafted, less crafted-away.
+    # Sorted, like every set this function walks: set order varies with
+    # PYTHONHASHSEED, and it decides the LP's row order (so which of several
+    # equally good allocations the solver returns) and how tied rows are listed.
     net = {
         item: (
             leftovers.get(item, 0.0)
             + (crafting_bonus * craft[item] if item in craft else 0)
             - pulp.lpSum(quantity * craft[j] for j, quantity in consumers.get(item, []))
         )
-        for item in items
+        for item in sorted(items)
     }
     for expr in net.values():
         problem += expr >= 0  # cannot consume more of a material than is available
-    problem += pulp.lpSum(prices[item] * net[item] for item in sellable)
+    problem += pulp.lpSum(prices[item] * net[item] for item in sorted(sellable))
     problem.solve(_solver())
     if pulp.LpStatus[problem.status] != "Optimal":
         return []
     rows = [
         (item, sold, sold * prices[item])
-        for item in sellable
+        for item in sorted(sellable)
         if (sold := pulp.value(net[item]) or 0.0) >= 1
     ]
-    rows.sort(key=lambda row: row[2], reverse=True)
+    rows.sort(key=lambda row: row[2], reverse=True)  # stable: ties stay A-Z
     return rows
 
 
