@@ -54,6 +54,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 10. Warm-start the refinement stages | 0.252s | 0.512s | 0.360s | 0.613s |
 | 11. Import rich and multiprocessing only where used | 0.249s | 0.512s | 0.335s | 0.588s |
 | 12. Mastery-costs sweep on worker processes | 0.248s | 0.220s | 0.333s | 0.405s |
+| 13. Run known work ahead: the confirmed frontier, the reference endpoint | 0.216s | 0.224s | 0.309s | 0.405s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -325,3 +326,23 @@ Caveats, and what guards them:
   and no pool is ever started.
 * A handful of items -- the expand toggle's further tiers -- stays on threads,
   which cost nothing to start.
+
+### 13. Run known work ahead -- output identical
+
+Two solves on the solver page's critical path had their inputs long before
+their turn came:
+
+* the fixed point's **confirming iteration**: once an iteration sets a horizon,
+  the next one usually only confirms it (`_makespans_close`), after which the
+  frontier runs at exactly that horizon -- so `solve_frontier` now starts that
+  frontier (`frontier_at`) on a look-ahead thread as soon as the horizon is set,
+  and uses it if the confirmation comes (else the loop goes on as before, and
+  the early start is discarded);
+* the **reference endpoint** `derive_report_inputs` judges passive completion
+  against depends only on the final frontier's offers, so it now starts beside
+  that frontier and rides along on `FrontierResult.reference`.
+
+Both are the same deterministic solves, only started earlier, so nothing
+changes. They need spare CPUs, so they only run ahead when `solver_threads`
+allows more than one (`_LOOKAHEAD`, two threads); on one CPU the order is as it
+was.

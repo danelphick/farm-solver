@@ -22,7 +22,7 @@ import sys
 import threading
 import tomllib
 from collections.abc import Callable, Iterable
-from concurrent.futures import Executor, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -2172,6 +2172,37 @@ class FrontierResult:
     # solve pipeline always fills it in.
     production: passive.PassiveProduction | None
     horizon: timedelta | None
+    # The reference endpoint derive_report_inputs needs, started alongside the
+    # frontier that produced ``offers`` (see solve_frontier); None to compute it
+    # there instead.
+    reference: Future | None = None
+
+
+# Runs solve_frontier's look-ahead work (the reference endpoint) beside the
+# frontier, on spare CPUs only (see solve_frontier).
+_LOOKAHEAD = ThreadPoolExecutor(max_workers=2, thread_name_prefix="lookahead")
+
+
+def _reference_endpoint(
+    inputs: SolveInputs,
+    args: argparse.Namespace,
+    offers: list[sources.Offer],
+    production: passive.PassiveProduction | None,
+) -> optimizer.SourcingPlan:
+    """The fastest fully self-sourced plan over ``offers``: the yardstick
+    derive_report_inputs judges passive completion against."""
+    # `production` is None only in stripped-down callers (see the webapi tests'
+    # hand-built FrontierResults); the report side is equally tolerant of that.
+    quantize = (
+        config.passive_quantizer(production) if production is not None else None
+    )
+    return optimizer.self_sourced_endpoint(
+        offers, inputs.demand, inputs.recipes, args.crafting_bonus,
+        openables=inputs.open_flows, inventory=inputs.inventory,
+        cookie_sets=inputs.cookie_sets,
+        grape_juices_per_day=daily_grape_juices(inputs.farm),
+        prices=inputs.prices, quantize=quantize,
+    )
 
 
 def solve_frontier(
@@ -2237,6 +2268,44 @@ def solve_frontier(
         and time_limit is None and args.max_ap is None and args.max_ln is None
         and args.max_ac is None and args.max_gold is None
     )
+
+    def frontier_at(
+        at: timedelta | None,
+    ) -> tuple[passive.PassiveProduction, list[sources.Offer], list, Future | None]:
+        """The frontier with passive production over horizon ``at``: its
+        production, offers and plans, and the reference endpoint started beside
+        it on spare CPUs (derive_report_inputs depends only on these offers --
+        an identical cold solve on its own base, wherever it runs)."""
+        production = config.passive_production(
+            cfg, today=start, start=start, horizon=at,
+            monthly_grants=monthly_grants,
+            has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
+        )
+        quantize = config.passive_quantizer(production)
+        offers = optimizer.all_offers(
+            production, fish, explore, farm, inputs.boost_offers
+        )
+        reference = (
+            _LOOKAHEAD.submit(_reference_endpoint, inputs, args, offers, production)
+            if lookahead else None
+        )
+        plans = optimizer.frontier(
+            offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
+            inventory, cookie_sets, report._pet_dominated_items(production),
+            grape_juices_per_day=daily_grape_juices(farm), prices=prices,
+            pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
+            quantize=quantize, ap_tradeable=ap_tradeable,
+            non_mastery_goals=non_mastery_goals, no_buy=no_buy, spread=spread,
+            price_pumpkin_juice=price_pj,
+        )
+        return production, offers, plans, reference
+
+    # On spare CPUs, work whose inputs are already known runs ahead (see
+    # _LOOKAHEAD): the reference endpoint beside each frontier, and -- below --
+    # the frontier itself beside the fixed point's confirming iteration. Neither
+    # changes a result: each is the same deterministic solve, just started early.
+    lookahead = optimizer.solver_threads(2) > 1
+    ahead: tuple[timedelta | None, Future] | None = None
     if fast_path:
         for _ in range(_MAX_SEASON_ITERS):
             production = config.passive_production(
@@ -2262,30 +2331,21 @@ def solve_frontier(
             if horizon is not None and _makespans_close(fast.time, horizon):
                 break
             horizon = fast.time
+            # The next iteration usually just confirms this horizon, after which
+            # the frontier below runs at it -- so start that frontier now.
+            if lookahead:
+                ahead = (horizon, _LOOKAHEAD.submit(frontier_at, horizon))
 
     for _ in range(_MAX_SEASON_ITERS):
-        production = config.passive_production(
-            cfg, today=start, start=start, horizon=horizon,
-            monthly_grants=monthly_grants,
-            has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
-        )
-        quantize = config.passive_quantizer(production)
-        offers = optimizer.all_offers(
-            production, fish, explore, farm, inputs.boost_offers
-        )
-        plans = optimizer.frontier(
-            offers, demand, recipes, args.crafting_bonus, args.plans, open_flows,
-            inventory, cookie_sets, report._pet_dominated_items(production),
-            grape_juices_per_day=daily_grape_juices(farm), prices=prices,
-            pj_gain=pj_gain, pj_price=pj_price, pj_limit=pj_limit,
-            quantize=quantize, ap_tradeable=ap_tradeable,
-            non_mastery_goals=non_mastery_goals, no_buy=no_buy, spread=spread,
-            price_pumpkin_juice=price_pj,
-        )
+        if ahead is not None and ahead[0] == horizon:
+            production, offers, plans, reference = ahead[1].result()
+        else:
+            production, offers, plans, reference = frontier_at(horizon)
+        ahead = None
         if not plans:
             return FrontierResult(
                 plans=[], within=[], shown=[], offers=offers,
-                production=production, horizon=horizon,
+                production=production, horizon=horizon, reference=reference,
             )
         # The limits drop plans over a time or consumable ceiling, unless that
         # would leave none (then the whole frontier is shown, with a warning below).
@@ -2312,7 +2372,7 @@ def solve_frontier(
 
     return FrontierResult(
         plans=plans, within=within, shown=shown, offers=offers,
-        production=production, horizon=horizon,
+        production=production, horizon=horizon, reference=reference,
     )
 
 
@@ -2343,17 +2403,10 @@ def derive_report_inputs(
     # and the fast plans overstate net materials (Antler) -- and thinning may drop it.
     # Its own `.time` is unused here (only its residuals are), but quantizing it
     # too keeps the invariant that every plan carrying a printable time is quantized.
-    # `production` is None only in stripped-down callers (see the webapi tests'
-    # hand-built FrontierResults); the report side is equally tolerant of that.
-    quantize = (
-        config.passive_quantizer(fr.production) if fr.production is not None else None
-    )
-    reference = optimizer.self_sourced_endpoint(
-        fr.offers, inputs.demand, inputs.recipes, args.crafting_bonus,
-        openables=inputs.open_flows, inventory=inputs.inventory,
-        cookie_sets=inputs.cookie_sets,
-        grape_juices_per_day=daily_grape_juices(inputs.farm),
-        prices=inputs.prices, quantize=quantize,
+    # solve_frontier may already have started it beside the frontier.
+    reference = (
+        fr.reference.result() if fr.reference is not None
+        else _reference_endpoint(inputs, args, fr.offers, fr.production)
     )
     max_passive_residuals = optimizer.passive_residuals(
         reference, inputs.demand, inputs.recipes, args.crafting_bonus,

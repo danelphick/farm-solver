@@ -53,9 +53,17 @@ args, cfg, horizon_seed=None)` runs the seasonal fixed-point loop and the
 frontier sweep, returning a `FrontierResult` (`plans`/`within`/`shown`, `offers`,
 `production`, the converged `horizon` — `horizon_seed` lets a caller resume the
 fixed point instead of restarting it, used by the web API's horizon-guard
-re-solve); `main.derive_report_inputs(inputs, fr, args)` computes the report-only
+re-solve — and `reference`, the reference endpoint's future when it was started
+early); `main.derive_report_inputs(inputs, fr, args)` computes the report-only
 context (`cheapest`, `display`, `max_passive_residuals`, `reasons`, `golds`,
-`sourceable_elsewhere`) into a `PlanContextData`. `run()` itself keeps setup,
+`sourceable_elsewhere`) into a `PlanContextData`. **Running ahead** (spare CPUs
+only, `optimizer.solver_threads(2) > 1`, on the two-thread `_LOOKAHEAD`
+executor): `solve_frontier`'s `frontier_at(horizon)` is started as soon as the
+fixed point sets a horizon -- the next iteration usually just confirms it, and
+the frontier loop then takes the early result if the horizon matches -- and each
+`frontier_at` starts `_reference_endpoint` (the self-sourced reference
+`derive_report_inputs` needs, a function of the offers alone) beside the
+frontier. Same deterministic solves, started earlier; output unchanged. `run()` itself keeps setup,
 file loading and the `--unobtainable` early exit, then calls the three in order
 and drives the `Reporter` off their results:
 
