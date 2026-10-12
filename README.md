@@ -1087,6 +1087,9 @@ mastery sweep's worker processes. The processes use the "spawn" start method,
 which re-runs the parent's main script in each worker, so they are only used
 from a known entry point (`main.py`, `manage.py`, `gunicorn`, the benchmark) or
 an interactive session -- a script of your own that calls the solver without an
-`if __name__ == "__main__":` guard gets threads instead.
+`if __name__ == "__main__":` guard gets threads instead. A web server keeps its
+worker processes for its lifetime, at ~50 MB of memory each: size the instance's
+memory for them (one per vCPU, up to 10), or set `FARM_SOLVER_PROCESSES=0` to
+keep the mastery sweep on threads.
 `plans/FASTEST_SOLVE.md` has the measurements.
 

@@ -366,9 +366,11 @@ Caveats, and what guards them:
   entry point (`main.py`, `manage.py`, `gunicorn`, `bench_solve.py`); anything
   else stays on threads. `FARM_SOLVER_PROCESSES=0`/`1` overrides.
 * A pool that breaks (a worker dies) falls back to threads for that sweep.
-* Each worker is a full interpreter with the solver imported (~60-80MB), so up
-  to 10 of them on a big machine; on the 1-vCPU deployment the worker count is 1
-  and no pool is ever started.
+* Each worker is a full interpreter with the solver imported (~49 MB RSS each,
+  measured after a sweep), so up to 10 of them (~0.5 GB) on a big machine, kept
+  for the process's life; one per vCPU on a container. On the 1-vCPU deployment
+  the worker count is 1 and no pool is ever started; `FARM_SOLVER_PROCESSES=0`
+  keeps a memory-tight multi-vCPU instance on threads.
 * A handful of items -- the expand toggle's further tiers -- stays on threads,
   which cost nothing to start.
 
