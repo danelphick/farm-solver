@@ -167,6 +167,9 @@ corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 7
 cookies_grow_time_threshold = "18m"  # min grow time a cookie set may boost
 instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth
+# Veggie Juice: each one drunk cuts a growing crop's time left by 10% (compounding,
+# never below a minute). The juice is crafted, held or AP-traded like any input.
+use_veggie_juice = true
 # The Scythe of Dewstar gives 4 bonus crops per row every harvest. It is an
 # account perk, not a held item, so by default it is auto-detected from having
 # met every mastery requirement for level 250; uncomment to force it on/off instead.

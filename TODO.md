@@ -2,9 +2,6 @@
 
 - Prune Juice - resets Grape Juice allocation for the day and so allows speedier farming at a cost.
 
-- Veggie Juice - reduces crop length by 10%. Multiple can be drunk to reduce to a minimum of 1
-  minute.
-
 - Recycling - Drinking OJ, AP, AC gives back glass bottles.
 
 - Acorn Pie - exploring in any zone drops Hide. Needs drop tables for every zone - currently only

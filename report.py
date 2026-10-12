@@ -1341,16 +1341,29 @@ def _harvest_alls(count: int) -> str:
 def _crop_of(offer: sources.Offer) -> str:
     """The crop a farming offer grows, from its ``grow X[ variant]`` name.
 
-    The single place farming offer names are parsed; the ``with cookies`` /
-    ``without grape juice`` variant suffixes (an offer has at most one) are
-    stripped, leaving the crop's display name.
+    The single place farming offer names are parsed; the ``with k veggie juice``
+    suffix, then the ``with cookies`` / ``without grape juice`` variant suffixes
+    (an offer has at most one) are stripped, leaving the crop's display name.
     """
     return (
-        offer.name.removeprefix("grow ")
+        re.sub(r" with \d+ veggie juice$", "", offer.name.removeprefix("grow "))
         .removesuffix(" (burst)")
         .removesuffix(" with cookies")
         .removesuffix(" without grape juice")
     )
+
+
+def _juices_used(draw: sources.Draw) -> str:
+    """`` using N Grape Juice, M Veggie Juice`` for a plain farming draw ('' if none)."""
+    spent = [
+        f"{round(qty):,} {name}"
+        for qty, name in (
+            (draw.gj, "Grape Juice"),
+            (draw.offer.consumes.get(crops.VEGGIE_JUICE, 0.0) * draw.units, "Veggie Juice"),
+        )
+        if round(qty) >= 1
+    ]
+    return f" using {', '.join(spent)}" if spent else ""
 
 
 def _farming_action(draw: sources.Draw) -> str:
@@ -1910,6 +1923,9 @@ def _build_plan_context(
             # is read off the draws' consumes, so its held spend shows in the
             # From-inventory section and the bought portion in the Buy section.
             sources.HICKORY_OMELETTE: consumed.get(sources.HICKORY_OMELETTE, 0.0),
+            # Veggie Juice likewise: drunk by the juiced farming offers, never
+            # yielded by a draw, so its held spend is read off the consumes too.
+            crops.VEGGIE_JUICE: consumed.get(crops.VEGGIE_JUICE, 0.0),
         }.items()
         if round(spent) >= 1
     }
@@ -1922,6 +1938,7 @@ def _build_plan_context(
             display.setdefault(item, item.title())
     display.setdefault(sources.ACORN_PIE, "Acorn Pie")
     display.setdefault(sources.HICKORY_OMELETTE, "Hickory Omelette")
+    display.setdefault(crops.VEGGIE_JUICE, "Veggie Juice")
     # An open is worth reporting if it yields a needed item, restocks a tool, or
     # gathers something a draw goes on to consume (an Apple-yielding chest opened
     # to feed the eat-Apple stamina flow, say) -- the same `consumed` union the
@@ -2319,9 +2336,7 @@ def print_plan(
             line = (
                 f"  {_harvest_alls(math.ceil(draw.units))} of {crop}"
                 f" in {passive.format_duration(draw.time)}"
-            )
-            if round(juices) >= 1:
-                line += f" using {round(juices):,} Grape Juice"
+            ) + _juices_used(draw)
             print(f"{line}:")
             # Grape-juice and natural harvests yield the same bundle, so the
             # grape-juice share of the plantings splits every produced item the
@@ -2748,9 +2763,7 @@ def markdown_plan(
                         Cell.num(round(draw.produced[key])), note,
                     ])
                 continue
-            action = f"{_harvest_alls(math.ceil(draw.units))} of {crop}"
-            if round(juices) >= 1:
-                action += f" using {round(juices):,} Grape Juice"
+            action = f"{_harvest_alls(math.ceil(draw.units))} of {crop}" + _juices_used(draw)
             gj_share = juices / draw.units if draw.units else 0.0
             for key in sorted(k for k in draw.offer.yields if k in ctx.interesting):
                 total = draw.produced[key]

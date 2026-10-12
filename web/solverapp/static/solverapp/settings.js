@@ -141,6 +141,8 @@ const CONFIG_FIELDS = {
       help: "How many Grape Juices you can press per day; bounds GJ-boosted growing." },
     { key: "farming.cookies_grow_time_threshold", label: "Cookie grow threshold", type: "text",
       help: "Minimum base grow time a crop needs before a Cookie set is worth spending on it (e.g. 18m)." },
+    { key: "farming.use_veggie_juice", label: "Veggie Juice", type: "bool",
+      help: "Speed plantings by drinking Veggie Juice: each cuts a crop's time left by 10% (compounding, never below 1 minute)." },
     { key: "farming.have_scythe_of_dewstar", label: "Scythe of Dewstar", type: "autobool",
       help: "Scythe of Dewstar perk: +4 bonus crops per row each harvest. Auto-detect infers it from your tower progress (level 250)." },
     { key: "farming.have_dewstars_journal", label: "Dewstar's Journal", type: "autobool",

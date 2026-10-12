@@ -36,6 +36,7 @@ from sources import (
     Draw,
     Offer,
     OpenFlow,
+    farming_offers,
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
@@ -126,6 +127,24 @@ def test_sugar_cane_mill_is_rate_limited_and_grounded_in_its_inputs():
     # Without the machine presses the mill cannot run at all.
     starved = minimize(offers, {"unrefined sugar": 100}, inventory={"sugar cane": 1000})
     assert starved.remainder
+
+
+def test_veggie_juice_speeds_farming_when_held():
+    # A 10-minute crop, 30 plantings: 5h unjuiced. Holding plenty of Veggie Juice,
+    # the fastest plan drinks it down to the one-minute floor (22 a planting).
+    farm = Farm(
+        crops={"corn": Crop("Corn", timedelta(minutes=10), {"corn": 1})},
+        rows=1,
+        veggie_juice=True,
+    )
+    offers = farming_offers(farm, ground=True)
+    fast = minimize(offers, {"corn": 30}, inventory={"veggie juice": 10_000})
+    assert fast.time == pytest.approx(timedelta(minutes=30), abs=timedelta(seconds=1))
+    assert fast.veggie_juices == pytest.approx(30 * 22)
+    # With no juice to drink, it is the plain ten minutes a planting.
+    slow = minimize(offers, {"corn": 30})
+    assert slow.time == pytest.approx(timedelta(hours=5), abs=timedelta(seconds=1))
+    assert slow.veggie_juices == 0
 
 
 def test_sugar_cane_mill_conversion_gets_no_crafting_bonus():

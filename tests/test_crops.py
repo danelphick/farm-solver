@@ -94,6 +94,41 @@ def test_corn_speed_only_affects_corn():
     assert farm.grow_time("Carrot") == timedelta(minutes=30)
 
 
+def test_veggie_juice_cuts_ten_percent_of_the_time_left():
+    farm = make_farm(veggie_juice=True)
+    steps = dict(farm.veggie_juice_steps("Corn"))  # a 10-minute crop
+    assert steps[1] == timedelta(minutes=9)
+    # Compounding on the time left: 10m * 0.9 ** 3.
+    assert steps[3] == timedelta(minutes=10) * 0.9**3
+
+
+def test_veggie_juice_never_goes_below_a_minute():
+    crops = {"quick": Crop(name="Quick", growth=timedelta(seconds=65), drops={"quick": 1})}
+    farm = Farm(crops=crops, veggie_juice=True)
+    # 65s * 0.9 = 58.5s, clamped to the one-minute floor; no more juice helps.
+    assert farm.veggie_juice_steps("Quick") == [(1, timedelta(minutes=1))]
+
+
+def test_veggie_juice_steps_end_at_the_fewest_juices_reaching_the_floor():
+    steps = make_farm(veggie_juice=True).veggie_juice_steps("Corn")
+    # 10m * 0.9 ** 21 = 1.09m; 22 juices is the first count under a minute.
+    assert steps[-1] == (22, timedelta(minutes=1))
+    assert all(time > timedelta(minutes=1) for _, time in steps[:-1])
+    counts = [k for k, _ in steps]
+    assert counts == sorted(set(counts))
+
+
+def test_veggie_juice_steps_empty_when_off_or_already_at_the_floor():
+    assert make_farm().veggie_juice_steps("Corn") == []
+    crops = {"fast": Crop(name="Fast", growth=timedelta(minutes=1), drops={"fast": 1})}
+    assert Farm(crops=crops, veggie_juice=True).veggie_juice_steps("Fast") == []
+
+
+def test_farm_from_config_reads_use_veggie_juice():
+    assert farm_from_config({"rows": 1, "use_veggie_juice": True}).veggie_juice
+    assert not farm_from_config({"rows": 1}).veggie_juice
+
+
 def test_time_to_grow_rounds_up_to_whole_plantings():
     farm = make_farm(rows=12)
     # 100 carrots at 48 a harvest needs 3 harvests (144), so 3 hours.

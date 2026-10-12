@@ -231,6 +231,9 @@ class SourcingPlan:
     # :func:`sources.sawmill_boost_offers`) -- a held/bought meal, so it is priced
     # like the other consumables and never self-sourced.
     hickory_omelettes: float = 0.0
+    # Veggie Juices drunk to speed plantings (see :meth:`crops.Farm.veggie_juice_steps`)
+    # -- crafted, held or AP-traded, and valued like the other consumables.
+    veggie_juices: float = 0.0
     # Consumables bought for gold (lower-cased name -> units) and the gold spent on
     # them. The rest of each consumable's spend is self-sourced (costs time, not
     # gold); ``gold`` is the plan's real cost, what the frontier trades against time.
@@ -807,7 +810,8 @@ def _build_base(
         gold = gold + pj_price * pulp.lpSum(pj.values())
 
     # Market value of every consumable the plan spends -- Arnold Palmers, Large Nets,
-    # Grape Juice, Apple Cider, Orange Juice (from the offers' per-unit tallies) and
+    # Grape Juice, Apple Cider, Orange Juice, Veggie Juice (from the offers' per-unit
+    # tallies) and
     # cookie sets. The ``favour_passive`` mode minimises this to push sourcing off the
     # tool-hungry fishing/exploring/GJ channels and onto free passive production and
     # basic farming -- the slow, resource-banking end of the frontier (see
@@ -822,6 +826,10 @@ def _build_base(
             + o.consumes.get("orange juice", 0.0) * prices.get("orange juice", 0.0)
             + o.consumes.get("hickory omelette", 0.0)
             * prices.get("hickory omelette", 0.0)
+            # Veggie Juice (juiced farming) is not a gold consumable; a nominal
+            # weight keeps it penalised, like Grape Juice, when it has no price.
+            + o.consumes.get("veggie juice", 0.0)
+            * (prices.get("veggie juice", 0.0) or 1e-4)
         )
         * x
         for o, x in zip(used, usage)
@@ -1693,6 +1701,9 @@ def _solve_configured(
         hickory_omelettes=sum(
             d.offer.consumes.get("hickory omelette", 0.0) * d.units for d in draws
         ),
+        veggie_juices=sum(
+            d.offer.consumes.get("veggie juice", 0.0) * d.units for d in draws
+        ),
         bought=bought,
         gold=pulp.value(base.gold) or 0.0,
         # Opportunity cost of the free (banked + passive) stamina this plan burns,
@@ -1980,6 +1991,7 @@ def _consumable_spend(plan: SourcingPlan) -> dict[str, float]:
         "grape juice": plan.grape_juices,
         "cookie set": plan.cookie_sets,
         "hickory omelette": plan.hickory_omelettes,
+        "veggie juice": plan.veggie_juices,
     }
 
 

@@ -655,6 +655,7 @@ corn_speed_reduction = 20  # corn's further percent reduction
 grape_juices_per_day = 14  # instant whole-field grows available each day
 cookies_grow_time_threshold = "18m"  # slowest crop worth a cookie set (omit to disable)
 instant_grow_time = "3s"   # effective grow time of crops with <=5m base growth (omit to disable)
+use_veggie_juice = true    # speed plantings by drinking Veggie Juice (omit/false to disable)
 ```
 
 From these the solver works out, for each crop, how much a full-field planting yields and how long it takes. Mushroom and the *Mega* seeds (Cotton, Sunflower, Beet) yield ten times as much per seed. Crops are grown one at a time, so a crop's plantings run back-to-back, but farming as a whole runs concurrently with the passive buildings.
@@ -672,6 +673,10 @@ Farming (5y 202d):
 The `Farming` heading's time is the whole track's total — crops grow one at a time, so their waits add up.
 
 The very fast crops — those with a base growth of five minutes or less (Peppers, Carrot, Peas, Cucumber and Eggplant, the slowest at exactly 5m) — grow quicker than you can click once the speed perks are on, so `instant_grow_time` (default `"3s"`) sets their effective harvest cadence instead of the speed formula. Omit it to leave them on the formula. These crops are never given Grape Juice: they already grow faster than a wait, so an instant grow would be wasted on them (the daily allowance is saved for the slow crops that gain from it).
+
+### Veggie Juice
+
+With `use_veggie_juice = true` a planting can be sped up by drinking **Veggie Juice**: each one cuts the time left by 10%, so they compound (a 10-minute crop takes 9m after one, 8m 6s after two, ...), but never below **one minute** (a 65s crop drops to 60s, not 58.5s). The solver chooses how many to drink per planting — from one up to the count that reaches the floor, sampled more sparsely as the count grows — trading them against time like any other consumable: Veggie Juice is crafted, drawn from stock or traded for Arnold Palmers. Grape Juice instant grows need none, and cookie days are left unjuiced. A juiced crop reports its spend as `using N Veggie Juice` in the Farming section.
 
 ### Cookies
 

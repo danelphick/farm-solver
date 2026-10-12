@@ -94,6 +94,19 @@ COOKIE_SET_MULTIPLIER = 9
 # it, so it bounds how many boosted harvests one set buys.
 COOKIE_WINDOW = timedelta(minutes=5)
 
+# Veggie Juice: drinking one cuts the time left on every growing crop by 10%, so
+# several compound (``0.9 ** k``) -- but never below a minute. A planting can take
+# as many as it likes; past the count that reaches the floor they gain nothing.
+VEGGIE_JUICE = "veggie juice"
+VEGGIE_JUICE_FACTOR = 0.9
+VEGGIE_JUICE_FLOOR = timedelta(minutes=1)
+# The juice counts per planting offered to the LP (see Farm.veggie_juice_steps):
+# every count up to this, then each next ~VEGGIE_JUICE_STRIDE times the last.
+# Grow time is convex in the count, so the LP's mix of two neighbouring counts is
+# a slight over-estimate of the time in between -- never an under-estimate.
+VEGGIE_JUICE_DENSE = 3
+VEGGIE_JUICE_STRIDE = 1.6
+
 # The inventory item a crop's seeds are held as: the crop's name plus this,
 # lower-cased like every inventory key ("Mega Cotton" -> "mega cotton seeds").
 # Only a limited seed's stock is modelled (see :meth:`Crop.seed_item`).
@@ -203,6 +216,9 @@ class Farm:
     :meth:`dewstar_bonus`); ``dewstar_journal`` is whether Dewstar's Journal is
     also held, extending the Cookie bonus to those bonus crops (see
     :meth:`dewstar_cookie_bonus`).
+
+    ``veggie_juice`` is whether plantings may be sped up by drinking Veggie Juice
+    (see :meth:`veggie_juice_steps`).
     """
 
     crops: dict[str, Crop] = field(default_factory=dict)
@@ -215,6 +231,7 @@ class Farm:
     instant_grow_time: timedelta | None = None
     dewstar: bool = False
     dewstar_journal: bool = False
+    veggie_juice: bool = False
 
     def crop(self, name: str) -> Crop | None:
         return self.crops.get(name.lower())
@@ -252,6 +269,38 @@ class Farm:
         if name.lower() == CORN:
             factor *= self.corn_speed
         return crop.growth * factor
+
+    def veggie_juice_steps(self, name: str) -> list[tuple[int, timedelta]]:
+        """``[(juices, grow time), ...]``: the Veggie Juice options for one planting.
+
+        Each juice drunk cuts the time left by ``1 - VEGGIE_JUICE_FACTOR`` (10%),
+        compounding, down to :data:`VEGGIE_JUICE_FLOOR`; so ``k`` juices grow a
+        planting in ``max(floor, grow_time * 0.9 ** k)``. The counts are sampled
+        (every one to :data:`VEGGIE_JUICE_DENSE`, then geometrically) and end at
+        the first that reaches the floor, since more gain nothing. Empty when
+        Veggie Juice is off, the crop is near-instant, or already at the floor.
+        """
+        grow_time = self.grow_time(name)
+        if not self.veggie_juice or grow_time is None or self.is_instant(name):
+            return []
+        if grow_time <= VEGGIE_JUICE_FLOOR:
+            return []
+        steps: list[tuple[int, timedelta]] = []
+        k = 1
+        while True:
+            time = max(VEGGIE_JUICE_FLOOR, grow_time * VEGGIE_JUICE_FACTOR**k)
+            if time == VEGGIE_JUICE_FLOOR:
+                # The fewest juices that reach the floor -- the last useful count.
+                k = math.ceil(
+                    math.log(VEGGIE_JUICE_FLOOR / grow_time)
+                    / math.log(VEGGIE_JUICE_FACTOR)
+                    - 1e-9
+                )
+                if not steps or steps[-1][0] < k:
+                    steps.append((k, VEGGIE_JUICE_FLOOR))
+                return steps
+            steps.append((k, time))
+            k = k + 1 if k < VEGGIE_JUICE_DENSE else math.ceil(k * VEGGIE_JUICE_STRIDE)
 
     def per_harvest(self, name: str, item: str | None = None) -> float | None:
         """Expected count of ``item`` from one full harvest of crop ``name``.
@@ -599,6 +648,7 @@ def load_farm(
     instant_grow_time: timedelta | None = None,
     dewstar: bool = False,
     dewstar_journal: bool = False,
+    veggie_juice: bool = False,
 ) -> Farm:
     """Build a :class:`Farm` from the crop CSVs and the player's settings."""
     crops = read_crops(crops_path or DEFAULT_CROPS_CSV)
@@ -616,6 +666,7 @@ def load_farm(
         instant_grow_time=instant_grow_time,
         dewstar=dewstar,
         dewstar_journal=dewstar_journal,
+        veggie_juice=veggie_juice,
     )
 
 
@@ -641,6 +692,8 @@ def farm_from_config(
     data come from the CSVs. ``have_scythe_of_dewstar`` and
     ``have_dewstars_journal`` are resolved by the caller -- see
     ``main.resolve_scythe_of_dewstar`` / ``main.resolve_dewstars_journal``.
+    ``use_veggie_juice`` lets plantings be sped up with Veggie Juice (see
+    :meth:`Farm.veggie_juice_steps`).
     """
     rows = int(config_section.get("rows", 0))
     double_chance = float(config_section.get("double_crop_chance", 0)) / PERCENT
@@ -665,4 +718,5 @@ def farm_from_config(
     return load_farm(
         crops_path, drops_path, rows, double_chance, speed, corn_speed, grape_juices,
         threshold, instant, have_scythe_of_dewstar, have_dewstars_journal,
+        bool(config_section.get("use_veggie_juice")),
     )

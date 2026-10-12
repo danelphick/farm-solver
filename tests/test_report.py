@@ -23,6 +23,7 @@ from report import (
     _efficiency_note,
     _farming_action,
     _farming_grow_time,
+    _juices_used,
     _net_gold_note,
     _plan_makespan,
     _svg_plot,
@@ -100,6 +101,22 @@ def test_farming_action_names_a_cookie_burst():
     assert _farming_action(Draw(burst, 0.3)) == "cookie burst of Pine Tree"
     day = Offer("grow Pine Tree with cookies", "farming", {"pine": 1}, cookies=1)
     assert _farming_action(Draw(day, 1.2)) == "2 cookie-boosted days of Pine Tree"
+
+
+def test_veggie_juice_offers_name_their_crop_and_juice_spend():
+    folded = Offer(
+        "grow Pine Tree with 8 veggie juice", "farming", {"pine": 1},
+        consumes={"veggie juice": 7.5, "grape juice": 0.5}, gj=0.5,
+    )
+    free = Offer(
+        "grow Pine Tree without grape juice with 13 veggie juice", "farming",
+        {"pine": 1}, consumes={"veggie juice": 13.0},
+    )
+    assert _crop_of(folded) == "Pine Tree"
+    assert _crop_of(free) == "Pine Tree"
+    assert _juices_used(Draw(folded, 4)) == " using 2 Grape Juice, 30 Veggie Juice"
+    assert _juices_used(Draw(free, 2)) == " using 26 Veggie Juice"
+    assert _juices_used(Draw(_PINE, 2)) == ""
 
 
 def _cookie_farm() -> Farm:

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
-from crops import COOKIE_WINDOW, PLOTS_PER_ROW, Farm
+from crops import COOKIE_WINDOW, PLOTS_PER_ROW, VEGGIE_JUICE, Farm
 from exploring import ACORN_PIE_EXPLORES, Exploring
 from fishing import Fishing
 from locksmith import Locksmith
@@ -572,6 +572,12 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
     could only hold it to once per crop, letting a plan burst every qualifying crop
     on the same day and spend a cookie set and a full day's juice on each.
 
+    With Veggie Juice on (``farm.veggie_juice``), each grounded plain offer also
+    gets a ``... with k veggie juice`` variant per sampled juice count ``k``
+    (:meth:`Farm.veggie_juice_steps`): its natural plantings grow in the
+    juice-shortened time and each drinks ``k`` Veggie Juices. Cookie days are left
+    unjuiced.
+
     A seed-limited crop's (a Mega crop's or Spring's) grounded offers also consume
     its seeds (:meth:`crops.Crop.seed_item` -- a full field per planting, one seed
     per plot: ``PLOTS_PER_ROW * rows``), so the LP is bounded by the seeds held in
@@ -621,6 +627,46 @@ def farming_offers(farm: Farm, ground: bool = False) -> list[Offer]:
                     time_per_unit=grow_time,
                 )
             )
+        if ground:
+            # Veggie Juice variants: each planting drinks k juices to grow in
+            # max(1 minute, 0.9**k of the time) -- one offer per sampled k, the
+            # Grape-Juice-folded and Grape-Juice-free forms alike (an instant
+            # Grape Juice grow needs no Veggie Juice, so only the natural plantings
+            # drink it). Grounded only: the juice is a real item to craft, hold or
+            # trade for.
+            for k, vj_time in farm.veggie_juice_steps(crop.name):
+                natural = day / vj_time
+                consumes = {VEGGIE_JUICE: k * natural / (natural + juices)}
+                if juices:
+                    consumes["grape juice"] = juices / (natural + juices)
+                if seed:
+                    consumes[seed] = seeds_per_planting
+                offers.append(
+                    Offer(
+                        name=f"grow {crop.name} with {k} veggie juice",
+                        track=FARMING_TRACK,
+                        yields=bundle,
+                        consumes=consumes,
+                        gj=juices / (natural + juices),
+                        time_per_unit=day / (natural + juices),
+                    )
+                )
+                if juices:
+                    vj_consumes = {VEGGIE_JUICE: float(k)}
+                    if seed:
+                        vj_consumes[seed] = seeds_per_planting
+                    offers.append(
+                        Offer(
+                            name=(
+                                f"grow {crop.name} without grape juice"
+                                f" with {k} veggie juice"
+                            ),
+                            track=FARMING_TRACK,
+                            yields=bundle,
+                            consumes=vj_consumes,
+                            time_per_unit=vj_time,
+                        )
+                    )
         if farm.takes_cookies(crop.name):
             cookie_bundle = {
                 item: farm.cookie_day_yield(crop.name, item) for item in crop.drops

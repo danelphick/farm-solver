@@ -206,6 +206,30 @@ def test_farming_offers_carry_the_harvest_bundle_and_grow_time():
     assert offer.time_per_unit == timedelta(hours=1)
 
 
+def test_farming_offers_add_grounded_veggie_juice_variants():
+    farm = Farm(
+        crops={"corn": Crop("Corn", timedelta(minutes=10), {"corn": 1})},
+        rows=1,
+        grape_juices_per_day=14,
+        veggie_juice=True,
+    )
+    by_name = {o.name: o for o in farming_offers(farm, ground=True)}
+    free = by_name["grow Corn without grape juice with 1 veggie juice"]
+    assert free.time_per_unit == timedelta(minutes=9)
+    assert free.consumes == {"veggie juice": 1.0}
+    assert free.gj == 0
+    # The Grape-Juice-folded form: 160 juiced natural plantings (9m) a day plus
+    # 14 instant ones; only the natural ones drink the Veggie Juice.
+    folded = by_name["grow Corn with 1 veggie juice"]
+    natural = 24 * 60 / 9
+    assert folded.time_per_unit == timedelta(days=1) / (natural + 14)
+    assert folded.consumes["veggie juice"] == pytest.approx(natural / (natural + 14))
+    assert folded.consumes["grape juice"] == pytest.approx(14 / (natural + 14))
+    assert folded.gj == pytest.approx(14 / (natural + 14))
+    # Ungrounded offers never get it: the juice must be a real item.
+    assert not any("veggie" in o.name for o in farming_offers(farm))
+
+
 def test_farming_offer_time_shortens_with_grape_juice():
     farm = Farm(
         crops={"slow": Crop("Slow", timedelta(days=1), {"slow": 1})},

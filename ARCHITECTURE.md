@@ -321,7 +321,7 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   instant multi-output LP flow with no crafting bonus. `place` (`LOCKSMITH`
   default, or `SUGAR_CANE_MILL`) picks its report section: the Opening (Locksmith)
   section shows only Locksmith flows.
-- **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
+- **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`, `veggie_juice_steps`,
   `takes_cookies`, `cookie_day_yield`, `cookie_burst_yield`. **`passive.PassiveProduction`** —
   `producers` list, `rate_per_minute`, storehouse cap.
 
@@ -1770,6 +1770,22 @@ information survives elsewhere in the document:
   `main.sourceable_from_game_data` folds in a default mill offer (and the
   `--unobtainable` caller the conversion flows) so the mill's products count as
   sourceable, and `item_categories` tags them all Farming.
+- **Veggie Juice** (`[farming] use_veggie_juice` → `crops.Farm.veggie_juice`): each
+  juice cuts a growing planting's time **left** by 10%, compounding — `k` juices
+  grow it in `max(VEGGIE_JUICE_FLOOR (1m), T·0.9^k)`. `Farm.veggie_juice_steps`
+  samples `k` (every count to `VEGGIE_JUICE_DENSE`, then ×`VEGGIE_JUICE_STRIDE`,
+  ending at the fewest juices reaching the floor; none for instant or
+  already-at-floor crops). Time is convex in `k`, so the LP mixing two sampled
+  counts over-estimates the time between them, never under. Grounded
+  `sources.farming_offers` adds per `k` a `grow X with k veggie juice` (the
+  Grape-Juice-folded form: only the natural plantings drink) and, when the crop
+  takes GJ, a `grow X without grape juice with k veggie juice`; cookie days stay
+  unjuiced. The juice is an ordinary consumed input (crafted, held, AP-traded),
+  tallied as `SourcingPlan.veggie_juices`, priced in `_consumable_spend` and in
+  `spend_value` (nominal 1e-4 when unpriced, like GJ). `report._crop_of` strips the
+  ` with k veggie juice` suffix; `report._juices_used` prints the `using ...` note.
+  **Cost**: ~6x the farming offers, so model build time grows (`--mastery-costs`
+  ~2s → ~5.7s on the sample save); coarsen the sampling constants if it bites.
 - **Limited seeds (Mega/Spring)**: a crop whose CSV `Primary` differs from its
   name (`crops.Crop.seed_item` — the Mega crops and Spring) has finite,
   not-readily-replaceable seeds, so its grounded farming offers consume the held
