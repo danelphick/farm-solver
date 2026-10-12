@@ -55,6 +55,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 11. Import rich and multiprocessing only where used | 0.249s | 0.512s | 0.335s | 0.588s |
 | 12. Mastery-costs sweep on worker processes | 0.248s | 0.220s | 0.333s | 0.405s |
 | 13. Run known work ahead: the confirmed frontier, the reference endpoint | 0.216s | 0.224s | 0.309s | 0.405s |
+| 14. The surplus LP straight to HiGHS, from a cached shape | 0.200s | 0.226s | 0.284s | 0.402s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -258,7 +259,8 @@ What a 1-vCPU instance (the deployment's default) gains -- `bench_solve.py
 | branch at step 9, 1 thread | 0.508s | 1.247s | 0.614s | 1.331s |
 | branch at step 10, 1 thread | 0.395s | 1.258s | 0.556s | 1.336s |
 | branch at step 11, 1 thread | 0.395s | 1.258s | 0.531s | 1.303s |
-| speed-up | 2.7x | 4.5x | 2.0x | 2.2x |
+| branch at step 14, 1 thread | 0.371s | 1.24s | 0.491s | 1.30s |
+| speed-up | 2.9x | 4.5x | 2.2x | 2.2x |
 
 Everything except steps 3-5 (the threads) counts here: the PuLP hand-over, the
 CBC fallback gone, the MIP heuristic, the leftovers pass, the build reuse and
@@ -346,3 +348,18 @@ Both are the same deterministic solves, only started earlier, so nothing
 changes. They need spare CPUs, so they only run ahead when `solver_threads`
 allows more than one (`_LOOKAHEAD`, two threads); on one CPU the order is as it
 was.
+
+### 14. The surplus LP straight to HiGHS, from a cached shape -- output identical
+
+`post` values every frontier plan's surplus with a small LP (`surplus_sale_value`:
+craft the leftovers into the sellable goods for the most gold), built in PuLP per
+plan though its shape depends only on the recipes, prices and crafting bonus --
+the leftovers are just its right-hand sides. `_surplus_model` now builds that
+shape once (cached like the build caches, step 8) exactly as `FastHiGHS` would lay
+out the PuLP formulation -- rows per item in order, each row's terms in PuLP's
+order, columns `s0`, `s1`, ... in name order, the maximised objective negated --
+and each call only fills in the right-hand sides, solves, and reads back each
+good's net value the way `LpAffineExpression.value()` sums it. The PuLP
+formulation stays as `_surplus_sale_value_pulp`, used on any other backend, and
+was checked equal to the direct one -- every returned row, float for float -- on
+all 191 calls of four web solves.

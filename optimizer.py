@@ -58,6 +58,7 @@ from itertools import pairwise
 from pathlib import Path
 from typing import NamedTuple
 
+import highspy
 import pulp
 
 from ascension import (
@@ -2425,7 +2426,156 @@ def surplus_sale_value(
     ``sum(price * sold)`` over crafts bounded by the leftovers. Returns
     ``(item, count, gold)`` per sellable good with a whole unit or more, gold
     highest first; the total nominal value is their gold summed.
+
+    It runs on every frontier plan, so on the HiGHS backend the LP -- whose
+    shape depends only on the recipes, prices and bonus, the leftovers being its
+    right-hand sides -- comes from the cached :func:`_surplus_model` and goes to
+    HiGHS directly: exactly the model (and so the answer) the PuLP formulation in
+    :func:`_surplus_sale_value_pulp` produces, without building it per plan.
     """
+    if _backend != "highs":
+        return _surplus_sale_value_pulp(leftovers, recipes, crafting_bonus, prices)
+    model = _surplus_model(recipes, crafting_bonus, prices)
+    if model is None:
+        return []
+    row_lower = [-leftovers.get(item, 0.0) for item in model.items]
+    hlp = highspy.HighsLp()
+    hlp.num_col_ = model.columns
+    hlp.num_row_ = len(model.items)
+    hlp.col_cost_ = model.cost
+    hlp.col_lower_ = [0.0] * model.columns
+    hlp.col_upper_ = [highspy.kHighsInf] * model.columns
+    hlp.row_lower_ = row_lower
+    hlp.row_upper_ = [highspy.kHighsInf] * len(model.items)
+    matrix = hlp.a_matrix_
+    matrix.format_ = highspy.MatrixFormat.kRowwise
+    matrix.num_col_ = model.columns
+    matrix.num_row_ = len(model.items)
+    matrix.start_ = model.starts
+    matrix.index_ = model.indices
+    matrix.value_ = model.values
+    hlp.a_matrix_ = matrix
+    highs = highspy.Highs()
+    for key, value in {"output_flag": False, **_HIGHS_OPTIONS}.items():
+        highs.setOptionValue(key, value)
+    highs.passModel(hlp)
+    highs.run()
+    if highs.getModelStatus() != highspy.HighsModelStatus.kOptimal:
+        return []
+    values = highs.getSolution().col_value
+    rows = []
+    for item, terms in zip(model.sellable, model.sellable_terms, strict=True):
+        # LpAffineExpression.value(): the constant, then each term in order.
+        sold = leftovers.get(item, 0.0)
+        for column, coef in terms:
+            sold += values[column] * coef
+        if (sold or 0.0) >= 1:
+            rows.append((item, sold, sold * prices[item]))
+    rows.sort(key=lambda row: row[2], reverse=True)  # stable: ties stay A-Z
+    return rows
+
+
+@dataclass(frozen=True)
+class _SurplusModel:
+    """The surplus-sale LP's fixed part (see :func:`surplus_sale_value`), laid out
+    exactly as :class:`highs_backend.FastHiGHS` lays out the PuLP formulation:
+    one row per item (sorted), each holding that item's net-leftover terms in
+    PuLP's order; columns the craft variables ``s0``, ``s1``, ... in name order;
+    costs the negated (maximised) objective. ``sellable_terms`` are each sellable
+    good's net terms, for reading back how many are sold."""
+
+    items: list[str]
+    sellable: list[str]
+    columns: int
+    cost: list[float]
+    starts: list[int]
+    indices: list[int]
+    values: list[float]
+    sellable_terms: list[list[tuple[int, float]]]
+
+
+def _surplus_model(
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    prices: dict[str, float],
+) -> _SurplusModel | None:
+    def compute() -> _SurplusModel | None:
+        sellable = sorted(
+            item
+            for item, price in prices.items()
+            if price > 0 and item in recipes and item != "grape juice"
+        )
+        if not sellable:
+            return None
+        items: set[str] = set()
+        stack = list(sellable)
+        while stack:
+            item = stack.pop()
+            if item in items:
+                continue
+            items.add(item)
+            stack.extend(recipes.get(item, {}))
+        craftable = sorted(item for item in items if item in recipes)
+        consumers: dict[str, list[tuple[str, float]]] = {}
+        for item in craftable:
+            for material, quantity in recipes[item].items():
+                consumers.setdefault(material, []).append((item, quantity))
+        # Craft variable i is named s<i>; HiGHS gets them in name order.
+        names = [f"s{i}" for i in range(len(craftable))]
+        order = {name: k for k, name in enumerate(sorted(names))}
+        column = {item: order[f"s{i}"] for i, item in enumerate(craftable)}
+        # Each item's net terms, accumulated as PuLP's operators would build
+        # `leftover + bonus * craft[item] - lpSum(qty * craft[j] ...)`.
+        net: dict[str, dict[int, float]] = {}
+        for item in sorted(items):
+            terms: dict[int, float] = {}
+            if item in column and crafting_bonus != 0:
+                terms[column[item]] = crafting_bonus * 1
+            for j, quantity in consumers.get(item, []):
+                if quantity == 0:
+                    continue
+                col = column[j]
+                terms[col] = terms[col] + quantity * -1 if col in terms else quantity * -1
+            net[item] = terms
+        # The objective, lpSum(price * net[item] for each sellable good).
+        objective: dict[int, float] = {}
+        for item in sellable:
+            price = prices[item]
+            for col, coef in net[item].items():
+                objective[col] = (
+                    objective[col] + price * coef if col in objective else price * coef
+                )
+        cost = [-1 * 0.0] * len(craftable)
+        for col, coef in objective.items():
+            cost[col] = -1 * coef
+        starts, indices, values = [0], [], []
+        for item in sorted(items):
+            for col, coef in net[item].items():
+                if coef != 0:
+                    indices.append(col)
+                    values.append(coef)
+            starts.append(len(indices))
+        return _SurplusModel(
+            items=sorted(items), sellable=sellable, columns=len(craftable),
+            cost=cost, starts=starts, indices=indices, values=values,
+            sellable_terms=[list(net[item].items()) for item in sellable],
+        )
+
+    return _cached(
+        ("surplus", id(recipes), id(prices), crafting_bonus),
+        (recipes, prices),
+        compute,
+    )
+
+
+def _surplus_sale_value_pulp(
+    leftovers: dict[str, float],
+    recipes: dict[str, dict[str, float]],
+    crafting_bonus: float,
+    prices: dict[str, float],
+) -> list[tuple[str, float, float]]:
+    """:func:`surplus_sale_value` through PuLP, on whatever backend is selected
+    (the HiGHS path builds the identical LP straight from :func:`_surplus_model`)."""
     sellable = {
         item
         for item, price in prices.items()
