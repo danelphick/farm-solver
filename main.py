@@ -21,7 +21,7 @@ import os
 import sys
 import tomllib
 from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -3676,6 +3676,9 @@ def solve_ascension_frontier(
             "mega_schedule": mega_schedule,
             "catalogue": list(catalogue.values()),
         }
+        # Imported here: it pulls in multiprocessing, which only --ascend uses.
+        from concurrent.futures import ProcessPoolExecutor
+
         with ProcessPoolExecutor(
             max_workers=n_workers,
             initializer=_ascend_worker_init,

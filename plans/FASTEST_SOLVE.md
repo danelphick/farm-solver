@@ -52,6 +52,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 8. Reuse what builds share; re-tune the thread counts | 0.283s | 0.526s | 0.387s | 0.632s |
 | 9. Thread counts capped at the CPUs available | 0.275s | 0.521s | 0.374s | 0.625s |
 | 10. Warm-start the refinement stages | 0.252s | 0.512s | 0.360s | 0.613s |
+| 11. Import rich and multiprocessing only where used | 0.249s | 0.512s | 0.335s | 0.588s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -254,7 +255,8 @@ What a 1-vCPU instance (the deployment's default) gains -- `bench_solve.py
 | `main` (`0875ebf`) | 1.079s | 5.646s | 1.068s | 2.904s |
 | branch at step 9, 1 thread | 0.508s | 1.247s | 0.614s | 1.331s |
 | branch at step 10, 1 thread | 0.395s | 1.258s | 0.556s | 1.336s |
-| speed-up | 2.7x | 4.5x | 1.9x | 2.2x |
+| branch at step 11, 1 thread | 0.395s | 1.258s | 0.531s | 1.303s |
+| speed-up | 2.7x | 4.5x | 2.0x | 2.2x |
 
 Everything except steps 3-5 (the threads) counts here: the PuLP hand-over, the
 CBC fallback gone, the MIP heuristic, the leftovers pass, the build reuse and
@@ -284,3 +286,12 @@ mastery-costs page's gold figures move in their last digits (at most 0.0002
 gold), so every displayed figure and the row order are unchanged. Solver page
 on one CPU 0.508s -> 0.395s; at the default threads 0.275s -> 0.252s. (The
 mastery sweep's refinements are mostly MIPs, which stay cold.)
+
+### 11. Import rich and multiprocessing only where used -- output identical
+
+Every CLI run paid for importing rich (its Markdown renderer pulls in
+markdown-it) and `concurrent.futures.process` (multiprocessing), though rich only
+renders a `--format markdown` report to a terminal and the process pool only
+serves `--ascend`. Both are now imported where they are used. `import main`
+drops from ~72ms to ~50ms, and each CLI run by ~25-30ms; the web views (a
+warm process) are unaffected.

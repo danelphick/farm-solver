@@ -21,11 +21,6 @@ from collections.abc import Iterable
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
-from rich.console import Console
-from rich.markdown import Markdown as RichMarkdown
-from rich.segment import Segment, Segments
-from rich.style import Style
-
 import ascension
 import config
 import crafting
@@ -37,9 +32,13 @@ import pets
 import sources
 
 if TYPE_CHECKING:
-    # main.py imports report.py, so this is TYPE_CHECKING-only (never evaluated
-    # at runtime, see `from __future__ import annotations`) to avoid a cycle --
-    # only used to type-hint the ascension orchestration dataclasses below.
+    # Annotation-only imports (never evaluated at runtime, see `from __future__
+    # import annotations`): rich is imported where a Markdown report actually
+    # renders to a terminal, and main.py imports report.py, so importing it back
+    # would be a cycle -- it only type-hints the ascension orchestration below.
+    from rich.console import Console
+    from rich.segment import Segments
+
     import main
 
 
@@ -3538,6 +3537,12 @@ class TextReporter(Reporter):
 
 
 def _highlight_unreachable_rows(console: Console, text: str) -> Segments:
+    # rich is imported here, not at the top: only a Markdown report to a terminal
+    # renders through it, and importing it costs every other run ~15ms.
+    from rich.markdown import Markdown as RichMarkdown
+    from rich.segment import Segment, Segments
+    from rich.style import Style
+
     """Recolor red any rendered line naming an unreachable goal.
 
     Plain Markdown (and rich's parser of it) has no per-row/per-cell colour, so
@@ -3619,6 +3624,9 @@ class MarkdownReporter(Reporter):
             # nothing to attach to here either, so it's ignored in this case.
             print(text)
             return
+        from rich.console import Console  # see _highlight_unreachable_rows
+        from rich.markdown import Markdown as RichMarkdown
+
         console = Console()
         renderable = (
             _highlight_unreachable_rows(console, text)
