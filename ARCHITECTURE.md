@@ -2038,6 +2038,11 @@ that imports it without going through `manage.py`.
   `config` param (blank/"Default" omitted); `applyConfigParams` restores them.
   They all funnel through `webapi`'s generic `config` override channel, so no
   per-field wiring exists server-side.
+  A schema field's `enabledBy: "<bool key>"` gates it (`data-enabled-by`):
+  `syncGatedConfigFields` disables it unless that checkbox is ticked and itself
+  enabled (so chains cascade: Sugar Boost II <- Boost I <- the Sugar Cane Mill),
+  re-run on the gate's change and after `applyConfigParams`; a disabled bool
+  reads as unticked in `readConfigParams`.
   **`data-config-key` is a page-wide contract, not just the generated panes'
   plumbing**: every control mirroring a config key carries it (plus a
   `data-config-type`), *including* the hand-written ones -- the prices, the

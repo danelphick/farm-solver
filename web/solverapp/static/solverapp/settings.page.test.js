@@ -266,6 +266,58 @@ describe("settings popover", () => {
   });
 });
 
+describe("gated building perks", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const MILL = '[data-config-key="sugar_cane_mill.have_sugar_cane_mill"]';
+  const BOOST_I = '[data-config-key="sugar_cane_mill.have_sugar_boost_i"]';
+  const BOOST_II = '[data-config-key="sugar_cane_mill.have_sugar_boost_ii"]';
+
+  test("the sugar boosts are disabled until the mill (then Boost I) is ticked", async () => {
+    await loadPage();
+    click("#settings-btn");
+    // The fixture injects no mill, so both boosts start greyed out.
+    expect($(BOOST_I).disabled).toBe(true);
+    expect($(BOOST_II).disabled).toBe(true);
+
+    $(MILL).click();
+    expect($(BOOST_I).disabled).toBe(false);
+    expect($(BOOST_II).disabled).toBe(true);  // still needs Boost I
+
+    $(BOOST_I).click();
+    expect($(BOOST_II).disabled).toBe(false);
+
+    $(MILL).click();
+    expect($(BOOST_I).disabled).toBe(true);
+    expect($(BOOST_II).disabled).toBe(true);
+  });
+
+  test("a ticked but gated-off boost is not sent as on", async () => {
+    const { baseline } = await loadPage();
+    click("#settings-btn");
+    $(MILL).click();
+    $(BOOST_I).click();
+    $(MILL).click();  // un-own the mill: Boost I stays ticked but disabled
+    click("#settings-save");
+
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    // Nothing deviates from the defaults, so no `config` param at all.
+    const config = JSON.parse(solveCalls().at(-1)[1].body).params.config || {};
+    expect(config["sugar_cane_mill.have_sugar_boost_i"]).toBeUndefined();
+  });
+
+  test("Cancel re-syncs the gates with the reverted mill", async () => {
+    await loadPage();
+    click("#settings-btn");
+    $(MILL).click();
+    expect($(BOOST_I).disabled).toBe(false);
+    click("#settings-cancel");
+    expect($(BOOST_I).disabled).toBe(true);
+  });
+});
+
 // The snapshot button is the one control in the panel that is NOT staged: it
 // records the mastery box into this browser's history the moment it is clicked.
 // These tests are the guard on that exception staying deliberate.

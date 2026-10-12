@@ -301,8 +301,10 @@ const BUILDING_SECTIONS = [
     { key: "sugar_cane_mill.have_sugar_cane_mill", label: "Sugar Cane Mill", type: "bool",
       help: "You have bought the Sugar Cane Mill: it presses sugar cane and machine presses into unrefined sugar and refines that into molasses, brown and white sugar. Off means no mill (the boosts below are then ignored)." },
     { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool",
+      enabledBy: "sugar_cane_mill.have_sugar_cane_mill",
       help: "Sugar Boost I: the sugar cane mill presses two batches a minute (double the sugar cane and machine presses)." },
     { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool",
+      enabledBy: "sugar_cane_mill.have_sugar_boost_i",
       help: "Sugar Boost II: doubles each batch's unrefined sugar for the same inputs (needs Sugar Boost I)." },
   ] },
 ];
@@ -375,8 +377,33 @@ function createConfigField(field) {
   }
   input.dataset.configKey = field.key;
   input.dataset.configType = field.type;
+  // A field schema's `enabledBy` names the bool control that gates it (a perk
+  // of a building you may not own); see syncGatedConfigFields.
+  if (field.enabledBy) input.dataset.enabledBy = field.enabledBy;
   row.appendChild(input);
   return row;
+}
+
+// Disable each gated control (data-enabled-by) unless its gate is ticked and
+// itself enabled, so a chain (Sugar Boost II <- Boost I <- the mill) greys out
+// all the way down. DOM order puts a gate before what it gates. A disabled bool
+// reads as false (see readConfigParams), so a perk of an unowned building is
+// never sent as on.
+function syncGatedConfigFields() {
+  document.querySelectorAll("[data-enabled-by]").forEach((el) => {
+    const gate = document.querySelector(`[data-config-key="${el.dataset.enabledBy}"]`);
+    el.disabled = !(gate && gate.checked && !gate.disabled);
+  });
+}
+
+function wireGatedConfigFields() {
+  const gates = new Set();
+  document.querySelectorAll("[data-enabled-by]").forEach((el) => {
+    const gate = document.querySelector(`[data-config-key="${el.dataset.enabledBy}"]`);
+    if (gate) gates.add(gate);
+  });
+  gates.forEach((gate) => gate.addEventListener("change", syncGatedConfigFields));
+  syncGatedConfigFields();
 }
 
 // Fill the pane content divs (data-config="...") from the schemas above. Called
@@ -414,6 +441,7 @@ function buildConfigPanels() {
       buildings.appendChild(wrap);
     });
   }
+  wireGatedConfigFields();
 }
 
 // Every control that mirrors a config key carries `data-config-key` (plus a
@@ -448,8 +476,10 @@ function readConfigParams() {
     const key = el.dataset.configKey;
     const type = el.dataset.configType;
     if (type === "bool") {
-      // Only a checkbox toggled away from its default is an override.
-      if (el.checked !== !!configDefault(key)) config[key] = el.checked;
+      // Only a checkbox toggled away from its default is an override; a gated-off
+      // (disabled) one counts as unticked.
+      const checked = el.checked && !el.disabled;
+      if (checked !== !!configDefault(key)) config[key] = checked;
       return;
     }
     const raw = el.value;
@@ -475,6 +505,7 @@ function applyConfigParams(config) {
       el.value = key in config ? config[key] : "";
     }
   });
+  syncGatedConfigFields();
 }
 
 // --- Material trading pane --------------------------------------------------
