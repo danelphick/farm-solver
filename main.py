@@ -21,7 +21,7 @@ import os
 import sys
 import tomllib
 from collections.abc import Iterable
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -793,7 +793,9 @@ def build_parser() -> argparse.ArgumentParser:
             "how many worker processes to fan the --ascend gold-weight sweep "
             "across (the passes are independent). Default: one per CPU (or the "
             "FARM_SOLVER_ASCEND_JOBS env var), capped at the pass count. 1 forces "
-            "the in-process sequential path. Ignored outside --ascend"
+            "the in-process sequential path. With --mastery-costs: how many "
+            "threads its per-item solves run on (default 8; 1 = sequential). "
+            "Ignored otherwise"
         ),
     )
     parser.add_argument(
@@ -2964,6 +2966,8 @@ def solve_mastery_costs(
     unmasterable: list[MasteryNote] = []
     limited: list[MasteryNote] = []
     items: dict[str, MasteryItemInfo] = {}
+    # (display name, progress, remaining tiers, tiers to solve) per item to solve.
+    climbs: list[tuple[str, int, list[tuple[int, str]], list[tuple[int, str]]]] = []
     candidates = list(ascension.candidates(state, catalogue.values()))
     if expand_item is not None:
         wanted = expand_item.lower()
@@ -2998,7 +3002,13 @@ def solve_mastery_costs(
         # later concern, and each would be a solve of its own -- named in
         # ``more_tiers`` for the page to expand. Expanding solves exactly those.
         tiers = remaining[1:] if expand_item is not None else remaining[:1]
-        reached = True
+        climbs.append((name, progress, remaining, tiers))
+
+    def climb(
+        name: str, progress: int, tiers: list[tuple[int, str]]
+    ) -> tuple[list[MasteryCostRow], MasteryNote | None]:
+        """One item's rows for ``tiers``, and the note for one it cannot reach."""
+        found: list[MasteryCostRow] = []
         for threshold, label in tiers:
             demand = {name: (threshold - progress) / args.mastery_bonus}
             try:
@@ -3019,19 +3029,34 @@ def solve_mastery_costs(
                 # Record the tier and stop climbing: every higher one needs
                 # strictly more of the same, so it is infeasible too. One bad
                 # tier must not abort the whole sweep.
-                limited.append(MasteryNote(
+                return found, MasteryNote(
                     name,
                     f"{name} cannot reach "
                     f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
                     "cannot supply that many",
-                ))
-                reached = False
-                break
+                )
             # Cost is the gold the plan actually spends buying (plan.gold), so
             # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
             # drop, not the market value of the tools it now self-sources instead.
-            rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
-        if expand_item is None and reached and len(remaining) > 1:
+            found.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+        return found, None
+
+    # The items are independent solves, so they run on a thread pool: HiGHS
+    # releases the GIL while it solves, so the solves overlap (the Python model
+    # building between them still takes turns). Each item builds its own LP, so
+    # nothing is shared but read-only inputs, and the results are gathered back
+    # in candidate order -- the output is the same whatever the worker count.
+    workers = _mastery_cost_workers(args, len(climbs))
+    if workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(lambda c: climb(c[0], c[1], c[3]), climbs))
+    else:
+        results = [climb(name, progress, tiers) for name, progress, _, tiers in climbs]
+    for (name, _, remaining, _), (found, note) in zip(climbs, results, strict=True):
+        rows.extend(found)
+        if note is not None:
+            limited.append(note)
+        elif expand_item is None and len(remaining) > 1:
             items[name] = replace(
                 items[name], more_tiers=tuple(lb for _, lb in remaining[1:])
             )
@@ -3040,6 +3065,22 @@ def solve_mastery_costs(
     limited.sort(key=lambda note: note.text)
     return MasteryCostsResult(rows=_sorted_mastery_rows(rows, args.sort),
                              unmasterable=unmasterable, limited=limited, items=items)
+
+
+# Threads for --mastery-costs' per-item solves (see solve_mastery_costs) when
+# --jobs does not say: past about this many, the GIL-bound model building between
+# solves is the bottleneck and more threads stop paying.
+MASTERY_COST_WORKERS = 8
+
+
+def _mastery_cost_workers(args: argparse.Namespace, n_items: int) -> int:
+    """How many threads --mastery-costs spreads its per-item solves over:
+    ``--jobs`` if given, else :data:`MASTERY_COST_WORKERS` (never more than the
+    items, never fewer than one)."""
+    requested = getattr(args, "jobs", None)
+    if requested is None:
+        requested = MASTERY_COST_WORKERS
+    return max(1, min(requested, n_items))
 
 
 def resolve_ascend_params(args: argparse.Namespace, cfg: dict) -> tuple[int, int, int]:

@@ -44,6 +44,7 @@ A step that cannot keep the output identical says so, and why, below.
 | `main` (`0875ebf`) | 1.079s | 5.646s | 1.068s | 2.904s |
 | 1. `FastHiGHS`: a fast PuLP -> HiGHS hand-over | 0.770s | 5.155s | 0.716s | 2.386s |
 | 2. HiGHS without presolve before the CBC fallback | 0.684s | 3.019s | 0.703s | 2.365s |
+| 3. Mastery costs' items on a thread pool | 0.684s | 0.951s | 0.716s | 1.025s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -97,3 +98,18 @@ the optimum is not unique the reported plan can differ at solver-tolerance level
   yield 1 Wood fewer, Gary's Crushroom 3 Mushroom Paste fewer, the Surplus
   section 5 Hammer fewer, and the passive-production rows tied on quantity and
   time now list alphabetically instead of in the CBC solution's order.
+
+### 3. Mastery costs' items on a thread pool -- output identical
+
+The mastery-costs sweep is 192 independent `fastest_endpoint` solves, and
+highspy releases the GIL inside `Highs.run` (8 threads ran a batch of HiGHS
+solves 5.8x faster than one). `solve_mastery_costs` now walks the candidates
+first (status, notes, which tiers to solve -- no solving), then runs each item's
+tier climb on a `ThreadPoolExecutor` and gathers the results back in candidate
+order, so the table is identical at any worker count (checked at 1, 2, 4, 6, 8,
+10 and 14). Each item builds its own LP; the threads share only read-only
+inputs.
+
+The CLI sweep by worker count (`--jobs`): 1 -> 2.34s, 2 -> 1.45s, 4 -> 1.07s, 6
+and up -> 1.01s. Past ~6 the Python model building between solves -- which
+still holds the GIL -- is the limit, so the default is 8 (`MASTERY_COST_WORKERS`).

@@ -211,6 +211,17 @@ The per-tier `fastest_endpoint` call catches that `ValueError` (see
 tried, so there is nothing further to climb). One bad tier must never abort the whole sweep, which is what it did before: on the
 web config, `Bouquet of Flowers` at Megamaster killed all 201 other rows.
 
+**Threads**: the per-item solves are independent, so `solve_mastery_costs`
+first walks the candidates (status, notes, tiers to solve -- no solving) into
+`climbs`, then runs each item's tier climb (`climb`: `fastest_endpoint` per tier,
+stopping at an infeasible one) on a `ThreadPoolExecutor` of
+`_mastery_cost_workers` threads (`--jobs`, else `MASTERY_COST_WORKERS` = 8).
+HiGHS releases the GIL while it solves, so the solves overlap while the Python
+model building between them takes turns (past ~6 threads that is the limit);
+each item builds its own LP and the results are gathered back in candidate
+order, so the output is identical at any worker count (2.37s -> 1.03s for the
+CLI sweep, `plans/FASTEST_SOLVE.md`).
+
 Mechanics: `_build_channel_setup` builds the goal-independent channels once, and
 production is **steady-state** (`config.passive_production` with no `start`/
 `horizon` — the yearly-average calendar), so each item is a single
