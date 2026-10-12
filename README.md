@@ -386,7 +386,10 @@ Tiers that cannot be reached (sourceable, but not that many):
 python main.py --mastery-costs                 # fastest-first
 python main.py --mastery-costs --sort gold      # cheapest-first
 python main.py --mastery-costs --self-sourced   # never buy AP/LN/AC (see below)
+python main.py --mastery-costs --jobs 1         # one item at a time, in this process
 ```
+
+The items are independent solves, so the sweep spreads them over worker processes -- up to 10, never more than the CPUs available (`--jobs N` sets the count; see [Using more CPUs](#using-more-cpus)).
 
 ### Self-sourcing the tools (`--self-sourced`)
 
@@ -1048,11 +1051,12 @@ Keep win over Delete, a rollback target always survives.
 
 ### Server hardware reality
 
-The solver's own README/ARCHITECTURE performance figures (a solve in
-~0.4–0.7s) come from a fast desktop-class CPU. The frontier sweep is ~80
-*sequential* single-threaded LP solves, so a typical cloud VPS core — often
-1.5–4× slower single-thread than a top-tier desktop chip — should budget
-**~1–3s per re-solve** instead. Benchmark the actual target host before
+The solver's own README/ARCHITECTURE performance figures come from a fast
+desktop-class CPU. On one core the frontier sweep is ~200 small LP solves run
+one after another, so a typical cloud VPS core — often 1.5–4× slower
+single-thread than a top-tier desktop chip — should budget several times the
+desktop figure per re-solve (see "Using more CPUs" below for what extra cores
+buy). Benchmark the actual target host before
 tuning anything (`time python main.py` with a representative mastery/
 inventory pair is a reasonable proxy): the web UI shows an explicit pending
 state on a re-solve, and the solve-semaphore acquire timeout
@@ -1061,7 +1065,28 @@ budget rather than the desktop figure.
 
 A measured data point, from the first real Cloud Run deployment
 (`us-central1`, 1 vCPU): a fresh-account tower solve that takes **0.61s** on
-an Apple-silicon desktop takes **~3.5s** there — about 5.7× slower, and
-above the 1–3s guess above. Still comfortably inside the 20s semaphore
-budget, but budget nearer 4s than 2s when sizing anything against a
-shared cloud vCPU. A cache-hit refilter on the same box is ~40ms.
+an Apple-silicon desktop takes **~3.5s** there — about 5.7× slower than
+the desktop. Still comfortably inside the 20s semaphore budget, but budget
+nearer 4s than 2s when sizing anything against a shared cloud vCPU. A
+cache-hit refilter on the same box is ~40ms. (Measured before the
+`perf/fastest-solve` work, which cuts a solve on one CPU to well under half --
+see `plans/FASTEST_SOLVE.md`.)
+
+#### Using more CPUs
+
+A solve uses as many CPUs as it is given, up to a point: the frontier's sweeps
+run on up to 5 threads (HiGHS releases the GIL while it solves) and the
+mastery-costs sweep on up to 10 worker processes, each count capped at the CPUs
+the process may actually use -- its affinity, and a Linux cgroup CPU quota such
+as Cloud Run's `--cpu`. On the default 1-vCPU deployment everything runs in
+turn, as before; with `--cpu 4` the same instance answers each request
+noticeably faster even with one gunicorn worker. Two environment variables
+override the detection: `FARM_SOLVER_THREADS=N` sets the thread count (`1`
+forces the sequential paths), and `FARM_SOLVER_PROCESSES=0`/`1` forbids/allows the
+mastery sweep's worker processes. The processes use the "spawn" start method,
+which re-runs the parent's main script in each worker, so they are only used
+from a known entry point (`main.py`, `manage.py`, `gunicorn`, the benchmark) or
+an interactive session -- a script of your own that calls the solver without an
+`if __name__ == "__main__":` guard gets threads instead.
+`plans/FASTEST_SOLVE.md` has the measurements.
+
