@@ -46,7 +46,8 @@ A step that cannot keep the output identical says so, and why, below.
 | 2. HiGHS without presolve before the CBC fallback | 0.684s | 3.019s | 0.703s | 2.365s |
 | 3. Mastery costs' items on a thread pool | 0.684s | 0.951s | 0.716s | 1.025s |
 | 4. The frontier's sweeps and exact finish on a thread pool | 0.486s | 0.943s | 0.497s | 1.032s |
-| 5. Every exact-finish plan concurrently | 0.426s | 0.943s | 0.466s | 1.032s |
+| 5. Every exact-finish plan concurrently | 0.426s | 0.946s | 0.466s | 1.018s |
+| 6. HiGHS's feasibility-jump heuristic off | 0.338s | 0.901s | 0.448s | 1.007s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -149,3 +150,29 @@ plans sharing a base (the fast and cheap endpoints' plans both live on
 `base_active`), re-solved one after another as integer MIPs (~25-60ms each).
 Now every plan is its own task: the first plan from each base re-solves on
 that base, any other on a fresh copy -- the same cold solve of the same model.
+
+### 6. HiGHS's feasibility-jump heuristic off -- output identical, except two wrong rows put right
+
+The integer (MIP) solves -- the fixed point's fastest endpoints, the exact
+finish, the reference endpoint -- were now the critical path: 27 MIPs a solver
+page at ~9ms against ~1.4ms for an LP, though each has a single integer
+(`days_available`; a few Pumpkin Juices when on). Half of each MIP's time was
+HiGHS's feasibility-jump heuristic hunting for a first incumbent, which the root
+LP all but hands over on these models: with it off the MIPs took 0.128s instead
+of 0.274s and returned bit-identical solutions on all 27.
+
+Across the CLI scenarios and the solver page the output is identical. On the
+mastery-costs page two rows change -- and both were wrong before:
+
+| row | before | after |
+| --- | --- | --- |
+| Runestone 10 -> Grandmaster | 51d 2h, 0 gold | 17d 9h, 2,536 gold |
+| Runestone 16 -> Grandmaster | 82d 23h, 0 gold | 27d 22h, 1,522 gold |
+
+With the heuristic on, HiGHS's presolve returned these two "fastest" plans as
+*optimal* at ~3x the true optimum (objective 121,976 vs 40,259 minutes for
+Runestone 16) -- the same numerical fragility as step 2, silently this time.
+With it off, presolve calls those models infeasible instead, so step 2's
+fallback re-solves them without presolve and finds the real optimum. A check of
+all 192 first solves of the sweep, presolve on vs off, finds no other model
+where both claim optimal but disagree by more than a minute.

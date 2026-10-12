@@ -150,9 +150,13 @@ _CAP_MARGIN = 0.005
 # (``pulp.listSolvers()``) bolt on by name through :func:`set_solver_backend`.
 # "highs" is PuLP's HiGHS backend with a faster model hand-over (see
 # :mod:`highs_backend`): the same model and solves, built without PuLP's
-# per-solve Python rebuild.
+# per-solve Python rebuild. HiGHS's feasibility-jump heuristic is off: it hunts
+# for a first incumbent at a MIP's root, which on these MIPs (one integer, the
+# daily-budget day count, or a few Pumpkin Juices) the root LP all but hands
+# over anyway, and it was half of every MIP solve's time.
+_HIGHS_OPTIONS = {"mip_heuristic_run_feasibility_jump": False}
 _SOLVER_BACKENDS = {
-    "highs": lambda: FastHiGHS(msg=False),
+    "highs": lambda: FastHiGHS(msg=False, **_HIGHS_OPTIONS),
     "cbc": lambda: pulp.PULP_CBC_CMD(msg=0),
 }
 _backend = "highs" if pulp.HiGHS(msg=False).available() else "cbc"
@@ -1185,7 +1189,11 @@ def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
     fallbacks = [pulp.PULP_CBC_CMD(msg=False)]
     if isinstance(solver, pulp.HiGHS):
         fallbacks.insert(
-            0, FastHiGHS(msg=False, presolve="off", mip_root_presolve_only=True)
+            0,
+            FastHiGHS(
+                msg=False, presolve="off", mip_root_presolve_only=True,
+                **_HIGHS_OPTIONS,
+            ),
         )
     for fallback in fallbacks:
         problem.solve(fallback)
