@@ -11,9 +11,9 @@ Goal: make the two web views -- the **solver page** (`/api/solve`:
 | | solve | mastery | cli | cli-mc |
 | --- | --- | --- | --- | --- |
 | `main` | 1.079s | 5.646s | 1.068s | 2.904s |
-| branch, 14-core Mac (defaults) | 0.193s | 0.225s | 0.277s | 0.401s |
-| speed-up | **5.6x** | **25x** | **3.9x** | **7.2x** |
-| branch, one CPU (`--threads 1`; the 1-vCPU deployment) | 0.359s | 1.24s | 0.48s | 1.30s |
+| branch, 14-core Mac (defaults) | 0.191s | 0.219s | 0.280s | 0.402s |
+| speed-up | **5.6x** | **26x** | **3.8x** | **7.2x** |
+| branch, one CPU (`--threads 1`; the 1-vCPU deployment) | 0.365s | 1.246s | 0.493s | 1.301s |
 | speed-up on one CPU | **3.0x** | **4.5x** | **2.2x** | **2.2x** |
 
 Where it came from: a PuLP -> HiGHS hand-over that converts each LP once and
