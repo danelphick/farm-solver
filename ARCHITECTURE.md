@@ -555,6 +555,18 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
     `_origin = (base, kwargs)` so `frontier` can re-solve it exact. `frontier` (below)
     reuses one `_Base` across its ~80-call sweep instead of rebuilding the LP from
     scratch per call (`plans/MODEL_REUSE_PLAN.md`).
+    **How `_build_base` builds rows**: the hot ones (each item's balance, its buy
+    cap, the ascension supply, the track rows, `spend_value`) are collected as plain
+    `{variable: coefficient}` dicts — offer/open terms indexed per item once as
+    `(variable, coefficient)` pairs — and become one `LpConstraint` each via
+    `_accumulate`/`_row`, not PuLP operators: `rate * x` + `lpSum` + `a + b`
+    allocates an expression per term and copies the running sum at every `+`, which
+    was the biggest cost of a `--mastery-costs` sweep (build 1.58s → 0.60s over its
+    192 builds). `_accumulate` mirrors PuLP's arithmetic exactly — a zero coefficient
+    adds no term (`0 * x` is empty), a repeat sums in place, insertion order is kept —
+    so the model is identical to the operator-built one (verified by dumping every
+    row of every build across the CLI modes). The few small constraints (cookie/day
+    budgets, juice, stamina, ascension AK) still use operators.
     Every constraint a `_solve_configured` call adds is named and recorded in
     `base.ephemeral`; the *next* call on that base pops exactly those names first —
     **pop happens at the top of the call, not the end**, so a call that raises

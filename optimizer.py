@@ -48,7 +48,7 @@ that is neither is dropped into the plan's ``remainder``.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from itertools import pairwise
@@ -350,6 +350,45 @@ class SourcingPlan:
 
 def _minutes(time: timedelta) -> float:
     return time.total_seconds() / 60
+
+
+# Building the LP's rows. PuLP's operator style (``rate * x``, ``lpSum``, ``a + b``)
+# allocates a fresh LpAffineExpression for every term and copies the whole running
+# expression at every ``+``/``-``, which made model building the biggest cost of a
+# --mastery-costs sweep. The hot rows are instead collected as plain
+# ``{variable: coefficient}`` dicts and turned into one LpConstraint each.
+# ``_accumulate`` mirrors PuLP's arithmetic exactly -- a zero coefficient adds no
+# term (as ``0 * x`` is empty), a repeated variable sums in place, insertion order
+# is kept -- so the model handed to the solver is identical to the operator-built
+# one (same rows, same order, same coefficients).
+
+
+def _accumulate(
+    terms: dict[pulp.LpVariable, float],
+    pairs: Iterable[tuple[pulp.LpVariable, float]],
+    sign: int = 1,
+) -> None:
+    """Add ``sign * coefficient`` for each ``(variable, coefficient)`` of ``pairs``
+    into ``terms``."""
+    for var, coef in pairs:
+        if coef == 0:
+            continue
+        if var in terms:
+            terms[var] += coef * sign
+        else:
+            terms[var] = coef * sign
+
+
+def _row(
+    terms: dict[pulp.LpVariable, float],
+    sense: int,
+    constant: float = 0.0,
+    rhs: float | None = None,
+) -> pulp.LpConstraint:
+    """``terms + constant <sense> rhs`` as one PuLP constraint."""
+    return pulp.LpConstraint(
+        pulp.LpAffineExpression(terms, constant=constant), sense, rhs=rhs
+    )
 
 
 def _obtainable(
@@ -677,8 +716,12 @@ def _build_base(
     # bought sets and (both of them) at what the plan's span makes available. The
     # other consumable tallies (Arnold Palmers, Large Nets, ...) are read off the
     # solved draws in the plan built at the end, not needed as LP expressions here.
-    cookies = pulp.lpSum(o.cookies * x for o, x in zip(used, usage) if o.cookies)
-    juices_used = pulp.lpSum(o.gj * x for o, x in zip(used, usage) if o.gj)
+    cookies = pulp.LpAffineExpression(
+        [(x, o.cookies) for o, x in zip(used, usage) if o.cookies]
+    )
+    juices_used = pulp.LpAffineExpression(
+        [(x, o.gj) for o, x in zip(used, usage) if o.gj]
+    )
 
     # Buy variables: a buyable consumable can be bought (free, instant supply) for
     # gold instead of self-sourced (which costs makespan). Only reachable, priced
@@ -817,8 +860,10 @@ def _build_base(
     # basic farming -- the slow, resource-banking end of the frontier (see
     # :func:`frontier`). Grape Juice carries no gold price, so a nominal weight keeps
     # it penalised alongside the priced tools rather than free.
-    spend_value = pulp.lpSum(
+    spend_terms: dict[pulp.LpVariable, float] = {}
+    _accumulate(spend_terms, (
         (
+            x,
             o.ap * prices.get("arnold palmer", 0.0)
             + o.ln * prices.get("large net", 0.0)
             + o.gj * (prices.get("grape juice", 0.0) or 1e-4)
@@ -829,11 +874,13 @@ def _build_base(
             # Veggie Juice (juiced farming) is not a gold consumable; a nominal
             # weight keeps it penalised, like Grape Juice, when it has no price.
             + o.consumes.get("veggie juice", 0.0)
-            * (prices.get("veggie juice", 0.0) or 1e-4)
+            * (prices.get("veggie juice", 0.0) or 1e-4),
         )
-        * x
         for o, x in zip(used, usage)
-    ) + cookies * prices.get("cookie set", 0.0)
+    ))
+    spend_value = (
+        pulp.LpAffineExpression(spend_terms) + cookies * prices.get("cookie set", 0.0)
+    )
 
     # Total market value spent, the stage-2 tie-break (see :func:`_solve_configured`).
     # ``spend_value`` already values every consumable at its price whether bought or
@@ -857,17 +904,28 @@ def _build_base(
         spend_value + ap_trade_value + (pj_price * pulp.lpSum(pj.values()) if pj else 0)
     )
 
-    # Index each offer's yields/consumes by item once, so the per-item loop below
-    # doesn't rescan every offer twice (via ``yield_of``) for every item.
-    yield_terms: dict[str, list] = {}
-    consume_terms: dict[str, list] = {}
+    # Index each offer's yields/consumes -- and each open's -- by item once, as
+    # ``(variable, coefficient)`` pairs (see ``_accumulate``), so the per-item loop
+    # below neither rescans every offer and openable for every item nor builds an
+    # expression per term.
+    yield_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
+    consume_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
     for o, x in zip(used, usage):
         for item, rate in o.yields.items():
             if rate > 0:
-                yield_terms.setdefault(item, []).append(rate * x)
+                yield_terms.setdefault(item, []).append((x, rate))
         for item, qty in o.consumes.items():
             if qty > 0:
-                consume_terms.setdefault(item, []).append(qty * x)
+                consume_terms.setdefault(item, []).append((x, qty))
+    open_yield_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
+    open_consume_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
+    for f, o in zip(opened, opens):
+        for item, qty in f.yields.items():
+            if qty:
+                open_yield_terms.setdefault(item, []).append((o, qty))
+        for item, qty in f.consumes.items():
+            if qty:
+                open_consume_terms.setdefault(item, []).append((o, qty))
 
     # Stamina opportunity cost. Stamina an Apple Cider explore burns that arrived
     # *free* -- the banked ``--current-stamina`` (an inventory ``held`` credit) and
@@ -902,7 +960,7 @@ def _build_base(
     stamina_op: pulp.LpVariable | None = None
     if stamina_price > 0:
         stamina_op = pulp.LpVariable("stamina_op", lowBound=0)
-        consumed_stamina = pulp.lpSum(consume_terms.get("stamina", []))
+        consumed_stamina = pulp.LpAffineExpression(consume_terms.get("stamina", []))
         topped_up_stamina = pulp.lpSum(
             o.yields.get("stamina", 0.0) * x
             for o, x in zip(used, usage)
@@ -925,36 +983,36 @@ def _build_base(
     # the printed plan reproducible run to run.
     ascend_S: dict[str, pulp.LpAffineExpression] = {}
     for item in sorted(items):
-        gathered = pulp.lpSum(yield_terms.get(item, []))
+        # Each part of the balance as ``(variable, coefficient)`` pairs.
+        gathered = yield_terms.get(item, [])
         # What offers use up as inputs (Arnold Palmers an explore burns, the
         # stamina and Apple Cider a cider explore spends) -- these must be
         # sourced like any other need.
-        used_up = pulp.lpSum(consume_terms.get(item, []))
-        made = crafting_bonus * craft[item] if item in craft else 0
-        consumed = pulp.lpSum(qty * craft[j] for j, qty in consumers.get(item, []))
-        unpacked = pulp.lpSum(
-            f.yields.get(item, 0.0) * o
-            for f, o in zip(opened, opens)
-            if f.yields.get(item, 0.0)
-        )
-        emptied = pulp.lpSum(
-            f.consumes.get(item, 0.0) * o
-            for f, o in zip(opened, opens)
-            if f.consumes.get(item, 0.0)
-        )
+        used_up = consume_terms.get(item, [])
+        made = [(craft[item], crafting_bonus)] if item in craft else []
+        consumed = [(craft[j], qty) for j, qty in consumers.get(item, [])]
+        unpacked = open_yield_terms.get(item, [])
+        emptied = open_consume_terms.get(item, [])
         # Stock on hand is free supply for intermediates; a directly-demanded
         # item's balance is already net of what is held, so it gets no credit.
         held = inventory.get(item, 0.0) if item not in wanted else 0.0
         need = wanted[item][1] if item in wanted else 0
-        bought = buy.get(item, 0)
+        # gathered + made - consumed - used_up + unpacked - emptied + held
+        #   + bought + boosted >= need
+        balance: dict[pulp.LpVariable, float] = {}
+        _accumulate(balance, gathered)
+        _accumulate(balance, made)
+        _accumulate(balance, consumed, -1)
+        _accumulate(balance, used_up, -1)
+        _accumulate(balance, unpacked)
+        _accumulate(balance, emptied, -1)
+        if item in buy:
+            _accumulate(balance, [(buy[item], 1)])
         # A Pumpkin Juice on this goal item covers pj_gain[item] units of its demand,
         # clamped at the goal by pj_credit (built above).
-        boosted = pj_credit[item] if item in pj else 0
-        problem += (
-            gathered + made - consumed - used_up + unpacked - emptied + held
-            + bought + boosted
-            >= need
-        )
+        if item in pj:
+            _accumulate(balance, [(pj_credit[item], 1)])
+        problem += _row(balance, pulp.LpConstraintGE, constant=0.0 + held, rhs=need)
         # Buying can never earn an item's own mastery: a bought unit only covers a
         # non-goal use (a craft material, or a channel's tool), so cap purchases at
         # that derived demand. The goal ``need`` must then come from making or
@@ -965,10 +1023,13 @@ def _build_base(
         # the consumables is untouched; a mastery goal is never in the set, so its
         # floor stays tight and it must be produced.
         if item in buy:
-            cap = consumed + used_up + emptied
-            if item in ap_tradeable and item in non_mastery_goals:
-                cap = cap + need
-            problem += buy[item] <= cap
+            # buy <= consumed + used_up + emptied (+ need)
+            cap: dict[pulp.LpVariable, float] = {buy[item]: 1}
+            _accumulate(cap, consumed, -1)
+            _accumulate(cap, used_up, -1)
+            _accumulate(cap, emptied, -1)
+            trade_goal = item in ap_tradeable and item in non_mastery_goals
+            problem += _row(cap, pulp.LpConstraintLE, constant=-need if trade_goal else 0.0)
 
         # Ascension mastery supply: GROSS production only (gathered + crafted +
         # unpacked, the same terms the balance above uses before ``consumed``/
@@ -976,7 +1037,14 @@ def _build_base(
         # balance, since mastery progress accrues even on production this plan
         # goes on to consume as a craft material (mastery-chaining).
         if item in ascend_y:
-            S_i = ascension.mastery_bonus * (gathered + made + unpacked)
+            supply: dict[pulp.LpVariable, float] = {}
+            _accumulate(supply, gathered)
+            _accumulate(supply, made)
+            _accumulate(supply, unpacked)
+            bonus = ascension.mastery_bonus
+            S_i = pulp.LpAffineExpression(
+                {var: bonus * coef for var, coef in supply.items()} if bonus else {}
+            )
             ascend_S[item] = S_i
             steps = ascend_y[item]
             c = cand_by_item[item]
@@ -1001,11 +1069,14 @@ def _build_base(
                 problem += S_i >= floor
 
     # Makespan: each track's summed time is at most T (tracks run concurrently).
-    tracks: dict[str, list] = {}
+    tracks: dict[str, dict[pulp.LpVariable, float]] = {}
     for offer, x in zip(used, usage):
-        tracks.setdefault(offer.track, []).append(_minutes(offer.time_per_unit) * x)
+        _accumulate(
+            tracks.setdefault(offer.track, {}), [(x, _minutes(offer.time_per_unit))]
+        )
     for terms in tracks.values():
-        problem += pulp.lpSum(terms) <= makespan
+        _accumulate(terms, [(makespan, 1)], -1)
+        problem += _row(terms, pulp.LpConstraintLE)
 
     # Ascension AK constraint: step AK (10/master, 100/grandmaster) plus smeared
     # chore AK over the makespan (in days) must clear the stage's requirement.
