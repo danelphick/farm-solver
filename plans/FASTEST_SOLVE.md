@@ -91,9 +91,19 @@ failed). So `_assert_optimal` now tries `FastHiGHS(presolve="off",
 mip_root_presolve_only=True)` first and keeps CBC as the last resort; neither web
 view calls CBC any more.
 
-The CLI scenarios never hit the fallback and are unchanged. The web views now
-take those items' optima from HiGHS instead of CBC -- equally optimal, but where
-the optimum is not unique the reported plan can differ at solver-tolerance level:
+The CLI's normal and `--mastery-costs` scenarios never hit the fallback and are
+unchanged. The `--ascend` mode does -- 115 times in the fresh-account 0->200 climb
+-- and there it is kept CBC-only (`cbc_only`, added after the fact): the climb
+rounds fractional LP solutions stage by stage and carries each stage's plan into
+the next, so a different but equally optimal vertex at one fallback (the two
+solvers' objectives agree to ~1e-3 minutes at all 115) sent the whole climb down
+another path -- its fastest plan came out at 92,440 gold instead of 49,444, at
+the same 0m. With CBC kept there, the climb's output is identical to `main`'s
+again (and it still drops from 68s to 60s).
+
+The web views now take those items' optima from HiGHS instead of CBC --
+equally optimal, but where the optimum is not unique the reported plan can
+differ at solver-tolerance level:
 
 * mastery-costs page: every time identical, and the "cannot" lists; 61 of 192
   gold figures differ, all by under 0.0001% except Sunflower Oil's Megamaster

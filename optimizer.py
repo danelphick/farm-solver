@@ -1284,7 +1284,9 @@ class _UnmeetableCap(Exception):
     """
 
 
-def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
+def _assert_optimal(
+    problem: pulp.LpProblem, solver, *, cbc_only: bool = False
+) -> object:
     """Raise when a solve did not reach an optimum.
 
     With every channel unbounded an obtainable demand is always satisfiable, but
@@ -1316,11 +1318,16 @@ def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
     that (equally valid) solution loaded and is returned, so the caller's
     remaining refinement solves stay on a backend that can handle this model.
     Returns the solver the rest of the call should use.
+
+    ``cbc_only`` skips the HiGHS second opinion, for the ascension mode: its
+    stage-by-stage climb rounds fractional LP solutions and carries each stage's
+    plan into the next, so a different (equally optimal) vertex at one fallback
+    sends the whole climb down another path -- CBC keeps its plans as they were.
     """
     if pulp.LpStatus[problem.status] == "Optimal":
         return solver
     fallbacks = [pulp.PULP_CBC_CMD(msg=False)]
-    if isinstance(solver, pulp.HiGHS):
+    if isinstance(solver, pulp.HiGHS) and not cbc_only:
         fallbacks.insert(
             0,
             FastHiGHS(
@@ -1567,7 +1574,7 @@ def _round_and_fix_ascension(
             else:
                 set_bounds(item, step, 0, 0)
             problem.solve(solver)
-            solver = _assert_optimal(problem, solver)
+            solver = _assert_optimal(problem, solver, cbc_only=True)
             yvals = {
                 (item, step): var.value() or 0.0 for item, step, var in all_steps
             }
@@ -1594,7 +1601,7 @@ def _round_and_fix_ascension(
     # A capped solve is exempt from the optimality checks, exactly like the
     # primary solve above it (see _assert_optimal's docstring: HiGHS mis-flags
     # tiny-RHS pins under a cap, where keeping the loaded solution is right).
-    return _assert_optimal(problem, solver) if check else solver
+    return _assert_optimal(problem, solver, cbc_only=True) if check else solver
 
 
 def _has_integers(base: _Base) -> bool:
@@ -1711,7 +1718,7 @@ def _solve_configured(
     solver = _solver()
     problem.solve(solver)
     if time_cap is None:
-        solver = _assert_optimal(problem, solver)
+        solver = _assert_optimal(problem, solver, cbc_only=base.ascension is not None)
 
     # Ascension round-and-fix: snap the primary solve's fractional step
     # selections to 0/1 and re-solve, before the refinement tower below runs on
@@ -1849,7 +1856,9 @@ def _solve_configured(
                 # met, which _assert_optimal says properly (and second-opinions on
                 # CBC first); capped, the sweep just loses this sample.
                 if time_cap is None:
-                    solver = _assert_optimal(problem, solver)
+                    solver = _assert_optimal(
+                        problem, solver, cbc_only=base.ascension is not None
+                    )
                 else:
                     raise _UnmeetableCap(_minutes(time_cap))
 
