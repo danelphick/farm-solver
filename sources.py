@@ -24,8 +24,10 @@ their tracks cost no time -- they trade Arnold Palmers and Large Nets for speed.
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 from datetime import timedelta
+from pathlib import Path
 
 from crops import COOKIE_WINDOW, PLOTS_PER_ROW, Farm
 from exploring import ACORN_PIE_EXPLORES, Exploring
@@ -87,6 +89,13 @@ SUGAR_CANE = "sugar cane"
 MACHINE_PRESS = "machine press"
 # One batch: 1 Unrefined Sugar from 7 Sugar Cane and 1 Machine Press.
 SUGAR_CANE_PER_BATCH = 7
+# The mill also converts Unrefined Sugar into its refined products, one row per
+# product material in this CSV (see :func:`sugar_cane_mill_flows`).
+DEFAULT_SUGAR_CANE_MILL_CSV = Path(__file__).with_name("sugar_cane_mill.csv")
+
+# Where an :class:`OpenFlow` happens (its ``place``), naming its report section.
+LOCKSMITH = "Locksmith"
+SUGAR_CANE_MILL = "Sugar Cane Mill"
 
 
 @dataclass
@@ -189,11 +198,18 @@ class OpenFlow:
 
     ``consumes`` and ``yields`` both map a lower-cased item to how many one open
     uses or produces.
+    
+    ``place`` says where the flow happens: :data:`LOCKSMITH` for an openable, or
+    :data:`SUGAR_CANE_MILL` for a mill conversion (see
+    :func:`sugar_cane_mill_flows`) -- the same free, instant, bonus-free flow
+    (no crafting bonus; the mastery bonus still applies to the product, as to
+    any found item), reported in its own section.
     """
 
     name: str
     consumes: dict[str, float] = field(default_factory=dict)
     yields: dict[str, float] = field(default_factory=dict)
+    place: str = LOCKSMITH
 
 
 def aggregate(draws: list[Draw]) -> tuple[timedelta, float, float]:
@@ -484,6 +500,36 @@ def sugar_cane_mill_offers(batches: int, output_per_batch: int) -> list[Offer]:
             },
             time_per_unit=timedelta(minutes=1),
         )
+    ]
+
+
+def sugar_cane_mill_flows(
+    path: Path = DEFAULT_SUGAR_CANE_MILL_CSV,
+) -> list[OpenFlow]:
+    """The Sugar Cane Mill's conversions (Molasses, Brown Sugar, ...) as flows.
+
+    ``path`` is a ``product,material,quantity`` CSV, one row per material a
+    product takes (several rows for one product add up). Each flow consumes the
+    materials and yields exactly one of the product: like an open it is instant
+    and gets **no** crafting bonus (the mastery bonus still applies, as it does
+    to any found item). Its ``name`` is the product's display name and its
+    ``place`` :data:`SUGAR_CANE_MILL`.
+    """
+    materials: dict[str, dict[str, float]] = {}
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            product = row["product"].strip()
+            needs = materials.setdefault(product, {})
+            material = row["material"].strip().lower()
+            needs[material] = needs.get(material, 0.0) + float(row["quantity"])
+    return [
+        OpenFlow(
+            name=product,
+            consumes=needs,
+            yields={product.lower(): 1.0},
+            place=SUGAR_CANE_MILL,
+        )
+        for product, needs in materials.items()
     ]
 
 

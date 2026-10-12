@@ -1331,9 +1331,10 @@ def sourceable_from_game_data(
 
     The fixed point of :func:`optimizer._obtainable` seeded with the directly
     obtainable items: plus whatever can be crafted from them (``recipes``,
-    :func:`crafting.recipe_flows`), opened (``open_flows``) or pressed at the
-    Sugar Cane Mill (:func:`sources.sugar_cane_mill_offers`, game data like the
-    rest, so counted whether or not the config has the mill), transitively.
+    :func:`crafting.recipe_flows`), opened (``open_flows``, which the caller
+    gives the mill's conversions too) or pressed at the Sugar Cane Mill
+    (:func:`sources.sugar_cane_mill_offers`, game data like the rest, so counted
+    whether or not the config has the mill), transitively.
     """
     return optimizer._obtainable(
         sources.sugar_cane_mill_offers(1, 1), recipes, open_flows, held=obtainable
@@ -1944,6 +1945,11 @@ def _build_channel_setup(
     recipes = crafting.recipe_flows(workshop)
     smith = locksmith.load_openables()
     open_flows = sources.open_flows(smith)
+    # The Sugar Cane Mill's refining conversions (Unrefined Sugar -> Molasses,
+    # Brown Sugar, White Sugar): free, instant, bonus-free flows like an open,
+    # available when the config has the mill.
+    if config.sugar_cane_mill_rates(cfg)[0]:
+        open_flows += sources.sugar_cane_mill_flows()
     # Items already in stock are free supply for the intermediates a plan would
     # otherwise gather, craft or open (the optimiser skips crediting the directly
     # demanded items, whose shortfall is already net of what is held).
@@ -2644,7 +2650,7 @@ def item_categories(
     - **Farming**: a crop (its primary item) or seed drop, a farm building's
       output (``production``'s non-pet, non-grant producers -- so only the
       buildings the config has), or the Sugar Cane Mill's products (Unrefined
-      Sugar, modelled as an offer, and its unmodelled ones).
+      Sugar and the ``sugar_cane_mill.csv`` conversions).
     - **Fishing** / **Exploring**: in a fishing zone's / exploring location's
       drop table (flagged tables included), plus unmodelled manual fishing.
     - **Mining** / **Cooking**: unmodelled.csv's ``Mining`` / ``Cooking`` rows.
@@ -2669,7 +2675,9 @@ def item_categories(
     for producer in production.producers:
         if producer.name != "farmhouse" and not config.is_smeared_producer(producer.name):
             tag(producer.outputs, "Farming")
-    tag([sources.UNREFINED_SUGAR], "Farming")  # the Sugar Cane Mill's product
+    # The Sugar Cane Mill's products: its pressed sugar and refined conversions.
+    tag([sources.UNREFINED_SUGAR], "Farming")
+    tag((flow.name for flow in sources.sugar_cane_mill_flows()), "Farming")
     for zone in fishing.read_zones(fishing.DEFAULT_FISHING_CSV).values():
         tag(zone.drop_rates, "Fishing")
     for location in exploring.read_locations(exploring.DEFAULT_EXPLORING_CSV).values():
@@ -3794,7 +3802,8 @@ def run(args: argparse.Namespace) -> int:
         available = sourceable_from_game_data(
             obtainable_items(production, farm, fish, explore),
             recipes,
-            sources.open_flows(locksmith.load_openables()),
+            sources.open_flows(locksmith.load_openables())
+            + sources.sugar_cane_mill_flows(),
         )
         reasons = load_item_reasons()
         if args.unobtainable == "crafting":

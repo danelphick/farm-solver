@@ -322,7 +322,7 @@ A material that is really obtainable in game by a route the solver does not mode
 The following materials are required for some crafts but are unobtainable:
   Esperium
   Fairy Crystal (Mining not modelled)
-  White Sugar (Sugar Cane Mill not modelled)
+  Bone Fragments (Mining not modelled)
 ```
 
 ## Mastery costs
@@ -479,6 +479,8 @@ have_feed_boost = true
 
 [sugar_cane_mill]    # 7 sugar cane + 1 machine press -> 1 unrefined sugar a minute;
                      # boost I: 2/min from double the inputs; + boost II: 4/min, same inputs
+                     # it also refines unrefined sugar per sugar_cane_mill.csv
+                     # (Molasses 3, Brown Sugar 5, White Sugar 7; no crafting bonus)
 have_sugar_boost_i = true
 have_sugar_boost_ii = true
 

@@ -39,6 +39,7 @@ from sources import (
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
+    sugar_cane_mill_flows,
     sugar_cane_mill_offers,
 )
 
@@ -125,6 +126,20 @@ def test_sugar_cane_mill_is_rate_limited_and_grounded_in_its_inputs():
     # Without the machine presses the mill cannot run at all.
     starved = minimize(offers, {"unrefined sugar": 100}, inventory={"sugar cane": 1000})
     assert starved.remainder
+
+
+def test_sugar_cane_mill_conversion_gets_no_crafting_bonus():
+    # 10 Molasses from held Unrefined Sugar takes 10 conversions of 3 each, even
+    # with a crafting bonus in force (it only scales recipe crafts). The mill
+    # offer (grounded in held cane and a press) makes Unrefined Sugar obtainable.
+    inventory = {"unrefined sugar": 100, "sugar cane": 7, "machine press": 1}
+    plan = minimize(
+        sugar_cane_mill_offers(1, 1), {"molasses": 10}, crafting_bonus=1.45,
+        openables=sugar_cane_mill_flows(), inventory=inventory,
+    )
+    assert plan.time == timedelta(0)  # all from held sugar, the mill idle
+    assert plan.opens["Molasses"] == pytest.approx(10)
+    assert not plan.remainder
 
 
 def test_all_offers_grounds_consumables_and_adds_the_cider_channel():

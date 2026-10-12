@@ -317,8 +317,10 @@ independently) for a fresh session's defaults -- see `webapi.load_web_config`.
   it drains — so a slow, passive-leaning plan that banks more than it buys sits at
   *negative* gold and the frontier extends past the "buy nothing" line. Two plans
   equal on both are equivalent however they mix making, buying and banking.
-- **`sources.OpenFlow(name, consumes, yields)`** — opening a chest/bag: a free,
-  instant multi-output LP flow.
+- **`sources.OpenFlow(name, consumes, yields, place)`** — opening a chest/bag: a free,
+  instant multi-output LP flow with no crafting bonus. `place` (`LOCKSMITH`
+  default, or `SUGAR_CANE_MILL`) picks its report section: the Opening (Locksmith)
+  section shows only Locksmith flows.
 - **`crops.Farm`** — grow times, `grape_juices_for`, `is_instant`,
   `takes_cookies`, `cookie_day_yield`, `cookie_burst_yield`. **`passive.PassiveProduction`** —
   `producers` list, `rate_per_minute`, storehouse cap.
@@ -1757,10 +1759,17 @@ information survives elsewhere in the document:
   `main._build_channel_setup` alongside the sawmill boost onto the same `boost_offers`
   list (the field now means "extra building offers"). The report's **Sugar Cane
   Mill** section (`report._sugar_cane_mill_summary`) shows sugar, time and inputs.
-  `main.sourceable_from_game_data` folds in a default mill so `--unobtainable`
-  counts Unrefined Sugar as sourceable, and `item_categories` tags it Farming;
-  the mill's other products (Brown Sugar, Molasses, White Sugar) stay in
-  unmodelled.csv.
+  **Refining**: `sugar_cane_mill.csv` (`product,material,quantity`, several rows
+  per product sum) lists the mill's conversions — Molasses/Brown Sugar/White
+  Sugar from 3/5/7 Unrefined Sugar. `sources.sugar_cane_mill_flows` reads it into
+  `OpenFlow`s with `place=SUGAR_CANE_MILL`: instant and, being opens not recipes,
+  **no crafting bonus** (the mastery bonus still applies, as it divides any
+  mastery shortfall whatever the source). `main._build_channel_setup` appends
+  them to `open_flows` only when the config has the mill; the report lists them
+  in the Sugar Cane Mill section (`report._sugar_cane_mill_conversions`).
+  `main.sourceable_from_game_data` folds in a default mill offer (and the
+  `--unobtainable` caller the conversion flows) so the mill's products count as
+  sourceable, and `item_categories` tags them all Farming.
 - **Limited seeds (Mega/Spring)**: a crop whose CSV `Primary` differs from its
   name (`crops.Crop.seed_item` — the Mega crops and Spring) has finite,
   not-readily-replaceable seeds, so its grounded farming offers consume the held

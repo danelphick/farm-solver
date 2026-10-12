@@ -2102,6 +2102,29 @@ def _sugar_cane_mill_line(mill: tuple[timedelta, int, int, int]) -> str:
     )
 
 
+def _sugar_cane_mill_conversions(
+    plan: optimizer.SourcingPlan, ctx: _PlanContext
+) -> list[str]:
+    """The mill conversions this plan makes, one line each, biggest first.
+
+    ``"100x Molasses from 300 Unrefined Sugar"`` per product converted (see
+    :func:`sources.sugar_cane_mill_flows`); both renderers print these lines in
+    the Sugar Cane Mill section.
+    """
+    lines = []
+    for name, count in sorted(plan.opens.items(), key=lambda nc: -nc[1]):
+        flow = ctx.flows_by_name.get(name.lower())
+        if flow is None or flow.place != sources.SUGAR_CANE_MILL or round(count) < 1:
+            continue
+        used = ", ".join(
+            f"{round(qty * count):,} {ctx.display.get(item, item.title())}"
+            for item, qty in flow.consumes.items()
+        )
+        product = ctx.display.get(name.lower(), flow.name)
+        lines.append(f"{round(count):,}x {product} from {used}")
+    return lines
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
@@ -2239,6 +2262,7 @@ def print_plan(
         (name, count)
         for name, count in plan.opens.items()
         if (flow := ctx.flows_by_name.get(name.lower())) is not None
+        and flow.place == sources.LOCKSMITH
         and any(
             round(flow.yields[item] * count) >= 1
             for item in flow.yields
@@ -2393,9 +2417,13 @@ def print_plan(
         )
 
     mill = _sugar_cane_mill_summary(plan)
-    if mill is not None:
+    conversions = _sugar_cane_mill_conversions(plan, ctx)
+    if mill is not None or conversions:
         print("\nSugar Cane Mill:")
-        print(f"  {_sugar_cane_mill_line(mill)}")
+        if mill is not None:
+            print(f"  {_sugar_cane_mill_line(mill)}")
+        for line in conversions:
+            print(f"  {line}")
 
     # Consumable tools drawn from held stock (spent before any are crafted, opened
     # or bought). Surfacing these makes the spend tallies reconcile: a plan can burn
@@ -2657,6 +2685,7 @@ def markdown_plan(
         (name, count)
         for name, count in plan.opens.items()
         if (flow := ctx.flows_by_name.get(name.lower())) is not None
+        and flow.place == sources.LOCKSMITH
         and any(
             round(flow.yields[item] * count) >= 1
             for item in flow.yields
@@ -2807,9 +2836,12 @@ def markdown_plan(
         )
 
     mill = _sugar_cane_mill_summary(plan)
-    if mill is not None:
+    conversions = _sugar_cane_mill_conversions(plan, ctx)
+    if mill is not None or conversions:
         doc.heading("Sugar Cane Mill")
-        doc.para(_sugar_cane_mill_line(mill))
+        doc.bullets(
+            ([_sugar_cane_mill_line(mill)] if mill is not None else []) + conversions
+        )
 
     held = [
         (item, min(inventory.get(item, 0.0), spent))

@@ -338,7 +338,6 @@ def test_the_shipped_reasons_file_parses_and_covers_the_named_features():
     reasons = main.load_unmodelled_reasons()
     assert reasons["neigh"] == "Cooking not modelled"
     assert reasons["magna core"] == "Wishing Well not modelled"
-    assert reasons["white sugar"] == "Sugar Cane Mill not modelled"
     assert reasons["stone shell"] == "Mining not modelled"
     assert reasons["gold feed"] == "not modelled"
     assert reasons["lobster"] == "Mining not modelled"
@@ -446,7 +445,7 @@ def test_item_categories_reads_each_type_off_its_source():
         "Board": ("Crafting",),
         "Neigh": ("Cooking",),  # from unmodelled.csv
         "Stone Shell": ("Mining",),
-        "White Sugar": ("Farming",),  # the Sugar Cane Mill
+        "White Sugar": ("Farming",),  # a Sugar Cane Mill conversion
     }
 
 

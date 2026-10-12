@@ -18,6 +18,7 @@ from sources import (
     HICKORY_OMELETTE,
     HICKORY_OMELETTE_FRACTION,
     SAWMILL_BOOST_TRACK,
+    SUGAR_CANE_MILL,
     SUGAR_CANE_MILL_TRACK,
     Draw,
     Offer,
@@ -30,6 +31,7 @@ from sources import (
     passive_offers,
     sawmill_boost_offers,
     stamina_offers,
+    sugar_cane_mill_flows,
     sugar_cane_mill_offers,
 )
 
@@ -94,6 +96,27 @@ def test_sugar_cane_mill_with_both_boosts_makes_four_from_double_inputs():
     [offer] = sugar_cane_mill_offers(2, 2)
     assert offer.yields == {"unrefined sugar": 4.0}
     assert offer.consumes == {"sugar cane": 14.0, "machine press": 2.0}
+
+
+def test_sugar_cane_mill_flows_read_the_shipped_conversions():
+    flows = {flow.name: flow for flow in sugar_cane_mill_flows()}
+    assert flows["Molasses"].consumes == {"unrefined sugar": 3.0}
+    assert flows["Brown Sugar"].consumes == {"unrefined sugar": 5.0}
+    assert flows["White Sugar"].consumes == {"unrefined sugar": 7.0}
+    assert flows["White Sugar"].yields == {"white sugar": 1.0}
+    assert all(flow.place == SUGAR_CANE_MILL for flow in flows.values())
+
+
+def test_sugar_cane_mill_flows_sum_a_products_material_rows(tmp_path):
+    path = tmp_path / "mill.csv"
+    path.write_text(
+        "product,material,quantity\n"
+        "Fancy Sugar,Unrefined Sugar,2\n"
+        "Fancy Sugar,Molasses,1\n"
+    )
+    [flow] = sugar_cane_mill_flows(path)
+    assert flow.consumes == {"unrefined sugar": 2.0, "molasses": 1.0}
+    assert flow.yields == {"fancy sugar": 1.0}
 
 
 def test_units_for_is_driven_by_the_binding_item():
