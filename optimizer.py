@@ -66,6 +66,7 @@ from ascension import (
 from crops import Farm
 from exploring import Exploring
 from fishing import Fishing
+from highs_backend import FastHiGHS
 from passive import PassiveProduction
 from sources import (
     PASSIVE_TRACK,
@@ -140,8 +141,11 @@ _CAP_MARGIN = 0.005
 # dependency fallback -- launches a subprocess per solve (~8 ms of process
 # startup each), which once dominated the whole run. Other PuLP solvers
 # (``pulp.listSolvers()``) bolt on by name through :func:`set_solver_backend`.
+# "highs" is PuLP's HiGHS backend with a faster model hand-over (see
+# :mod:`highs_backend`): the same model and solves, built without PuLP's
+# per-solve Python rebuild.
 _SOLVER_BACKENDS = {
-    "highs": lambda: pulp.HiGHS(msg=False),
+    "highs": lambda: FastHiGHS(msg=False),
     "cbc": lambda: pulp.PULP_CBC_CMD(msg=0),
 }
 _backend = "highs" if pulp.HiGHS(msg=False).available() else "cbc"
