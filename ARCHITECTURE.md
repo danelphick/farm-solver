@@ -211,17 +211,25 @@ The per-tier `fastest_endpoint` call catches that `ValueError` (see
 tried, so there is nothing further to climb). One bad tier must never abort the whole sweep, which is what it did before: on the
 web config, `Bouquet of Flowers` at Megamaster killed all 201 other rows.
 
-**Threads**: the per-item solves are independent, so `solve_mastery_costs`
+**Parallelism**: the per-item solves are independent, so `solve_mastery_costs`
 first walks the candidates (status, notes, tiers to solve -- no solving) into
-`climbs`, then runs each item's tier climb (`climb`: `fastest_endpoint` per tier,
-stopping at an infeasible one) on a `ThreadPoolExecutor` of
-`_mastery_cost_workers` threads (`--jobs`, else
-`optimizer.solver_threads(MASTERY_COST_WORKERS)` = 6, capped at the CPUs available).
-HiGHS releases the GIL while it solves, so the solves overlap while the Python
-model building between them takes turns (past ~6 threads that is the limit);
-each item builds its own LP and the results are gathered back in candidate
-order, so the output is identical at any worker count (2.37s -> 1.03s for the
-CLI sweep, `plans/FASTEST_SOLVE.md`).
+`climbs`, then runs each item's tier climb (`_climb`: `fastest_endpoint` per tier,
+stopping at an infeasible one, from the shared, picklable `_ClimbInputs`) through
+`_run_climbs` over `_mastery_cost_workers` workers (`--jobs`, else
+`optimizer.solver_threads(MASTERY_COST_WORKERS)` = 10, capped at the CPUs
+available; one = in turn). A full sweep (at least
+`_CLIMB_PROCESS_MIN_JOBS_PER_WORKER` items per worker) runs on **worker
+processes** (`_climb_processes`): a module-level `ProcessPoolExecutor` with the
+"spawn" context, kept for the process's life (a web server reuses it), each
+worker taking every n-th item as one `_climb_batch` -- because a third of each
+item is Python model building, which threads would serialise on the GIL. Only
+when `_spawn_safe()`: spawned workers re-run the parent's main script, so the
+caller must be an interactive session or a known-guarded entry point
+(`_SPAWN_SAFE_MAINS`: main.py, manage.py, gunicorn, bench_solve.py);
+`FARM_SOLVER_PROCESSES` overrides. A broken pool falls back to threads, as does a
+handful of items (an expanded item's tiers), where a thread pool costs nothing
+to start. Results come back in job order, so the output is identical at any
+worker count or kind (`plans/FASTEST_SOLVE.md`).
 
 Mechanics: `_build_channel_setup` builds the goal-independent channels once, and
 production is **steady-state** (`config.passive_production` with no `start`/

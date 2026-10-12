@@ -19,9 +19,10 @@ import json
 import math
 import os
 import sys
+import threading
 import tomllib
-from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterable
+from concurrent.futures import Executor, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -794,8 +795,8 @@ def build_parser() -> argparse.ArgumentParser:
             "across (the passes are independent). Default: one per CPU (or the "
             "FARM_SOLVER_ASCEND_JOBS env var), capped at the pass count. 1 forces "
             "the in-process sequential path. With --mastery-costs: how many "
-            "threads its per-item solves run on (default: 6, capped at the CPUs "
-            "available; 1 = sequential). Ignored otherwise"
+            "worker processes its per-item solves run on (default: 10, capped at "
+            "the CPUs available; 1 = in-process, one at a time). Ignored otherwise"
         ),
     )
     parser.add_argument(
@@ -3004,54 +3005,15 @@ def solve_mastery_costs(
         tiers = remaining[1:] if expand_item is not None else remaining[:1]
         climbs.append((name, progress, remaining, tiers))
 
-    def climb(
-        name: str, progress: int, tiers: list[tuple[int, str]]
-    ) -> tuple[list[MasteryCostRow], MasteryNote | None]:
-        """One item's rows for ``tiers``, and the note for one it cannot reach."""
-        found: list[MasteryCostRow] = []
-        for threshold, label in tiers:
-            demand = {name: (threshold - progress) / args.mastery_bonus}
-            try:
-                plan = optimizer.fastest_endpoint(
-                    offers, demand, recipes, args.crafting_bonus, prices=prices,
-                    openables=open_flows, inventory=setup.inventory,
-                    cookie_sets=setup.cookie_sets or 0.0,
-                    grape_juices_per_day=daily_grape_juices(setup.farm),
-                    quantize=quantize,
-                    ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
-                    no_buy=no_buy,
-                )
-            except ValueError:
-                # Sourceable, but not this many: a finitely-bounded supply (a
-                # limited-seed crop, or a material the AP allow-list keeps off
-                # the trading table) makes a large enough demand *infeasible*
-                # rather than unobtainable -- see optimizer._assert_optimal.
-                # Record the tier and stop climbing: every higher one needs
-                # strictly more of the same, so it is infeasible too. One bad
-                # tier must not abort the whole sweep.
-                return found, MasteryNote(
-                    name,
-                    f"{name} cannot reach "
-                    f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
-                    "cannot supply that many",
-                )
-            # Cost is the gold the plan actually spends buying (plan.gold), so
-            # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
-            # drop, not the market value of the tools it now self-sources instead.
-            found.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
-        return found, None
-
-    # The items are independent solves, so they run on a thread pool: HiGHS
-    # releases the GIL while it solves, so the solves overlap (the Python model
-    # building between them still takes turns). Each item builds its own LP, so
-    # nothing is shared but read-only inputs, and the results are gathered back
-    # in candidate order -- the output is the same whatever the worker count.
-    workers = _mastery_cost_workers(args, len(climbs))
-    if workers > 1:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(lambda c: climb(c[0], c[1], c[3]), climbs))
-    else:
-        results = [climb(name, progress, tiers) for name, progress, _, tiers in climbs]
+    inputs = _ClimbInputs(
+        offers=offers, recipes=recipes, open_flows=open_flows, prices=prices,
+        inventory=setup.inventory, cookie_sets=setup.cookie_sets or 0.0,
+        grape_juices_per_day=daily_grape_juices(setup.farm), quantize=quantize,
+        ap_tradeable=ap_tradeable, no_buy=no_buy,
+        crafting_bonus=args.crafting_bonus, mastery_bonus=args.mastery_bonus,
+    )
+    jobs = [(name, progress, tiers) for name, progress, _, tiers in climbs]
+    results = _run_climbs(inputs, jobs, _mastery_cost_workers(args, len(jobs)))
     for (name, _, remaining, _), (found, note) in zip(climbs, results, strict=True):
         rows.extend(found)
         if note is not None:
@@ -3067,11 +3029,170 @@ def solve_mastery_costs(
                              unmasterable=unmasterable, limited=limited, items=items)
 
 
-# Threads for --mastery-costs' per-item solves (see solve_mastery_costs) when
-# --jobs does not say and the CPUs allow (optimizer.solver_threads): past about
-# this many, the GIL-bound model building between solves is the bottleneck and
-# more threads stop paying.
-MASTERY_COST_WORKERS = 6
+@dataclass(frozen=True)
+class _ClimbInputs:
+    """What every --mastery-costs item's solves share (see :func:`_climb`):
+    built once per sweep, read-only, and picklable for a worker process."""
+
+    offers: list[sources.Offer]
+    recipes: dict[str, dict[str, float]]
+    open_flows: list[sources.OpenFlow]
+    prices: dict[str, float] | None
+    inventory: dict[str, float]
+    cookie_sets: float
+    grape_juices_per_day: float
+    quantize: Callable[[str, float], timedelta | None]
+    ap_tradeable: frozenset[str]
+    no_buy: frozenset[str]
+    crafting_bonus: float
+    mastery_bonus: float
+
+
+def _climb(
+    inputs: _ClimbInputs, name: str, progress: int, tiers: list[tuple[int, str]]
+) -> tuple[list[MasteryCostRow], MasteryNote | None]:
+    """One --mastery-costs item's rows for ``tiers``, and the note for the first
+    one it cannot reach (which ends the climb)."""
+    found: list[MasteryCostRow] = []
+    for threshold, label in tiers:
+        demand = {name: (threshold - progress) / inputs.mastery_bonus}
+        try:
+            plan = optimizer.fastest_endpoint(
+                inputs.offers, demand, inputs.recipes, inputs.crafting_bonus,
+                prices=inputs.prices, openables=inputs.open_flows,
+                inventory=inputs.inventory, cookie_sets=inputs.cookie_sets,
+                grape_juices_per_day=inputs.grape_juices_per_day,
+                quantize=inputs.quantize, ap_tradeable=inputs.ap_tradeable,
+                non_mastery_goals=frozenset(), no_buy=inputs.no_buy,
+            )
+        except ValueError:
+            # Sourceable, but not this many: a finitely-bounded supply (a
+            # limited-seed crop, or a material the AP allow-list keeps off the
+            # trading table) makes a large enough demand *infeasible* rather than
+            # unobtainable -- see optimizer._assert_optimal. Record the tier and
+            # stop climbing: every higher one needs strictly more of the same, so
+            # it is infeasible too. One bad tier must not abort the whole sweep.
+            return found, MasteryNote(
+                name,
+                f"{name} cannot reach "
+                f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
+                "cannot supply that many",
+            )
+        # Cost is the gold the plan actually spends buying (plan.gold), so
+        # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
+        # drop, not the market value of the tools it now self-sources instead.
+        found.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+    return found, None
+
+
+def _climb_batch(
+    inputs: _ClimbInputs, jobs: list[tuple[str, int, list[tuple[int, str]]]]
+) -> list[tuple[list[MasteryCostRow], MasteryNote | None]]:
+    """:func:`_climb` over ``jobs`` -- a worker process's share of a sweep."""
+    return [_climb(inputs, name, progress, tiers) for name, progress, tiers in jobs]
+
+
+def _run_climbs(
+    inputs: _ClimbInputs,
+    jobs: list[tuple[str, int, list[tuple[int, str]]]],
+    workers: int,
+) -> list[tuple[list[MasteryCostRow], MasteryNote | None]]:
+    """Every job's :func:`_climb`, in job order, over ``workers``.
+
+    The items are independent solves, each building its own LP from read-only
+    inputs, and the results come back in job order -- so the output is the same
+    however they run. With one worker they run in turn. With more and a full
+    sweep's worth of items, on worker processes (:func:`_climb_processes`): the
+    Python model building between solves is about a third of each item, and on
+    threads it takes turns on the GIL. A handful of items -- an expanded item's
+    further tiers -- stays on threads, which cost nothing to start.
+    """
+    if workers <= 1:
+        return _climb_batch(inputs, jobs)
+    if len(jobs) >= _CLIMB_PROCESS_MIN_JOBS_PER_WORKER * workers and _spawn_safe():
+        results = _climb_processes(inputs, jobs, workers)
+        if results is not None:
+            return results
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(lambda job: _climb(inputs, *job), jobs))
+
+
+# Below this many items per worker, a sweep runs on threads: a worker process
+# costs ~0.1s to start the first time, more than a few items' solves.
+_CLIMB_PROCESS_MIN_JOBS_PER_WORKER = 4
+
+# Entry scripts known to guard their top level with `if __name__ == "__main__"`
+# (see _spawn_safe): this CLI, Django's manage.py, gunicorn, the benchmark.
+_SPAWN_SAFE_MAINS = frozenset({"main.py", "manage.py", "gunicorn", "bench_solve.py"})
+
+
+def _spawn_safe() -> bool:
+    """Whether worker processes may be spawned for a --mastery-costs sweep.
+
+    A spawned worker first re-runs the parent's main script (as ``__mp_main__``)
+    to rebuild its state, so a script whose top level does work -- a caller that
+    solves without an ``if __name__ == "__main__"`` guard -- would run again in
+    every worker. Only an interactive session (no script) or a known-guarded
+    entry point is safe; anything else keeps to threads. The
+    ``FARM_SOLVER_PROCESSES`` environment variable overrides: ``0`` never spawns,
+    ``1`` always may.
+    """
+    if (env := os.environ.get("FARM_SOLVER_PROCESSES")) is not None:
+        return env.strip() not in ("", "0")
+    path = getattr(sys.modules.get("__main__"), "__file__", None)
+    return path is None or Path(path).name in _SPAWN_SAFE_MAINS
+
+# The worker processes --mastery-costs sweeps run on, kept for the life of the
+# process (a web server reuses them request to request) and replaced if the
+# worker count changes. "spawn", never "fork": the parent may hold threads and
+# live HiGHS state, which a forked child would inherit half-copied.
+_CLIMB_POOL: tuple[int, Executor] | None = None
+_CLIMB_POOL_LOCK = threading.Lock()
+
+
+def _climb_processes(
+    inputs: _ClimbInputs,
+    jobs: list[tuple[str, int, list[tuple[int, str]]]],
+    workers: int,
+) -> list[tuple[list[MasteryCostRow], MasteryNote | None]] | None:
+    """:func:`_climb` over ``jobs`` on ``workers`` processes, in job order; or
+    ``None`` if the pool broke (a worker died), for the caller to fall back to
+    threads. Worker ``k`` takes jobs ``k``, ``k + workers``, ... -- interleaved so
+    the costly items spread out -- and ships ``inputs`` once with its batch."""
+    global _CLIMB_POOL
+    with _CLIMB_POOL_LOCK:
+        if _CLIMB_POOL is None or _CLIMB_POOL[0] != workers:
+            if _CLIMB_POOL is not None:
+                _CLIMB_POOL[1].shutdown(wait=False)
+            import multiprocessing
+            from concurrent.futures import ProcessPoolExecutor
+
+            _CLIMB_POOL = (workers, ProcessPoolExecutor(
+                max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+            ))
+        pool = _CLIMB_POOL[1]
+    from concurrent.futures.process import BrokenProcessPool
+
+    results: list = [None] * len(jobs)
+    try:
+        futures = [
+            pool.submit(_climb_batch, inputs, jobs[k::workers]) for k in range(workers)
+        ]
+        for k, future in enumerate(futures):
+            results[k::workers] = future.result()
+    except BrokenProcessPool:
+        with _CLIMB_POOL_LOCK:
+            if _CLIMB_POOL is not None and _CLIMB_POOL[1] is pool:
+                _CLIMB_POOL = None
+        return None
+    return results
+
+
+# Workers (processes, or threads for a few items -- see _run_climbs) for
+# --mastery-costs' per-item solves when --jobs does not say, capped at the CPUs
+# available (optimizer.solver_threads). Measured on a 10+4-core machine: the
+# process sweep keeps gaining to ~10.
+MASTERY_COST_WORKERS = 10
 
 
 def _mastery_cost_workers(args: argparse.Namespace, n_items: int) -> int:

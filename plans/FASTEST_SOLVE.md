@@ -53,6 +53,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 9. Thread counts capped at the CPUs available | 0.275s | 0.521s | 0.374s | 0.625s |
 | 10. Warm-start the refinement stages | 0.252s | 0.512s | 0.360s | 0.613s |
 | 11. Import rich and multiprocessing only where used | 0.249s | 0.512s | 0.335s | 0.588s |
+| 12. Mastery-costs sweep on worker processes | 0.248s | 0.220s | 0.333s | 0.405s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -295,3 +296,32 @@ renders a `--format markdown` report to a terminal and the process pool only
 serves `--ascend`. Both are now imported where they are used. `import main`
 drops from ~72ms to ~50ms, and each CLI run by ~25-30ms; the web views (a
 warm process) are unaffected.
+
+### 12. Mastery-costs sweep on worker processes -- output identical
+
+On threads the sweep was bound by its Python (a third of each item, taking
+turns on the GIL): six threads went no faster than 0.51s. A full sweep now runs
+on worker processes -- a `ProcessPoolExecutor` ("spawn" context, never "fork":
+the parent may hold threads and live HiGHS state) kept for the process's life,
+so a web server pays the ~0.1s start-up once, not per request. Worker `k` takes
+items `k`, `k + n`, ... (interleaved, so the costly ones spread out) with the
+shared inputs (`_ClimbInputs`: offers, recipes, prices, quantizer, ...) shipped
+once per batch; results come back in item order, so the table is identical.
+Measured by worker count on this machine (web page / CLI): 4 -> 0.37s / 0.55s,
+6 -> 0.32s / 0.51s, 8 -> 0.24s / 0.42s, 10 -> 0.22s / 0.41s; the default is now
+`MASTERY_COST_WORKERS = 10`, capped at the CPUs available as before.
+
+Caveats, and what guards them:
+
+* **Spawned workers re-run the caller's main script** (as `__mp_main__`) before
+  they can run anything, so a script that solves at its top level, without an
+  `if __name__ == "__main__"` guard, would run again in every worker. Processes
+  are only used when `_spawn_safe()`: an interactive session, or a known-guarded
+  entry point (`main.py`, `manage.py`, `gunicorn`, `bench_solve.py`); anything
+  else stays on threads. `FARM_SOLVER_PROCESSES=0`/`1` overrides.
+* A pool that breaks (a worker dies) falls back to threads for that sweep.
+* Each worker is a full interpreter with the solver imported (~60-80MB), so up
+  to 10 of them on a big machine; on the 1-vCPU deployment the worker count is 1
+  and no pool is ever started.
+* A handful of items -- the expand toggle's further tiers -- stays on threads,
+  which cost nothing to start.
