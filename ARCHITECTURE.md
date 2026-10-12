@@ -566,7 +566,17 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
     runs the refinement above and reads out the `SourcingPlan`, stamping it with
     `_origin = (base, kwargs)` so `frontier` can re-solve it exact. `frontier` (below)
     reuses one `_Base` across its ~80-call sweep instead of rebuilding the LP from
-    scratch per call (`plans/MODEL_REUSE_PLAN.md`).
+    scratch per call (`plans/MODEL_REUSE_PLAN.md`). **Threads**: past its endpoints
+    `frontier` hands off to `_frontier_sweeps`, which runs on a
+    `ThreadPoolExecutor` of `FRONTIER_WORKERS` (4): `_sweep` returns a *collector*
+    and splits its caps into contiguous runs solved concurrently, the first on the
+    given base and each other on a copy from `make_base` (a base is one mutable LP,
+    so threads never share one), running `post` on each plan as it is solved; the
+    epsilon sweep runs while the main thread builds `base_passive` and solves the
+    probe; the exact finish re-solves plans grouped by origin base, groups
+    concurrently. HiGHS releases the GIL while solving, so the solves overlap. A
+    capped solve is a cold solve of the identical model on any copy, so plans and
+    their order are unchanged at any worker count (`plans/FASTEST_SOLVE.md`).
     **How `_build_base` builds rows**: the hot ones (each item's balance, its buy
     cap, the ascension supply, the track rows, `spend_value`) are collected as plain
     `{variable: coefficient}` dicts — offer/open terms indexed per item once as

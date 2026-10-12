@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from itertools import pairwise
@@ -128,6 +129,12 @@ _PIN_ABS = 1e-9
 # well above the requested plan count so thinning has a dense frontier to spread
 # over; the LPs are tiny, so a few dozen extra solves are cheap.
 _MIN_CAP_SAMPLES = 40
+
+# Threads a frontier spreads its independent solves over -- the sweeps' capped
+# solves and the exact finish (see :func:`_sweep`, :func:`_frontier_sweeps`).
+# HiGHS releases the GIL while it solves, so these overlap; each extra sweep
+# thread needs its own copy of the base, which costs a build. 1 = sequential.
+FRONTIER_WORKERS = 4
 
 # Passive-completion breakpoints this close (fraction of the endpoint) to either
 # frontier end are dropped: the slowest one always coincides with the cheap plan's
@@ -2409,8 +2416,11 @@ def plan_surplus_gold(
 
 def _sweep(
     base: _Base, caps: list[float], favour_passive: bool = False,
-    exact_integers: bool = True,
-) -> list[SourcingPlan]:
+    exact_integers: bool = True, *,
+    finish: Callable[[SourcingPlan], None] | None = None,
+    pool: ThreadPoolExecutor | None = None,
+    make_base: Callable[[], _Base] | None = None,
+) -> Callable[[], list[SourcingPlan]]:
     """Solve ``base`` at each of ``caps`` (seconds), dropping the unmeetable ones.
 
     A cap no plan in this regime can meet is a gap in the sample, not an error -- see
@@ -2419,20 +2429,42 @@ def _sweep(
     (solved uncapped) carry it.
 
     ``exact_integers`` is forwarded to every solve -- :func:`frontier` sweeps ``False`` (the
-    cheap continuous relaxation) and finishes the survivors exact.
+    cheap continuous relaxation) and finishes the survivors exact. ``finish`` runs on
+    each plan as it is solved (``frontier``'s quantize-and-credit ``post``).
+
+    Returns a function that waits for and returns the plans, in cap order. Given a
+    ``pool`` and ``make_base`` (a factory for an identical copy of ``base``), the caps
+    are split into contiguous runs solved concurrently -- the first on ``base``, each
+    other on its own copy, since a base is one mutable LP -- while the caller carries
+    on; HiGHS releases the GIL as it solves, so the runs overlap. Every capped solve
+    is a cold solve of the same model whichever base it runs on, so the plans are
+    the same either way.
     """
-    plans = []
-    for cap in caps:
-        try:
-            plans.append(
-                _solve_configured(
-                    base, favour_passive=favour_passive,
+    def run(run_base: _Base, run_caps: list[float]) -> list[SourcingPlan]:
+        plans = []
+        for cap in run_caps:
+            try:
+                plan = _solve_configured(
+                    run_base, favour_passive=favour_passive,
                     time_cap=timedelta(seconds=cap), exact_integers=exact_integers,
                 )
-            )
-        except _UnmeetableCap:
-            continue
-    return plans
+            except _UnmeetableCap:
+                continue
+            if finish is not None:
+                finish(plan)
+            plans.append(plan)
+        return plans
+
+    if pool is None or make_base is None or len(caps) < 2:
+        plans = run(base, caps)
+        return lambda: plans
+    runs = min(FRONTIER_WORKERS, len(caps))
+    cuts = [len(caps) * i // runs for i in range(runs + 1)]
+    futures = [pool.submit(run, base, caps[cuts[0]:cuts[1]])] + [
+        pool.submit(lambda run_caps: run(make_base(), run_caps), caps[cuts[i]:cuts[i + 1]])
+        for i in range(1, runs)
+    ]
+    return lambda: [plan for future in futures for plan in future.result()]
 
 
 def _dominates(a: SourcingPlan, b: SourcingPlan) -> bool:
@@ -3195,6 +3227,64 @@ def frontier(
             quantize, base_passive=base_passive, probe=probe,
         )
 
+    # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
+    # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
+    # real deposit-boundary times: two epsilon-cap plans that landed inside the
+    # same deposit window now collapse to equal (quantized) time, and the
+    # lower-gold one dominates. Then credit each plan for the surplus it banks
+    # (see :func:`plan_surplus_gold`), so its ``cost`` gold is net of what it can
+    # sell -- a slow, passive-leaning plan dips below zero and the frontier
+    # extends past the "buy nothing" line. Both done before pruning:
+    # ``_non_dominated`` and ``_thin`` both rank by the net cost. Run on each sweep
+    # plan as it is solved (on the sweep's thread), on the endpoints below.
+    def post(plan: SourcingPlan) -> None:
+        _quantize_plan_time(
+            plan, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
+        )
+        plan.surplus_gold = plan_surplus_gold(
+            plan, demand, recipes or {}, crafting_bonus, openables or [],
+            inventory or {}, prices or {},
+        )
+
+    def make_base() -> _Base:
+        # An identical copy of base_active/base_passive (built from the same
+        # inputs), for a sweep run on another thread -- see _sweep.
+        return _build_base(
+            offers, demand, recipes, crafting_bonus, openables, inventory,
+            cookie_sets, prices, pj_gain, pj_price, pj_limit,
+            grape_juices_per_day=grape_juices_per_day,
+            ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
+            no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
+        )
+
+    with ThreadPoolExecutor(max_workers=FRONTIER_WORKERS) as pool:
+        return _frontier_sweeps(
+            pool, make_base, post, base_active, fast, cheap, t_cheap_raw, count,
+            demand, recipes, crafting_bonus, openables, inventory,
+            passive_pet_items, prices, quantize,
+        )
+
+
+def _frontier_sweeps(
+    pool: ThreadPoolExecutor,
+    make_base: Callable[[], _Base],
+    post: Callable[[SourcingPlan], None],
+    base_active: _Base,
+    fast: SourcingPlan,
+    cheap: SourcingPlan,
+    t_cheap_raw: float,
+    count: int,
+    demand: dict[str, float],
+    recipes: dict[str, dict[str, float]] | None,
+    crafting_bonus: float,
+    openables: list[OpenFlow] | None,
+    inventory: dict[str, float] | None,
+    passive_pet_items: set[str],
+    prices: dict[str, float] | None,
+    quantize: Callable[[str, float], timedelta | None] | None,
+) -> list[SourcingPlan]:
+    """:func:`frontier` past its endpoints: the two sweeps, thinning, and the exact
+    finish -- the independent solves spread over ``pool`` (see :func:`_sweep`)."""
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
@@ -3215,7 +3305,12 @@ def frontier(
         if lo < cap < hi
     ]
     caps += breakpoints
-    plans += _sweep(base_active, caps, exact_integers=False)
+    # Started, not awaited: the slow regime's probe below runs meanwhile.
+    collect_active = _sweep(
+        base_active, caps, exact_integers=False,
+        finish=post, pool=pool, make_base=make_base,
+    )
+    collect_passive = None
 
     # Slow regime: extend past the cheap endpoint with favour_passive plans that lean
     # ever harder on passive/farming and bank the surplus. Bounded at t_bound, the
@@ -3225,13 +3320,7 @@ def frontier(
     # worth nothing and these slower plans are dominated).
     anchors = list(breakpoints)
     if prices:
-        base_passive = _build_base(
-            offers, demand, recipes, crafting_bonus, openables, inventory,
-            cookie_sets, prices, pj_gain, pj_price, pj_limit,
-            grape_juices_per_day=grape_juices_per_day,
-            ap_tradeable=ap_tradeable, non_mastery_goals=non_mastery_goals,
-            no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
-        )
+        base_passive = make_base()
         probe = _solve_configured(base_passive, favour_passive=True, exact_integers=False)
         nonpet = _passive_completion_caps(
             probe, demand, recipes or {}, crafting_bonus, openables or [],
@@ -3243,28 +3332,16 @@ def frontier(
             ext_breaks = [cap for cap in nonpet if ext_lo < cap < ext_hi]
             anchors += ext_breaks
             ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
-            plans += _sweep(base_passive, ext_caps, favour_passive=True, exact_integers=False)
+            collect_passive = _sweep(
+                base_passive, ext_caps, favour_passive=True, exact_integers=False,
+                finish=post, pool=pool, make_base=make_base,
+            )
 
-    # Quantize every plan's reported time (idempotent -- fast/cheap are quantized
-    # a second time here harmlessly) so `_non_dominated`/`_thin`/dedup rank on
-    # real deposit-boundary times: two epsilon-cap plans that landed inside the
-    # same deposit window now collapse to equal (quantized) time, and the
-    # lower-gold one dominates. Then credit each plan for the surplus it banks
-    # (see :func:`plan_surplus_gold`), so its ``cost`` gold is net of what it can
-    # sell -- a slow, passive-leaning plan dips below zero and the frontier
-    # extends past the "buy nothing" line. Both done before pruning:
-    # ``_non_dominated`` and ``_thin`` both rank by the net cost.
-    def post(plan: SourcingPlan) -> None:
-        _quantize_plan_time(
-            plan, quantize, demand, recipes or {}, crafting_bonus, openables or [], inventory or {},
-        )
-        plan.surplus_gold = plan_surplus_gold(
-            plan, demand, recipes or {}, crafting_bonus, openables or [],
-            inventory or {}, prices or {},
-        )
-
-    for plan in plans:
-        post(plan)
+    post(fast)
+    post(cheap)
+    plans += collect_active()
+    if collect_passive is not None:
+        plans += collect_passive()
     thinned = _thin(_non_dominated(plans), count, tuple(anchors))
 
     # A MIP costs ~50x an LP per solve (see :func:`_solve_configured`), and the model
@@ -3279,15 +3356,24 @@ def frontier(
     # but every returned plan is a real whole-juice plan. Skipped entirely when the
     # model has no integer variable at all -> the relaxation was already exact.
     if _has_integers(base_active):
-        finished = []
-        for plan in thinned:
-            if plan._origin is None:  # hand-built/remainder-only: nothing to re-solve
-                finished.append(plan)
-                continue
-            base, kwargs = plan._origin
-            exact = _solve_configured(base, exact_integers=True, **kwargs)
-            post(exact)
-            finished.append(exact)
+        # Each plan is re-solved on the base it came from; plans sharing a base
+        # take turns on it, plans on different bases (the sweeps' copies) run
+        # concurrently. A hand-built/remainder-only plan has nothing to re-solve.
+        finished = list(thinned)
+        by_base: dict[int, list[int]] = {}
+        for index, plan in enumerate(thinned):
+            if plan._origin is not None:
+                by_base.setdefault(id(plan._origin[0]), []).append(index)
+
+        def finish_exact(indices: list[int]) -> None:
+            for index in indices:
+                base, kwargs = thinned[index]._origin
+                exact = _solve_configured(base, exact_integers=True, **kwargs)
+                post(exact)
+                finished[index] = exact
+
+        for future in [pool.submit(finish_exact, group) for group in by_base.values()]:
+            future.result()
         # Two survivors can land on the same integer point once juice is whole; drop the
         # duplicate rows, keeping the first (fastest-first order is preserved).
         seen: set[tuple[int, int]] = set()

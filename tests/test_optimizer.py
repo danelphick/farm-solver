@@ -1,4 +1,5 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 import pytest
@@ -1360,10 +1361,27 @@ def test_sweep_drops_caps_no_plan_in_the_regime_can_meet():
         pj_gain={"it": 10}, pj_price=5,
     )
     # 100 units at 1/minute: a 1-second cap is impossible with juice off.
-    plans = optimizer._sweep(base, [1.0], favour_passive=True)
+    plans = optimizer._sweep(base, [1.0], favour_passive=True)()
     assert plans == []
     # ...and the same base still solves at a cap it can actually meet.
-    assert optimizer._sweep(base, [100 * 60], favour_passive=True)
+    assert optimizer._sweep(base, [100 * 60], favour_passive=True)()
+
+
+def test_sweep_on_a_pool_matches_the_sequential_sweep():
+    # Split over threads, each run on its own copy of the base, the sweep returns
+    # the same plans in the same (cap) order as one thread on one base.
+    def make_base():
+        return optimizer._build_base(
+            [FARM_ITEM, FISH_ITEM], {"It": 100}, {}, 1.0, [], {}, 0.0, GOLD,
+        )
+    caps = [m * 60 for m in (5, 20, 40, 60, 80, 100, 150)]
+    sequential = optimizer._sweep(make_base(), caps)()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        pooled = optimizer._sweep(make_base(), caps, pool=pool, make_base=make_base)()
+    assert [(p.time, p.gold, p.large_nets) for p in pooled] == [
+        (p.time, p.gold, p.large_nets) for p in sequential
+    ]
+    assert len(pooled) == len(caps)
 
 
 def test_solve_configured_relaxes_pumpkin_juice_when_not_exact():

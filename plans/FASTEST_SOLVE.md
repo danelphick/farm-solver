@@ -45,6 +45,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 1. `FastHiGHS`: a fast PuLP -> HiGHS hand-over | 0.770s | 5.155s | 0.716s | 2.386s |
 | 2. HiGHS without presolve before the CBC fallback | 0.684s | 3.019s | 0.703s | 2.365s |
 | 3. Mastery costs' items on a thread pool | 0.684s | 0.951s | 0.716s | 1.025s |
+| 4. The frontier's sweeps and exact finish on a thread pool | 0.486s | 0.943s | 0.497s | 1.032s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -113,3 +114,29 @@ inputs.
 The CLI sweep by worker count (`--jobs`): 1 -> 2.34s, 2 -> 1.45s, 4 -> 1.07s, 6
 and up -> 1.01s. Past ~6 the Python model building between solves -- which
 still holds the GIL -- is the limit, so the default is 8 (`MASTERY_COST_WORKERS`).
+
+### 4. The frontier's sweeps and exact finish on a thread pool -- output identical
+
+After step 2, three quarters of a solver-page request was HiGHS itself: ~220
+solves (192 LPs at ~1.4ms, 27 MIPs at ~9ms). Most of them are independent: the
+epsilon sweep's ~45 capped solves, the slow regime's ~45, and the exact
+(integer) re-solves of the plans that survive thinning.
+
+`frontier` now runs them on a `ThreadPoolExecutor` (`FRONTIER_WORKERS` = 4):
+
+* `_sweep` splits its caps into contiguous runs solved concurrently -- the first
+  on the given base, each other on its own copy (`make_base`: `_build_base` from
+  the same inputs; a base is one mutable LP, so threads cannot share one) -- and
+  returns a collector instead of a list, so the epsilon sweep runs while the
+  main thread builds the slow regime's base and solves its probe. `post`
+  (quantize + surplus credit) runs on each plan on its sweep thread.
+* the exact finish re-solves each thinned plan on the base it came from; plans
+  sharing a base take turns, plans on different bases run concurrently.
+
+A capped solve is a cold solve of the same model whichever base copy runs it
+(same rows, same order, same columns), so the plans -- and their order, which
+the dedup's first-wins relies on -- are unchanged; `post` is per plan. By worker
+count (solver page / CLI): 1 -> 0.684s / 0.705s, 2 -> 0.533s / 0.556s, 3 ->
+0.520s / 0.526s, 4 -> 0.474s / 0.489s, 6 -> 0.482s / 0.491s, 8 -> 0.497s /
+0.500s; past 4 each extra base copy's build (Python, so GIL-bound) costs more
+than the extra overlap saves.
