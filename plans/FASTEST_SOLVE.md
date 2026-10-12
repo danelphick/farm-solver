@@ -48,6 +48,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 4. The frontier's sweeps and exact finish on a thread pool | 0.486s | 0.943s | 0.497s | 1.032s |
 | 5. Every exact-finish plan concurrently | 0.426s | 0.946s | 0.466s | 1.018s |
 | 6. HiGHS's feasibility-jump heuristic off | 0.338s | 0.901s | 0.448s | 1.007s |
+| 7. Surplus leftovers in one pass over the touched items | 0.306s | 0.886s | 0.414s | 0.999s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -176,3 +177,15 @@ With it off, presolve calls those models infeasible instead, so step 2's
 fallback re-solves them without presolve and finds the real optimum. A check of
 all 192 first solves of the sweep, presolve on vs off, finds no other model
 where both claim optimal but disagree by more than a minute.
+
+### 7. Surplus leftovers in one pass over the touched items -- output identical
+
+With the solves overlapping, the Python between them -- which takes turns on
+the GIL -- set the sweeps' pace, and the largest piece was `post`'s surplus
+credit on every frontier plan. `accumulated_leftovers` called `plan_balance`
+twice and walked the whole inventory (thousands of items on a real save) three
+more times, to subtract from each leftover the held share that cancels it
+exactly for every item the plan never touches. It now computes the balance
+once and walks only the touched items (needed, made, opened, gathered or
+passively produced); the arithmetic per item is unchanged -- the result was
+checked equal, float for float, on all 148 frontier plans of three web solves.

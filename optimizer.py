@@ -2227,15 +2227,40 @@ def accumulated_leftovers(
     the frontier's net cost) should be measured on -- see
     :func:`plan_surplus_gold`.
     """
-    leftovers = plan_leftovers(
+    # plan_leftovers less leftover_inventory_share, computed in one pass (it runs
+    # on every frontier plan). An item the plan never touches -- held stock it
+    # neither needs, makes, opens, gathers nor passively produces -- nets to
+    # exactly zero (its leftover is all held share), so only the touched items
+    # are walked, not the whole inventory; the arithmetic per item is unchanged.
+    balance = plan_balance(
         plan, demand, recipes, crafting_bonus, openables, inventory
     )
-    shares = leftover_inventory_share(
-        plan, demand, recipes, crafting_bonus, openables, inventory
-    )
+    passive = plan.passive_draw
+    produced = passive.produced if passive is not None else {}
+    consumed = draw_consumed(plan)
+    demanded = {item.lower() for item in demand}
+    touched = set(balance.need) | set(produced) | set(balance.crafted)
+    flows = {flow.name.lower(): flow for flow in openables}
+    for name in plan.opens:
+        flow = flows.get(name.lower())
+        if flow is not None:
+            touched.update(flow.yields)
+    for draw in plan.draws:
+        if draw.offer.track != PASSIVE_TRACK:
+            touched.update(draw.offer.yields)
     accumulated: dict[str, float] = {}
-    for item, left in leftovers.items():
-        if (net := left - shares.get(item, 0.0)) > UNIT_EPSILON:
+    for item in touched:
+        supply = balance.elsewhere.get(item, 0.0) + produced.get(item, 0.0)
+        used = balance.need.get(item, 0.0) + consumed.get(item, 0.0)
+        if (left := supply - used) <= UNIT_EPSILON:
+            continue
+        share = 0.0
+        if (
+            item in inventory and item not in demanded
+            and (held_share := inventory[item] - used) > UNIT_EPSILON
+        ):
+            share = held_share
+        if (net := left - share) > UNIT_EPSILON:
             accumulated[item] = net
     return accumulated
 
