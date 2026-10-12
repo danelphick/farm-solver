@@ -49,6 +49,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 5. Every exact-finish plan concurrently | 0.426s | 0.946s | 0.466s | 1.018s |
 | 6. HiGHS's feasibility-jump heuristic off | 0.338s | 0.901s | 0.448s | 1.007s |
 | 7. Surplus leftovers in one pass over the touched items | 0.306s | 0.886s | 0.414s | 0.999s |
+| 8. Reuse what builds share; re-tune the thread counts | 0.283s | 0.526s | 0.387s | 0.632s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -116,7 +117,8 @@ inputs.
 
 The CLI sweep by worker count (`--jobs`): 1 -> 2.34s, 2 -> 1.45s, 4 -> 1.07s, 6
 and up -> 1.01s. Past ~6 the Python model building between solves -- which
-still holds the GIL -- is the limit, so the default is 8 (`MASTERY_COST_WORKERS`).
+still holds the GIL -- is the limit, so the default is 8 (`MASTERY_COST_WORKERS`;
+re-tuned to 6 in step 8).
 
 ### 4. The frontier's sweeps and exact finish on a thread pool -- output identical
 
@@ -125,7 +127,8 @@ solves (192 LPs at ~1.4ms, 27 MIPs at ~9ms). Most of them are independent: the
 epsilon sweep's ~45 capped solves, the slow regime's ~45, and the exact
 (integer) re-solves of the plans that survive thinning.
 
-`frontier` now runs them on a `ThreadPoolExecutor` (`FRONTIER_WORKERS` = 4):
+`frontier` now runs them on a `ThreadPoolExecutor` (`FRONTIER_WORKERS` = 4; 5
+after step 8):
 
 * `_sweep` splits its caps into contiguous runs solved concurrently -- the first
   on the given base, each other on its own copy (`make_base`: `_build_base` from
@@ -189,3 +192,30 @@ exactly for every item the plan never touches. It now computes the balance
 once and walks only the touched items (needed, made, opened, gathered or
 passively produced); the arithmetic per item is unchanged -- the result was
 checked equal, float for float, on all 148 frontier plans of three web solves.
+
+### 8. Reuse what builds share; re-tune the thread counts -- output identical
+
+The threaded mastery-costs sweep was now paced by its GIL-bound model building:
+`_build_base` was over half of a sweep's Python. Two of its parts depend only on
+inputs every build in a sweep shares (the offers, recipes and openables -- and
+the frontier's base copies share all of them):
+
+* **`_obtainable`** and what derives from it (craftable recipes, usable offers
+  and openables, the reachability indexes), recomputed per build -- now cached
+  per `(offers, recipes, openables, buyable, held)`;
+* **the offer scan**: every build walked every usable offer's whole bundle (on a
+  real save, ~12,000 item-offer pairs) to find the offers yielding a reachable
+  item and to index their terms -- now a per-item index of producing/consuming
+  offers is built once per offers list, and a build reads just its reachable
+  items' entries.
+
+`_cached` keys an entry by the inputs' identity and keeps the inputs alive in
+it (so an `id` cannot be reused while cached), under a lock since builds run on
+solver threads. Variables are now created with `problem.add_variable`, PuLP 4.0's
+form, which skips a deprecation warning per variable.
+
+The models are unchanged -- every row of every build dumps identical -- and so
+is every output. With building cheaper, the thread counts were re-measured: the
+mastery sweep is flat from 6 to 8 threads (0.524s / 0.530s) and slower past it,
+the frontier best at 5 (0.285s against 0.301s at 4), so the defaults are now
+`MASTERY_COST_WORKERS = 6` and `FRONTIER_WORKERS = 5`.

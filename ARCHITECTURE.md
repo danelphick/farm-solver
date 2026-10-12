@@ -215,7 +215,7 @@ web config, `Bouquet of Flowers` at Megamaster killed all 201 other rows.
 first walks the candidates (status, notes, tiers to solve -- no solving) into
 `climbs`, then runs each item's tier climb (`climb`: `fastest_endpoint` per tier,
 stopping at an infeasible one) on a `ThreadPoolExecutor` of
-`_mastery_cost_workers` threads (`--jobs`, else `MASTERY_COST_WORKERS` = 8).
+`_mastery_cost_workers` threads (`--jobs`, else `MASTERY_COST_WORKERS` = 6).
 HiGHS releases the GIL while it solves, so the solves overlap while the Python
 model building between them takes turns (past ~6 threads that is the limit);
 each item builds its own LP and the results are gathered back in candidate
@@ -568,7 +568,7 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
     reuses one `_Base` across its ~80-call sweep instead of rebuilding the LP from
     scratch per call (`plans/MODEL_REUSE_PLAN.md`). **Threads**: past its endpoints
     `frontier` hands off to `_frontier_sweeps`, which runs on a
-    `ThreadPoolExecutor` of `FRONTIER_WORKERS` (4): `_sweep` returns a *collector*
+    `ThreadPoolExecutor` of `FRONTIER_WORKERS` (5): `_sweep` returns a *collector*
     and splits its caps into contiguous runs solved concurrently, the first on the
     given base and each other on a copy from `make_base` (a base is one mutable LP,
     so threads never share one), running `post` on each plan as it is solved; the
@@ -588,7 +588,15 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
     adds no term (`0 * x` is empty), a repeat sums in place, insertion order is kept —
     so the model is identical to the operator-built one (verified by dumping every
     row of every build across the CLI modes). The few small constraints (cookie/day
-    budgets, juice, stamina, ascension AK) still use operators.
+    budgets, juice, stamina, ascension AK) still use operators. **Reuse between
+    builds**: what depends only on the shared inputs is cached (`_cached`, keyed by
+    the objects' identity, entries holding them; a lock, as builds run on solver
+    threads): `_offer_index` (each item's producing/consuming offers by position,
+    built once per offers list -- the used offers and their terms come from it, not
+    from rescanning every offer's whole bundle) and `_obtainability` (`_obtainable`
+    and what derives from it, per offers/recipes/openables/buyable/held). Inputs are
+    treated as immutable once passed in. Variables are made with
+    `problem.add_variable` (PuLP 4.0's form; no deprecation warning per variable).
     Every constraint a `_solve_configured` call adds is named and recorded in
     `base.ephemeral`; the *next* call on that base pops exactly those names first —
     **pop happens at the top of the call, not the end**, so a call that raises

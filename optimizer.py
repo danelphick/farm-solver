@@ -48,6 +48,7 @@ that is neither is dropped into the plan's ``remainder``.
 from __future__ import annotations
 
 import math
+import threading
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -134,7 +135,7 @@ _MIN_CAP_SAMPLES = 40
 # solves and the exact finish (see :func:`_sweep`, :func:`_frontier_sweeps`).
 # HiGHS releases the GIL while it solves, so these overlap; each extra sweep
 # thread needs its own copy of the base, which costs a build. 1 = sequential.
-FRONTIER_WORKERS = 4
+FRONTIER_WORKERS = 5
 
 # Passive-completion breakpoints this close (fraction of the endpoint) to either
 # frontier end are dropped: the slowest one always coincides with the cheap plan's
@@ -484,6 +485,121 @@ def _reachable(
     return seen
 
 
+# --- What _build_base can reuse between builds -------------------------------
+#
+# A --mastery-costs sweep builds ~200 LPs over the same offers, recipes and
+# openables, differing only in the demanded item, and a frontier builds copies of
+# one base for its sweep threads (see _sweep): the parts of a build that depend
+# only on those shared inputs are worked out once and kept here, keyed by the
+# objects' identity (each entry holds the objects, so an id cannot be reused while
+# it is cached). Callers already treat the offers/recipes/openables they pass as
+# immutable once solving starts. Shared by the solver threads, hence the lock.
+
+
+@dataclass(frozen=True)
+class _OfferIndex:
+    """Each item's producing and consuming offers, by position in the offers list:
+    ``yields``/``consumes`` map an item to ``[(position, rate), ...]`` in offers
+    order, positive rates only."""
+
+    yields: dict[str, list[tuple[int, float]]]
+    consumes: dict[str, list[tuple[int, float]]]
+
+
+@dataclass(frozen=True)
+class _Obtainability:
+    """:func:`_obtainable` and what :func:`_build_base` derives from it for one
+    ``(offers, recipes, openables, buyable, held)``: ``usable`` flags each offer
+    (by position) whose inputs are all obtainable."""
+
+    obtainable: set[str]
+    craftable: set[str]
+    openable_flows: list[OpenFlow]
+    openers: dict[str, list[OpenFlow]]
+    usable: list[bool]
+    offer_inputs: dict[str, list[dict[str, float]]]
+
+
+_BUILD_CACHE: dict[tuple, tuple[tuple, object]] = {}
+_BUILD_CACHE_LOCK = threading.Lock()
+_BUILD_CACHE_SIZE = 16
+
+
+def _cached(key: tuple, anchors: tuple, compute: Callable[[], object]) -> object:
+    """``compute()``, memoised under ``key`` (built from ``id``s of ``anchors``,
+    which the entry keeps alive)."""
+    with _BUILD_CACHE_LOCK:
+        hit = _BUILD_CACHE.get(key)
+    if hit is not None and all(a is b for a, b in zip(hit[0], anchors, strict=True)):
+        return hit[1]
+    value = compute()
+    with _BUILD_CACHE_LOCK:
+        _BUILD_CACHE[key] = (anchors, value)
+        while len(_BUILD_CACHE) > _BUILD_CACHE_SIZE:
+            del _BUILD_CACHE[next(iter(_BUILD_CACHE))]
+    return value
+
+
+def _offer_index(offers: list[Offer]) -> _OfferIndex:
+    def compute() -> _OfferIndex:
+        yields: dict[str, list[tuple[int, float]]] = {}
+        consumes: dict[str, list[tuple[int, float]]] = {}
+        for k, offer in enumerate(offers):
+            for item, rate in offer.yields.items():
+                if rate > 0:
+                    yields.setdefault(item, []).append((k, rate))
+            for item, qty in offer.consumes.items():
+                if qty > 0:
+                    consumes.setdefault(item, []).append((k, qty))
+        return _OfferIndex(yields, consumes)
+
+    return _cached(("offer-index", id(offers)), (offers,), compute)
+
+
+def _obtainability(
+    offers: list[Offer],
+    recipes: dict[str, dict[str, float]],
+    openables: list[OpenFlow],
+    buyable: frozenset[str],
+    held: frozenset[str],
+) -> _Obtainability:
+    def compute() -> _Obtainability:
+        obtainable = _obtainable(offers, recipes, openables, buyable, held)
+        craftable = {
+            item
+            for item, materials in recipes.items()
+            if all(m in obtainable for m in materials)
+        }
+        # Which openables are usable (all their inputs obtainable), indexed by the
+        # items they yield so reachability can walk from a wanted drop to its chest.
+        openable_flows = [
+            f for f in openables if all(c in obtainable for c in f.consumes)
+        ]
+        openers: dict[str, list[OpenFlow]] = {}
+        for flow in openable_flows:
+            for out in flow.yields:
+                openers.setdefault(out, []).append(flow)
+        # Offers whose inputs are all obtainable can actually run; index their
+        # consumed bundles by each item they yield so reachability walks from a
+        # wanted drop into the consumables (Arnold Palmers, stamina, ...) it burns.
+        usable = [all(c in obtainable for c in o.consumes) for o in offers]
+        offer_inputs: dict[str, list[dict[str, float]]] = {}
+        for offer, ok in zip(offers, usable, strict=True):
+            if not ok or not offer.consumes:
+                continue
+            for out in offer.yields:
+                offer_inputs.setdefault(out, []).append(offer.consumes)
+        return _Obtainability(
+            obtainable, craftable, openable_flows, openers, usable, offer_inputs
+        )
+
+    return _cached(
+        ("obtainability", id(offers), id(recipes), id(openables), buyable, held),
+        (offers, recipes, openables),
+        compute,
+    )
+
+
 @dataclass
 class _Base:
     """The part of :func:`minimize`'s LP shared by every call in a sweep that
@@ -617,29 +733,15 @@ def _build_base(
         for item in offer.consumes
         if inventory.get(item, 0.0) > 0 and item not in wanted
     }
-    obtainable = _obtainable(offers, recipes, openables, buyable, offer_inputs_held)
-    craftable = {
-        item
-        for item, materials in recipes.items()
-        if all(m in obtainable for m in materials)
-    }
-    # Which openables are usable (all their inputs obtainable), indexed by the
-    # items they yield so reachability can walk from a wanted drop to its chest.
-    openable_flows = [f for f in openables if all(c in obtainable for c in f.consumes)]
-    openers: dict[str, list[OpenFlow]] = {}
-    for flow in openable_flows:
-        for out in flow.yields:
-            openers.setdefault(out, []).append(flow)
-    # Offers whose inputs are all obtainable can actually run; index their
-    # consumed bundles by each item they yield so reachability walks from a
-    # wanted drop into the consumables (Arnold Palmers, stamina, ...) it burns.
-    usable = [o for o in offers if all(c in obtainable for c in o.consumes)]
-    offer_inputs: dict[str, list[dict[str, float]]] = {}
-    for offer in usable:
-        if not offer.consumes:
-            continue
-        for out in offer.yields:
-            offer_inputs.setdefault(out, []).append(offer.consumes)
+    reach = _obtainability(
+        offers, recipes, openables, frozenset(buyable), frozenset(offer_inputs_held)
+    )
+    obtainable = reach.obtainable
+    craftable = reach.craftable
+    openable_flows = reach.openable_flows
+    openers = reach.openers
+    offer_inputs = reach.offer_inputs
+    offer_index = _offer_index(offers)
 
     # Ascension candidates: an obtainable one joins the reachable seed set (its
     # channels/crafts/opens must enter the model too, same as a wanted item); one
@@ -674,10 +776,14 @@ def _build_base(
             grape_juices_per_day=grape_juices_per_day,
         )
 
-    used = [
-        o for o in usable
-        if any(rate > 0 and i in items for i, rate in o.yields.items())
-    ]
+    # The usable offers yielding a reachable item, in offers order.
+    used_at = sorted({
+        k
+        for item in items
+        for k, _ in offer_index.yields.get(item, ())
+        if reach.usable[k]
+    })
+    used = [offers[k] for k in used_at]
     crafted = sorted(items & craftable)
     # Openables worth modelling: those touching a reachable item, either yielding
     # one or consuming one (a chest reached only as the thing a key gates still
@@ -697,12 +803,12 @@ def _build_base(
     # ``max_units`` caps an offer's usage (the once-per-day cookie burst, which a
     # plan cannot simply repeat back-to-back -- see :func:`sources.farming_offers`).
     usage = [
-        pulp.LpVariable(f"x{i}", lowBound=0, upBound=o.max_units)
+        problem.add_variable(f"x{i}", lowBound=0, upBound=o.max_units)
         for i, o in enumerate(used)
     ]
-    craft = {item: pulp.LpVariable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
-    opens = [pulp.LpVariable(f"o{i}", lowBound=0) for i in range(len(opened))]
-    makespan = pulp.LpVariable("T", lowBound=0)
+    craft = {item: problem.add_variable(f"c{i}", lowBound=0) for i, item in enumerate(crafted)}
+    opens = [problem.add_variable(f"o{i}", lowBound=0) for i in range(len(opened))]
+    makespan = problem.add_variable("T", lowBound=0)
 
     # Ascension step variables: one continuous var in [0, 1] per remaining step
     # (master/grandmaster/mega) a surviving candidate has (see
@@ -716,11 +822,11 @@ def _build_base(
         c = cand_by_item[item]
         steps: dict[str, pulp.LpVariable] = {}
         if c.delta_master is not None:
-            steps["master"] = pulp.LpVariable(f"ym{i}", lowBound=0, upBound=1)
+            steps["master"] = problem.add_variable(f"ym{i}", lowBound=0, upBound=1)
         if c.delta_grandmaster is not None:
-            steps["grandmaster"] = pulp.LpVariable(f"ygm{i}", lowBound=0, upBound=1)
+            steps["grandmaster"] = problem.add_variable(f"ygm{i}", lowBound=0, upBound=1)
         if c.delta_mega is not None:
-            steps["mega"] = pulp.LpVariable(f"ymega{i}", lowBound=0, upBound=1)
+            steps["mega"] = problem.add_variable(f"ymega{i}", lowBound=0, upBound=1)
         ascend_y[item] = steps
         if "master" in steps and "grandmaster" in steps:
             problem += steps["grandmaster"] <= steps["master"]
@@ -748,13 +854,13 @@ def _build_base(
     # withheld. Its price stays in ``prices``, valuing it in ``spend_value`` as
     # before, but ``gold`` (below) never charges it since there is no buy var.
     buy = {
-        item: pulp.LpVariable(f"b{i}", lowBound=0)
+        item: problem.add_variable(f"b{i}", lowBound=0)
         for i, item in enumerate(sorted(items & purchasable))
         if item in prices and item not in no_buy
     }
     price_cookie = prices.get("cookie set", 0.0)
     buy_cookie = (
-        pulp.LpVariable("bcookie", lowBound=0) if "cookie set" in prices else None
+        problem.add_variable("bcookie", lowBound=0) if "cookie set" in prices else None
     )
     # Held cookie sets are free; beyond them a purchase lifts the cap at gold cost.
     problem += cookies <= cookie_sets + (buy_cookie if buy_cookie is not None else 0)
@@ -809,7 +915,7 @@ def _build_base(
     juices_bind = grape_juices_per_day > 0 and any(o.gj for o in used)
     days_available: pulp.LpVariable | None = None
     if cookies_bind or juices_bind:
-        days_available = pulp.LpVariable("days", lowBound=0, cat=pulp.LpInteger)
+        days_available = problem.add_variable("days", lowBound=0, cat=pulp.LpInteger)
         problem += days_available <= makespan / _MINUTES_PER_DAY + 1
         if cookies_bind:
             problem += cookies <= days_available
@@ -840,7 +946,7 @@ def _build_base(
     pj = {}
     if pj_gain:
         pj = {
-            item: pulp.LpVariable(
+            item: problem.add_variable(
                 f"pj{i}", lowBound=0,
                 upBound=math.ceil(wanted[item][1] / pj_gain[item]),
                 cat="Integer",
@@ -857,7 +963,7 @@ def _build_base(
     # one and covering it outright. Capping the count and clamping the credit separately
     # keeps the last juice legal while still refusing to pay it for overshoot.
     pj_credit = {
-        item: pulp.LpVariable(f"pjc{i}", lowBound=0, upBound=wanted[item][1])
+        item: problem.add_variable(f"pjc{i}", lowBound=0, upBound=wanted[item][1])
         for i, item in enumerate(sorted(pj))
     }
     for item, var in pj.items():
@@ -919,19 +1025,17 @@ def _build_base(
         spend_value + ap_trade_value + (pj_price * pulp.lpSum(pj.values()) if pj else 0)
     )
 
-    # Index each offer's yields/consumes -- and each open's -- by item once, as
-    # ``(variable, coefficient)`` pairs (see ``_accumulate``), so the per-item loop
-    # below neither rescans every offer and openable for every item nor builds an
-    # expression per term.
-    yield_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
-    consume_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
-    for o, x in zip(used, usage):
-        for item, rate in o.yields.items():
-            if rate > 0:
-                yield_terms.setdefault(item, []).append((x, rate))
-        for item, qty in o.consumes.items():
-            if qty > 0:
-                consume_terms.setdefault(item, []).append((x, qty))
+    # Each item's offer and open terms as ``(variable, coefficient)`` pairs (see
+    # ``_accumulate``), so the per-item loop below neither rescans every offer and
+    # openable for every item nor builds an expression per term. Offer terms come
+    # from the (cached) per-item offer index, kept to the used offers, in order.
+    x_at = dict(zip(used_at, usage, strict=True))
+
+    def offer_terms(
+        index: dict[str, list[tuple[int, float]]], item: str
+    ) -> list[tuple[pulp.LpVariable, float]]:
+        return [(x_at[k], rate) for k, rate in index.get(item, ()) if k in x_at]
+
     open_yield_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
     open_consume_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {}
     for f, o in zip(opened, opens):
@@ -974,8 +1078,10 @@ def _build_base(
     stamina_price = prices.get("stamina", 0.0)
     stamina_op: pulp.LpVariable | None = None
     if stamina_price > 0:
-        stamina_op = pulp.LpVariable("stamina_op", lowBound=0)
-        consumed_stamina = pulp.LpAffineExpression(consume_terms.get("stamina", []))
+        stamina_op = problem.add_variable("stamina_op", lowBound=0)
+        consumed_stamina = pulp.LpAffineExpression(
+            offer_terms(offer_index.consumes, "stamina")
+        )
         topped_up_stamina = pulp.lpSum(
             o.yields.get("stamina", 0.0) * x
             for o, x in zip(used, usage)
@@ -999,11 +1105,11 @@ def _build_base(
     ascend_S: dict[str, pulp.LpAffineExpression] = {}
     for item in sorted(items):
         # Each part of the balance as ``(variable, coefficient)`` pairs.
-        gathered = yield_terms.get(item, [])
+        gathered = offer_terms(offer_index.yields, item)
         # What offers use up as inputs (Arnold Palmers an explore burns, the
         # stamina and Apple Cider a cider explore spends) -- these must be
         # sourced like any other need.
-        used_up = consume_terms.get(item, [])
+        used_up = offer_terms(offer_index.consumes, item)
         made = [(craft[item], crafting_bonus)] if item in craft else []
         consumed = [(craft[j], qty) for j, qty in consumers.get(item, [])]
         unpacked = open_yield_terms.get(item, [])
