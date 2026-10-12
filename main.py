@@ -794,8 +794,8 @@ def build_parser() -> argparse.ArgumentParser:
             "across (the passes are independent). Default: one per CPU (or the "
             "FARM_SOLVER_ASCEND_JOBS env var), capped at the pass count. 1 forces "
             "the in-process sequential path. With --mastery-costs: how many "
-            "threads its per-item solves run on (default 6; 1 = sequential). "
-            "Ignored otherwise"
+            "threads its per-item solves run on (default: 6, capped at the CPUs "
+            "available; 1 = sequential). Ignored otherwise"
         ),
     )
     parser.add_argument(
@@ -3068,18 +3068,20 @@ def solve_mastery_costs(
 
 
 # Threads for --mastery-costs' per-item solves (see solve_mastery_costs) when
-# --jobs does not say: past about this many, the GIL-bound model building between
-# solves is the bottleneck and more threads stop paying.
+# --jobs does not say and the CPUs allow (optimizer.solver_threads): past about
+# this many, the GIL-bound model building between solves is the bottleneck and
+# more threads stop paying.
 MASTERY_COST_WORKERS = 6
 
 
 def _mastery_cost_workers(args: argparse.Namespace, n_items: int) -> int:
     """How many threads --mastery-costs spreads its per-item solves over:
-    ``--jobs`` if given, else :data:`MASTERY_COST_WORKERS` (never more than the
-    items, never fewer than one)."""
+    ``--jobs`` if given, else :func:`optimizer.solver_threads` of
+    :data:`MASTERY_COST_WORKERS` (never more than the items, never fewer than
+    one)."""
     requested = getattr(args, "jobs", None)
     if requested is None:
-        requested = MASTERY_COST_WORKERS
+        requested = optimizer.solver_threads(MASTERY_COST_WORKERS)
     return max(1, min(requested, n_items))
 
 

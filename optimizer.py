@@ -48,12 +48,14 @@ that is neither is dropped into the plan's ``remainder``.
 from __future__ import annotations
 
 import math
+import os
 import threading
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from itertools import pairwise
+from pathlib import Path
 from typing import NamedTuple
 
 import pulp
@@ -132,10 +134,35 @@ _PIN_ABS = 1e-9
 _MIN_CAP_SAMPLES = 40
 
 # Threads a frontier spreads its independent solves over -- the sweeps' capped
-# solves and the exact finish (see :func:`_sweep`, :func:`_frontier_sweeps`).
-# HiGHS releases the GIL while it solves, so these overlap; each extra sweep
-# thread needs its own copy of the base, which costs a build. 1 = sequential.
+# solves and the exact finish (see :func:`_sweep`, :func:`_frontier_sweeps`) --
+# when the CPUs allow (see :func:`solver_threads`). HiGHS releases the GIL while it
+# solves, so these overlap; each extra sweep thread needs its own copy of the base,
+# which costs a build.
 FRONTIER_WORKERS = 5
+
+
+def available_cpus() -> int:
+    """The CPUs this process can actually run on: its affinity mask, capped by a
+    Linux cgroup v2 CPU quota (a container's ``--cpu``, Cloud Run's included)."""
+    cpus = os.process_cpu_count() or 1
+    try:
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            cpus = min(cpus, max(1, int(quota) // int(period)))
+    except (OSError, ValueError):
+        pass
+    return cpus
+
+
+def solver_threads(preferred: int) -> int:
+    """How many threads to spread independent solves over: the
+    ``FARM_SOLVER_THREADS`` environment variable when set, else ``preferred``
+    capped at :func:`available_cpus`. 1 means sequential -- on a single CPU the
+    threads would only take turns, and the frontier's per-thread base copies
+    would be wasted builds."""
+    if env := os.environ.get("FARM_SOLVER_THREADS"):
+        return max(1, int(env))
+    return max(1, min(preferred, available_cpus()))
 
 # Passive-completion breakpoints this close (fraction of the endpoint) to either
 # frontier end are dropped: the slowest one always coincides with the cheap plan's
@@ -2558,6 +2585,7 @@ def _sweep(
     exact_integers: bool = True, *,
     finish: Callable[[SourcingPlan], None] | None = None,
     pool: ThreadPoolExecutor | None = None,
+    workers: int = 1,
     make_base: Callable[[], _Base] | None = None,
 ) -> Callable[[], list[SourcingPlan]]:
     """Solve ``base`` at each of ``caps`` (seconds), dropping the unmeetable ones.
@@ -2572,8 +2600,8 @@ def _sweep(
     each plan as it is solved (``frontier``'s quantize-and-credit ``post``).
 
     Returns a function that waits for and returns the plans, in cap order. Given a
-    ``pool`` and ``make_base`` (a factory for an identical copy of ``base``), the caps
-    are split into contiguous runs solved concurrently -- the first on ``base``, each
+    ``pool`` of ``workers`` threads and ``make_base`` (a factory for an identical
+    copy of ``base``), the caps are split into contiguous runs solved concurrently -- the first on ``base``, each
     other on its own copy, since a base is one mutable LP -- while the caller carries
     on; HiGHS releases the GIL as it solves, so the runs overlap. Every capped solve
     is a cold solve of the same model whichever base it runs on, so the plans are
@@ -2594,10 +2622,10 @@ def _sweep(
             plans.append(plan)
         return plans
 
-    if pool is None or make_base is None or len(caps) < 2:
+    if pool is None or make_base is None or workers < 2 or len(caps) < 2:
         plans = run(base, caps)
         return lambda: plans
-    runs = min(FRONTIER_WORKERS, len(caps))
+    runs = min(workers, len(caps))
     cuts = [len(caps) * i // runs for i in range(runs + 1)]
     futures = [pool.submit(run, base, caps[cuts[0]:cuts[1]])] + [
         pool.submit(lambda run_caps: run(make_base(), run_caps), caps[cuts[i]:cuts[i + 1]])
@@ -3396,16 +3424,24 @@ def frontier(
             no_buy=no_buy, price_pumpkin_juice=price_pumpkin_juice,
         )
 
-    with ThreadPoolExecutor(max_workers=FRONTIER_WORKERS) as pool:
+    workers = solver_threads(FRONTIER_WORKERS)
+    if workers < 2:
         return _frontier_sweeps(
-            pool, make_base, post, base_active, fast, cheap, t_cheap_raw, count,
+            None, 1, make_base, post, base_active, fast, cheap, t_cheap_raw, count,
             demand, recipes, crafting_bonus, openables, inventory,
+            passive_pet_items, prices, quantize,
+        )
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return _frontier_sweeps(
+            pool, workers, make_base, post, base_active, fast, cheap, t_cheap_raw,
+            count, demand, recipes, crafting_bonus, openables, inventory,
             passive_pet_items, prices, quantize,
         )
 
 
 def _frontier_sweeps(
-    pool: ThreadPoolExecutor,
+    pool: ThreadPoolExecutor | None,
+    workers: int,
     make_base: Callable[[], _Base],
     post: Callable[[SourcingPlan], None],
     base_active: _Base,
@@ -3423,7 +3459,8 @@ def _frontier_sweeps(
     quantize: Callable[[str, float], timedelta | None] | None,
 ) -> list[SourcingPlan]:
     """:func:`frontier` past its endpoints: the two sweeps, thinning, and the exact
-    finish -- the independent solves spread over ``pool`` (see :func:`_sweep`)."""
+    finish -- the independent solves spread over ``pool``'s ``workers`` threads
+    (see :func:`_sweep`), or run in turn when ``pool`` is ``None``."""
     plans = [fast, cheap]
     # Sample well above `count` so thinning has a dense frontier to spread over.
     samples = max(_MIN_CAP_SAMPLES, 4 * count)
@@ -3447,7 +3484,7 @@ def _frontier_sweeps(
     # Started, not awaited: the slow regime's probe below runs meanwhile.
     collect_active = _sweep(
         base_active, caps, exact_integers=False,
-        finish=post, pool=pool, make_base=make_base,
+        finish=post, pool=pool, workers=workers, make_base=make_base,
     )
     collect_passive = None
 
@@ -3473,7 +3510,7 @@ def _frontier_sweeps(
             ext_caps = _time_caps(t_cheap_raw, t_bound, samples) + ext_breaks + [t_bound]
             collect_passive = _sweep(
                 base_passive, ext_caps, favour_passive=True, exact_integers=False,
-                finish=post, pool=pool, make_base=make_base,
+                finish=post, pool=pool, workers=workers, make_base=make_base,
             )
 
     post(fast)
@@ -3515,6 +3552,9 @@ def _frontier_sweeps(
             if plan._origin is None:
                 continue
             origin = plan._origin[0]
+            if pool is None:  # sequential: every plan on its own base, in turn
+                finish_exact(index, origin)
+                continue
             reuse = id(origin) not in claimed
             claimed.add(id(origin))
             futures.append(pool.submit(finish_exact, index, origin if reuse else None))

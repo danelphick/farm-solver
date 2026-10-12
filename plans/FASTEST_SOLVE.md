@@ -50,6 +50,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 6. HiGHS's feasibility-jump heuristic off | 0.338s | 0.901s | 0.448s | 1.007s |
 | 7. Surplus leftovers in one pass over the touched items | 0.306s | 0.886s | 0.414s | 0.999s |
 | 8. Reuse what builds share; re-tune the thread counts | 0.283s | 0.526s | 0.387s | 0.632s |
+| 9. Thread counts capped at the CPUs available | 0.275s | 0.521s | 0.374s | 0.625s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -219,3 +220,31 @@ is every output. With building cheaper, the thread counts were re-measured: the
 mastery sweep is flat from 6 to 8 threads (0.524s / 0.530s) and slower past it,
 the frontier best at 5 (0.285s against 0.301s at 4), so the defaults are now
 `MASTERY_COST_WORKERS = 6` and `FRONTIER_WORKERS = 5`.
+
+### 9. Thread counts capped at the CPUs available -- output identical
+
+The deployment (`deploy/cloudrun.sh`) runs on **1 vCPU** by default, where the
+solver threads of steps 3-5 can only take turns -- and the frontier's per-thread
+base copies would be wasted builds. `optimizer.solver_threads(preferred)` now
+caps every thread count at `available_cpus()` -- the process's affinity, then a
+Linux cgroup v2 CPU quota (a container's `--cpu`) -- with `FARM_SOLVER_THREADS`
+as an explicit override; at 1 the frontier skips its pool and copies entirely
+(the original sequential path) and the mastery sweep runs in turn. Outputs are
+identical either way (checked with `FARM_SOLVER_THREADS=1` and at the default).
+`scripts/bench_solve.py --threads 1` measures the single-CPU case.
+
+## On one CPU
+
+What a 1-vCPU instance (the deployment's default) gains -- `bench_solve.py
+--threads 1`. `main` never used threads, so its figures are the same:
+
+| | solve | mastery | cli | cli-mc |
+| --- | --- | --- | --- | --- |
+| `main` (`0875ebf`) | 1.079s | 5.646s | 1.068s | 2.904s |
+| branch, 1 thread | 0.508s | 1.247s | 0.614s | 1.331s |
+| speed-up | 2.1x | 4.5x | 1.7x | 2.2x |
+
+Everything except steps 3-5 (the threads) counts here: the PuLP hand-over, the
+CBC fallback gone, the MIP heuristic, the leftovers pass and the build reuse.
+With more vCPUs each request also uses the threads -- the main table's figures
+are this 14-core machine at the defaults (5 frontier threads, 6 mastery).

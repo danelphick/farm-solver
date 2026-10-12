@@ -60,8 +60,10 @@ class SessionCache:
 
 CACHE = SessionCache()
 
-# One LP solve at a time per process: PuLP/HiGHS hold solver state that isn't
-# safe under concurrent solves in the same process (see ARCHITECTURE.md).
+# One request's solve at a time per process. A solve already spreads its own
+# independent LPs over the CPUs (optimizer.solver_threads -- each thread on its
+# own PuLP problem and Highs instance; sharing one problem between threads is
+# what is unsafe), so a second concurrent solve would only contend for them.
 # Acquired even on a cache hit -- render()'s horizon guard can still trigger
 # a re-solve (see webapi.render) -- so every request funnels through this.
 SOLVE_SEMAPHORE = threading.BoundedSemaphore(1)

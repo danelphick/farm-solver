@@ -11,10 +11,13 @@ Against the newest ``mydata/`` pastes, times:
 
 The two in-process cases run once to warm up (a web server's process is warm),
 then ``--repeat`` times; the CLI cases are cold every time, like a real run.
-Reports the fastest and the median of each. ``plans/FASTEST_SOLVE.md`` records
-what each optimisation step did to these numbers.
+Reports the fastest and the median of each. ``--threads N`` sets
+``FARM_SOLVER_THREADS`` for every case -- ``--threads 1`` stands in for a
+single-CPU host (the Cloud Run deployment's default ``--cpu 1``), where the
+solver threads cannot help. ``plans/FASTEST_SOLVE.md`` records what each
+optimisation step did to these numbers.
 
-Run with: ``uv run python scripts/bench_solve.py [--repeat N] [--only NAME ...]``
+Run with: ``uv run python scripts/bench_solve.py [--repeat N] [--threads N] [--only NAME ...]``
 """
 
 from __future__ import annotations
@@ -78,7 +81,10 @@ def main_() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--repeat", type=int, default=5)
     parser.add_argument("--only", nargs="+", choices=CASES, default=list(CASES))
+    parser.add_argument("--threads", type=int, default=None)
     opts = parser.parse_args()
+    if opts.threads is not None:
+        os.environ["FARM_SOLVER_THREADS"] = str(opts.threads)  # inherited by the CLIs
 
     mastery_text, inventory_text = _pastes()
 
@@ -98,7 +104,8 @@ def main_() -> None:
     }
     print(
         f"python {platform.python_version()}, highspy {highspy.Highs().version()}, "
-        f"{os.cpu_count()} cpus, repeat {opts.repeat}"
+        f"{os.cpu_count()} cpus, repeat {opts.repeat}, "
+        f"threads {os.environ.get('FARM_SOLVER_THREADS', 'default')}"
     )
     for name in opts.only:
         times = runs[name]()

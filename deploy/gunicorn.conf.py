@@ -16,11 +16,13 @@ import os
 bind = f"0.0.0.0:{os.environ.get('PORT', '8080')}"
 
 # One worker per vCPU, deliberately. solverapp.cache.SOLVE_SEMAPHORE already
-# limits each *process* to one LP solve at a time (PuLP/HiGHS hold solver state
-# that is not safe to touch from two threads), so on a 1-vCPU instance a second
+# limits each *process* to one solve at a time, so on a 1-vCPU instance a second
 # worker buys no extra solve throughput -- it just puts two CPU-bound frontier
 # sweeps on one core and makes both about twice as slow. Raise this together
-# with the instance's --cpu, not on its own.
+# with the instance's --cpu, not on its own. (On more than one vCPU each solve
+# also spreads its independent LPs over up to ~5 of them -- optimizer.
+# solver_threads, capped at the CPUs the container is given -- so extra CPUs
+# shorten each request even with one worker.)
 workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
 
 # Threads, on the other hand, are what keep the app responsive *while* a solve
