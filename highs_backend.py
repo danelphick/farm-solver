@@ -16,6 +16,15 @@ just builds it faster: the rows are converted once and cached on the problem,
 so a re-solve only converts the constraints added since the last solve (the
 shared prefix is reused), and the whole model goes over in one ``passModel``.
 Only the primal values are read back (nothing reads the duals or slacks).
+
+**Warm starts** (:data:`WARM_START`): an LP solved right after another on the
+same problem, differing only in its objective, column bounds and *added* rows --
+``optimizer._solve_configured``'s refinement stages, which re-optimise with the
+previous stage pinned -- continues on the previous solve's ``Highs`` (its basis
+still loaded) instead of starting cold. The first solve of every call is cold
+(the previous call's pins have been removed by then), as is any MIP, any solve
+after a non-optimal one, and any change of options. A warm re-optimisation lands
+on the same optimum; at most the last few digits of a value can differ.
 """
 
 from __future__ import annotations
@@ -25,6 +34,9 @@ import pulp
 from pulp import constants
 
 _INF = highspy.kHighsInf
+
+# Continue an LP from the previous solve's basis where it can (see above).
+WARM_START = True
 
 # PuLP's HighsModelStatus -> (LpStatus, LpSolution) table (pulp.HiGHS's
 # findSolutionValues), so a solve reports exactly what PuLP's backend would.
@@ -69,6 +81,7 @@ class _Model:
         "columns",
         "index",
         "indices",
+        "kept",
         "lower",
         "registered",
         "rows",
@@ -87,6 +100,7 @@ class _Model:
         self.values: list[float] = []
         self.lower: list[float] = []
         self.upper: list[float] = []
+        self.kept = 0  # rows the last sync left in place (the shared prefix)
 
     def sync_rows(self, constraints: list[pulp.LpConstraint]) -> None:
         """Bring the cached rows in line with ``constraints``: keep the prefix
@@ -97,6 +111,7 @@ class _Model:
         limit = min(len(rows), len(constraints))
         while shared < limit and rows[shared] is constraints[shared]:
             shared += 1
+        self.kept = shared
         if shared < len(rows):
             end = self.starts[shared]
             del rows[shared:], self.starts[shared + 1:]
@@ -133,47 +148,30 @@ def _model(problem: pulp.LpProblem) -> _Model:
 
 class FastHiGHS(pulp.HiGHS):
     """PuLP's in-process HiGHS backend with a cached, one-call model hand-over
-    (see the module docstring). A drop-in ``pulp.HiGHS``."""
+    and warm-started refinements (see the module docstring). A drop-in
+    ``pulp.HiGHS``."""
 
     def actualSolve(self, lp, callback=None):
-        self.createAndConfigureSolver(lp)
         model = _model(lp)
         columns = model.columns
-        n = len(columns)
-        # PuLP folds a maximisation into the costs (and so negates a zero too).
-        sign = -1 if lp.sense == constants.LpMaximize else 1
-        cost = [sign * 0.0] * n
-        index = model.index
-        for var, coef in lp.objective.items():
-            cost[index[var]] = sign * coef
-
-        hlp = highspy.HighsLp()
-        hlp.num_col_ = n
-        hlp.num_row_ = len(model.rows)
-        hlp.col_cost_ = cost
-        hlp.col_lower_ = [-_INF if v.lowBound is None else v.lowBound for v in columns]
-        hlp.col_upper_ = [_INF if v.upBound is None else v.upBound for v in columns]
-        hlp.row_lower_ = model.lower
-        hlp.row_upper_ = model.upper
-        matrix = hlp.a_matrix_
-        matrix.format_ = highspy.MatrixFormat.kRowwise
-        matrix.num_col_ = n
-        matrix.num_row_ = len(model.rows)
-        matrix.start_ = model.starts
-        matrix.index_ = model.indices
-        matrix.value_ = model.values
-        hlp.a_matrix_ = matrix
-        if self.mip and any(v.cat == constants.LpInteger for v in columns):
-            hlp.integrality_ = [
-                highspy.HighsVarType.kInteger
-                if v.cat == constants.LpInteger
-                else highspy.HighsVarType.kContinuous
-                for v in columns
-            ]
-        lp.solverModel.passModel(hlp)
+        integer = self.mip and any(v.cat == constants.LpInteger for v in columns)
+        cost = _costs(lp, model)
+        warm = getattr(lp, "_highs_warm", None)
+        lp._highs_warm = None
+        if (
+            WARM_START and not integer and warm is not None
+            and warm[1] is model and model.kept >= warm[2]
+            and warm[3] == self.optionsDict
+        ):
+            highs = warm[0]
+            _extend(highs, model, warm[2], cost)
+            lp.solverModel = highs
+        else:
+            self.createAndConfigureSolver(lp)
+            highs = lp.solverModel
+            highs.passModel(_whole(model, cost, integer))
         self.callSolver(lp)
 
-        highs = lp.solverModel
         status = highs.getModelStatus()
         values = highs.getSolution().col_value
         for i, var in enumerate(columns):
@@ -183,4 +181,76 @@ class FastHiGHS(pulp.HiGHS):
         else:
             outcome = _STATUS.get(status, _NOT_SOLVED)
         lp.assignStatus(*outcome)
+        if WARM_START and not integer and status == highspy.HighsModelStatus.kOptimal:
+            lp._highs_warm = (highs, model, len(model.rows), dict(self.optionsDict))
         return outcome[0]
+
+
+def _costs(problem: pulp.LpProblem, model: _Model) -> list[float]:
+    """The objective as a cost per column (PuLP folds a maximisation into the
+    costs, and so negates a zero too)."""
+    sign = -1 if problem.sense == constants.LpMaximize else 1
+    cost = [sign * 0.0] * len(model.columns)
+    index = model.index
+    for var, coef in problem.objective.items():
+        cost[index[var]] = sign * coef
+    return cost
+
+
+def _bounds(model: _Model) -> tuple[list[float], list[float]]:
+    columns = model.columns
+    return (
+        [-_INF if v.lowBound is None else v.lowBound for v in columns],
+        [_INF if v.upBound is None else v.upBound for v in columns],
+    )
+
+
+def _whole(model: _Model, cost: list[float], integer: bool) -> highspy.HighsLp:
+    """The whole model, for a cold solve."""
+    columns = model.columns
+    n = len(columns)
+    hlp = highspy.HighsLp()
+    hlp.num_col_ = n
+    hlp.num_row_ = len(model.rows)
+    hlp.col_cost_ = cost
+    hlp.col_lower_, hlp.col_upper_ = _bounds(model)
+    hlp.row_lower_ = model.lower
+    hlp.row_upper_ = model.upper
+    matrix = hlp.a_matrix_
+    matrix.format_ = highspy.MatrixFormat.kRowwise
+    matrix.num_col_ = n
+    matrix.num_row_ = len(model.rows)
+    matrix.start_ = model.starts
+    matrix.index_ = model.indices
+    matrix.value_ = model.values
+    hlp.a_matrix_ = matrix
+    if integer:
+        hlp.integrality_ = [
+            highspy.HighsVarType.kInteger
+            if v.cat == constants.LpInteger
+            else highspy.HighsVarType.kContinuous
+            for v in columns
+        ]
+    return hlp
+
+
+def _extend(
+    highs: highspy.Highs, model: _Model, loaded: int, cost: list[float]
+) -> None:
+    """Bring a warm ``highs`` -- holding ``model``'s first ``loaded`` rows from the
+    previous solve -- up to date: the rows added since, the objective, the column
+    bounds. Its basis stays loaded for the next run."""
+    n = len(model.columns)
+    added = len(model.rows) - loaded
+    if added:
+        first = model.starts[loaded]
+        highs.addRows(
+            added, model.lower[loaded:], model.upper[loaded:],
+            len(model.indices) - first,
+            [start - first for start in model.starts[loaded:-1]],
+            model.indices[first:], model.values[first:],
+        )
+    every = list(range(n))
+    highs.changeColsCost(n, every, cost)
+    lower, upper = _bounds(model)
+    highs.changeColsBounds(n, every, lower, upper)
