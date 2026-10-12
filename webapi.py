@@ -841,7 +841,37 @@ def mastery_costs(
     section on without a round trip.
     """
     cfg, state = _prepare(mastery_text, inventory_text, args)
-    result = main.solve_mastery_costs(args, cfg, state)
+    return _mastery_costs_payload(main.solve_mastery_costs(args, cfg, state))
+
+
+def mastery_cost_tiers(
+    mastery_text: str, inventory_text: str, args: argparse.Namespace, item: str
+) -> MasteryCostsPayload:
+    """An item's further tiers -- those :func:`mastery_costs` left uncalculated.
+
+    The page's expand toggle: the same sweep narrowed to ``item`` with
+    ``expand_item`` (see :func:`main.solve_mastery_costs`), so only the tiers past
+    its next one are solved. ``rows`` holds those, and ``limited`` the first one
+    that cannot be reached, if any.
+    """
+    cfg, state = _prepare(mastery_text, inventory_text, args)
+    return _mastery_costs_payload(
+        main.solve_mastery_costs(args, cfg, state, expand_item=item)
+    )
+
+
+def mastery_cost_tiers_fingerprint(
+    mastery_text: str, inventory_text: str, args: argparse.Namespace, item: str
+) -> str:
+    """Cache key for :func:`mastery_cost_tiers`: the table's key plus the item."""
+    return (
+        mastery_costs_fingerprint(mastery_text, inventory_text, args)
+        + "|tiers:" + item.lower()
+    )
+
+
+def _mastery_costs_payload(result: main.MasteryCostsResult) -> MasteryCostsPayload:
+    """``result`` as the structured payload both mastery-costs endpoints return."""
     return MasteryCostsPayload(
         rows=[
             {
@@ -862,6 +892,7 @@ def mastery_costs(
                 "categories": list(info.categories),
                 "event": info.event,
                 "status": info.status,
+                "more_tiers": list(info.more_tiers),
             }
             for name, info in result.items.items()
         },

@@ -1181,6 +1181,46 @@ details[open] > summary .summary-detail {
   background: var(--panel);
 }
 
+/* The expand toggle beside an item with further (unsolved) tiers, and the rows
+   it reveals directly under the item's own: indented and muted, so they read
+   as that item's continuation rather than as rows of the ranked table. */
+.tier-toggle,
+.tier-toggle-slot {
+  display: inline-block;
+  width: 1.2rem;
+  margin-left: -0.3rem;
+  text-align: left;
+}
+
+.tier-toggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tier-toggle:hover {
+  color: var(--accent);
+}
+
+#mastery-costs-section table tbody tr.tier-extra td {
+  color: var(--muted);
+}
+
+#mastery-costs-section table tbody tr.tier-extra .tier-extra-item {
+  padding-left: 0.8rem;
+}
+
+#mastery-costs-section table tbody tr.tier-extra td[colspan] {
+  padding-left: 2rem;
+}
+
+#mastery-costs-section table tbody tr.tier-error td {
+  color: var(--error);
+}
+
 #unmasterable-list,
 #limited-list {
   margin: 0;

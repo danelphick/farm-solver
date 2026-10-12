@@ -181,8 +181,36 @@ class ApiMasteryCostsTests(SimpleTestCase):
         # The filters' facts: one entry per item, rows included.
         self.assertIn(row["item"], body["items"])
         self.assertEqual(
-            set(body["items"][row["item"]]), {"categories", "event", "status"}
+            set(body["items"][row["item"]]),
+            {"categories", "event", "status", "more_tiers"},
         )
+
+    def _post_tiers(self, item):
+        return self.client.post(
+            "/api/mastery-costs/tiers",
+            data=json.dumps({
+                "mastery_text": MASTERY_TEXT,
+                "inventory_text": INVENTORY_TEXT,
+                "params": {},
+                "item": item,
+            }),
+            content_type="application/json",
+        )
+
+    def test_tiers_solves_an_items_further_tiers_and_caches_them(self):
+        items = self._post({}).json()["items"]
+        item = next(name for name, info in items.items() if info["more_tiers"])
+        first = self._post_tiers(item)
+        self.assertEqual(first.status_code, 200)
+        body = first.json()
+        self.assertFalse(body["cached"])
+        self.assertEqual(body["item"], item)
+        self.assertTrue(body["rows"] or body["limited"])
+        self.assertTrue(all(row["item"] == item for row in body["rows"]))
+        self.assertTrue(self._post_tiers(item).json()["cached"])
+
+    def test_tiers_without_an_item_is_400(self):
+        self.assertEqual(self._post_tiers("").status_code, 400)
 
     def test_identical_repost_is_a_cache_hit(self):
         self.assertFalse(self._post({}).json()["cached"])

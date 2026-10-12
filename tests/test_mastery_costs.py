@@ -202,7 +202,7 @@ def test_mastery_costs_conflicts_raise_before_solving(extra):
 # --- infeasible tiers ("limited") --------------------------------------------
 
 
-def _solve_with_failing_tier(monkeypatch, fail_on_call: int, state=None):
+def _solve_with_failing_tier(monkeypatch, fail_on_call: int, state=None, expand_item=None):
     """Run solve_mastery_costs over a one-item catalogue, failing one tier's LP.
 
     An item can be perfectly sourceable and still not sourceable *in the
@@ -226,7 +226,10 @@ def _solve_with_failing_tier(monkeypatch, fail_on_call: int, state=None):
 
     monkeypatch.setattr(optimizer, "fastest_endpoint", failing)
     monkeypatch.setattr(main, "load_mastery_catalogue", lambda: {"board": "Board"})
-    return main.solve_mastery_costs(args, cfg, state or GameState()), calls
+    result = main.solve_mastery_costs(
+        args, cfg, state or GameState(), expand_item=expand_item
+    )
+    return result, calls
 
 
 def test_only_the_next_tier_is_solved(monkeypatch):
@@ -238,6 +241,29 @@ def test_only_the_next_tier_is_solved(monkeypatch):
     assert len(calls) == 1
     args = build_parser().parse_args(["--mastery-costs"])
     assert calls[0]["Board"] == pytest.approx(50_000 / args.mastery_bonus)
+    # Megamaster is left for the page's expand toggle to ask for.
+    assert result.items["Board"].more_tiers == ("MM",)
+
+
+def test_expanding_an_item_solves_only_its_further_tiers(monkeypatch):
+    state = GameState(masteries={"board": Mastery("Board", progress=50_000, required=100_000)})
+    result, calls = _solve_with_failing_tier(
+        monkeypatch, fail_on_call=0, state=state, expand_item="Board"
+    )
+    assert [(r.item, r.tier) for r in result.rows] == [("Board", "MM")]
+    assert len(calls) == 1
+    assert result.items["Board"].more_tiers == ()
+
+
+def test_expanding_stops_climbing_at_an_unreachable_tier(monkeypatch):
+    # From 0: the table solved Master; expanding tries Grandmaster, which fails,
+    # so Megamaster -- strictly more of the same -- is never attempted.
+    result, calls = _solve_with_failing_tier(monkeypatch, fail_on_call=1, expand_item="board")
+    assert result.rows == []
+    assert len(calls) == 1
+    assert result.limited == [MasteryNote(
+        "Board", "Board cannot reach Grandmaster: its sources cannot supply that many"
+    )]
 
 
 def test_an_infeasible_tier_is_reported_instead_of_aborting_the_sweep(monkeypatch):
@@ -250,6 +276,8 @@ def test_an_infeasible_tier_is_reported_instead_of_aborting_the_sweep(monkeypatc
         "Board", "Board cannot reach Master: its sources cannot supply that many"
     )]
     assert result.unmasterable == []  # a different failure: this one HAS sources
+    # Nothing past an unreachable tier is worth offering to expand.
+    assert result.items["Board"].more_tiers == ()
 
 
 def test_print_mastery_costs_renders_the_limited_section(capsys):
@@ -483,7 +511,9 @@ def test_solve_mastery_costs_classifies_each_item(monkeypatch):
     # The three obtainability classes are disjoint: gathered (Drum), a recipe
     # with an unsourceable material (Compass <- Magna Core), neither (Cicada).
     assert result.items == {
-        "Drum": main.MasteryItemInfo(("Fishing",), event=False, status=main.OBTAINABLE),
+        "Drum": main.MasteryItemInfo(
+            ("Fishing",), event=False, status=main.OBTAINABLE, more_tiers=("GM", "MM")
+        ),
         "Compass": main.MasteryItemInfo(
             ("Crafting",), event=False, status=main.MATERIALS_UNOBTAINABLE
         ),

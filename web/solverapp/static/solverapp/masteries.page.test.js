@@ -513,3 +513,101 @@ describe("mastery-costs filters", () => {
     expect(box("Fishing").checked).toBe(true);
   });
 });
+
+describe("mastery-costs expand toggle", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    installLocalStorage();
+  });
+
+  // "Fast Cheap" is solved for Master only; Grandmaster and Megamaster are left
+  // for the toggle. The tiers endpoint solves GM and stops at an unreachable MM.
+  const EXPANDABLE = {
+    ...PAYLOAD,
+    items: {
+      ...PAYLOAD.items,
+      "Fast Cheap": { ...PAYLOAD.items["Fast Cheap"], more_tiers: ["GM", "MM"] },
+    },
+  };
+  const TIERS = {
+    cached: false,
+    solved_ms: 5,
+    item: "Fast Cheap",
+    rows: [{ item: "Fast Cheap", tier: "GM", time: "9d", time_seconds: 777600, gold: 400 }],
+    limited: [{ item: "Fast Cheap", text: "Fast Cheap cannot reach Megamaster: its sources cannot supply that many" }],
+  };
+
+  async function loadExpandable() {
+    const requests = await loadPage({ state: SAVED, payload: EXPANDABLE });
+    fetchMock.mockImplementation(async (url) => ({
+      ok: true,
+      status: 200,
+      json: async () => (url === "/api/mastery-costs/tiers" ? TIERS : EXPANDABLE),
+    }));
+    return requests;
+  }
+
+  const toggles = () => [...document.querySelectorAll("#mastery-costs-body .tier-toggle")];
+  const clickToggle = () =>
+    toggles()[0].dispatchEvent(new Event("click", { bubbles: true }));
+  const tierCalls = () =>
+    fetchMock.mock.calls.filter(([url]) => url === "/api/mastery-costs/tiers");
+
+  test("only an item with unsolved tiers gets a toggle", async () => {
+    await loadExpandable();
+    expect(toggles().map((b) => b.dataset.item)).toEqual(["Fast Cheap"]);
+    expect(toggles()[0].getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("expanding fetches the item's further tiers into rows under it", async () => {
+    await loadExpandable();
+    clickToggle();
+    await vi.waitFor(() => expect(rowText().length).toBe(5));
+
+    const [, options] = tierCalls()[0];
+    expect(JSON.parse(options.body).item).toBe("Fast Cheap");
+    expect(rowText()).toEqual([
+      ["Fast Cheap", "M", "1d", "100.0 g"],
+      ["", "GM", "9d", "400.0 g"],
+      ["Fast Cheap cannot reach Megamaster: its sources cannot supply that many"],
+      ["Fast Dear", "GM", "1d", "900.0 g"],
+      ["Slow", "MM", "5d", "10.0 g"],
+    ]);
+    const extra = document.querySelectorAll("#mastery-costs-body tr")[1];
+    expect(extra.dataset.href).toBe("/?mastery=Fast%20Cheap%3AGM");
+    expect(toggles()[0].getAttribute("aria-expanded")).toBe("true");
+  });
+
+  test("collapsing hides them and re-expanding reuses them without a request", async () => {
+    await loadExpandable();
+    clickToggle();
+    await vi.waitFor(() => expect(rowText().length).toBe(5));
+
+    clickToggle();
+    expect(rowText().length).toBe(3);
+    clickToggle();
+    expect(rowText().length).toBe(5);
+    expect(tierCalls().length).toBe(1);
+  });
+
+  test("the expanded rows follow their item through a re-sort", async () => {
+    await loadExpandable();
+    clickToggle();
+    await vi.waitFor(() => expect(rowText().length).toBe(5));
+    document
+      .querySelector('#mastery-costs-head button[data-sort="gold"]')
+      .dispatchEvent(new Event("click", { bubbles: true }));
+    expect(rowText().map((cells) => cells[1])).toEqual(["MM", "M", "GM", undefined, "GM"]);
+  });
+
+  test("clicking the toggle does not navigate to the row's plan", async () => {
+    await loadExpandable();
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { set href(value) { assign(value); } },
+    });
+    clickToggle();
+    expect(assign).not.toHaveBeenCalled();
+  });
+});

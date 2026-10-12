@@ -145,7 +145,8 @@ frontier as before.
 A standalone report dispatched from its own `run` branch (like `--unobtainable`,
 but it *does* read the mastery/inventory state): for every remaining masterable
 item, the fastest plan to reach its **next** unfinished tier (only that one — an
-item at 50k gets a GM row, no MM) and that plan's gold. Driven
+item at 50k gets a GM row, no MM; the rest are named in `MasteryItemInfo.
+more_tiers` and solved on demand via `expand_item`) and that plan's gold. Driven
 by `main.solve_mastery_costs` → `MasteryCostsResult`; conflicts with
 `--ascend`/`--unobtainable`/`--target`/`-m`/`-i` (checked before any file load or
 solve). `--sort time|gold` picks the primary rank axis, the other the tie-breaker
@@ -2153,7 +2154,20 @@ that imports it without going through `manage.py`.
   `self_sourced` param on top) and, on a popover save, **writes** it back
   through `mergeSettingsIntoState` -- keeping the solver page's goal, which the
   popover never shows -- then re-requests. So both pages always agree on what
-  "your save" means, and either can edit it. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
+  "your save" means, and either can edit it. **Expand toggle**: the table
+  solves only each item's next tier; `MasteryItemInfo.more_tiers` (in the
+  payload's `items`) names the rest, and such an item gets a `.tier-toggle`
+  before its name (a same-width `.tier-toggle-slot` on the others, so names
+  align). The first open POSTs `/api/mastery-costs/tiers` (`views.
+  api_mastery_cost_tiers` → `webapi.mastery_cost_tiers` →
+  `solve_mastery_costs(..., expand_item=item)`, which solves only those further
+  tiers and stops climbing at the first unreachable one; cached server-side
+  under `mastery_cost_tiers_fingerprint`, the table's key plus the item). The
+  result lives in the client's `expansions` map (item → open/status/rows/
+  limited) until the next table load, so closing and reopening never refetches;
+  a response for a since-reloaded table is dropped. Expanded rows render
+  directly under their item whatever the sort (`expansionHtml`), not ranked
+  with the rest. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
   unit-tested exports (`masteries.test.js`); `SORT_COLUMNS`/`SORT_KEYS` name the
   four sortable columns and the value tuple each ranks on (primary then
   tie-breaks — the two numeric axes still break on each other like the CLI's

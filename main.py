@@ -2733,6 +2733,10 @@ class MasteryItemInfo:
     categories: tuple[str, ...]  # see item_categories
     event: bool  # an event item (load_event_windows)
     status: str  # OBTAINABLE / MATERIALS_UNOBTAINABLE / UNOBTAINABLE
+    # Tiers past the solved (next) one, not yet calculated -- the page's expand
+    # toggle asks for them on demand (solve_mastery_costs's ``expand_item``).
+    # Empty when the next tier is the last, or could not be reached itself.
+    more_tiers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2878,7 +2882,10 @@ def unmasterable_chain(
 
 
 def solve_mastery_costs(
-    args: argparse.Namespace, cfg: dict, state: farm_solver.GameState
+    args: argparse.Namespace,
+    cfg: dict,
+    state: farm_solver.GameState,
+    expand_item: str | None = None,
 ) -> MasteryCostsResult:
     """The --mastery-costs mode: fastest plan + gold to each item's next tier.
 
@@ -2891,7 +2898,14 @@ def solve_mastery_costs(
     collected as :func:`unmasterable_chain` explanations instead. The channel
     setup and the offers are built once (steady-state passive production, i.e.
     the yearly-average calendar) and reused across every per-item solve, which is
-    cheap because each item's reachable craft subtree is small.
+    cheap because each item's reachable craft subtree is small. Each item's
+    :attr:`MasteryItemInfo.more_tiers` names the tiers past the next one.
+
+    ``expand_item`` (a display or lower-cased name) instead solves just that
+    item's **further** tiers -- the ones ``more_tiers`` named -- climbing until
+    one cannot be reached (recorded in ``limited``; every higher tier needs
+    strictly more of the same, so it is not attempted). The web page's expand
+    toggle uses it to fill in an item's hidden rows on demand.
     """
     start = args.start_date or date.today()
     setup = _build_channel_setup(args, cfg, state, start, args.crafting_bonus)
@@ -2951,6 +2965,12 @@ def solve_mastery_costs(
     limited: list[MasteryNote] = []
     items: dict[str, MasteryItemInfo] = {}
     candidates = list(ascension.candidates(state, catalogue.values()))
+    if expand_item is not None:
+        wanted = expand_item.lower()
+        candidates = [
+            c for c in candidates
+            if wanted in (c.item, (display.get(c.item) or "").lower())
+        ]
     categories = item_categories(
         (c.item for c in candidates), production, recipes, load_unmodelled_sources()
     )
@@ -2973,40 +2993,48 @@ def solve_mastery_costs(
             ))
             continue
         progress = mastery.progress if mastery is not None else 0
-        # Only the next tier not yet reached: the higher ones are a later concern,
-        # and each would be a solve of its own.
-        tier = next(((t, lb) for t, lb in _MASTERY_TIERS if progress < t), None)
-        if tier is None:
-            continue
-        threshold, label = tier
-        demand = {name: (threshold - progress) / args.mastery_bonus}
-        try:
-            plan = optimizer.fastest_endpoint(
-                offers, demand, recipes, args.crafting_bonus, prices=prices,
-                openables=open_flows, inventory=setup.inventory,
-                cookie_sets=setup.cookie_sets or 0.0,
-                grape_juices_per_day=daily_grape_juices(setup.farm),
-                quantize=quantize,
-                ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
-                no_buy=no_buy,
+        remaining = [(t, lb) for t, lb in _MASTERY_TIERS if progress < t]
+        # Normally only the next tier not yet reached: the higher ones are a
+        # later concern, and each would be a solve of its own -- named in
+        # ``more_tiers`` for the page to expand. Expanding solves exactly those.
+        tiers = remaining[1:] if expand_item is not None else remaining[:1]
+        reached = True
+        for threshold, label in tiers:
+            demand = {name: (threshold - progress) / args.mastery_bonus}
+            try:
+                plan = optimizer.fastest_endpoint(
+                    offers, demand, recipes, args.crafting_bonus, prices=prices,
+                    openables=open_flows, inventory=setup.inventory,
+                    cookie_sets=setup.cookie_sets or 0.0,
+                    grape_juices_per_day=daily_grape_juices(setup.farm),
+                    quantize=quantize,
+                    ap_tradeable=ap_tradeable, non_mastery_goals=frozenset(),
+                    no_buy=no_buy,
+                )
+            except ValueError:
+                # Sourceable, but not this many: a finitely-bounded supply (a
+                # limited-seed crop, or a material the AP allow-list keeps off
+                # the trading table) makes a large enough demand *infeasible*
+                # rather than unobtainable -- see optimizer._assert_optimal.
+                # Record the tier and stop climbing: every higher one needs
+                # strictly more of the same, so it is infeasible too. One bad
+                # tier must not abort the whole sweep.
+                limited.append(MasteryNote(
+                    name,
+                    f"{name} cannot reach "
+                    f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
+                    "cannot supply that many",
+                ))
+                reached = False
+                break
+            # Cost is the gold the plan actually spends buying (plan.gold), so
+            # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
+            # drop, not the market value of the tools it now self-sources instead.
+            rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+        if expand_item is None and reached and len(remaining) > 1:
+            items[name] = replace(
+                items[name], more_tiers=tuple(lb for _, lb in remaining[1:])
             )
-        except ValueError:
-            # Sourceable, but not this many: a finitely-bounded supply (a
-            # limited-seed crop, or a material the AP allow-list keeps off
-            # the trading table) makes a large enough demand *infeasible*
-            # rather than unobtainable -- see optimizer._assert_optimal.
-            # Record the tier; one bad tier must not abort the whole sweep.
-            limited.append(MasteryNote(
-                name,
-                f"{name} cannot reach "
-                f"{_MASTERY_TIER_NAMES.get(label, label)}: its sources "
-                "cannot supply that many",
-            ))
-            continue
-        # Cost is the gold the plan actually spends buying (plan.gold), so
-        # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
-        # drop, not the market value of the tools it now self-sources instead.
-        rows.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
 
     unmasterable.sort(key=lambda note: note.text)
     limited.sort(key=lambda note: note.text)

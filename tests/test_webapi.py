@@ -839,7 +839,8 @@ def test_mastery_costs_end_to_end_on_synthetic_paste_text():
     }
     assert named <= set(payload.items)
     for info in payload.items.values():
-        assert set(info) == {"categories", "event", "status"}
+        assert set(info) == {"categories", "event", "status", "more_tiers"}
+        assert set(info["more_tiers"]) <= {"GM", "MM"}
         assert info["categories"] and set(info["categories"]) <= set(main.ITEM_CATEGORIES)
         assert info["status"] in {
             main.OBTAINABLE, main.MATERIALS_UNOBTAINABLE, main.UNOBTAINABLE
@@ -850,6 +851,24 @@ def test_mastery_costs_end_to_end_on_synthetic_paste_text():
         payload.items[note["item"]]["status"] != main.OBTAINABLE
         for note in payload.unmasterable
     )
+
+
+def test_mastery_cost_tiers_fills_in_an_items_further_tiers():
+    args = webapi.params_to_args({})
+    table = webapi.mastery_costs(_MASTERY_TEXT, _INVENTORY_TEXT, args)
+    item, info = next(
+        (name, info) for name, info in table.items.items() if info["more_tiers"]
+    )
+    tiers = webapi.mastery_cost_tiers(_MASTERY_TEXT, _INVENTORY_TEXT, args, item)
+    solved = [row["tier"] for row in tiers.rows]
+    noted = [note["item"] for note in tiers.limited]
+    assert {row["item"] for row in tiers.rows} <= {item}
+    # Every further tier is either solved or the climb stopped at a limited one.
+    assert solved == info["more_tiers"][: len(solved)]
+    assert len(solved) == len(info["more_tiers"]) or noted == [item]
+    assert webapi.mastery_cost_tiers_fingerprint(
+        _MASTERY_TEXT, _INVENTORY_TEXT, args, item
+    ) != webapi.mastery_costs_fingerprint(_MASTERY_TEXT, _INVENTORY_TEXT, args)
 
 
 def test_mastery_costs_ignores_the_goal_params_it_is_handed():

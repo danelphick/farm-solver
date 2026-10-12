@@ -798,6 +798,12 @@ settings up (your goal there is left alone).
   returns to the list.
 - The small **timeline** link beside each item name opens that item's
   [mastery timeline](#mastery-timeline-page) instead.
+- Each item's row is its **next** tier only. An item with tiers past that one
+  (an item at 50,000 has Megamaster after Grandmaster) gets a **▸** toggle
+  before its name: opening it works out those tiers (just for that item) and
+  shows them as rows beneath it, or which one its sources cannot reach.
+  Closing and reopening it shows them again without recalculating, until the
+  table itself reloads.
 
 Times use the steady-state (yearly-average) calendar, and each item has one row:
 its **next** tier, measured from where you are now (an item at 50,000 shows

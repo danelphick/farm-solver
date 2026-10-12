@@ -292,3 +292,51 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
         "limited": payload.limited,
         "items": payload.items,
     })
+
+
+@csrf_exempt  # same reasoning as api_solve: a JSON POST API with no auth
+@require_POST
+def api_mastery_cost_tiers(request: HttpRequest) -> JsonResponse:
+    """One item's further mastery tiers, for the mastery-costs expand toggle.
+
+    The table (:func:`api_mastery_costs`) solves only each item's next tier;
+    this solves the rest for the one ``item`` in the body
+    (``webapi.mastery_cost_tiers``), cached per item under the table's key.
+    Responds with that item's ``rows`` and ``limited`` notes.
+    """
+    decoded = _decode_request(request)
+    if isinstance(decoded, JsonResponse):
+        return decoded
+    mastery_text, inventory_text, args = decoded
+    item = json.loads(request.body).get("item")
+    if not isinstance(item, str) or not item.strip():
+        return JsonResponse({"error": "item must be a non-empty string"}, status=400)
+
+    key = webapi.mastery_cost_tiers_fingerprint(mastery_text, inventory_text, args, item)
+    started = time.monotonic()
+
+    with key_lock(key):
+        payload = CACHE.get(key)
+        if not isinstance(payload, webapi.MasteryCostsPayload):
+            payload = None
+        cached = payload is not None
+        if payload is None:
+            if not SOLVE_SEMAPHORE.acquire(timeout=_SEMAPHORE_TIMEOUT_SECONDS):
+                return JsonResponse({"error": "solver busy, try again"}, status=503)
+            try:
+                payload = webapi.mastery_cost_tiers(
+                    mastery_text, inventory_text, args, item
+                )
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=422)
+            finally:
+                SOLVE_SEMAPHORE.release()
+            CACHE.put(key, payload)
+
+    return JsonResponse({
+        "cached": cached,
+        "solved_ms": round((time.monotonic() - started) * 1000),
+        "item": item,
+        "rows": payload.rows,
+        "limited": payload.limited,
+    })

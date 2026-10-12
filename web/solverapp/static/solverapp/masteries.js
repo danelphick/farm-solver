@@ -161,6 +161,13 @@ let loadedLimited = [];
 // loaded", not "filtered to nothing".
 let loaded = false;
 
+// The table solves only each item's next tier; an item with more (its
+// `more_tiers`) gets an expand toggle that asks /api/mastery-costs/tiers for the
+// rest. item -> {open, status: "pending" | "done" | "error", rows, limited,
+// error}. Kept until the next table load, so re-expanding shows them again
+// without another request.
+let expansions = new Map();
+
 // Event items are shown until the button hides them (restored in init()).
 let showEvents = true;
 
@@ -206,6 +213,54 @@ function renderSortIndicators() {
   });
 }
 
+// The expand toggle before an item's name, when it has tiers left unsolved.
+function tierToggleHtml(item) {
+  const info = loadedItems[item];
+  const more = (info && info.more_tiers) || [];
+  // An empty slot the toggle's width, so every row's name lines up.
+  if (!more.length) return `<span class="tier-toggle-slot"></span>`;
+  const open = Boolean(expansions.get(item)?.open);
+  const tiers = more.map(tierLabel).join(", ");
+  return `<button type="button" class="tier-toggle" data-item="${escapeHtml(item)}"` +
+    ` aria-expanded="${open}" title="${open ? "Hide" : "Show"} ${escapeHtml(tiers)}">` +
+    `${open ? "▾" : "▸"}</button>`;
+}
+
+function costRowHtml(row, extra) {
+  const name = extra
+    ? `<span class="tier-toggle-slot"></span><span class="tier-extra-item">${escapeHtml(row.item)}</span>`
+    : tierToggleHtml(row.item) + escapeHtml(row.item) +
+      ` <a class="timeline-link" href="${escapeHtml(timelineHref(row.item))}"` +
+      ` title="Mastery timeline for ${escapeHtml(row.item)}">timeline</a>`;
+  return `<tr class="clickable${extra ? " tier-extra" : ""}"` +
+    ` data-href="${escapeHtml(masteryHref(row))}"` +
+    ` title="Plan for ${escapeHtml(row.item)} → ${escapeHtml(tierLabel(row.tier))}">` +
+    `<td>${name}</td>` +
+    `<td>${escapeHtml(row.tier)}</td>` +
+    `<td class="num">${escapeHtml(row.time)}</td>` +
+    `<td class="num">${formatGold(row.gold)} g</td>` +
+    `</tr>`;
+}
+
+function noteRowHtml(text, kind) {
+  return `<tr class="tier-extra tier-${kind}"><td colspan="4">${escapeHtml(text)}</td></tr>`;
+}
+
+// An expanded item's further tiers, directly under its row whatever the sort:
+// they are part of that item's story, not rows to rank against the rest.
+function expansionHtml(item) {
+  const exp = expansions.get(item);
+  if (!exp || !exp.open) return "";
+  if (exp.status === "pending") return noteRowHtml("Calculating further tiers…", "pending");
+  if (exp.status === "error") return noteRowHtml(exp.error, "error");
+  return (
+    [...exp.rows]
+      .sort((a, b) => tierRank(a.tier) - tierRank(b.tier))
+      .map((row) => costRowHtml(row, true))
+      .join("") + exp.limited.map((note) => noteRowHtml(note.text, "limited")).join("")
+  );
+}
+
 function renderTable(filter) {
   renderSortIndicators();
   const rows = sortRows(filterEntries(loadedRows, loadedItems, filter), sortKey, sortDirection);
@@ -213,17 +268,7 @@ function renderTable(filter) {
   // each <tr> has to carry its own item/tier to become a link, which reading
   // them back out of rendered table cells would make fragile.
   $("#mastery-costs-body").innerHTML = rows
-    .map(
-      (row) => `<tr class="clickable" data-href="${escapeHtml(masteryHref(row))}"` +
-        ` title="Plan for ${escapeHtml(row.item)} → ${escapeHtml(tierLabel(row.tier))}">` +
-        `<td>${escapeHtml(row.item)}` +
-        ` <a class="timeline-link" href="${escapeHtml(timelineHref(row.item))}"` +
-        ` title="Mastery timeline for ${escapeHtml(row.item)}">timeline</a></td>` +
-        `<td>${escapeHtml(row.tier)}</td>` +
-        `<td class="num">${escapeHtml(row.time)}</td>` +
-        `<td class="num">${formatGold(row.gold)} g</td>` +
-        `</tr>`
-    )
+    .map((row) => costRowHtml(row, false) + expansionHtml(row.item))
     .join("");
   $("#mastery-costs-section").hidden = rows.length === 0;
   return rows.length;
@@ -270,6 +315,7 @@ function renderEventsButton() {
 }
 
 function renderResult(data) {
+  expansions = new Map();
   loadedRows = data.rows || [];
   loadedItems = data.items || {};
   loadedUnmasterable = data.unmasterable || [];
@@ -324,6 +370,67 @@ function saveSettings() {
 // (a fast self-sourced double-toggle) is dropped rather than shown.
 let sequence = 0;
 
+// The request body both endpoints take: the saved pastes and settings, plus
+// this page's self-sourced knob (and, for the tiers endpoint, the `item`).
+function requestBody(extra = {}) {
+  const saved = readSavedState();
+  return JSON.stringify({
+    mastery_text: (saved && saved.mastery_text) || "",
+    inventory_text: (saved && saved.inventory_text) || "",
+    // The shared settings, plus this page's one extra knob. The goal/frontier
+    // fields (target, mastery, items, plans, ...) are carried along harmlessly:
+    // main.solve_mastery_costs solves its own per-item goals and never reads
+    // them, and they are not part of this endpoint's cache key.
+    params: {
+      ...((saved && saved.params) || {}),
+      self_sourced: $("#self-sourced").checked,
+    },
+    ...extra,
+  });
+}
+
+// Fetch an expanded item's further tiers into `expansions`, then redraw. A
+// response for a table that has since been reloaded (`sequence` moved on) is
+// dropped: it was solved against the old state.
+async function fetchTiers(item) {
+  const mySequence = sequence;
+  const exp = expansions.get(item);
+  let data;
+  let failure = null;
+  try {
+    const response = await fetch("/api/mastery-costs/tiers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: requestBody({ item }),
+    });
+    data = await response.json();
+    if (!response.ok) failure = (data && data.error) || `Error ${response.status}`;
+  } catch (err) {
+    failure = "Could not calculate further tiers: " + err.message;
+  }
+  if (mySequence !== sequence || expansions.get(item) !== exp) return;
+  if (failure) {
+    Object.assign(exp, { status: "error", error: failure });
+  } else {
+    Object.assign(exp, { status: "done", rows: data.rows || [], limited: data.limited || [] });
+  }
+  renderFiltered();
+}
+
+// The expand toggle: the first open fetches; after that it only shows/hides
+// what is already here (an error is retried on the next open).
+function toggleTiers(item) {
+  const exp = expansions.get(item);
+  if (exp && !(exp.status === "error" && !exp.open)) {
+    exp.open = !exp.open;
+    renderFiltered();
+    return;
+  }
+  expansions.set(item, { open: true, status: "pending", rows: [], limited: [] });
+  renderFiltered();
+  fetchTiers(item);
+}
+
 async function load() {
   const saved = readSavedState();
   const masteryText = (saved && saved.mastery_text) || "";
@@ -338,18 +445,7 @@ async function load() {
   $("#empty-state").hidden = true;
   $("#mastery-controls").hidden = false;
 
-  const body = JSON.stringify({
-    mastery_text: masteryText,
-    inventory_text: inventoryText,
-    // The shared settings, plus this page's one extra knob. The goal/frontier
-    // fields (target, mastery, items, plans, ...) are carried along harmlessly:
-    // main.solve_mastery_costs solves its own per-item goals and never reads
-    // them, and they are not part of this endpoint's cache key.
-    params: {
-      ...((saved && saved.params) || {}),
-      self_sourced: $("#self-sourced").checked,
-    },
-  });
+  const body = requestBody();
 
   const mySequence = ++sequence;
   setStatus("Solving every remaining mastery…", "pending");
@@ -461,6 +557,12 @@ function init() {
   // Delegated on the (stable) tbody, which renderTable replaces wholesale.
   // A plain navigation, so the browser's Back button returns to this list.
   $("#mastery-costs-body").addEventListener("click", (event) => {
+    // The expand toggle shows/hides the item's further tiers, not its plan.
+    const toggle = event.target.closest("button.tier-toggle");
+    if (toggle) {
+      toggleTiers(toggle.dataset.item);
+      return;
+    }
     // The Item cell carries its own "timeline" link; let the anchor navigate
     // rather than hijacking the click for the row's plan destination.
     if (event.target.closest("a")) return;
