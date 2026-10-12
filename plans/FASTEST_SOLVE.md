@@ -56,6 +56,7 @@ A step that cannot keep the output identical says so, and why, below.
 | 12. Mastery-costs sweep on worker processes | 0.248s | 0.220s | 0.333s | 0.405s |
 | 13. Run known work ahead: the confirmed frontier, the reference endpoint | 0.216s | 0.224s | 0.309s | 0.405s |
 | 14. The surplus LP straight to HiGHS, from a cached shape | 0.200s | 0.226s | 0.284s | 0.402s |
+| 15. Build the stage-3 objective once per base | 0.193s | 0.225s | 0.277s | 0.401s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -260,7 +261,8 @@ What a 1-vCPU instance (the deployment's default) gains -- `bench_solve.py
 | branch at step 10, 1 thread | 0.395s | 1.258s | 0.556s | 1.336s |
 | branch at step 11, 1 thread | 0.395s | 1.258s | 0.531s | 1.303s |
 | branch at step 14, 1 thread | 0.371s | 1.24s | 0.491s | 1.30s |
-| speed-up | 2.9x | 4.5x | 2.2x | 2.2x |
+| branch at step 15, 1 thread | 0.359s | 1.24s | 0.48s | 1.30s |
+| speed-up | 3.0x | 4.5x | 2.2x | 2.2x |
 
 Everything except steps 3-5 (the threads) counts here: the PuLP hand-over, the
 CBC fallback gone, the MIP heuristic, the leftovers pass, the build reuse and
@@ -363,3 +365,12 @@ good's net value the way `LpAffineExpression.value()` sums it. The PuLP
 formulation stays as `_surplus_sale_value_pulp`, used on any other backend, and
 was checked equal to the direct one -- every returned row, float for float -- on
 all 191 calls of four web solves.
+
+### 15. Build the stage-3 objective once per base -- output identical
+
+The refinement's last stage minimises activity -- the sum of every craft, draw,
+open and buy variable, ~600 terms -- and rebuilt that sum with `lpSum` on every
+call, though it is the same expression on every call on a base. `_Base.activity`
+now keeps it (built on first use; the stage only runs when the base has such
+variables, so the expression is never empty and PuLP never folds a dummy
+variable into it).

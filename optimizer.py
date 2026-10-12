@@ -688,6 +688,9 @@ class _Base:
     # skip straight to the trivial remainder-only plan without touching ``problem``.
     remainder_only: bool = False
     ephemeral: list[str] = field(default_factory=list)
+    # The stage-3 (least activity) objective, built on first use and reused --
+    # it is the same expression on every call (see _solve_configured).
+    activity: pulp.LpAffineExpression | None = None
     # Ascension extension (see _build_base's docstring section): the spec this
     # base was built for (None outside ascension mode), each surviving candidate
     # item's step variables (item -> step name -> 0/1-bounded LpVariable, step
@@ -1824,13 +1827,16 @@ def _solve_configured(
                 problem.addConstraint(fixed)
                 base.ephemeral.append(fixed.name)
 
-        # Stage 3 -- least activity, so no reported metric moves.
-        problem.setObjective(
-            pulp.lpSum(base.craft.values()) + pulp.lpSum(base.usage)
-            + pulp.lpSum(base.opens) + pulp.lpSum(base.buy.values())
-            + pulp.lpSum(base.pj.values())
-            + (base.buy_cookie if base.buy_cookie is not None else 0)
-        )
+        # Stage 3 -- least activity, so no reported metric moves. The same
+        # expression every call on this base, so it is built once and kept.
+        if base.activity is None:
+            base.activity = (
+                pulp.lpSum(base.craft.values()) + pulp.lpSum(base.usage)
+                + pulp.lpSum(base.opens) + pulp.lpSum(base.buy.values())
+                + pulp.lpSum(base.pj.values())
+                + (base.buy_cookie if base.buy_cookie is not None else 0)
+            )
+        problem.setObjective(base.activity)
         problem.solve(solver)
 
         # Every pin above only narrows a problem that already had an optimum, so the
