@@ -102,6 +102,7 @@ have_flour_power = true
 have_feed_boost = true
 
 [sugar_cane_mill]
+have_sugar_cane_mill = true
 have_sugar_boost_i = true
 have_sugar_boost_ii = true
 

@@ -237,7 +237,9 @@ def hickory_omelette_mode(config: dict[str, Any]) -> str:
 def sugar_cane_mill_rates(config: dict[str, Any]) -> tuple[int, int]:
     """The Sugar Cane Mill's ``(batches per minute, unrefined sugar per batch)``.
 
-    ``(0, 0)`` without a ``[sugar_cane_mill]`` section. A batch presses 7 Sugar
+    ``(0, 0)`` unless ``[sugar_cane_mill] have_sugar_cane_mill`` is true (the
+    mill is a purchased building; without it the boosts are ignored). A batch
+    presses 7 Sugar
     Cane and a Machine Press into Unrefined Sugar (see
     :func:`sources.sugar_cane_mill_offers` -- a grounded conversion, not a free
     passive producer). ``have_sugar_boost_i`` runs two batches a minute (double
@@ -245,8 +247,8 @@ def sugar_cane_mill_rates(config: dict[str, Any]) -> tuple[int, int]:
     inputs. So 1/min from 7+1 by default, 2/min from 14+2 with boost I and 4/min
     from 14+2 with both. Boost II without boost I is an error.
     """
-    mill = config.get("sugar_cane_mill")
-    if mill is None:
+    mill = config.get("sugar_cane_mill") or {}
+    if not mill.get("have_sugar_cane_mill"):
         return 0, 0
     boost_i = bool(mill.get("have_sugar_boost_i"))
     boost_ii = bool(mill.get("have_sugar_boost_ii"))

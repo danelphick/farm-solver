@@ -369,16 +369,25 @@ def test_sugar_cane_mill_is_not_a_free_passive_producer():
 
 
 def test_sugar_cane_mill_rates_default_one_batch_of_one():
-    assert sugar_cane_mill_rates({"sugar_cane_mill": {}}) == (1, 1)
+    assert sugar_cane_mill_rates(
+        {"sugar_cane_mill": {"have_sugar_cane_mill": True}}
+    ) == (1, 1)
 
 
-def test_sugar_cane_mill_rates_absent_section_is_no_mill():
+def test_sugar_cane_mill_rates_unbought_mill_is_no_mill():
     assert sugar_cane_mill_rates({}) == (0, 0)
+    # The boosts mean nothing without the building itself.
+    assert sugar_cane_mill_rates(
+        {"sugar_cane_mill": {"have_sugar_boost_i": True, "have_sugar_boost_ii": True}}
+    ) == (0, 0)
+    assert sugar_cane_mill_rates(
+        {"sugar_cane_mill": {"have_sugar_cane_mill": False, "have_sugar_boost_i": True}}
+    ) == (0, 0)
 
 
 def test_sugar_boost_i_doubles_the_batches():
     assert sugar_cane_mill_rates(
-        {"sugar_cane_mill": {"have_sugar_boost_i": True}}
+        {"sugar_cane_mill": {"have_sugar_cane_mill": True, "have_sugar_boost_i": True}}
     ) == (2, 1)
 
 
@@ -386,6 +395,7 @@ def test_sugar_boost_ii_doubles_each_batch_output():
     assert sugar_cane_mill_rates(
         {
             "sugar_cane_mill": {
+                "have_sugar_cane_mill": True,
                 "have_sugar_boost_i": True,
                 "have_sugar_boost_ii": True,
             }
@@ -395,7 +405,9 @@ def test_sugar_boost_ii_doubles_each_batch_output():
 
 def test_sugar_boost_ii_without_i_is_an_error():
     with pytest.raises(ValueError):
-        sugar_cane_mill_rates({"sugar_cane_mill": {"have_sugar_boost_ii": True}})
+        sugar_cane_mill_rates(
+            {"sugar_cane_mill": {"have_sugar_cane_mill": True, "have_sugar_boost_ii": True}}
+        )
 
 
 def test_passive_production_reads_hay_field_as_straw():

@@ -481,6 +481,7 @@ have_feed_boost = true
                      # boost I: 2/min from double the inputs; + boost II: 4/min, same inputs
                      # it also refines unrefined sugar per sugar_cane_mill.csv
                      # (Molasses 3, Brown Sugar 5, White Sugar 7; no crafting bonus)
+have_sugar_cane_mill = true   # bought the mill; false/absent = no mill at all
 have_sugar_boost_i = true
 have_sugar_boost_ii = true
 

@@ -298,6 +298,8 @@ const BUILDING_SECTIONS = [
       help: "Flour Power: the flour mill makes 2 flour/min instead of 1." },
     { key: "feed_mill.have_feed_boost", label: "Feed Boost", type: "bool",
       help: "Feed Boost: the feed mill makes 2 feed/min instead of 1." },
+    { key: "sugar_cane_mill.have_sugar_cane_mill", label: "Sugar Cane Mill", type: "bool",
+      help: "You have bought the Sugar Cane Mill: it presses sugar cane and machine presses into unrefined sugar and refines that into molasses, brown and white sugar. Off means no mill (the boosts below are then ignored)." },
     { key: "sugar_cane_mill.have_sugar_boost_i", label: "Sugar Boost I", type: "bool",
       help: "Sugar Boost I: the sugar cane mill presses two batches a minute (double the sugar cane and machine presses)." },
     { key: "sugar_cane_mill.have_sugar_boost_ii", label: "Sugar Boost II", type: "bool",
