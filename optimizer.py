@@ -1160,27 +1160,36 @@ def _assert_optimal(problem: pulp.LpProblem, solver) -> object:
     still-loaded solution is the right fallback.
 
     A non-optimal status is itself only *suspected* infeasibility: HiGHS has been
-    seen flagging a feasible model "Unbounded" (impossible here -- the objective
-    is a sum of nonnegative terms -- so it is presolve mis-flagging the tiny
-    ~1e-8 gold-weight coefficients). Before declaring the demand unsatisfiable,
-    re-solve once with the bundled CBC as a second opinion; if it finds an
-    optimum, that (equally valid) solution is left loaded and the CBC solver is
-    returned so the caller's remaining refinement solves stay on the backend
-    that can actually handle this model. Returns the solver the rest of the
-    call should use.
+    seen flagging a feasible model "Unbounded" or "Infeasible" (impossible here --
+    the objective is a sum of nonnegative terms -- so it is presolve mis-flagging
+    the tiny ~1e-8 gold-weight coefficients; on the web config's mastery-costs
+    sweep, a third of the items). Before declaring the demand unsatisfiable,
+    re-solve with second opinions: HiGHS with presolve off first (in-process, a
+    few milliseconds) -- and, since a MIP (the integer ``days_available``) still
+    presolves at its search nodes, with that restricted to the root, which
+    together solve every such model seen so far -- then the bundled CBC (a
+    subprocess per solve). The first that finds an optimum leaves
+    that (equally valid) solution loaded and is returned, so the caller's
+    remaining refinement solves stay on a backend that can handle this model.
+    Returns the solver the rest of the call should use.
     """
     if pulp.LpStatus[problem.status] == "Optimal":
         return solver
-    fallback = pulp.PULP_CBC_CMD(msg=False)
-    problem.solve(fallback)
-    status = pulp.LpStatus[problem.status]
-    if status != "Optimal":
-        raise ValueError(
-            f"no plan can satisfy the demand (solver status: {status}); "
-            "a demanded item likely needs more than its limited sources "
-            "(e.g. held Mega/Spring seeds) can ever supply"
+    fallbacks = [pulp.PULP_CBC_CMD(msg=False)]
+    if isinstance(solver, pulp.HiGHS):
+        fallbacks.insert(
+            0, FastHiGHS(msg=False, presolve="off", mip_root_presolve_only=True)
         )
-    return fallback
+    for fallback in fallbacks:
+        problem.solve(fallback)
+        status = pulp.LpStatus[problem.status]
+        if status == "Optimal":
+            return fallback
+    raise ValueError(
+        f"no plan can satisfy the demand (solver status: {status}); "
+        "a demanded item likely needs more than its limited sources "
+        "(e.g. held Mega/Spring seeds) can ever supply"
+    )
 
 
 # Which lower steps a step needs pinned alongside it (mega needs grandmaster

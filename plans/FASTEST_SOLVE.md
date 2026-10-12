@@ -43,6 +43,7 @@ A step that cannot keep the output identical says so, and why, below.
 | --- | --- | --- | --- | --- |
 | `main` (`0875ebf`) | 1.079s | 5.646s | 1.068s | 2.904s |
 | 1. `FastHiGHS`: a fast PuLP -> HiGHS hand-over | 0.770s | 5.155s | 0.716s | 2.386s |
+| 2. HiGHS without presolve before the CBC fallback | 0.684s | 3.019s | 0.703s | 2.365s |
 
 `main` already includes the coefficient-dict row building (`afe461d`), which
 took `--mastery-costs` from 3.85s to 2.81s on its own.
@@ -66,3 +67,33 @@ shared prefix is reused; a base's ephemeral pins come and go at the end), then
 passes the model in one `passModel`, and reads back only the primal values (no
 caller reads duals or slacks). Verified identical on every scenario and on both
 web views.
+
+### 2. HiGHS without presolve before the CBC fallback -- web output differs at solver tolerance
+
+`_assert_optimal` re-solved any non-optimal first solve on CBC (a subprocess,
+~20ms a solve) before believing the demand unsatisfiable, and the CBC solver
+then carried the rest of that call's refinement. On the web config that was not
+rare: **62 of the mastery-costs page's 192 items** (37 "Infeasible", 24
+"Unbounded", 1 "UnboundedOrInfeasible" from HiGHS -- all feasible, CBC solved
+every one) and 3 of the solver page's solves -- ~45% of the mastery-costs page's
+time. Every one of those models solves to optimality in HiGHS with presolve off
+-- presolve mis-flags them; the costs reach 6e-11 against a 1e-7..1e5 matrix --
+once a MIP (the models carry one integer, `days_available`) also stops presolving
+at its search nodes (`mip_root_presolve_only`; without it 12 of the 62 still
+failed). So `_assert_optimal` now tries `FastHiGHS(presolve="off",
+mip_root_presolve_only=True)` first and keeps CBC as the last resort; neither web
+view calls CBC any more.
+
+The CLI scenarios never hit the fallback and are unchanged. The web views now
+take those items' optima from HiGHS instead of CBC -- equally optimal, but where
+the optimum is not unique the reported plan can differ at solver-tolerance level:
+
+* mastery-costs page: every time identical, and the "cannot" lists; 61 of 192
+  gold figures differ, all by under 0.0001% except Sunflower Oil's Megamaster
+  (665,219.36 -> 665,249.62 gold, +0.005%: the stage-2 tie-break minimises total
+  value, not gold, so equally-valued plans can spend different gold);
+* solver page: one frontier plan's time moves by 0.002 seconds and its gold by
+  0.0002 (both print the same); the selected plan's Small Spring explores
+  yield 1 Wood fewer, Gary's Crushroom 3 Mushroom Paste fewer, the Surplus
+  section 5 Hammer fewer, and the passive-production rows tied on quantity and
+  time now list alphabetically instead of in the CBC solution's order.
