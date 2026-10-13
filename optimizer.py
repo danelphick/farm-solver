@@ -2524,11 +2524,11 @@ def _pumpkin_gap_fill(
     juice-free plan distinct from the slow cheapest endpoint.
     """
     found: dict[int, SourcingPlan] = {}
-    # Stop narrowing a bracket at 1/1024 of the whole span (a minute at least): a
+    # Stop narrowing a bracket at 1/256 of the whole span (a minute at least): a
     # count that jumps (23 -> 21, no 22 exists) otherwise chases its boundary down
-    # to the minute, a dozen MIP solves for a row two hours from its neighbour --
-    # finer than the report's two-unit durations show on a months-long span.
-    resolution = max(60.0, (hi_t - lo_t) / 1024)
+    # to the minute, a dozen MIP solves hunting a row that would sit hours from its
+    # neighbour on a months-long span.
+    resolution = max(60.0, (hi_t - lo_t) / 256)
     floor = hi_pj if want is None else max(hi_pj, lo_pj - want)
 
     def at(cap: float) -> SourcingPlan:

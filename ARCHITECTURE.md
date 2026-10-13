@@ -732,7 +732,7 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
   surfaces alongside the slow cheapest endpoint). Bounded two ways: `want` (`count −
   distinct`, the spare rows, spent fast bracket first) limits each bracket to the counts
   just under its fast end -- all `_thin_pumpkin` could show -- and a bracket stops
-  narrowing at `span/1024` (a minute at least), since a count that *jumps* (23 → 21,
+  narrowing at `span/256` (a minute at least), since a count that *jumps* (23 → 21,
   no 22) otherwise chases its boundary to the minute. The merged set is
   `_non_dominated`-pruned first: where juice is not monotone in the cap the fastest plan
   at a count can be slower *and* dearer than a neighbour. `_thin_pumpkin` then re-thins the merged
