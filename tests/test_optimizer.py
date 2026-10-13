@@ -811,6 +811,15 @@ def test_passive_residuals_are_net_of_other_channels():
     assert passive_residuals(plan, {"Oak": 100}, {}, 1.0, [], {}) == {"oak": 70.0}
 
 
+def test_passive_residuals_are_net_of_purchases():
+    # 100 Twine needed; 80 traded for, so passive is left only the other 20. Not
+    # counting the buy read all 100 as passive's, and quantising that phantom wait
+    # inflated a minutes-long plan's time by centuries.
+    passive = Offer("passive", "passive", {"twine": 10.0}, time_per_unit=timedelta(minutes=1))
+    plan = SourcingPlan(draws=[Draw(passive, 2)], bought={"twine": 80})
+    assert passive_residuals(plan, {"Twine": 100}, {}, 1.0, [], {}) == {"twine": 20.0}
+
+
 def test_passive_completion_caps_skip_excluded_items():
     # Oak completes at 100/10 = 10 min; Horn is a pet trickle we exclude, so only
     # Oak's breakpoint is returned.

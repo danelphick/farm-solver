@@ -2582,9 +2582,9 @@ class PlanBalance(NamedTuple):
 
     ``need`` is everything the plan must produce: the demand, plus what its crafts
     consume as materials and what its opens consume (chest tokens and keys).
-    ``elsewhere`` is everything the non-passive channels supply for free: crafting
+    ``elsewhere`` is everything the non-passive channels supply: crafting
     output, open yields, held stock (except directly-demanded items, whose demand
-    is already net of stock), and every non-passive draw. ``crafted`` is the
+    is already net of stock), every non-passive draw, and purchases. ``crafted`` is the
     crafting output alone (``crafting_bonus`` per craft). An item's residual left
     for passive production is ``need - elsewhere``.
     """
@@ -2642,6 +2642,12 @@ def plan_balance(
             continue
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    # Bought (gold or Arnold-Palmer-traded) units are supply like any other channel,
+    # as the LP's balance rows count them. Leaving them out read an AP-traded
+    # material that passive also makes (1.87M Twine) as a passive residual, and
+    # quantising that phantom wait turned a 4-minute plan into 213 years.
+    for item, quantity in plan.bought.items():
+        elsewhere[item] = elsewhere.get(item, 0.0) + quantity
     return PlanBalance(need=need, elsewhere=elsewhere, crafted=crafted)
 
 
@@ -3293,16 +3299,11 @@ def frontier(
             exact = _solve_configured(base, exact_integers=True, **kwargs)
             post(exact)
             finished.append(exact)
-        # Two survivors can land on the same integer point once juice is whole; drop the
-        # duplicate rows, keeping the first (fastest-first order is preserved).
-        seen: set[tuple[int, int]] = set()
-        deduped = []
-        for plan in finished:
-            key = (round(plan.time.total_seconds()), round(plan.gold - plan.surplus_gold))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(plan)
-        thinned = deduped
+        # Re-prune on the exact costs: two survivors can land on the same integer point
+        # once juice is whole, and a row's exact re-solve can move it past a neighbour
+        # (slower *and* dearer than one beside it), which the relaxed pruning above
+        # could not see. ``_non_dominated`` drops both and re-sorts fastest first.
+        thinned = _non_dominated(finished)
 
         # A steep juice price makes the exact frontier jump counts (``3, 3, 2, 0``):
         # the relaxation under-counted juice, so thinning kept no plan at the skipped
