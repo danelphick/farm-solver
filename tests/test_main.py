@@ -51,7 +51,7 @@ from main import (
     strip_dated_sources,
     within_limits,
 )
-from optimizer import PumpkinTier, SourcingPlan, SpreadSpec
+from optimizer import SourcingPlan, SpreadSpec
 from passive import DAILY, MINUTE, PassiveProducer, PassiveProduction
 from report import (
     IGNORED_GOAL_TEXT,
@@ -2184,34 +2184,27 @@ def test_resolve_monthly_grants_config_override_wins():
     )
 
 
-def test_pumpkin_juice_gains_in_the_final_tier():
-    # A juice grants 10% of the tier it is drunk in, in the optimiser's
-    # items-to-find units (a found item is worth mastery_bonus mastery). A climb
-    # inside one tier has one tier: gain 100,000 / 1.1 per juice, span the shortfall.
-    needs = [ItemNeed("Butter", have=750_000, target=1_000_000, is_mastery=True)]
-    gains = pumpkin_juice_gains(needs, 1.1)
-    assert gains == {
-        "butter": (
-            PumpkinTier(pytest.approx(100_000 / 1.1), pytest.approx(250_000 / 1.1)),
-        )
-    }
+def test_pumpkin_juice_gains_compound_back_from_the_target():
+    # A juice multiplies current mastery by 1.1, so the last one drunk (on
+    # 909,091 -> 1M) adds 90,909 mastery, the one before it 1/1.1 of that, and so
+    # on -- in items-to-find units (a found item is worth mastery_bonus mastery).
+    needs = [ItemNeed("Butter", have=700_000, target=1_000_000, is_mastery=True)]
+    gains = pumpkin_juice_gains(needs, 1.1)["butter"]
+    last = 1_000_000 * (1 - 1 / 1.1)
+    assert gains[0] == pytest.approx(last / 1.1)
+    assert gains[1] == pytest.approx(last / 1.1 / 1.1)
+    # Four juices start at 1M / 1.1**4 = 683,013, below the 700,000 held: enough.
+    assert len(gains) == 4
 
 
-def test_pumpkin_juice_gains_split_a_climb_across_tiers():
-    # Gold Drum at 49,855 aiming for 1M: 50,145 of the climb is in the 100,000
-    # tier (10,000 a juice), the other 900,000 in the 1M tier (100,000 a juice).
-    needs = [ItemNeed("Gold Drum", have=49_855, target=1_000_000, is_mastery=True)]
-    (tiers,) = pumpkin_juice_gains(needs, 1.0).values()
-    assert tiers == (PumpkinTier(10_000, 50_145), PumpkinTier(100_000, 900_000))
-
-
-def test_pumpkin_juice_gains_cover_every_tier_from_zero():
-    # An untracked item starts at 0, so it crosses every tier up to its target --
-    # the final one for a 25,000 goal is the 100,000 tier, from 10,000.
-    needs = [ItemNeed("Gainite", have=0, target=25_000, is_mastery=True)]
-    tiers = pumpkin_juice_gains(needs, 1.0)["gainite"]
-    assert [tier.gain for tier in tiers] == [1, 10, 100, 1_000, 10_000]
-    assert [tier.span for tier in tiers] == [10, 90, 900, 9_000, 15_000]
+def test_pumpkin_juice_gains_stop_where_a_juice_adds_under_one_mastery():
+    # From zero no number of juices finishes the climb, so the credits run until a
+    # juice would add less than one mastery.
+    gains = pumpkin_juice_gains(
+        [ItemNeed("Gainite", have=0, target=100_000, is_mastery=True)], 1.0
+    )["gainite"]
+    assert gains[-1] >= 1
+    assert gains[-1] / 1.1 < 1
 
 
 def test_pumpkin_juice_gains_take_an_items_highest_goal():
@@ -2219,8 +2212,8 @@ def test_pumpkin_juice_gains_take_an_items_highest_goal():
         ItemNeed("Hops", have=500, target=10_000, is_mastery=True),
         ItemNeed("Hops", have=500, target=100_000, is_mastery=True),
     ]
-    tiers = pumpkin_juice_gains(needs, 1.0)["hops"]
-    assert tiers[-1] == PumpkinTier(10_000, 90_000)
+    gains = pumpkin_juice_gains(needs, 1.0)["hops"]
+    assert gains[0] == pytest.approx(100_000 * (1 - 1 / 1.1))
 
 
 def test_pumpkin_juice_gains_skips_acquire_goals_and_met_needs():
@@ -2245,44 +2238,21 @@ def test_print_frontier_omits_the_pumpkin_juice_column_when_unused(capsys):
 
 
 def test_pumpkin_juice_schedule_names_the_start_level():
-    # Two juices in the 1M tier earn 100,000 mastery each (whatever the mastery
-    # bonus -- that only converts to items), so drunk back to back from 800,000 the
-    # last lands the item on target.
-    needs = [ItemNeed("Butter", have=750_000, target=1_000_000, is_mastery=True)]
-    plan = SourcingPlan(pumpkin_juices={"butter": 2}, pumpkin_tiers={"butter": (2,)})
-    gains = pumpkin_juice_gains(needs, 1.1)
-    assert pumpkin_juice_schedule(plan, needs, gains) == {"butter": ((2, 800_000),)}
-
-
-def test_pumpkin_juice_schedule_clamps_to_current_progress():
-    # Only 40,000 of shortfall left, so target - 100,000 sits below the current
-    # 960,000 -- the drink point clamps up to where the item already is.
-    needs = [ItemNeed("Butter", have=960_000, target=1_000_000, is_mastery=True)]
-    plan = SourcingPlan(pumpkin_juices={"butter": 1}, pumpkin_tiers={"butter": (1,)})
-    gains = pumpkin_juice_gains(needs, 1.1)
-    assert pumpkin_juice_schedule(plan, needs, gains) == {"butter": ((1, 960_000),)}
-
-
-def test_pumpkin_juice_schedule_runs_one_stretch_per_tier():
-    # 3 juices in the 100,000 tier end at its top (70,000 -> 100,000), then 9 in
-    # the 1M tier from 100,000 to the goal.
-    needs = [ItemNeed("Gold Drum", have=49_855, target=1_000_000, is_mastery=True)]
-    plan = SourcingPlan(
-        pumpkin_juices={"gold drum": 12}, pumpkin_tiers={"gold drum": (3, 9)}
-    )
-    gains = pumpkin_juice_gains(needs, 1.1)
-    assert pumpkin_juice_schedule(plan, needs, gains) == {
-        "gold drum": ((3, 70_000), (9, 100_000))
-    }
-
-
-def test_pumpkin_juice_schedule_without_a_split_fills_the_top_tier_first():
+    # Three juices drunk back to back from 1M / 1.1**3 = 751,315 land the item on
+    # its 1M target (each multiplies mastery by 1.1).
     needs = [ItemNeed("Gold Drum", have=49_855, target=1_000_000, is_mastery=True)]
     plan = SourcingPlan(pumpkin_juices={"gold drum": 3})
     gains = pumpkin_juice_gains(needs, 1.1)
-    assert pumpkin_juice_schedule(plan, needs, gains) == {
-        "gold drum": ((3, 700_000),)
-    }
+    assert pumpkin_juice_schedule(plan, needs, gains) == {"gold drum": 751_315}
+
+
+def test_pumpkin_juice_schedule_clamps_to_current_progress():
+    # Only 40,000 of shortfall left, so 1M / 1.1 (909,091) sits below the current
+    # 960,000 -- the drink point clamps up to where the item already is.
+    needs = [ItemNeed("Butter", have=960_000, target=1_000_000, is_mastery=True)]
+    plan = SourcingPlan(pumpkin_juices={"butter": 1})
+    gains = pumpkin_juice_gains(needs, 1.1)
+    assert pumpkin_juice_schedule(plan, needs, gains) == {"butter": 960_000}
 
 
 def test_pumpkin_juice_schedule_skips_items_with_no_juice():
@@ -2300,7 +2270,7 @@ def test_print_plan_shows_the_pumpkin_juice_section(capsys):
     )
     print_plan(
         plan, demand, Farm(), Workshop(), 1.0,
-        pumpkin_schedule={"butter": ((3, 700_000),)},
+        pumpkin_schedule={"butter": 700_000},
     )
     out = capsys.readouterr().out
     assert "Pumpkin Juice (mastery boost):" in out

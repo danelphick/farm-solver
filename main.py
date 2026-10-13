@@ -533,38 +533,25 @@ def resolve_frontier_graph(args: argparse.Namespace, cfg: dict) -> str | None:
     return cfg.get("frontier", {}).get("graph")
 
 
-def _mastery_tiers(have: int, target: int) -> list[tuple[int, int, int]]:
-    """The mastery tiers a climb from ``have`` to ``target`` crosses, lowest first.
-
-    Each is ``(lo, hi, threshold)``: the stretch ``[lo, hi)`` of the climb spent in
-    the tier whose denominator is ``threshold``. FarmRPG thresholds are powers of
-    ten (see :attr:`farm_solver.Mastery.tier`), the tier with threshold ``t``
-    covering mastery ``[t / 10, t)`` (the first, ``10``, from 0).
-    """
-    tiers = []
-    threshold = 10
-    while threshold // 10 < target:
-        lo = max(have, 0 if threshold == 10 else threshold // 10)
-        hi = min(target, threshold)
-        if hi > lo:
-            tiers.append((lo, hi, threshold))
-        threshold *= 10
-    return tiers
+# A Pumpkin Juice multiplies an item's current mastery by this.
+PUMPKIN_JUICE_BOOST = 1.1
 
 
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
     mastery_bonus: float,
-) -> dict[str, tuple[optimizer.PumpkinTier, ...]]:
-    """What a Pumpkin Juice covers, per mastery-goal item and tier.
+) -> dict[str, tuple[float, ...]]:
+    """What each Pumpkin Juice covers, per mastery-goal item, best juice first.
 
-    A juice instantly grants 10% of the tier the item is in *when drunk* -- 10,000
-    mastery below 100,000, 100,000 from there to 1,000,000 -- so a shortfall
-    crossing tiers gets one :class:`optimizer.PumpkinTier` per tier it crosses,
-    lowest first: ``gain`` is that tier's ``0.1 * threshold``, and ``span`` the
-    stretch of the shortfall inside it (the most its juices can earn), both in the
+    A juice multiplies the item's current mastery by :data:`PUMPKIN_JUICE_BOOST`
+    (1.1), so it is worth most drunk late: ``n`` juices drunk back to back ending on
+    the target ``T`` start at ``T / 1.1**n`` and cover ``T * (1 - 1.1**-n)`` of the
+    climb. The k-th juice (counting back from the last drunk) adds ``T * 0.1 /
+    1.1**k``, so the credits shrink geometrically. They stop once the juices would
+    start at or below the current ``have`` (the shortfall is then covered outright,
+    the LP clamping the overshoot) or once a juice adds under one mastery. In the
     optimiser's items-to-find units (a found item is worth ``mastery_bonus``
-    mastery, so mastery ``/ mastery_bonus``). Only mastery goals (tower, ``-m``)
+    mastery), so each is ``/ mastery_bonus``. Only mastery goals (tower, ``-m``)
     with a shortfall qualify; an ``-i`` acquire goal earns no mastery, so a juice
     does nothing for it. An item with several goals climbs to the highest.
     """
@@ -575,34 +562,35 @@ def pumpkin_juice_gains(
         key = need.item.lower()
         have, target = climbs.get(key, (need.have, need.target))
         climbs[key] = (have, max(target, need.target))
-    return {
-        item: tuple(
-            optimizer.PumpkinTier(
-                gain=0.1 * threshold / mastery_bonus, span=(hi - lo) / mastery_bonus
-            )
-            for lo, hi, threshold in _mastery_tiers(have, target)
-        )
-        for item, (have, target) in climbs.items()
-    }
+    gains: dict[str, tuple[float, ...]] = {}
+    for item, (have, target) in climbs.items():
+        steps = []
+        start = float(target)
+        while start > have:
+            step = start - start / PUMPKIN_JUICE_BOOST
+            if step < 1:
+                break
+            steps.append(step / mastery_bonus)
+            start -= step
+        if steps:
+            gains[item] = tuple(steps)
+    return gains
 
 
 def pumpkin_juice_schedule(
     plan: optimizer.SourcingPlan,
     needs: list[farm_solver.ItemNeed],
-    pj_gain: dict[str, tuple[optimizer.PumpkinTier, ...]],
-) -> dict[str, tuple[tuple[int, int], ...]]:
-    """When to drink ``plan``'s Pumpkin Juices: ``(count, start level)`` per tier.
+    pj_gain: dict[str, tuple[float, ...]],
+) -> dict[str, int]:
+    """The mastery level at which to start drinking ``plan``'s Pumpkin Juices.
 
-    A juice grants 10% of the item's tier when drunk, so it lands its full boost
-    drunk late in a tier. The ``n`` juices the plan drinks in a tier (its
-    ``pumpkin_tiers`` split, see :func:`pumpkin_juice_gains`) start ``n * 0.1 *
-    threshold`` mastery below the top of that tier's stretch -- the goal itself for
-    the final tier, the next tier's floor for a lower one -- and go back to back, each
-    lifting mastery to the next one's drink point. A start below the stretch's floor
-    (the last juice overshooting) clamps up to it. A plan without a tier split (one
-    built by hand) is assumed to drink top tier first. Returns ``{lower-cased item:
-    ((count, level), ...)}`` in drinking order (lowest tier first), for the items
-    the plan drinks on.
+    A juice multiplies the current mastery by :data:`PUMPKIN_JUICE_BOOST`, so ``n``
+    juices drunk back to back land the item on target ``T`` from ``T / 1.1**n`` --
+    each lifts mastery to the next one's drink point -- the same climb
+    :func:`pumpkin_juice_gains` credits. A start below the current progress (the
+    last juice needed overshoots) clamps up to it: drink them from where the item
+    already is. Returns ``{lower-cased item: level}`` for the items the plan drinks
+    on.
     """
     climbs: dict[str, tuple[int, int]] = {}
     for need in needs:
@@ -610,28 +598,13 @@ def pumpkin_juice_schedule(
             key = need.item.lower()
             have, target = climbs.get(key, (need.have, need.target))
             climbs[key] = (have, max(target, need.target))
-    schedule: dict[str, tuple[tuple[int, int], ...]] = {}
+    schedule: dict[str, int] = {}
     for item, count in plan.pumpkin_juices.items():
         whole = round(count)
         if whole < 1 or item not in climbs or item not in pj_gain:
             continue
-        tiers = _mastery_tiers(*climbs[item])
-        counts = plan.pumpkin_tiers.get(item)
-        if counts is None or len(counts) != len(tiers):
-            counts = [0] * len(tiers)
-            left = whole
-            for k in reversed(range(len(tiers))):
-                lo, hi, threshold = tiers[k]
-                counts[k] = min(left, math.ceil((hi - lo) / (0.1 * threshold)))
-                left -= counts[k]
-            counts[-1] += left
-        drinks = tuple(
-            (n, max(lo, round(hi - n * 0.1 * threshold)))
-            for n, (lo, hi, threshold) in zip(counts, tiers, strict=True)
-            if n > 0
-        )
-        if drinks:
-            schedule[item] = drinks
+        have, target = climbs[item]
+        schedule[item] = max(have, round(target / PUMPKIN_JUICE_BOOST**whole))
     return schedule
 
 
@@ -1845,7 +1818,7 @@ class SolveInputs:
     # [sawmill] hickory_omelette is set) and the Sugar Cane Mill (when configured);
     # static across the seasonal fixed point, so built once here.
     boost_offers: list[sources.Offer]
-    pj_gain: dict[str, tuple[optimizer.PumpkinTier, ...]]
+    pj_gain: dict[str, tuple[float, ...]]
     pj_price: float
     pj_limit: int | None
     model_calendar: bool

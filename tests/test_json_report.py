@@ -342,7 +342,7 @@ def test_pumpkin_juice_section_drops_the_gold_suffix_and_names_the_start_level()
     plan = SourcingPlan(pumpkin_juices={"butter": 3.0}, pumpkin_gold=690.0, gold=690.0)
     text, sections = _plan_docs(
         plan, {}, prices={"butter": 10.0},
-        pumpkin_schedule={"butter": ((2, 18000),)},
+        pumpkin_schedule={"butter": 18000},
     )
     assert "| butter | 3 | 690.0 g | 18,000 |" in text
     (row,) = _only_table(sections, ["Goal", "Juices", "Gold", "Start drinking at mastery"])["rows"]

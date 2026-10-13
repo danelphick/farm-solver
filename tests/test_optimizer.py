@@ -10,7 +10,6 @@ from exploring import Exploring, ExploringLocation
 from fishing import Fishing, FishingZone
 from optimizer import (
     GraphSeries,
-    PumpkinTier,
     SourcingPlan,
     SpreadSpec,
     _build_base,
@@ -1312,28 +1311,23 @@ def test_minimize_drinks_a_whole_juice_for_a_goal_smaller_than_one_juice():
     assert plan.draws == []  # fully covered by the juice: nothing to grow
 
 
-def test_minimize_drinks_pumpkin_juice_in_the_high_tier_first():
-    # 100 demand crossing two tiers: 20 of it where a juice covers 1, the other 80
-    # where one covers 10. Capped at 9 juices, the plan drinks the 8 that cover the
-    # high tier and 1 in the low, crediting 81 -- the other 19 are grown.
-    tiers = (PumpkinTier(gain=1, span=20), PumpkinTier(gain=10, span=80))
+def test_minimize_credits_compounding_juices_exactly_at_whole_counts():
+    # Per-juice credits 50, 25, 12.5 (best first): capped at 2 juices they cover
+    # 75 of 100, the other 25 grown -- the chord bound is exact at whole counts.
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
-                    pj_gain={"it": tiers}, pj_price=5, pj_limit=9)
-    assert plan.pumpkin_juices.get("it") == 9
-    assert plan.pumpkin_tiers.get("it") == (1, 8)
-    assert plan.pumpkin_credit.get("it") == pytest.approx(81)
-    assert plan.time == timedelta(minutes=19)
+                    pj_gain={"it": (50.0, 25.0, 12.5)}, pj_price=5, pj_limit=2)
+    assert plan.pumpkin_juices.get("it") == 2
+    assert plan.pumpkin_credit.get("it") == pytest.approx(75)
+    assert plan.time == timedelta(minutes=25)
 
 
-def test_minimize_credits_a_tier_at_most_its_span():
-    # A juice in the high tier covers 10 but only 5 of the climb lies there, so one
-    # high juice earns 5 and the low tier's 1-unit juices cover the rest.
-    tiers = (PumpkinTier(gain=1, span=3), PumpkinTier(gain=10, span=5))
-    plan = minimize([FARM_ITEM], {"It": 8}, prices=GOLD, gold_weight=BUY_FREELY,
-                    pj_gain={"it": tiers}, pj_price=5)
-    assert plan.pumpkin_tiers.get("it") == (3, 1)
-    assert plan.pumpkin_credit.get("it") == pytest.approx(8)
-    assert plan.time == timedelta(0)
+def test_minimize_caps_compounding_juices_at_their_count():
+    # Only three juices are on offer (87.5 between them), so the rest is grown.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": (50.0, 25.0, 12.5)}, pj_price=5)
+    assert plan.pumpkin_juices.get("it") == 3
+    assert plan.pumpkin_credit.get("it") == pytest.approx(87.5)
+    assert plan.time == timedelta(minutes=12.5)
 
 
 def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():

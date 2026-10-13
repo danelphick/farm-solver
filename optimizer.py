@@ -204,29 +204,6 @@ def all_offers(
     ]
 
 
-class PumpkinTier(NamedTuple):
-    """One mastery tier a goal's Pumpkin Juices can be drunk in.
-
-    A juice grants 10% of the tier the item sits in *when drunk*, so where the
-    goal's shortfall spans several tiers each has its own per-juice ``gain``
-    (demand units one juice covers there) and ``span`` (the demand units of the
-    shortfall lying in that tier -- the most its juices can be credited with).
-    See :func:`main.pumpkin_juice_gains`.
-    """
-
-    gain: float
-    span: float
-
-
-def _pj_tiers(
-    gain: float | tuple[PumpkinTier, ...], need: float
-) -> tuple[PumpkinTier, ...]:
-    """``pj_gain``'s entry for one item as tiers: a bare number is the one-tier
-    form, its gain good for the whole ``need``. Empty tiers are dropped."""
-    tiers = (PumpkinTier(gain, need),) if isinstance(gain, int | float) else gain
-    return tuple(tier for tier in tiers if tier.gain > 0 and tier.span > 0)
-
-
 @dataclass
 class SourcingPlan:
     """One way to source the demand: the actions taken, the cost, the remainder.
@@ -285,10 +262,6 @@ class SourcingPlan:
     # :func:`plan_balance` nets it out of ``need`` and the passive/residual accounting
     # reflects that the boost -- not passive production -- covered that slice.
     pumpkin_credit: dict[str, float] = field(default_factory=dict)
-    # Each item's juices split by the tier they are drunk in (lower-cased goal item
-    # -> counts, aligned with that item's ``pj_gain`` tiers; see :class:`PumpkinTier`).
-    # Sums to ``pumpkin_juices[item]``; feeds :func:`main.pumpkin_juice_schedule`.
-    pumpkin_tiers: dict[str, tuple[int, ...]] = field(default_factory=dict)
     # Sale value of everything the plan produces past all it consumes -- surplus it
     # banks (see :func:`plan_surplus_gold`), for other tasks or to sell. A credit
     # against ``gold``: the plan's net cost, what the frontier really trades against
@@ -520,9 +493,6 @@ class _Base:
     # (``pj_credit <= pj_gain*pj``, ``<= need``). The balance credits this, not
     # ``pj_gain*pj``, so an overshooting last juice is legal but earns nothing extra.
     pj_credit: dict[str, pulp.LpVariable]
-    # The integer juice counts behind each ``pj``, one per tier it can be drunk in
-    # (a one-tier item's is ``pj`` itself; a multi-tier ``pj`` is their sum).
-    pj_tiers: dict[str, list[pulp.LpVariable]]
     gold: pulp.LpAffineExpression
     spend_value: pulp.LpAffineExpression
     # The market value of everything the plan spends, whichever way it was sourced:
@@ -534,7 +504,7 @@ class _Base:
     crafted: list[str]
     opened: list[OpenFlow]
     remainder: dict[str, float]
-    pj_gain: dict[str, float | tuple[PumpkinTier, ...]]
+    pj_gain: dict[str, float | tuple[float, ...]]
     pj_price: float
     # Stamina opportunity cost (see _build_base): ``stamina_op`` meters the free
     # (banked + passive) stamina consumed and ``stamina_price`` is its per-unit
@@ -580,7 +550,7 @@ def _build_base(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float | tuple[PumpkinTier, ...]] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     *,
@@ -681,8 +651,7 @@ def _build_base(
         return _Base(
             problem=pulp.LpProblem("sourcing", pulp.LpMinimize),
             usage=[], craft={}, opens=[], makespan=pulp.LpVariable("T", lowBound=0),
-            buy={}, buy_cookie=None, pj={}, pj_credit={}, pj_tiers={}, gold=0,
-            spend_value=0,
+            buy={}, buy_cookie=None, pj={}, pj_credit={}, gold=0, spend_value=0,
             total_value=0,
             used=[], crafted=[], opened=[], remainder=remainder,
             pj_gain=pj_gain, pj_price=pj_price, remainder_only=True,
@@ -854,16 +823,26 @@ def _build_base(
     # so the last one is allowed to overshoot); ``pj_credit`` below clamps what that
     # overshoot earns.
     #
-    # **Tiers**: a juice grants 10% of the tier the item is in when drunk, so a
-    # shortfall spanning several tiers (Gold Drum at 49,855 aiming for 1,000,000:
-    # 10,000 a juice below 100,000, 100,000 above) gets one integer count per tier
-    # (``pj_tiers``), each earning its own ``gain`` and credited at most that tier's
-    # ``span`` of the shortfall -- the cap the whole goal is for a one-tier item. The
-    # LP then drinks in the high tier first on its own (more mastery per juice).
-    # ``pj`` stays the item's total, so everything that caps, pins or reads the count
-    # is tier-blind; a one-tier item's ``pj`` *is* its one count.
-    #
-    # What the juices actually earn toward the goal: ``gain`` each, but never more
+    # **Compounding**: a juice multiplies the item's *current* mastery by 1.1, so it
+    # is worth most drunk last, at the top of the climb, and each earlier one is worth
+    # 1/1.1 of the next. ``pj_gain`` then gives the per-juice credits in that order
+    # (see :func:`main.pumpkin_juice_gains`): a decreasing sequence, so the credit of
+    # ``n`` juices is concave in ``n`` and the chords between consecutive whole counts
+    # bound it exactly at every integer -- no extra variables. A bare number is the
+    # flat form, every juice worth the same.
+    pj = {}
+    for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys())):
+        gain = pj_gain[item]
+        if isinstance(gain, int | float):
+            if gain <= 0:
+                continue
+            bound = math.ceil(wanted[item][1] / gain)
+        else:
+            if not gain:
+                continue
+            bound = len(gain)
+        pj[item] = pulp.LpVariable(f"pj{i}", lowBound=0, upBound=bound, cat="Integer")
+    # What the juices actually earn toward the goal: ``pj_gain`` each, but never more
     # than the goal itself (mastery cannot exceed the requirement, so a juice past full
     # coverage is wasted, not banked). This is the clamp that used to be written as
     # ``pj*gain <= need`` -- a cap on the *credit*, which also banned the whole juice
@@ -871,38 +850,20 @@ def _build_base(
     # units against a 9,091-unit juice) was capped at 0.23 juices instead of paying for
     # one and covering it outright. Capping the count and clamping the credit separately
     # keeps the last juice legal while still refusing to pay it for overshoot.
-    pj: dict[str, pulp.LpVariable] = {}
-    pj_credit: dict[str, pulp.LpVariable] = {}
-    pj_tiers: dict[str, list[pulp.LpVariable]] = {}
-    for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys())):
-        tiers = _pj_tiers(pj_gain[item], wanted[item][1])
-        if not tiers:
+    pj_credit = {
+        item: pulp.LpVariable(f"pjc{i}", lowBound=0, upBound=wanted[item][1])
+        for i, item in enumerate(sorted(pj))
+    }
+    for item, var in pj.items():
+        gain = pj_gain[item]
+        if isinstance(gain, int | float):
+            problem += pj_credit[item] <= gain * var
             continue
-        counts = [
-            pulp.LpVariable(
-                f"pj{i}" if len(tiers) == 1 else f"pj{i}t{k}", lowBound=0,
-                upBound=math.ceil(tier.span / tier.gain), cat="Integer",
-            )
-            for k, tier in enumerate(tiers)
-        ]
-        credit = pulp.LpVariable(f"pjc{i}", lowBound=0, upBound=wanted[item][1])
-        if len(tiers) == 1:
-            pj[item] = counts[0]
-            problem += credit <= tiers[0].gain * counts[0]
-        else:
-            # The total is integral as the sum of integers, so it stays continuous.
-            pj[item] = pulp.LpVariable(
-                f"pj{i}", lowBound=0, upBound=sum(var.upBound for var in counts)
-            )
-            problem += pj[item] == pulp.lpSum(counts)
-            tier_credits = []
-            for k, (tier, count) in enumerate(zip(tiers, counts, strict=True)):
-                tier_credit = pulp.LpVariable(f"pjc{i}t{k}", lowBound=0, upBound=tier.span)
-                problem += tier_credit <= tier.gain * count
-                tier_credits.append(tier_credit)
-            problem += credit <= pulp.lpSum(tier_credits)
-        pj_credit[item] = credit
-        pj_tiers[item] = counts
+        # The chord from k to k+1 juices: exact at both, above the curve elsewhere.
+        earned = 0.0
+        for k, step in enumerate(gain):
+            problem += pj_credit[item] <= earned + step * (var - k)
+            earned += step
     if pj_limit is not None and pj:
         problem += pulp.lpSum(pj.values()) <= pj_limit
     if pj:
@@ -1161,8 +1122,7 @@ def _build_base(
 
     return _Base(
         problem=problem, usage=usage, craft=craft, opens=opens, makespan=makespan,
-        buy=buy, buy_cookie=buy_cookie, pj=pj, pj_credit=pj_credit, pj_tiers=pj_tiers,
-        gold=gold,
+        buy=buy, buy_cookie=buy_cookie, pj=pj, pj_credit=pj_credit, gold=gold,
         spend_value=spend_value,
         total_value=total_value,
         used=used, crafted=crafted, opened=opened, remainder=remainder,
@@ -1552,9 +1512,8 @@ def _solve_configured(
     # Toggle the model's integer variables for this solve. Cheap and idempotent;
     # reuses the one shared base rather than building a second integer copy.
     cat = pulp.LpInteger if exact_integers else pulp.LpContinuous
-    for counts in base.pj_tiers.values():
-        for var in counts:
-            var.cat = cat
+    for var in base.pj.values():
+        var.cat = cat
     if base.days_available is not None:
         base.days_available.cat = cat
 
@@ -1707,12 +1666,11 @@ def _solve_configured(
         # fixing them to their rounded selves would force an integrality the sweep is
         # deliberately dropping for speed.
         if exact_integers:
-            for counts in base.pj_tiers.values():
-                for var in counts:
-                    fixed = var == round(var.value() or 0.0)
-                    fixed.name = f"pj_fix_{var.name}"
-                    problem.addConstraint(fixed)
-                    base.ephemeral.append(fixed.name)
+            for item, var in base.pj.items():
+                fixed = var == round(var.value() or 0.0)
+                fixed.name = f"pj_fix_{item}"
+                problem.addConstraint(fixed)
+                base.ephemeral.append(fixed.name)
 
         # Stage 3 -- least activity, so no reported metric moves.
         problem.setObjective(
@@ -1852,10 +1810,6 @@ def _solve_configured(
         # allowed to overshoot the goal and earn only the slice up to it.
         pumpkin_credit={
             item: base.pj_credit[item].value() or 0.0 for item in pumpkin_juices
-        },
-        pumpkin_tiers={
-            item: tuple(round(var.value() or 0.0) for var in base.pj_tiers[item])
-            for item in pumpkin_juices
         },
         price_pumpkin_juice=base.price_pumpkin_juice,
         remainder=base.remainder,
@@ -2009,7 +1963,7 @@ def minimize(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     favour_passive: bool = False,
-    pj_gain: dict[str, float | tuple[PumpkinTier, ...]] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
@@ -2068,8 +2022,8 @@ def minimize(
     ``prices`` -- or an empty/``None`` dict -- is not buyable and is fully self-sourced.
 
     **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
-    covers, ``0.1 * mastery_threshold / mastery_bonus``, or a tuple of
-    :class:`PumpkinTier` where the shortfall spans tiers) turns on the mastery-boost
+    covers, or the decreasing per-juice credits of a compounding boost, best first --
+    see :func:`main.pumpkin_juice_gains`) turns on the mastery-boost
     lever: a ``pj`` variable per goal item adds free, instant supply toward that item's
     demand at ``pj_price`` gold each, capped at fully covering the demand (a juice past
     the goal buys nothing). ``pj_limit`` caps the total juices spent. Like buying it is
@@ -2387,7 +2341,7 @@ def fastest_endpoint(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float | tuple[PumpkinTier, ...]] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
@@ -3115,7 +3069,7 @@ def frontier(
     cookie_sets: float = 0.0,
     passive_pet_items: set[str] = frozenset(),
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float | tuple[PumpkinTier, ...]] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,

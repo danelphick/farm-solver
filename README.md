@@ -251,7 +251,7 @@ Stamina:
 
 ### Pumpkin Juice (mastery boost)
 
-**Pumpkin Juice** is a rare bought item that, drunk on an item, instantly grants **10% of that item's mastery tier** (100,000 mastery for an item mastering to `MM`). It is a pure gold-for-progress lever — bought, never made — so it trades exactly like the other purchases: a juice on a goal item covers a slice of its mastery shortfall directly, so much less of it needs crafting or gathering, which can finish a plan sooner (and sometimes cheaper, when the sourcing it saves is worth more than the juice). It only helps **mastery** goals (the tower and `-m`); an `-i` acquire goal earns no mastery, so a juice does nothing for it.
+**Pumpkin Juice** is a rare bought item that, drunk on an item, instantly multiplies that item's **current mastery by 1.1** (+10% of where it is now), so juices compound: five drunk back to back multiply it by 1.1⁵ ≈ 1.61. It is a pure gold-for-progress lever — bought, never made — so it trades exactly like the other purchases: a juice on a goal item covers a slice of its mastery shortfall directly, so much less of it needs crafting or gathering, which can finish a plan sooner (and sometimes cheaper, when the sourcing it saves is worth more than the juice). It only helps **mastery** goals (the tower and `-m`); an `-i` acquire goal earns no mastery, so a juice does nothing for it.
 
 It is off by default. Turn it on with `--use-pumpkin-juice` (or `mastery.use_pumpkin_juice = true`), and the solver decides how many each frontier plan drinks — the fast plans buy juice to finish quickly, the cheap ones self-source and drink none. `--use-pumpkin-juice=N` caps the total spent across a plan (the cap cannot be exceeded but need not be reached); each juice is priced at `trading.pumpkin_juice` gold (default 230) — nominal, since juice cannot be bought from another player, but still a cost plans are ranked on:
 
@@ -260,21 +260,16 @@ python main.py -m "Butter:1000000" --use-pumpkin-juice      # any number
 python main.py --use-pumpkin-juice=20                       # at most 20 for the tower
 ```
 
-A plan that drinks juice shows a **PJ** (Pumpkin Juice) column in the frontier table and a **Pumpkin Juice (mastery boost)** section in its breakdown, naming each goal boosted, how many juices, the gold, and — since a juice only grants 10% of the tier the item is in *when you drink it* — the **mastery level to start drinking at**, late in the goal's final tier so each lands its full boost and the last hits the goal:
+A plan that drinks juice shows a **PJ** (Pumpkin Juice) column in the frontier table and a **Pumpkin Juice (mastery boost)** section in its breakdown, naming each goal boosted, how many juices, the gold, and — since a juice adds 10% of the item's *current* mastery, so is worth most drunk late — the **mastery level to start drinking at**, so the last one lands the goal:
 
 ```text
 Pumpkin Juice (mastery boost):
-  1x Pumpkin Juice on Butter = 258 g
-    start drinking at Butter mastery 900,000
-  total 258 g
+  3x Pumpkin Juice on Butter = 690 g
+    start drinking at Butter mastery 751,315
+  total 690 g
 ```
 
-The start sits below the goal by the mastery the juices are worth (10% of the tier each: 100,000 between 100,000 and 1,000,000). Each juice lifts mastery exactly to the next one's drink point, so you drink them all back to back from there and the last lands the item on target. The solver credits each juice with that tier's boost, so a juice drunk in the `MM` tier is worth ten drunk below 100,000 and it fills the final tier first. A goal whose shortfall crosses tiers can also use juices lower down, drunk at the top of their own tier, and the section then names one run per tier:
-
-```text
-  14x Pumpkin Juice on Gold Drum = 3,220.0 g
-    drink 5 from Gold Drum mastery 50,000, then 9 from 100,000
-```
+The start is the goal divided by 1.1 once per juice (`1,000,000 ÷ 1.1³ ≈ 751,315`). Each juice lifts mastery exactly to the next one's drink point, so you drink them all back to back from there and the last lands the item on target. Because each earlier juice is worth 1/1.1 of the next, the solver credits them that way too: the first few juices on an item are worth far more than the twentieth.
 
 (No wall-clock time is given for each juice: mastery is earned by crafting, which the model treats as instant, so there is no reliable time-of-day to attach — the mastery level is the actionable cue.) A juice can only ever cover up to 100% of a goal's mastery (ten juices fill a fresh tier), so the count is naturally bounded per item even with no cap. Its gold folds into each plan's **buy** total (there is no self-sourced alternative), so it is part of the net cost the frontier trades against time. Juice held in inventory is not credited — every juice is costed at its nominal price.
 
