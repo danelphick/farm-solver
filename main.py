@@ -2277,12 +2277,20 @@ def solve_frontier(
                 break
             horizon = fast.time
 
+    solved_for: passive.PassiveProduction | None = None
     for _ in range(_MAX_SEASON_ITERS):
         production = config.passive_production(
             cfg, today=start, start=start, horizon=horizon,
             monthly_grants=monthly_grants,
             has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
         )
+        # The production is the frontier's only input that moves with the horizon.
+        # Seasonal rates are averaged over whole windows, so a new horizon often
+        # rebuilds exactly the production the last frontier ran on -- and the same
+        # frontier, so the same selected makespan: converged, without re-solving.
+        if production == solved_for:
+            break
+        solved_for = production
         quantize = config.passive_quantizer(production)
         offers = optimizer.all_offers(
             production, fish, explore, farm, inputs.boost_offers

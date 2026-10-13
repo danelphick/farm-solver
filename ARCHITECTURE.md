@@ -138,7 +138,11 @@ selection case (no `--plan`/`--cheapest-plan`/limit — the selected plan is alw
 the converged horizon to the loop above, which then runs the real frontier once
 and breaks on its own convergence check. Any limit or explicit `--plan` can select
 a different plan than the fastest, so that case falls back to iterating the full
-frontier as before.
+frontier as before. Either way the loop **stops without re-solving when the new
+horizon rebuilds a `PassiveProduction` equal to the one the last frontier ran on**
+(`solved_for`): seasonal rates average over whole windows, so a moved horizon often
+yields the same production, hence the same frontier and selected makespan -- the
+third of three ~2s frontiers on a `--plan 3` tower run was exactly that.
 
 ## Mastery-costs mode (`--mastery-costs`)
 
@@ -725,7 +729,13 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
   cap, `_pumpkin_gap_fill` **bisects the cap axis** between two adjacent shown plans that
   differ by ≥2 juice, MIP-solving each midpoint, to pin the fastest real plan at every
   count in `[hi_pj, lo_pj)` (the lower bracket level included, so a *fast* juice-free plan
-  surfaces alongside the slow cheapest endpoint). `_thin_pumpkin` then re-thins the merged
+  surfaces alongside the slow cheapest endpoint). Bounded two ways: `want` (`count −
+  distinct`, the spare rows, spent fast bracket first) limits each bracket to the counts
+  just under its fast end -- all `_thin_pumpkin` could show -- and a bracket stops
+  narrowing at `span/1024` (a minute at least), since a count that *jumps* (23 → 21,
+  no 22) otherwise chases its boundary to the minute. The merged set is
+  `_non_dominated`-pruned first: where juice is not monotone in the cap the fastest plan
+  at a count can be slower *and* dearer than a neighbour. `_thin_pumpkin` then re-thins the merged
   set keeping both ends and the fastest plan per count, spending the redundant same-count
   rows on the decreasing-juice curve (`3, 2, 1, 0, 0`). **Gated** on `distinct counts <
   count`: when juice is cheap enough that every shown row already carries a different

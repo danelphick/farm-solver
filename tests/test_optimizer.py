@@ -1449,6 +1449,15 @@ def test_pumpkin_gap_fill_recovers_intermediate_juice_counts():
         assert round(sum(plan.pumpkin_juices.values())) == level
 
 
+def test_pumpkin_gap_fill_seeks_only_the_wanted_counts_below_the_fast_end():
+    # Only two spare rows: the counts just under the fast bracket (4, 3) are all the
+    # thinning could show, so the lower ones are never bisected for.
+    base = optimizer._build_base(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5)
+    fill = optimizer._pumpkin_gap_fill(base, 0.0, 5, 50 * 60, 0, want=2)
+    assert set(fill) == {3, 4}
+
+
 def test_thin_pumpkin_keeps_one_plan_per_juice_count():
     # Fastest-first plans carrying juice 3, 3, 3, 2, 1, 0, 0. Thinned to 5 must keep
     # both ends and the *fastest* plan at each distinct count -- the decreasing-juice

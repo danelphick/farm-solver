@@ -2502,9 +2502,13 @@ def _juice_count(plan: SourcingPlan) -> int:
 
 def _pumpkin_gap_fill(
     base: _Base, lo_t: float, lo_pj: int, hi_t: float, hi_pj: int,
+    want: int | None = None,
 ) -> dict[int, SourcingPlan]:
     """The fastest exact plan at each whole-juice count in ``[hi_pj, lo_pj)``,
-    found by bisecting the time-cap axis between two bracket plans.
+    found by bisecting the time-cap axis between two bracket plans. ``want`` caps
+    the counts sought to the ``want`` just below ``lo_pj`` -- the fast end, which
+    is all :func:`_thin_pumpkin` has spare rows for -- so brackets reaching lower
+    counts are never bisected.
 
     Juice is the model's only integer *goal* decision (``days_available`` is a
     daily-budget bound, not a thing to trade off) and its count is monotone
@@ -2520,6 +2524,12 @@ def _pumpkin_gap_fill(
     juice-free plan distinct from the slow cheapest endpoint.
     """
     found: dict[int, SourcingPlan] = {}
+    # Stop narrowing a bracket at 1/1024 of the whole span (a minute at least): a
+    # count that jumps (23 -> 21, no 22 exists) otherwise chases its boundary down
+    # to the minute, a dozen MIP solves for a row two hours from its neighbour --
+    # finer than the report's two-unit durations show on a months-long span.
+    resolution = max(60.0, (hi_t - lo_t) / 1024)
+    floor = hi_pj if want is None else max(hi_pj, lo_pj - want)
 
     def at(cap: float) -> SourcingPlan:
         return _solve_configured(
@@ -2527,14 +2537,15 @@ def _pumpkin_gap_fill(
 
     def record(plan: SourcingPlan) -> int:
         level = _juice_count(plan)
-        if hi_pj <= level < lo_pj:
+        if floor <= level < lo_pj:
             best = found.get(level)
             if best is None or plan.time < best.time:
                 found[level] = plan
         return level
 
     def bisect(a: float, ka: int, b: float, kb: int, depth: int) -> None:
-        if ka - kb <= 1 or b - a < 60 or depth > 24:
+        # Nothing wanted strictly between the brackets' counts (or below floor).
+        if ka - kb <= 1 or ka - 1 < floor or b - a < resolution or depth > 24:
             return
         mid = (a + b) / 2
         plan = at(mid)
@@ -3315,15 +3326,19 @@ def frontier(
         # different count -- does no extra solves and is byte-identical to no gap-fill.
         distinct = len({_juice_count(p) for p in thinned})
         if count >= 3 and len(thinned) >= 2 and distinct < count:
+            # Only ``count - distinct`` rows are spare, and _thin_pumpkin gives them
+            # to the fastest new counts, so seek just that many, fast brackets first.
+            want = count - distinct
             extra: list[SourcingPlan] = []
             for lo, hi in pairwise(thinned):
                 lo_pj, hi_pj = _juice_count(lo), _juice_count(hi)
-                if lo_pj - hi_pj >= 2:
+                if want > 0 and lo_pj - hi_pj >= 2:
                     fill = _pumpkin_gap_fill(
                         base_active, lo.time.total_seconds(), lo_pj,
-                        hi.time.total_seconds(), hi_pj,
+                        hi.time.total_seconds(), hi_pj, want,
                     )
                     extra.extend(fill.values())
+                    want -= len(fill)
             if extra:
                 for plan in extra:
                     post(plan)
@@ -3334,6 +3349,9 @@ def frontier(
                         round(plan.gold - plan.surplus_gold),
                     )
                     merged.setdefault(key, plan)
-                thinned = _thin_pumpkin(list(merged.values()), count)
+                # The fastest plan at a count need not be efficient: where juice is
+                # not monotone in the cap (21 juices at 75d 6h beside 23 at 75d 1h,
+                # slower *and* dearer) it is dominated, so prune before thinning.
+                thinned = _thin_pumpkin(_non_dominated(list(merged.values())), count)
 
     return thinned
