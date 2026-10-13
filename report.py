@@ -2142,6 +2142,35 @@ def _sugar_cane_mill_conversions(
     return lines
 
 
+def _drink_levels(drinks: tuple[tuple[int, int], ...] | None) -> str:
+    """A Pumpkin Juice schedule's start levels: ``"772,727"`` for one run, or
+    ``"6 from 49,855, then 9 from 100,000"`` when the plan drinks in several tiers."""
+    if not drinks:
+        return ""
+    if len(drinks) == 1:
+        return f"{drinks[0][1]:,}"
+    return ", then ".join(f"{count:,} from {level:,}" for count, level in drinks)
+
+
+def _drink_cell(drinks: tuple[tuple[int, int], ...] | None) -> Cell:
+    """The schedule as a table cell: one run's start level is a number, several
+    tiers' runs stay prose (see :func:`_drink_levels`)."""
+    text = _drink_levels(drinks)
+    if drinks and len(drinks) == 1:
+        return Cell(text, drinks[0][1])
+    return Cell(text, text or None)
+
+
+def _drink_text(drinks: tuple[tuple[int, int], ...], name: str) -> str:
+    """The Pumpkin Juice line's schedule note: where to start drinking, or with
+    several tiers, how many to drink from where (see :func:`_drink_levels`)."""
+    (count, level), *rest = drinks
+    if not rest:
+        return f"start drinking at {name} mastery {level:,}"
+    text = f"drink {count:,} from {name} mastery {level:,}"
+    return text + "".join(f", then {n:,} from {lvl:,}" for n, lvl in rest)
+
+
 def print_plan(
     plan: optimizer.SourcingPlan,
     demand: dict[str, float],
@@ -2155,15 +2184,16 @@ def print_plan(
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
-    pumpkin_schedule: dict[str, int] | None = None,
+    pumpkin_schedule: dict[str, tuple[tuple[int, int], ...]] | None = None,
     skip_critical_path: bool = False,
     ap_prices: dict[str, float] | None = None,
 ) -> None:
     """Expand one plan into its per-channel actions and leftover materials.
 
     ``pumpkin_schedule`` (from :func:`main.pumpkin_juice_schedule`) gives, per goal
-    item, the mastery level at which to start drinking its Pumpkin Juices (back to
-    back) so each lands its intended tier boost; the Pumpkin Juice section names it. ``skip_critical_path``
+    item, how many of its Pumpkin Juices to drink from which mastery level (back to
+    back, one run per tier) so each lands its intended tier boost; the Pumpkin
+    Juice section names them (see :func:`_drink_text`). ``skip_critical_path``
     (ascension mode only, see :func:`print_ascension_plan`) omits the usual
     :func:`print_critical_path` call -- a stage waiting on daily chores prints its
     own override line instead, ahead of this call; :func:`print_critical_path`'s
@@ -2528,13 +2558,13 @@ def print_plan(
             cost = _gold_text(units * per_juice)
             name = display.get(item, item)
             line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost} g"
-            # A juice grants 10% of the current tier, so it only lands its full boost
-            # drunk late, in the goal's final tier -- name the mastery level to start
-            # at; each juice lifts mastery to the next one's point, so they go back
-            # to back from there.
-            start = (pumpkin_schedule or {}).get(item)
-            if start is not None:
-                line += f"\n    start drinking at {name} mastery {start:,}"
+            # A juice grants 10% of the tier it is drunk in, so it only lands its full
+            # boost drunk late in a tier -- name the mastery level to start at; each
+            # juice lifts mastery to the next one's point, so they go back to back
+            # from there (one run per tier the plan drinks in).
+            drinks = (pumpkin_schedule or {}).get(item)
+            if drinks:
+                line += f"\n    {_drink_text(drinks, name)}"
             print(line)
         print(f"  total {_gold_text(plan.pumpkin_gold)} g")
 
@@ -2573,7 +2603,7 @@ def markdown_plan(
     sourceable_elsewhere: set[str] | None = None,
     max_passive_residuals: dict[str, float] | None = None,
     prices: dict[str, float] | None = None,
-    pumpkin_schedule: dict[str, int] | None = None,
+    pumpkin_schedule: dict[str, tuple[tuple[int, int], ...]] | None = None,
     skip_critical_path: bool = False,
     ap_prices: dict[str, float] | None = None,
 ) -> None:
@@ -2930,12 +2960,12 @@ def markdown_plan(
         for item, units in sorted(juices, key=lambda kv: -kv[1]):
             cost = units * per_juice
             name = display.get(item, item)
-            start = (pumpkin_schedule or {}).get(item)
+            drinks = (pumpkin_schedule or {}).get(item)
             rows.append([
                 name,
                 Cell.num(round(units)),
                 Cell.gold(cost),
-                Cell("" if start is None else f"{start:,}", start),
+                _drink_cell(drinks),
             ])
         doc.heading("Pumpkin Juice (mastery boost)")
         doc.table(["Goal", "Juices", "Gold", "Start drinking at mastery"], rows)
@@ -3482,7 +3512,7 @@ class Reporter:
         sourceable_elsewhere: set[str] | None = None,
         max_passive_residuals: dict[str, float] | None = None,
         prices: dict[str, float] | None = None,
-        pumpkin_schedule: dict[str, int] | None = None,
+        pumpkin_schedule: dict[str, tuple[tuple[int, int], ...]] | None = None,
         skip_critical_path: bool = False,
         ap_prices: dict[str, float] | None = None,
     ) -> None:
