@@ -534,61 +534,78 @@ def resolve_frontier_graph(args: argparse.Namespace, cfg: dict) -> str | None:
     return cfg.get("frontier", {}).get("graph")
 
 
+# A Pumpkin Juice multiplies an item's current mastery by this.
+PUMPKIN_JUICE_BOOST = 1.1
+
+
 def pumpkin_juice_gains(
     needs: list[farm_solver.ItemNeed],
-    state: farm_solver.GameState,
     mastery_bonus: float,
-) -> dict[str, float]:
-    """Units of demand one Pumpkin Juice covers, per mastery-goal item.
+) -> dict[str, tuple[float, ...]]:
+    """What each Pumpkin Juice covers, per mastery-goal item, best juice first.
 
-    A juice instantly grants 10% of an item's current mastery tier. In the
+    A juice multiplies the item's current mastery by :data:`PUMPKIN_JUICE_BOOST`
+    (1.1), so it is worth most drunk late: ``n`` juices drunk back to back ending on
+    the target ``T`` start at ``T / 1.1**n`` and cover ``T * (1 - 1.1**-n)`` of the
+    climb. The k-th juice (counting back from the last drunk) adds ``T * 0.1 /
+    1.1**k``, so the credits shrink geometrically. They stop once the juices would
+    start at or below the current ``have`` (the shortfall is then covered outright,
+    the LP clamping the overshoot) or once a juice adds under one mastery. In the
     optimiser's items-to-find units (a found item is worth ``mastery_bonus``
-    mastery), that is ``0.1 * threshold / mastery_bonus`` -- the threshold being the
-    item's mastery denominator (its current tier), or the goal target for an item
-    not yet tracked. Only mastery goals (tower, ``-m``) with a shortfall qualify;
-    an ``-i`` acquire goal earns no mastery, so a juice does nothing for it.
+    mastery), so each is ``/ mastery_bonus``. Only mastery goals (tower, ``-m``)
+    with a shortfall qualify; an ``-i`` acquire goal earns no mastery, so a juice
+    does nothing for it. An item with several goals climbs to the highest.
     """
-    gains: dict[str, float] = {}
+    climbs: dict[str, tuple[int, int]] = {}
     for need in needs:
         if not need.is_mastery or need.extra <= 0:
             continue
-        mastery = state.mastery(need.item)
-        threshold = mastery.required if mastery and mastery.required else need.target
-        if threshold > 0:
-            gains[need.item.lower()] = 0.1 * threshold / mastery_bonus
+        key = need.item.lower()
+        have, target = climbs.get(key, (need.have, need.target))
+        climbs[key] = (have, max(target, need.target))
+    gains: dict[str, tuple[float, ...]] = {}
+    for item, (have, target) in climbs.items():
+        steps = []
+        start = float(target)
+        while start > have:
+            step = start - start / PUMPKIN_JUICE_BOOST
+            if step < 1:
+                break
+            steps.append(step / mastery_bonus)
+            start -= step
+        if steps:
+            gains[item] = tuple(steps)
     return gains
 
 
 def pumpkin_juice_schedule(
     plan: optimizer.SourcingPlan,
     needs: list[farm_solver.ItemNeed],
-    pj_gain: dict[str, float],
+    pj_gain: dict[str, tuple[float, ...]],
 ) -> dict[str, int]:
     """The mastery level at which to start drinking ``plan``'s Pumpkin Juices.
 
-    A juice only lands its intended boost drunk late, in the goal's final tier. It
-    covers ``pj_gain`` of the item's shortfall -- the same demand units the LP credits
-    (``0.1 * threshold / mastery_bonus``, see :func:`pumpkin_juice_gains`) -- so the
-    first of ``count`` juices is drunk ``count * gain`` below the target; each juice
-    then lifts mastery to the next one's drink point, so they are drunk back to back
-    and the last lands the item on target. The start sits above the current progress
-    -- the LP caps juice at the shortfall, so ``count * gain`` never exceeds ``target -
-    have`` -- and is clamped there anyway. Using the LP's own ``pj_gain`` keeps the
-    schedule from drifting from the crediting. Returns ``{lower-cased item: level}``
-    for the items the plan drinks on.
+    A juice multiplies the current mastery by :data:`PUMPKIN_JUICE_BOOST`, so ``n``
+    juices drunk back to back land the item on target ``T`` from ``T / 1.1**n`` --
+    each lifts mastery to the next one's drink point -- the same climb
+    :func:`pumpkin_juice_gains` credits. A start below the current progress (the
+    last juice needed overshoots) clamps up to it: drink them from where the item
+    already is. Returns ``{lower-cased item: level}`` for the items the plan drinks
+    on.
     """
-    targets = {
-        need.item.lower(): (need.have, need.target)
-        for need in needs
-        if need.is_mastery
-    }
+    climbs: dict[str, tuple[int, int]] = {}
+    for need in needs:
+        if need.is_mastery:
+            key = need.item.lower()
+            have, target = climbs.get(key, (need.have, need.target))
+            climbs[key] = (have, max(target, need.target))
     schedule: dict[str, int] = {}
     for item, count in plan.pumpkin_juices.items():
         whole = round(count)
-        if whole < 1 or item not in targets or item not in pj_gain:
+        if whole < 1 or item not in climbs or item not in pj_gain:
             continue
-        have, target = targets[item]
-        schedule[item] = max(have, round(target - whole * pj_gain[item]))
+        have, target = climbs[item]
+        schedule[item] = max(have, round(target / PUMPKIN_JUICE_BOOST**whole))
     return schedule
 
 
@@ -1804,7 +1821,7 @@ class SolveInputs:
     # [sawmill] hickory_omelette is set) and the Sugar Cane Mill (when configured);
     # static across the seasonal fixed point, so built once here.
     boost_offers: list[sources.Offer]
-    pj_gain: dict[str, float]
+    pj_gain: dict[str, tuple[float, ...]]
     pj_price: float
     pj_limit: int | None
     model_calendar: bool
@@ -2121,7 +2138,7 @@ def build_inputs(
     # the optimiser decides how many (up to an optional cap) each frontier plan uses.
     pj_enabled, pj_limit, pj_price = resolve_pumpkin_juice(args.use_pumpkin_juice, cfg)
     pj_gain = (
-        pumpkin_juice_gains(active_needs, state, args.mastery_bonus)
+        pumpkin_juice_gains(active_needs, args.mastery_bonus)
         if pj_enabled
         else {}
     )
@@ -2273,18 +2290,24 @@ def solve_frontier(
         and args.max_ac is None and args.max_gold is None
     )
 
-    def frontier_at(
-        at: timedelta | None,
-    ) -> tuple[passive.PassiveProduction, list[sources.Offer], list, Future | None]:
-        """The frontier with passive production over horizon ``at``: its
-        production, offers and plans, and the reference endpoint started beside
-        it on spare CPUs (derive_report_inputs depends only on these offers --
-        an identical cold solve on its own base, wherever it runs)."""
-        production = config.passive_production(
+    def production_at(at: timedelta | None) -> passive.PassiveProduction:
+        return config.passive_production(
             cfg, today=start, start=start, horizon=at,
             monthly_grants=monthly_grants,
             has_mariyas_wheelbarrow=has_mariyas_wheelbarrow,
         )
+
+    def frontier_at(
+        at: timedelta | None,
+        production: passive.PassiveProduction | None = None,
+    ) -> tuple[passive.PassiveProduction, list[sources.Offer], list, Future | None]:
+        """The frontier with passive production over horizon ``at`` (or the
+        ``production`` already built for it): its production, offers and plans,
+        and the reference endpoint started beside it on spare CPUs
+        (derive_report_inputs depends only on these offers -- an identical cold
+        solve on its own base, wherever it runs)."""
+        if production is None:
+            production = production_at(at)
         quantize = config.passive_quantizer(production)
         offers = optimizer.all_offers(
             production, fish, explore, farm, inputs.boost_offers
@@ -2340,12 +2363,22 @@ def solve_frontier(
             if lookahead:
                 ahead = (horizon, _LOOKAHEAD.submit(frontier_at, horizon))
 
+    solved_for: passive.PassiveProduction | None = None
     for _ in range(_MAX_SEASON_ITERS):
+        # The production is the frontier's only input that moves with the horizon.
+        # Seasonal rates are averaged over whole windows, so a new horizon often
+        # rebuilds exactly the production the last frontier ran on -- and the same
+        # frontier, so the same selected makespan: converged, without re-solving.
         if ahead is not None and ahead[0] == horizon:
-            production, offers, plans, reference = ahead[1].result()
+            result = ahead[1].result()
         else:
-            production, offers, plans, reference = frontier_at(horizon)
+            upcoming = production_at(horizon)
+            result = None if upcoming == solved_for else frontier_at(horizon, upcoming)
         ahead = None
+        if result is None or result[0] == solved_for:
+            break
+        production, offers, plans, reference = result
+        solved_for = production
         if not plans:
             return FrontierResult(
                 plans=[], within=[], shown=[], offers=offers,

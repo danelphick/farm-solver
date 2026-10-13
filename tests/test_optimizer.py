@@ -812,6 +812,15 @@ def test_passive_residuals_are_net_of_other_channels():
     assert passive_residuals(plan, {"Oak": 100}, {}, 1.0, [], {}) == {"oak": 70.0}
 
 
+def test_passive_residuals_are_net_of_purchases():
+    # 100 Twine needed; 80 traded for, so passive is left only the other 20. Not
+    # counting the buy read all 100 as passive's, and quantising that phantom wait
+    # inflated a minutes-long plan's time by centuries.
+    passive = Offer("passive", "passive", {"twine": 10.0}, time_per_unit=timedelta(minutes=1))
+    plan = SourcingPlan(draws=[Draw(passive, 2)], bought={"twine": 80})
+    assert passive_residuals(plan, {"Twine": 100}, {}, 1.0, [], {}) == {"twine": 20.0}
+
+
 def test_passive_completion_caps_skip_excluded_items():
     # Oak completes at 100/10 = 10 min; Horn is a pet trickle we exclude, so only
     # Oak's breakpoint is returned.
@@ -1312,6 +1321,25 @@ def test_minimize_drinks_a_whole_juice_for_a_goal_smaller_than_one_juice():
     assert plan.draws == []  # fully covered by the juice: nothing to grow
 
 
+def test_minimize_credits_compounding_juices_exactly_at_whole_counts():
+    # Per-juice credits 50, 25, 12.5 (best first): capped at 2 juices they cover
+    # 75 of 100, the other 25 grown -- the chord bound is exact at whole counts.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": (50.0, 25.0, 12.5)}, pj_price=5, pj_limit=2)
+    assert plan.pumpkin_juices.get("it") == 2
+    assert plan.pumpkin_credit.get("it") == pytest.approx(75)
+    assert plan.time == timedelta(minutes=25)
+
+
+def test_minimize_caps_compounding_juices_at_their_count():
+    # Only three juices are on offer (87.5 between them), so the rest is grown.
+    plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=BUY_FREELY,
+                    pj_gain={"it": (50.0, 25.0, 12.5)}, pj_price=5)
+    assert plan.pumpkin_juices.get("it") == 3
+    assert plan.pumpkin_credit.get("it") == pytest.approx(87.5)
+    assert plan.time == timedelta(minutes=12.5)
+
+
 def test_minimize_self_sources_over_pumpkin_juice_when_gold_is_dear():
     # A huge gold weight buys nothing, juice included: grow it instead.
     plan = minimize([FARM_ITEM], {"It": 100}, prices=GOLD, gold_weight=SELF_SOURCE,
@@ -1437,6 +1465,15 @@ def test_pumpkin_gap_fill_recovers_intermediate_juice_counts():
     assert set(fill) == {1, 2, 3, 4}
     for level, plan in fill.items():
         assert round(sum(plan.pumpkin_juices.values())) == level
+
+
+def test_pumpkin_gap_fill_seeks_only_the_wanted_counts_below_the_fast_end():
+    # Only two spare rows: the counts just under the fast bracket (4, 3) are all the
+    # thinning could show, so the lower ones are never bisected for.
+    base = optimizer._build_base(
+        [FARM_ITEM], {"It": 50}, prices=GOLD, pj_gain={"it": 10}, pj_price=5)
+    fill = optimizer._pumpkin_gap_fill(base, 0.0, 5, 50 * 60, 0, want=2)
+    assert set(fill) == {3, 4}
 
 
 def test_thin_pumpkin_keeps_one_plan_per_juice_count():

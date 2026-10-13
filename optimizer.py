@@ -664,7 +664,7 @@ class _Base:
     crafted: list[str]
     opened: list[OpenFlow]
     remainder: dict[str, float]
-    pj_gain: dict[str, float]
+    pj_gain: dict[str, float | tuple[float, ...]]
     pj_price: float
     # Stamina opportunity cost (see _build_base): ``stamina_op`` meters the free
     # (banked + passive) stamina consumed and ``stamina_price`` is its per-unit
@@ -713,7 +713,7 @@ def _build_base(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     *,
@@ -975,17 +975,28 @@ def _build_base(
     # can drink. Bounded above by the juices it takes to *cover* the goal (rounded up,
     # so the last one is allowed to overshoot); ``pj_credit`` below clamps what that
     # overshoot earns.
+    #
+    # **Compounding**: a juice multiplies the item's *current* mastery by 1.1, so it
+    # is worth most drunk last, at the top of the climb, and each earlier one is worth
+    # 1/1.1 of the next. ``pj_gain`` then gives the per-juice credits in that order
+    # (see :func:`main.pumpkin_juice_gains`): a decreasing sequence, so the credit of
+    # ``n`` juices is concave in ``n`` and the chords between consecutive whole counts
+    # bound it exactly at every integer -- no extra variables. A bare number is the
+    # flat form, every juice worth the same.
     pj = {}
-    if pj_gain:
-        pj = {
-            item: problem.add_variable(
-                f"pj{i}", lowBound=0,
-                upBound=math.ceil(wanted[item][1] / pj_gain[item]),
-                cat="Integer",
-            )
-            for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys()))
-            if pj_gain[item] > 0
-        }
+    for i, item in enumerate(sorted(items & wanted.keys() & pj_gain.keys())):
+        gain = pj_gain[item]
+        if isinstance(gain, int | float):
+            if gain <= 0:
+                continue
+            bound = math.ceil(wanted[item][1] / gain)
+        else:
+            if not gain:
+                continue
+            bound = len(gain)
+        pj[item] = problem.add_variable(
+            f"pj{i}", lowBound=0, upBound=bound, cat="Integer"
+        )
     # What the juices actually earn toward the goal: ``pj_gain`` each, but never more
     # than the goal itself (mastery cannot exceed the requirement, so a juice past full
     # coverage is wasted, not banked). This is the clamp that used to be written as
@@ -999,7 +1010,15 @@ def _build_base(
         for i, item in enumerate(sorted(pj))
     }
     for item, var in pj.items():
-        problem += pj_credit[item] <= pj_gain[item] * var
+        gain = pj_gain[item]
+        if isinstance(gain, int | float):
+            problem += pj_credit[item] <= gain * var
+            continue
+        # The chord from k to k+1 juices: exact at both, above the curve elsewhere.
+        earned = 0.0
+        for k, step in enumerate(gain):
+            problem += pj_credit[item] <= earned + step * (var - k)
+            earned += step
     if pj_limit is not None and pj:
         problem += pulp.lpSum(pj.values()) <= pj_limit
     if pj:
@@ -2124,7 +2143,7 @@ def minimize(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     favour_passive: bool = False,
-    pj_gain: dict[str, float] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
@@ -2183,7 +2202,8 @@ def minimize(
     ``prices`` -- or an empty/``None`` dict -- is not buyable and is fully self-sourced.
 
     **Pumpkin Juice.** ``pj_gain`` (lower-cased goal item -> units of demand one juice
-    covers, ``0.1 * mastery_threshold / mastery_bonus``) turns on the mastery-boost
+    covers, or the decreasing per-juice credits of a compounding boost, best first --
+    see :func:`main.pumpkin_juice_gains`) turns on the mastery-boost
     lever: a ``pj`` variable per goal item adds free, instant supply toward that item's
     demand at ``pj_price`` gold each, capped at fully covering the demand (a juice past
     the goal buys nothing). ``pj_limit`` caps the total juices spent. Like buying it is
@@ -2675,7 +2695,7 @@ def fastest_endpoint(
     inventory: dict[str, float] | None = None,
     cookie_sets: float = 0.0,
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
@@ -2862,9 +2882,13 @@ def _juice_count(plan: SourcingPlan) -> int:
 
 def _pumpkin_gap_fill(
     base: _Base, lo_t: float, lo_pj: int, hi_t: float, hi_pj: int,
+    want: int | None = None,
 ) -> dict[int, SourcingPlan]:
     """The fastest exact plan at each whole-juice count in ``[hi_pj, lo_pj)``,
-    found by bisecting the time-cap axis between two bracket plans.
+    found by bisecting the time-cap axis between two bracket plans. ``want`` caps
+    the counts sought to the ``want`` just below ``lo_pj`` -- the fast end, which
+    is all :func:`_thin_pumpkin` has spare rows for -- so brackets reaching lower
+    counts are never bisected.
 
     Juice is the model's only integer *goal* decision (``days_available`` is a
     daily-budget bound, not a thing to trade off) and its count is monotone
@@ -2880,6 +2904,12 @@ def _pumpkin_gap_fill(
     juice-free plan distinct from the slow cheapest endpoint.
     """
     found: dict[int, SourcingPlan] = {}
+    # Stop narrowing a bracket at 1/256 of the whole span (a minute at least): a
+    # count that jumps (23 -> 21, no 22 exists) otherwise chases its boundary down
+    # to the minute, a dozen MIP solves hunting a row that would sit hours from its
+    # neighbour on a months-long span.
+    resolution = max(60.0, (hi_t - lo_t) / 256)
+    floor = hi_pj if want is None else max(hi_pj, lo_pj - want)
 
     def at(cap: float) -> SourcingPlan:
         return _solve_configured(
@@ -2887,14 +2917,15 @@ def _pumpkin_gap_fill(
 
     def record(plan: SourcingPlan) -> int:
         level = _juice_count(plan)
-        if hi_pj <= level < lo_pj:
+        if floor <= level < lo_pj:
             best = found.get(level)
             if best is None or plan.time < best.time:
                 found[level] = plan
         return level
 
     def bisect(a: float, ka: int, b: float, kb: int, depth: int) -> None:
-        if ka - kb <= 1 or b - a < 60 or depth > 24:
+        # Nothing wanted strictly between the brackets' counts (or below floor).
+        if ka - kb <= 1 or ka - 1 < floor or b - a < resolution or depth > 24:
             return
         mid = (a + b) / 2
         plan = at(mid)
@@ -2942,9 +2973,9 @@ class PlanBalance(NamedTuple):
 
     ``need`` is everything the plan must produce: the demand, plus what its crafts
     consume as materials and what its opens consume (chest tokens and keys).
-    ``elsewhere`` is everything the non-passive channels supply for free: crafting
+    ``elsewhere`` is everything the non-passive channels supply: crafting
     output, open yields, held stock (except directly-demanded items, whose demand
-    is already net of stock), and every non-passive draw. ``crafted`` is the
+    is already net of stock), every non-passive draw, and purchases. ``crafted`` is the
     crafting output alone (``crafting_bonus`` per craft). An item's residual left
     for passive production is ``need - elsewhere``.
     """
@@ -3002,6 +3033,12 @@ def plan_balance(
             continue
         for item, quantity in draw.produced.items():
             elsewhere[item] = elsewhere.get(item, 0.0) + quantity
+    # Bought (gold or Arnold-Palmer-traded) units are supply like any other channel,
+    # as the LP's balance rows count them. Leaving them out read an AP-traded
+    # material that passive also makes (1.87M Twine) as a passive residual, and
+    # quantising that phantom wait turned a 4-minute plan into 213 years.
+    for item, quantity in plan.bought.items():
+        elsewhere[item] = elsewhere.get(item, 0.0) + quantity
     return PlanBalance(need=need, elsewhere=elsewhere, crafted=crafted)
 
 
@@ -3429,7 +3466,7 @@ def frontier(
     cookie_sets: float = 0.0,
     passive_pet_items: set[str] = frozenset(),
     prices: dict[str, float] | None = None,
-    pj_gain: dict[str, float] | None = None,
+    pj_gain: dict[str, float | tuple[float, ...]] | None = None,
     pj_price: float = 0.0,
     pj_limit: int | None = None,
     quantize: Callable[[str, float], timedelta | None] | None = None,
@@ -3738,16 +3775,11 @@ def _frontier_sweeps(
             futures.append(pool.submit(finish_exact, index, origin if reuse else None))
         for future in futures:
             future.result()
-        # Two survivors can land on the same integer point once juice is whole; drop the
-        # duplicate rows, keeping the first (fastest-first order is preserved).
-        seen: set[tuple[int, int]] = set()
-        deduped = []
-        for plan in finished:
-            key = (round(plan.time.total_seconds()), round(plan.gold - plan.surplus_gold))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(plan)
-        thinned = deduped
+        # Re-prune on the exact costs: two survivors can land on the same integer point
+        # once juice is whole, and a row's exact re-solve can move it past a neighbour
+        # (slower *and* dearer than one beside it), which the relaxed pruning above
+        # could not see. ``_non_dominated`` drops both and re-sorts fastest first.
+        thinned = _non_dominated(finished)
 
         # A steep juice price makes the exact frontier jump counts (``3, 3, 2, 0``):
         # the relaxation under-counted juice, so thinning kept no plan at the skipped
@@ -3759,15 +3791,19 @@ def _frontier_sweeps(
         # different count -- does no extra solves and is byte-identical to no gap-fill.
         distinct = len({_juice_count(p) for p in thinned})
         if count >= 3 and len(thinned) >= 2 and distinct < count:
+            # Only ``count - distinct`` rows are spare, and _thin_pumpkin gives them
+            # to the fastest new counts, so seek just that many, fast brackets first.
+            want = count - distinct
             extra: list[SourcingPlan] = []
             for lo, hi in pairwise(thinned):
                 lo_pj, hi_pj = _juice_count(lo), _juice_count(hi)
-                if lo_pj - hi_pj >= 2:
+                if want > 0 and lo_pj - hi_pj >= 2:
                     fill = _pumpkin_gap_fill(
                         base_active, lo.time.total_seconds(), lo_pj,
-                        hi.time.total_seconds(), hi_pj,
+                        hi.time.total_seconds(), hi_pj, want,
                     )
                     extra.extend(fill.values())
+                    want -= len(fill)
             if extra:
                 for plan in extra:
                     post(plan)
@@ -3778,6 +3814,9 @@ def _frontier_sweeps(
                         round(plan.gold - plan.surplus_gold),
                     )
                     merged.setdefault(key, plan)
-                thinned = _thin_pumpkin(list(merged.values()), count)
+                # The fastest plan at a count need not be efficient: where juice is
+                # not monotone in the cap (21 juices at 75d 6h beside 23 at 75d 1h,
+                # slower *and* dearer) it is dominated, so prune before thinning.
+                thinned = _thin_pumpkin(_non_dominated(list(merged.values())), count)
 
     return thinned

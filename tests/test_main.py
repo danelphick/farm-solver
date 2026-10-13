@@ -2184,22 +2184,36 @@ def test_resolve_monthly_grants_config_override_wins():
     )
 
 
-def test_pumpkin_juice_gains_uses_the_mastery_threshold():
-    # A juice grants 10% of the item's tier (its required denominator), in the
-    # optimiser's items-to-find units (a found item is worth mastery_bonus mastery).
-    state = GameState(
-        masteries={"butter": Mastery("Butter", progress=0, required=1_000_000)}
-    )
-    needs = [ItemNeed("Butter", have=0, target=1_000_000, is_mastery=True)]
-    gains = pumpkin_juice_gains(needs, state, 1.1)
-    assert gains == {"butter": pytest.approx(0.1 * 1_000_000 / 1.1)}
+def test_pumpkin_juice_gains_compound_back_from_the_target():
+    # A juice multiplies current mastery by 1.1, so the last one drunk (on
+    # 909,091 -> 1M) adds 90,909 mastery, the one before it 1/1.1 of that, and so
+    # on -- in items-to-find units (a found item is worth mastery_bonus mastery).
+    needs = [ItemNeed("Butter", have=700_000, target=1_000_000, is_mastery=True)]
+    gains = pumpkin_juice_gains(needs, 1.1)["butter"]
+    last = 1_000_000 * (1 - 1 / 1.1)
+    assert gains[0] == pytest.approx(last / 1.1)
+    assert gains[1] == pytest.approx(last / 1.1 / 1.1)
+    # Four juices start at 1M / 1.1**4 = 683,013, below the 700,000 held: enough.
+    assert len(gains) == 4
 
 
-def test_pumpkin_juice_gains_falls_back_to_the_target_when_untracked():
-    # An item absent from the mastery file uses the goal target as its tier.
-    needs = [ItemNeed("Gainite", have=0, target=100_000, is_mastery=True)]
-    gains = pumpkin_juice_gains(needs, GameState(), 1.0)
-    assert gains == {"gainite": pytest.approx(0.1 * 100_000)}
+def test_pumpkin_juice_gains_stop_where_a_juice_adds_under_one_mastery():
+    # From zero no number of juices finishes the climb, so the credits run until a
+    # juice would add less than one mastery.
+    gains = pumpkin_juice_gains(
+        [ItemNeed("Gainite", have=0, target=100_000, is_mastery=True)], 1.0
+    )["gainite"]
+    assert gains[-1] >= 1
+    assert gains[-1] / 1.1 < 1
+
+
+def test_pumpkin_juice_gains_take_an_items_highest_goal():
+    needs = [
+        ItemNeed("Hops", have=500, target=10_000, is_mastery=True),
+        ItemNeed("Hops", have=500, target=100_000, is_mastery=True),
+    ]
+    gains = pumpkin_juice_gains(needs, 1.0)["hops"]
+    assert gains[0] == pytest.approx(100_000 * (1 - 1 / 1.1))
 
 
 def test_pumpkin_juice_gains_skips_acquire_goals_and_met_needs():
@@ -2207,7 +2221,7 @@ def test_pumpkin_juice_gains_skips_acquire_goals_and_met_needs():
         ItemNeed("Butter", have=0, target=100, is_mastery=False),  # -i, no mastery
         ItemNeed("Hops", have=50, target=50, is_mastery=True),  # already met
     ]
-    assert pumpkin_juice_gains(needs, GameState(), 1.1) == {}
+    assert pumpkin_juice_gains(needs, 1.1) == {}
 
 
 def test_print_frontier_shows_the_pumpkin_juice_column(capsys):
@@ -2224,24 +2238,21 @@ def test_print_frontier_omits_the_pumpkin_juice_column_when_unused(capsys):
 
 
 def test_pumpkin_juice_schedule_names_the_start_level():
-    # Two juices start two of the LP's gains (1,000,000 / 1.1 per juice for an MM
-    # item) below the goal, so drunk back to back the last lands the item on target
-    # -- the start above the current 750,000 progress.
-    gain = 0.1 * 1_000_000 / 1.1  # 90,909.09, matching pumpkin_juice_gains
-    needs = [ItemNeed("Butter", have=750_000, target=1_000_000, is_mastery=True)]
-    plan = SourcingPlan(pumpkin_juices={"butter": 2})
-    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {
-        "butter": round(1_000_000 - 2 * gain)
-    }
+    # Three juices drunk back to back from 1M / 1.1**3 = 751,315 land the item on
+    # its 1M target (each multiplies mastery by 1.1).
+    needs = [ItemNeed("Gold Drum", have=49_855, target=1_000_000, is_mastery=True)]
+    plan = SourcingPlan(pumpkin_juices={"gold drum": 3})
+    gains = pumpkin_juice_gains(needs, 1.1)
+    assert pumpkin_juice_schedule(plan, needs, gains) == {"gold drum": 751_315}
 
 
 def test_pumpkin_juice_schedule_clamps_to_current_progress():
-    # Only ~40,000 of shortfall left, so target - gain (~909,091) sits below the
-    # current 960,000 -- the drink point clamps up to where the item already is.
-    gain = 0.1 * 1_000_000 / 1.1
+    # Only 40,000 of shortfall left, so 1M / 1.1 (909,091) sits below the current
+    # 960,000 -- the drink point clamps up to where the item already is.
     needs = [ItemNeed("Butter", have=960_000, target=1_000_000, is_mastery=True)]
     plan = SourcingPlan(pumpkin_juices={"butter": 1})
-    assert pumpkin_juice_schedule(plan, needs, {"butter": gain}) == {"butter": 960_000}
+    gains = pumpkin_juice_gains(needs, 1.1)
+    assert pumpkin_juice_schedule(plan, needs, gains) == {"butter": 960_000}
 
 
 def test_pumpkin_juice_schedule_skips_items_with_no_juice():

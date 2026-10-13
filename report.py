@@ -2527,10 +2527,9 @@ def print_plan(
             cost = _gold_text(units * per_juice)
             name = display.get(item, item)
             line = f"  {round(units):>{width},}x Pumpkin Juice on {name} = {cost} g"
-            # A juice grants 10% of the current tier, so it only lands its full boost
-            # drunk late, in the goal's final tier -- name the mastery level to start
-            # at; each juice lifts mastery to the next one's point, so they go back
-            # to back from there.
+            # A juice multiplies current mastery by 1.1, so it is worth most drunk
+            # late -- name the mastery level to start at; each juice lifts mastery to
+            # the next one's point, so they go back to back from there.
             start = (pumpkin_schedule or {}).get(item)
             if start is not None:
                 line += f"\n    start drinking at {name} mastery {start:,}"
