@@ -137,7 +137,6 @@ use_neigh = true
 # when the plan starts inside the event and the inventory holds both keys; "on"
 # forces it open, "off" never uses it. The solver assumes all the Haunted House
 # exploring a plan wants fits in the event, and warns how many days are left.
-# For Apple Cider there, add its effectiveness under [exploring.effectiveness].
 explore_haunted_house = "during_event"
 # The Mechanical Heart (the tower level 300 artifact) grants a monthly bulk of
 # consumables (3000 Apple Cider on the 7th, 2000 Arnold Palmer on the 14th), added
@@ -160,6 +159,7 @@ Forest = 136
 "Jundland Desert" = 72
 "Gary's Crushroom" = 96
 "Sinking Swamp" = 152
+"Haunted House" = 120
 
 [farming]    # crop rows and growth modifiers; crops/drops come from the CSVs
 rows = 13
