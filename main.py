@@ -303,6 +303,91 @@ def resolve_swamp_puzzle(
     )
 
 
+# The ``[exploring] explore_haunted_house`` modes: force the Halloween event
+# location on, use it only while the event runs, or never use it.
+HAUNTED_HOUSE_MODES = ("on", "during_event", "off")
+DEFAULT_HAUNTED_HOUSE_MODE = "during_event"
+
+
+def haunted_house_mode(cfg: dict) -> str:
+    """The ``exploring.explore_haunted_house`` mode, validated.
+
+    A TOML boolean is accepted as ``on``/``off``, and ``during event`` /
+    ``during-event`` as ``during_event``; anything else is an error rather than
+    a silent fallback.
+    """
+    setting = cfg.get("exploring", {}).get(
+        "explore_haunted_house", DEFAULT_HAUNTED_HOUSE_MODE
+    )
+    if isinstance(setting, bool):
+        return "on" if setting else "off"
+    mode = str(setting).strip().lower().replace(" ", "_").replace("-", "_")
+    if mode not in HAUNTED_HOUSE_MODES:
+        raise ValueError(
+            "exploring.explore_haunted_house must be one of "
+            f"{', '.join(HAUNTED_HOUSE_MODES)}, not {setting!r}"
+        )
+    return mode
+
+
+def resolve_haunted_house(
+    cfg: dict, start: date, inventory: farm_solver.Inventory | None = None
+) -> bool:
+    """Whether the Haunted House exploring location is open to the plan.
+
+    ``on`` forces it open (planning for an event or keys you do not have yet)
+    and ``off`` closes it. ``during_event`` (the default) opens it only when
+    ``start`` falls inside the event (``exploring.haunted_house_window``) and
+    the inventory holds both ``exploring.HAUNTED_HOUSE_ITEMS`` -- with no
+    inventory to check (the ``--unobtainable`` report) the date alone decides.
+
+    The LP never sees the window: an open Haunted House is assumed to cover
+    all the exploring a plan wants there, however long the plan runs, and
+    :func:`haunted_house_note` warns how many days are actually left.
+    """
+    mode = haunted_house_mode(cfg)
+    if mode != "during_event":
+        return mode == "on"
+    opens, closes = exploring.haunted_house_window(start.year)
+    if not opens <= start <= closes:
+        return False
+    if inventory is None:
+        return True
+    return all(inventory.amount(item) > 0 for item in exploring.HAUNTED_HOUSE_ITEMS)
+
+
+def haunted_house_note(plan: optimizer.SourcingPlan, start: date) -> str | None:
+    """A warning when ``plan`` explores the Haunted House, else None.
+
+    The location is a Halloween event the LP treats as always open (see
+    :func:`resolve_haunted_house`), so a plan leaning on it must be told how
+    long the event actually has left from ``start``.
+    """
+    location = exploring.HAUNTED_HOUSE_LOCATION
+    names = {f"explore {location}", f"cider {location}"}
+    if not any(d.offer.name in names and d.units > 1e-9 for d in plan.draws):
+        return None
+    opens, closes = exploring.haunted_house_window(start.year)
+    if not opens <= start <= closes:
+        return (
+            f"This plan explores the {location}, but that Halloween event only runs "
+            f"{opens:%d %b} to {closes:%d %b} (it is assumed open because "
+            "exploring.explore_haunted_house is \"on\")."
+        )
+    days = (closes - start).days + 1
+    note = (
+        f"This plan explores the {location}, a Halloween event location open only "
+        f"{days} more day{'s' if days != 1 else ''} this year (until {closes:%d %b}); "
+        "the plan assumes all of that exploring fits in that window."
+    )
+    if plan.time > timedelta(days=days):
+        note += (
+            f" The plan runs {passive.format_duration(plan.time)}, longer than "
+            f"that, so do the {location} exploring first."
+        )
+    return note
+
+
 # The artifact governing the Cookie interaction with Dewstar bonus crops -- see
 # crops.Farm.dewstar_cookie_bonus.
 DEWSTARS_JOURNAL_ARTIFACT = "Dewstar's Journal"
@@ -1952,6 +2037,7 @@ def _build_channel_setup(
         cfg.get("exploring", {}),
         have_fungus_processing=resolve_fungus_processing(cfg, state.inventory),
         have_swamp_puzzle=have_swamp_puzzle,
+        have_haunted_house=resolve_haunted_house(cfg, start, state.inventory),
     )
     # The T300 tower artifact grants a monthly bulk of Apple Cider / Arnold Palmer
     # (config.MONTHLY_GRANTS), auto-detected from the tower level like the Scythe;
@@ -4108,6 +4194,7 @@ def run(args: argparse.Namespace) -> int:
             cfg.get("exploring", {}),
             have_fungus_processing=resolve_fungus_processing(cfg),
             have_swamp_puzzle=have_swamp_puzzle,
+            have_haunted_house=resolve_haunted_house(cfg, start),
         )
         production = config.passive_production(
             cfg, today=start, monthly_grants=resolve_monthly_grants(cfg),
@@ -4174,6 +4261,9 @@ def run(args: argparse.Namespace) -> int:
             f"Starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only for "
             "the part of the plan they fall in."
         )
+    haunted = haunted_house_note(fr.shown[selected], inputs.start)
+    if haunted:
+        reporter.note(haunted)
     if not fr.within:
         reporter.note(
             limit_shortfall(

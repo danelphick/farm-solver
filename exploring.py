@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field, replace
+from datetime import date
 from pathlib import Path
 
 # The bundled location data, used unless another path is given.
@@ -58,6 +59,26 @@ ACORN_PIE_EXPLORES = 450
 # an alternate drop table (see :func:`exploring_from_config`). Its fishing
 # counterpart is gated the same way -- see ``fishing.SWAMP_PUZZLE_ZONE``.
 SWAMP_PUZZLE_LOCATION = "Sinking Swamp"
+
+# The Haunted House is a Halloween event location, open only while the event
+# runs and only to a player holding both of HAUNTED_HOUSE_ITEMS. Like the swamp
+# it is dropped outright when unavailable (see :func:`exploring_from_config`);
+# whether it is available is resolved by the caller from the
+# ``[exploring] explore_haunted_house`` mode (see
+# ``main.resolve_haunted_house``). The LP does not model the event window
+# itself -- an open Haunted House is assumed to cover all the exploring a plan
+# wants there, and the report warns how many days are actually left.
+HAUNTED_HOUSE_LOCATION = "Haunted House"
+HAUNTED_HOUSE_ITEMS = ("QED Pack", "Jack-o-key")
+# The event's first and last (inclusive) days as (month, day). It opened on
+# 13 October; the 31 October close is expected but not confirmed.
+HAUNTED_HOUSE_OPENS = (10, 13)
+HAUNTED_HOUSE_CLOSES = (10, 31)
+
+
+def haunted_house_window(year: int) -> tuple[date, date]:
+    """The Haunted House event's first and last (inclusive) days in ``year``."""
+    return date(year, *HAUNTED_HOUSE_OPENS), date(year, *HAUNTED_HOUSE_CLOSES)
 
 
 @dataclass
@@ -238,6 +259,7 @@ def exploring_from_config(
     path: Path | None = None,
     have_fungus_processing: bool = False,
     have_swamp_puzzle: bool = True,
+    have_haunted_house: bool = False,
 ) -> Exploring:
     """Build an :class:`Exploring` from an ``[exploring]`` config section.
 
@@ -252,6 +274,8 @@ def exploring_from_config(
     ``main.resolve_swamp_puzzle``) is False when the player does not hold the
     Swamp Puzzle, which drops :data:`SWAMP_PUZZLE_LOCATION` entirely: an
     un-unlocked location cannot be explored, so it must not source anything.
+    ``have_haunted_house`` (see ``main.resolve_haunted_house``) likewise keeps
+    the :data:`HAUNTED_HOUSE_LOCATION` event location, dropped by default.
     """
     section = config_section or {}
     modifiers = ExploringModifiers(
@@ -270,6 +294,8 @@ def exploring_from_config(
     exploring = load_exploring(path, modifiers, cider, effectiveness)
     if not have_swamp_puzzle:
         exploring.locations.pop(SWAMP_PUZZLE_LOCATION.lower(), None)
+    if not have_haunted_house:
+        exploring.locations.pop(HAUNTED_HOUSE_LOCATION.lower(), None)
     active_flags = {FUNGUS_PROCESSING_FLAG} if have_fungus_processing else set()
     if active_flags:
         exploring.locations = {

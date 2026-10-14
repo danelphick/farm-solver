@@ -615,6 +615,8 @@ use_neigh = true                 # then ×0.8 stamina (the Neigh meal)
                                   # open/locked; unset auto-detects from inventory
 # have_mechanical_heart = true     # force the T300 monthly cider/palmer grants
                                   # on/off; unset auto-detects from having T300
+explore_haunted_house = "during_event"  # the Halloween Haunted House: on /
+                                  # during_event / off (see below)
 
 [exploring.effectiveness]        # per-zone Exploring Effectiveness for cider
 Forest = 136
@@ -636,6 +638,21 @@ The puzzle is a held item, so it is auto-detected from your inventory file (its 
                             # from inventory. Gates the FISHING zone too --
                             # there is no [fishing] counterpart.
 ```
+
+#### Haunted House (Halloween event)
+
+The **Haunted House** is an exploring location open only during the Halloween event (from 13 October until, probably, the end of 31 October) and only to a player holding both the **QED Pack** and the **Jack-o-key**. It drops Candy, Taffy, Lollipop, Apple, Candy Corn and the rarer event items (Spider, Bat Wing, Chattering Teeth, Witch Hat, Jack-o-lantern, Treat Bags 01–03, Hockey Mask).
+
+```toml
+[exploring]
+explore_haunted_house = "during_event"  # "on" | "during_event" | "off"
+```
+
+- `during_event` (the default) opens it only when the plan starts inside the event and your inventory holds both keys (with no inventory to check, the date alone decides).
+- `on` forces it open — planning for next year's event, or for keys you don't have yet.
+- `off` never uses it.
+
+The solver does not model the event window itself: when the Haunted House is open it assumes all the exploring a plan wants there fits inside the event, however long the plan runs. When the selected plan explores there it adds a note saying how many days the event has left (and, if the plan runs longer than that, to do the Haunted House exploring first). Its Apple Cider offer needs a `"Haunted House"` entry under `[exploring.effectiveness]`, like any other zone.
 
 The `[farmhouse]` section is the passive stamina source. The building raises your natural stamina cap by one a day (two with the Mattress Pad perk), so the cap recorded on `registered_on` has grown that much per day since (worked out for the plan's start date, like the storehouse). Each day your actual stamina then rises by `8 × cap`, limited to 500,000 (1,000,000 with the Apple Pie Enthusiast perk) — an automatic daily deposit the plan draws on before eating Apples or drinking Orange Juice for the rest. Stamina is a stat, not a stored good, so the storehouse cap does not apply to it.
 

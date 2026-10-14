@@ -264,6 +264,26 @@ describe("settings popover", () => {
     expect(body.params.config["exploring.wanderer_level"]).toBe(2);
     expect(body.params.config["fishing.use_sea_pincher"]).toBe(true);
   });
+
+  test("a choice control sends its value, and Default sends nothing", async () => {
+    const { baseline } = await loadPage();
+    const key = '[data-config-key="exploring.explore_haunted_house"]';
+
+    click("#settings-btn");
+    expect($(key).value).toBe("");  // starts at Default
+    edit(key, "off");
+    click("#settings-save");
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 1));
+    let body = JSON.parse(solveCalls().at(-1)[1].body);
+    expect(body.params.config["exploring.explore_haunted_house"]).toBe("off");
+
+    click("#settings-btn");
+    edit(key, "");
+    click("#settings-save");
+    await vi.waitFor(() => expect(solveCalls().length).toBe(baseline + 2));
+    body = JSON.parse(solveCalls().at(-1)[1].body);
+    expect(body.params.config || {}).not.toHaveProperty("exploring.explore_haunted_house");
+  });
 });
 
 describe("gated building perks", () => {

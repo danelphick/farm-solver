@@ -5,6 +5,7 @@ from exploring import (
     DEFAULT_EXPLORING_CSV,
     FUNGUS_ACORN_PIE_FLAG,
     FUNGUS_PROCESSING_FLAG,
+    HAUNTED_HOUSE_LOCATION,
     SWAMP_PUZZLE_LOCATION,
     CiderModifiers,
     Exploring,
@@ -161,6 +162,17 @@ def test_with_the_swamp_puzzle_the_sinking_swamp_location_is_explorable():
         )
         is not None
     )
+
+
+def test_the_haunted_house_is_dropped_unless_open():
+    # Off by default, so every caller predating the event is unaffected.
+    assert exploring_from_config({}).location(HAUNTED_HOUSE_LOCATION) is None
+    house = exploring_from_config({}, have_haunted_house=True).location(
+        HAUNTED_HOUSE_LOCATION
+    )
+    assert house is not None
+    # 248.32 Candy per 500-item Arnold Palmer.
+    assert house.explore(500)["candy"] == pytest.approx(248.32)
 
 
 def test_explores_per_cider_without_cinnamon_is_ten_per_effectiveness():

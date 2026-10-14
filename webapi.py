@@ -1023,6 +1023,9 @@ def render(
         graph_metric=graph_metric,
     )
     chosen = shown[selected]
+    haunted = main.haunted_house_note(chosen, inputs.start)
+    if haunted:
+        warnings.append(haunted)
     inputs.solution.arnold_palmers = round(chosen.arnold_palmers)
     inputs.solution.large_nets = round(chosen.large_nets)
     pj_schedule = main.pumpkin_juice_schedule(chosen, inputs.solution.needs, inputs.pj_gain)

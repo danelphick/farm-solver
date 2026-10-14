@@ -132,6 +132,13 @@ use_neigh = true
 # held item, so by default it is auto-detected from the inventory file; uncomment
 # to force it on/off instead.
 # have_swamp_puzzle = true
+# The Haunted House is a Halloween event location (13 Oct to, probably, 31 Oct)
+# needing both the "QED Pack" and the "Jack-o-key". "during_event" uses it only
+# when the plan starts inside the event and the inventory holds both keys; "on"
+# forces it open, "off" never uses it. The solver assumes all the Haunted House
+# exploring a plan wants fits in the event, and warns how many days are left.
+# For Apple Cider there, add its effectiveness under [exploring.effectiveness].
+explore_haunted_house = "during_event"
 # The Mechanical Heart (the tower level 300 artifact) grants a monthly bulk of
 # consumables (3000 Apple Cider on the 7th, 2000 Arnold Palmer on the 14th), added
 # to passive production spread over the plan. Like the Scythe of Dewstar it is an

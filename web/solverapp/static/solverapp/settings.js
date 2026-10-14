@@ -106,11 +106,15 @@ const PRICE_FIELDS = {
 //                Processing and the Swamp Puzzle from inventory). "Auto-detect"
 //                (the default) sends nothing, leaving the auto-detection in
 //                place; On/Off force a JSON boolean.
+//   choice    -> <select> over the field's `options` ([value, label] pairs) plus
+//                a "Default (...)" entry naming the config default; Default
+//                sends nothing, any other entry its value as a JSON string.
 
 const EXPLORING_ZONES = [
   "Forest", "Small Cave", "Small Spring", "Highland Hills", "Cane Pole Ridge",
   "Misty Forest", "Black Rock Canyon", "Mount Banon", "Ember Lagoon",
   "Whispering Creek", "Jundland Desert", "Gary's Crushroom", "Sinking Swamp",
+  "Haunted House",
 ];
 
 // The Pets pane's pets: every numeric (level) key of the injected [pets]
@@ -166,6 +170,9 @@ const CONFIG_FIELDS = {
       help: "Fungus Processing and You: Gary's Crushroom drops Mushroom Paste (plus rarer byproducts) instead of Mushroom. Auto-detect reads the artifact from your inventory." },
     { key: "exploring.have_swamp_puzzle", label: "Swamp Puzzle", type: "autobool",
       help: "Swamp Puzzle: unlocks the Sinking Swamp for both exploring AND fishing. Without it the zone is dropped, so nothing it alone drops (Scrap Cloth, and so the Basic Pillow tower level 301 needs) can be sourced. Auto-detect reads the item from your inventory." },
+    { key: "exploring.explore_haunted_house", label: "Haunted House", type: "choice",
+      options: [["during_event", "During event"], ["on", "On"], ["off", "Off"]],
+      help: "Haunted House, the Halloween event location (13 Oct to, probably, 31 Oct; needs the QED Pack and Jack-o-key). During event uses it only when the plan starts inside the event and your inventory holds both keys; On forces it open. The plan assumes all its Haunted House exploring fits in the event and warns how many days are left. Set its Exploring Effectiveness for Apple Cider there." },
   ],
   // Perks/meals changing how many fish one Large Net catches. (The Sinking Swamp
   // fishing zone is gated on the Swamp Puzzle, which lives in the Exploring pane
@@ -362,6 +369,11 @@ function createConfigField(field) {
     input.add(new Option("Off", "false"));
     input.classList.add("narrow");
     input.value = autoboolDefaultValue(field.key);  // "" (auto) unless config forces it
+  } else if (field.type === "choice") {
+    input = document.createElement("select");
+    const named = field.options.find(([value]) => value === def);
+    input.add(new Option(named ? `Default (${named[1]})` : "Default", ""));
+    field.options.forEach(([value, label]) => input.add(new Option(label, value)));
   } else if (field.type === "date") {
     input = document.createElement("input");
     input.type = "date";

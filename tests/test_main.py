@@ -1,5 +1,5 @@
 import argparse
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from rich.console import Console
@@ -26,6 +26,7 @@ from main import (
     build_parser,
     cheapest_plan,
     cookie_sets_available,
+    haunted_house_note,
     limit_shortfall,
     parse_gold_budget,
     parse_ignored_goals,
@@ -41,6 +42,7 @@ from main import (
     resolve_frontier_graph,
     resolve_frontier_spread,
     resolve_fungus_processing,
+    resolve_haunted_house,
     resolve_held_item,
     resolve_mariyas_wheelbarrow,
     resolve_monthly_grants,
@@ -2019,6 +2021,75 @@ def test_resolve_swamp_puzzle_config_override_wins():
         resolve_swamp_puzzle({"exploring": {"have_swamp_puzzle": True}}, Inventory())
         is True
     )
+
+
+HAUNTED_KEYS = Inventory(
+    items={
+        "qed pack": InventoryItem(name="QED Pack", quantity=1),
+        "jack-o-key": InventoryItem(name="Jack-o-key", quantity=1),
+    }
+)
+
+
+def test_resolve_haunted_house_during_event_needs_the_window_and_both_keys():
+    during, before, after = date(2026, 10, 14), date(2026, 10, 12), date(2026, 11, 1)
+    assert resolve_haunted_house({}, during, HAUNTED_KEYS) is True
+    assert resolve_haunted_house({}, date(2026, 10, 31), HAUNTED_KEYS) is True
+    assert resolve_haunted_house({}, before, HAUNTED_KEYS) is False
+    assert resolve_haunted_house({}, after, HAUNTED_KEYS) is False
+    one_key = Inventory(
+        items={"qed pack": InventoryItem(name="QED Pack", quantity=1)}
+    )
+    assert resolve_haunted_house({}, during, one_key) is False
+    # No inventory to check (--unobtainable): the date alone decides.
+    assert resolve_haunted_house({}, during) is True
+
+
+def test_resolve_haunted_house_on_and_off_ignore_the_date_and_keys():
+    outside = date(2026, 6, 1)
+    on = {"exploring": {"explore_haunted_house": "on"}}
+    off = {"exploring": {"explore_haunted_house": "off"}}
+    assert resolve_haunted_house(on, outside, Inventory()) is True
+    assert resolve_haunted_house(off, date(2026, 10, 14), HAUNTED_KEYS) is False
+    # TOML booleans and spelling variants are accepted.
+    assert resolve_haunted_house(
+        {"exploring": {"explore_haunted_house": True}}, outside
+    ) is True
+    assert resolve_haunted_house(
+        {"exploring": {"explore_haunted_house": "During event"}},
+        date(2026, 10, 14),
+    ) is True
+
+
+def test_resolve_haunted_house_rejects_an_unknown_mode():
+    with pytest.raises(ValueError, match="explore_haunted_house"):
+        resolve_haunted_house(
+            {"exploring": {"explore_haunted_house": "sometimes"}}, date(2026, 10, 14)
+        )
+
+
+def _haunted_plan(days: float, units: float = 1.0) -> SourcingPlan:
+    offer = Offer(name="explore Haunted House", track="exploring", yields={})
+    return SourcingPlan(time=timedelta(days=days), draws=[Draw(offer, units)])
+
+
+def test_haunted_house_note_only_for_a_plan_exploring_there():
+    assert haunted_house_note(_haunted_plan(1, units=0), date(2026, 10, 14)) is None
+    assert haunted_house_note(SourcingPlan(), date(2026, 10, 14)) is None
+
+
+def test_haunted_house_note_counts_the_days_left():
+    note = haunted_house_note(_haunted_plan(1), date(2026, 10, 14))
+    assert "18 more days" in note and "31 Oct" in note
+    assert "first" not in note
+    # A plan outlasting the event is told to do that exploring first.
+    assert "first" in haunted_house_note(_haunted_plan(30), date(2026, 10, 14))
+    assert "1 more day " in haunted_house_note(_haunted_plan(0), date(2026, 10, 31))
+
+
+def test_haunted_house_note_outside_the_event():
+    note = haunted_house_note(_haunted_plan(1), date(2026, 6, 1))
+    assert "13 Oct to 31 Oct" in note
 
 
 def test_resolve_scythe_of_dewstar_defaults_off_with_nothing_to_check():
