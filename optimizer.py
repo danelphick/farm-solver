@@ -1382,7 +1382,8 @@ _ASCEND_PREREQS: dict[str, tuple[str, ...]] = {
 
 
 def _round_and_fix_ascension(
-    base: _Base, solver: pulp.LpSolver, *, check: bool = True
+    base: _Base, solver: pulp.LpSolver, *, check: bool = True,
+    restore_days: bool = False,
 ) -> pulp.LpSolver:
     """Round the primary solve's fractional ascension step selections to 0/1.
 
@@ -1449,6 +1450,10 @@ def _round_and_fix_ascension(
     every step un-selected) rather than simply stale; a trial that solves
     that way simply reads as failed. Returns the solver the caller should
     keep using (CBC, if a rescue happened) for the refinement tower.
+
+    ``restore_days`` makes ``days_available`` integer again for that final
+    solve: the caller relaxed it so the primary solve and every trial here
+    are LPs (see ``_solve_configured``).
     """
     assert base.ascension is not None
     # Below this, a step is dust, not a commitment: the relaxation will shave
@@ -1621,6 +1626,8 @@ def _round_and_fix_ascension(
             constraint.name = f"ascend_pin_{item}_{step}"
             problem.addConstraint(constraint)
             base.ephemeral.append(constraint.name)
+    if restore_days:
+        base.days_available.cat = pulp.LpInteger
     problem.solve(solver)
     # A capped solve is exempt from the optimality checks, exactly like the
     # primary solve above it (see _assert_optimal's docstring: HiGHS mis-flags
@@ -1739,6 +1746,19 @@ def _solve_configured(
         # nothing (gold 0) for the slowest, fully self-sourced plan.
         primary = base.makespan + gold_weight * base.gold
     problem.setObjective(primary)
+    # Ascension: the primary solve and round-and-fix's trials run on the
+    # relaxed day count, so a climb's thousands of trials are LPs. An integer
+    # ``days_available`` made each a MIP -- ~7x the time -- and HiGHS's MIP
+    # presolve returned non-optimal "Optimal" roots on these models, steering
+    # the rounding with wrong objectives. The final pinned solve restores the
+    # exact count, so the plan itself is still whole-day. See
+    # _round_and_fix_ascension.
+    relax_days = (
+        base.ascension is not None and exact_integers
+        and base.days_available is not None
+    )
+    if relax_days:
+        base.days_available.cat = pulp.LpContinuous
     solver = _solver()
     problem.solve(solver)
     if time_cap is None:
@@ -1748,7 +1768,9 @@ def _solve_configured(
     # selections to 0/1 and re-solve, before the refinement tower below runs on
     # top of that (now-integral) solution. See _round_and_fix_ascension.
     if base.ascension is not None:
-        solver = _round_and_fix_ascension(base, solver, check=time_cap is None)
+        solver = _round_and_fix_ascension(
+            base, solver, check=time_cap is None, restore_days=relax_days,
+        )
 
     # The first solve fixes the *cost* but not a unique plan: it has alternate
     # optima CBC picks between at random across processes. Refine it in a

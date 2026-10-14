@@ -948,7 +948,17 @@ code path byte-identical — everything below is gated on the spec.
   that relaxation — so when pin-up already achieves that bound the down
   trial is skipped (ties already prefer up). It fires rarely (a step is
   fractional precisely when completing it costs something at the margin),
-  but it is free.
+  but it is free. **Day count relaxed for the trials**: `_solve_configured`
+  makes `days_available` (the daily cookie-set/Grape-Juice budget's integer
+  day count) continuous for the primary solve and every trial, and
+  `_round_and_fix_ascension(restore_days=True)` makes it integer again for
+  the final pinned solve, so the plan stays whole-day. Integer, it turned
+  every trial into a MIP (~16ms vs ~2.4ms each) from `aa1a618` on -- the
+  fresh-account `--sweep 2` climb went 4s → 38s -- and HiGHS's MIP presolve
+  also returned *non-optimal* "Optimal" roots on these models (the `--ascend
+  5` fast pass: 2,813 gold where the LP, CBC and presolve-free HiGHS all
+  find 0), so the climbs it chose rested on wrong trial objectives. The
+  relaxed trials reproduce the presolve-free exact MIP's frontiers.
 - **`plan.time`**: when the base carries a spec, it is the max of the draws'
   aggregate time and `timedelta(minutes=base.makespan.value())`, instead of just
   the draws' time — the chore term can legitimately make the optimal makespan
@@ -1109,10 +1119,12 @@ stage, since each stage's config/production/inventory differs.
   (nothing has evolved yet); later stages hit whenever adjacent gold weights
   chose the same plan prefix, which is most passes (a 16-point sweep yields a
   handful of distinct plans — observed 65 builds → 24 on a 4-stage climb).
-  Benchmarks on real data after the base cache and the round-and-fix trial
-  fast path (see "Ascension extension"): `--ascend 60 --tower-level 40` ~1.4s
-  (was ~8s), 4-stage `--ascend 100 --tower-level 40` ~4s (was ~21s),
-  `--ascend 200 --tower-level 100` ~4.7s, byte-identical plans throughout.
+  Benchmarks on real data after the base cache, the round-and-fix trial
+  fast path and the relaxed trial day count (see "Ascension extension"):
+  `--ascend 60 --tower-level 40` ~1.1s (was ~8s), 4-stage `--ascend 100
+  --tower-level 40` ~2.8s (was ~21s), `--ascend 200 --tower-level 100`
+  ~7.7s; the fresh-account 0→200 climb ~4.7s at `--sweep 2`, ~15s at the
+  default sweep.
   Remaining cost splits between the rounding trial re-solves and the
   primary/refinement-tower solves, which still rebuild through pulp because
   they change objectives and constraints, not just bounds.
