@@ -2270,9 +2270,12 @@ that imports it without going through `manage.py`.
   directly under their item whatever the sort (`expansionHtml`), not ranked
   with the rest. `sortRows(rows, key, direction)` and `masteryHref` are the pure,
   unit-tested exports (`masteries.test.js`); `SORT_COLUMNS`/`SORT_KEYS` name the
-  four sortable columns and the value tuple each ranks on (primary then
+  five sortable columns and the value tuple each ranks on (primary then
   tie-breaks — the two numeric axes still break on each other like the CLI's
-  `main._sorted_mastery_rows`, Item on the target). A key may also carry `fixed`
+  `main._sorted_mastery_rows`, Item on the target, Remaining on time).
+  **Remaining** (web only; the CLI table is unchanged) is
+  `MasteryCostRow.remaining`, the raw mastery still to go to the tier
+  (threshold − progress, before the mastery bonus), set by `main._climb`. A key may also carry `fixed`
   tie-breaks, which are compared **ascending whichever direction the primary
   sorts**: Target breaks on time then gold, so flipping it to MM/GM/M reorders the
   target groups while each group stays cheapest-first. **Every column

@@ -818,8 +818,11 @@ def test_mastery_costs_end_to_end_on_synthetic_paste_text():
     )
     assert payload.rows
     for row in payload.rows:
-        assert set(row) == {"item", "tier", "time", "time_seconds", "gold"}
+        assert set(row) == {"item", "tier", "remaining", "time", "time_seconds", "gold"}
         assert row["tier"] in {"M", "GM", "MM"}
+        # The mastery still to go: the tier's threshold less current progress.
+        threshold = {"M": 10_000, "GM": 100_000, "MM": 1_000_000}[row["tier"]]
+        assert 0 < row["remaining"] <= threshold
         assert isinstance(row["time"], str)  # preformatted for display
         assert isinstance(row["time_seconds"], float)  # and again, for sorting
         assert row["gold"] >= 0

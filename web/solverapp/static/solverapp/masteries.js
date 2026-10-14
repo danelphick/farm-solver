@@ -67,6 +67,7 @@ const SORT_KEYS = {
     ranked: (r) => [tierRank(r.tier)],
     fixed: (r) => [r.time_seconds, r.gold],
   },
+  remaining: { ranked: (r) => [r.remaining, r.time_seconds] },
   time: { ranked: (r) => [r.time_seconds, r.gold] },
   gold: { ranked: (r) => [r.gold, r.time_seconds] },
 };
@@ -238,13 +239,14 @@ function costRowHtml(row, extra) {
     ` title="Plan for ${escapeHtml(row.item)} → ${escapeHtml(tierLabel(row.tier))}">` +
     `<td>${name}</td>` +
     `<td>${escapeHtml(row.tier)}</td>` +
+    `<td class="num">${(row.remaining ?? 0).toLocaleString()}</td>` +
     `<td class="num">${escapeHtml(row.time)}</td>` +
     `<td class="num">${formatGold(row.gold)} g</td>` +
     `</tr>`;
 }
 
 function noteRowHtml(text, kind) {
-  return `<tr class="tier-extra tier-${kind}"><td colspan="4">${escapeHtml(text)}</td></tr>`;
+  return `<tr class="tier-extra tier-${kind}"><td colspan="5">${escapeHtml(text)}</td></tr>`;
 }
 
 // An expanded item's further tiers, directly under its row whatever the sort:

@@ -146,7 +146,7 @@ describe("sortRows", () => {
   });
 
   test("SORT_COLUMNS names every sortable column", () => {
-    expect(SORT_COLUMNS).toEqual(["item", "tier", "time", "gold"]);
+    expect(SORT_COLUMNS).toEqual(["item", "tier", "remaining", "time", "gold"]);
   });
 });
 

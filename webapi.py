@@ -877,6 +877,7 @@ def _mastery_costs_payload(result: main.MasteryCostsResult) -> MasteryCostsPaylo
             {
                 "item": row.item,
                 "tier": row.tier,
+                "remaining": row.remaining,
                 "time": passive.format_duration(row.time),
                 "time_seconds": row.time.total_seconds(),
                 "gold": row.gold,

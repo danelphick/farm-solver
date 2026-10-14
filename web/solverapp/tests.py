@@ -184,7 +184,7 @@ class ApiMasteryCostsTests(SimpleTestCase):
         self.assertTrue(body["rows"])
         row = body["rows"][0]
         self.assertEqual(
-            set(row), {"item", "tier", "time", "time_seconds", "gold"}
+            set(row), {"item", "tier", "remaining", "time", "time_seconds", "gold"}
         )
         self.assertIn(row["tier"], {"M", "GM", "MM"})
         self.assertIsInstance(body["unmasterable"], list)

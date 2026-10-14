@@ -24,9 +24,9 @@ function buildPage() {
 }
 
 const ROWS = [
-  { item: "Slow", tier: "MM", time: "5d", time_seconds: 432000, gold: 10 },
-  { item: "Fast Dear", tier: "GM", time: "1d", time_seconds: 86400, gold: 900 },
-  { item: "Fast Cheap", tier: "M", time: "1d", time_seconds: 86400, gold: 100 },
+  { item: "Slow", tier: "MM", remaining: 250000, time: "5d", time_seconds: 432000, gold: 10 },
+  { item: "Fast Dear", tier: "GM", remaining: 1500, time: "1d", time_seconds: 86400, gold: 900 },
+  { item: "Fast Cheap", tier: "M", remaining: 9000, time: "1d", time_seconds: 86400, gold: 100 },
 ];
 
 const PAYLOAD = {
@@ -145,9 +145,9 @@ describe("mastery-costs page", () => {
     });
 
     expect(rowText()).toEqual([
-      ["Fast Cheap", "M", "1d", "100.0 g"],
-      ["Fast Dear", "GM", "1d", "900.0 g"],
-      ["Slow", "MM", "5d", "10.0 g"],
+      ["Fast Cheap", "M", "9,000", "1d", "100.0 g"],
+      ["Fast Dear", "GM", "1,500", "1d", "900.0 g"],
+      ["Slow", "MM", "250,000", "5d", "10.0 g"],
     ]);
     expect(document.querySelector("#mastery-costs-section").hidden).toBe(false);
     expect(document.querySelector("#empty-state").hidden).toBe(true);
@@ -249,6 +249,16 @@ describe("mastery-costs page", () => {
     expect(rowText().map((cells) => cells[1])).toEqual(["MM", "GM", "M"]);
   });
 
+  test("Remaining shows the mastery still needed and sorts by it", async () => {
+    await loadPage({ state: SAVED });
+    clickSort("remaining");
+    expect(rowText().map((cells) => [cells[0], cells[2]])).toEqual([
+      ["Fast Dear", "1,500"],
+      ["Fast Cheap", "9,000"],
+      ["Slow", "250,000"],
+    ]);
+  });
+
   test("the active column shows its direction and is remembered", async () => {
     await loadPage({ state: SAVED });
     clickSort("item");
@@ -256,6 +266,7 @@ describe("mastery-costs page", () => {
     const headers = [...document.querySelectorAll("#mastery-costs-head th")];
     expect(headers.map((th) => th.getAttribute("aria-sort"))).toEqual([
       "ascending",
+      "none",
       "none",
       "none",
       "none",
@@ -533,7 +544,7 @@ describe("mastery-costs expand toggle", () => {
     cached: false,
     solved_ms: 5,
     item: "Fast Cheap",
-    rows: [{ item: "Fast Cheap", tier: "GM", time: "9d", time_seconds: 777600, gold: 400 }],
+    rows: [{ item: "Fast Cheap", tier: "GM", remaining: 91000, time: "9d", time_seconds: 777600, gold: 400 }],
     limited: [{ item: "Fast Cheap", text: "Fast Cheap cannot reach Megamaster: its sources cannot supply that many" }],
   };
 
@@ -567,11 +578,11 @@ describe("mastery-costs expand toggle", () => {
     const [, options] = tierCalls()[0];
     expect(JSON.parse(options.body).item).toBe("Fast Cheap");
     expect(rowText()).toEqual([
-      ["Fast Cheap", "M", "1d", "100.0 g"],
-      ["", "GM", "9d", "400.0 g"],
+      ["Fast Cheap", "M", "9,000", "1d", "100.0 g"],
+      ["", "GM", "91,000", "9d", "400.0 g"],
       ["Fast Cheap cannot reach Megamaster: its sources cannot supply that many"],
-      ["Fast Dear", "GM", "1d", "900.0 g"],
-      ["Slow", "MM", "5d", "10.0 g"],
+      ["Fast Dear", "GM", "1,500", "1d", "900.0 g"],
+      ["Slow", "MM", "250,000", "5d", "10.0 g"],
     ]);
     const extra = document.querySelectorAll("#mastery-costs-body tr")[1];
     expect(extra.dataset.href).toBe("/?mastery=Fast%20Cheap%3AGM");

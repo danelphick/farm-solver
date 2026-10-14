@@ -2858,13 +2858,15 @@ class MasteryCostRow:
     ``time`` is the fastest plan's makespan to reach ``tier``'s absolute
     threshold from the item's current progress (only the next tier is solved);
     ``gold`` is that plan's cost at the [trading]
-    exchange rates (0.0 when nothing is priced).
+    exchange rates (0.0 when nothing is priced). ``remaining`` is the mastery
+    still needed to reach the tier: its threshold less the current progress.
     """
 
     item: str  # display name
     tier: str  # "M" / "GM" / "MM"
     time: timedelta
     gold: float
+    remaining: int = 0
 
 
 @dataclass
@@ -3182,7 +3184,10 @@ def _climb(
         # Cost is the gold the plan actually spends buying (plan.gold), so
         # --self-sourced -- which withholds the AP/LN/AC buys -- shows the real
         # drop, not the market value of the tools it now self-sources instead.
-        found.append(MasteryCostRow(item=name, tier=label, time=plan.time, gold=plan.gold))
+        found.append(MasteryCostRow(
+            item=name, tier=label, time=plan.time, gold=plan.gold,
+            remaining=threshold - progress,
+        ))
     return found, None
 
 
