@@ -146,7 +146,10 @@ the next, so a different but equally optimal vertex at one fallback (the two
 solvers' objectives agree to ~1e-3 minutes at all 115) sent the whole climb down
 another path -- its fastest plan came out at 92,440 gold instead of 49,444, at
 the same 0m. With CBC kept there, the climb's output is identical to `main`'s
-again (and it still drops from 68s to 60s).
+again (and it still drops from 68s to 60s). *(Later removed: once the climb's
+plans changed anyway -- the relaxed trial day count and the MIP polish --
+`cbc_only` had nothing left to preserve, and its CBC subprocesses were a third of
+a real-save climb's time: `--ascend 200 --tower-level 100` 8.1s -> 2.9s.)*
 
 The web views now take those items' optima from HiGHS instead of CBC --
 equally optimal, but where the optimum is not unique the reported plan can

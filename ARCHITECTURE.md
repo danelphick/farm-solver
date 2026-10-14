@@ -1964,9 +1964,9 @@ information survives elsewhere in the document:
   nonnegative terms) on the tiny gold-weight coefficients, a third of the web
   mastery-costs sweep — with HiGHS **without presolve** (MIP presolve at the root
   only), then the bundled CBC; on rescue the rest of that call's refinement
-  stays on the rescuing solver. Ascension bases pass `cbc_only` and go straight
-  to CBC: the climb rounds LP solutions stage by stage, so another (equally
-  optimal) vertex at a fallback reroutes the whole climb.
+  stays on the rescuing solver. Ascension takes the same path (it once went
+  straight to CBC, to keep its climbs byte-identical across a backend change;
+  the CBC subprocess per solve cost a third of a real-save climb's time).
 - **Held items seed obtainability**: `_obtainable` takes a `held` set —
   `_build_base` passes the held, non-demanded items any offer *consumes* (e.g. an
   Acorn Pie) so a channel grounded only in a held consumable is usable. Excludes
