@@ -149,7 +149,15 @@ def _model(problem: pulp.LpProblem) -> _Model:
 class FastHiGHS(pulp.HiGHS):
     """PuLP's in-process HiGHS backend with a cached, one-call model hand-over
     and warm-started refinements (see the module docstring). A drop-in
-    ``pulp.HiGHS``."""
+    ``pulp.HiGHS``.
+
+    ``mip_start`` seeds a MIP with the variables' current values as its first
+    incumbent -- for a search capped by node count, which then only has to
+    improve on it (``optimizer._polish_ascension``)."""
+
+    def __init__(self, *args, mip_start: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mip_start = mip_start
 
     def actualSolve(self, lp, callback=None):
         model = _model(lp)
@@ -170,6 +178,11 @@ class FastHiGHS(pulp.HiGHS):
             self.createAndConfigureSolver(lp)
             highs = lp.solverModel
             highs.passModel(_whole(model, cost, integer))
+            if integer and self.mip_start:
+                start = highspy.HighsSolution()
+                start.col_value = [v.varValue or 0.0 for v in columns]
+                start.value_valid = True
+                highs.setSolution(start)
         self.callSolver(lp)
 
         status = highs.getModelStatus()

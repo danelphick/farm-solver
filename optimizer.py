@@ -1428,7 +1428,8 @@ def _round_and_fix_ascension(
     edit, so trials skip pulp's full model rebuild (which costs several times
     the actual solve on real candidate sets): when the primary solve ran on
     HiGHS, ``problem.solverModel`` is the still-loaded in-process highspy
-    model with every variable's column index on ``var.index``, and trials
+    model (each column's index from FastHiGHS's cached model, or ``var.index``
+    under PuLP's own backend), and trials
     flip column bounds there and re-solve warm-started from the previous
     basis. On any other backend (CBC fallback, or after a mid-loop rescue)
     trials flip the pulp variables' own bounds and re-solve through pulp.
@@ -1470,10 +1471,17 @@ def _round_and_fix_ascension(
         for item, steps in base.ascend_y.items()
         for step, var in steps.items()
     ]
+    # Each step var's column in the loaded highspy model: FastHiGHS keeps the
+    # map on its cached model, PuLP's own backend stamps ``var.index``.
+    model = getattr(problem, "_highs_model", None)
+    if isinstance(solver, FastHiGHS) and model is not None:
+        column = {var: model.index.get(var) for _, _, var in all_steps}
+    else:
+        column = {var: getattr(var, "index", None) for _, _, var in all_steps}
     highs = (
         getattr(problem, "solverModel", None)
         if isinstance(solver, pulp.HiGHS)
-        and all(hasattr(var, "index") for _, _, var in all_steps)
+        and all(index is not None for index in column.values())
         else None
     )
     if highs is not None:
@@ -1495,11 +1503,13 @@ def _round_and_fix_ascension(
         bound = highs.getObjectiveValue()
     else:
         bound = pulp.value(problem.objective)
+    # The same optimum, in pulp's terms, for _polish_ascension's gate.
+    relaxed = pulp.value(problem.objective)
 
     def set_bounds(item: str, step: str, low: int, up: int) -> None:
         var = base.ascend_y[item][step]
         if highs is not None:
-            highs.changeColBounds(var.index, low, up)
+            highs.changeColBounds(column[var], low, up)
         else:
             var.lowBound, var.upBound = low, up
 
@@ -1517,7 +1527,7 @@ def _round_and_fix_ascension(
             if ok:
                 col = highs.getSolution().col_value
                 snapshot = {
-                    (item, step): col[var.index] for item, step, var in all_steps
+                    (item, step): col[column[var]] for item, step, var in all_steps
                 }
                 objective = highs.getObjectiveValue()
         else:
@@ -1632,7 +1642,119 @@ def _round_and_fix_ascension(
     # A capped solve is exempt from the optimality checks, exactly like the
     # primary solve above it (see _assert_optimal's docstring: HiGHS mis-flags
     # tiny-RHS pins under a cap, where keeping the loaded solution is right).
-    return _assert_optimal(problem, solver, cbc_only=True) if check else solver
+    if check:
+        solver = _assert_optimal(problem, solver, cbc_only=True)
+    if isinstance(solver, FastHiGHS) and pulp.LpStatus[problem.status] == "Optimal":
+        solver = _polish_ascension(base, solver, relaxed)
+    return solver
+
+
+# The ascension polish's MIP (see :func:`_polish_ascension`): a 0.1% gap, and a
+# node cap rather than a time limit so a run stays deterministic. Presolve is
+# off because HiGHS's MIP presolve has returned non-optimal "Optimal" answers
+# on these models.
+_POLISH_OPTIONS = {"presolve": "off", "mip_rel_gap": 1e-3, "mip_max_nodes": 20}
+
+
+def _polish_ascension(
+    base: _Base, solver: pulp.LpSolver, relaxed: float
+) -> pulp.LpSolver:
+    """Improve a round-and-fixed step selection with a short MIP search.
+
+    The two-sided rounding decides one step at a time, greedily, and can land
+    far from the best whole selection: on ``--ascend 5`` its fast plan cost
+    96,037 gold where 689 buys the same 0 minutes, and on the fresh-account
+    climb a stage's cheap-end objective came out 4x the MIP's. So once it has
+    settled, the step vars become binary and HiGHS searches from the rounded
+    selection as its starting incumbent, for at most ``mip_max_nodes`` nodes
+    (:data:`_POLISH_OPTIONS`). It can only improve on the rounding: a search
+    that finds nothing better leaves the rounded pins in place.
+
+    Skipped when the rounding already sits within 0.1% of ``relaxed`` -- the
+    relaxation's optimum, which no selection can beat. The rounding stays as
+    the starting point because a cold MIP finds poor incumbents on the large
+    candidate sets (a fresh account's ~1,000 steps) and spends seconds at the
+    root of each; on those the polish is a bounded local improvement, not a
+    proof. On small sets (a real save's ~250 steps) it usually reaches the
+    0.1% gap within the cap.
+
+    On return the problem is solved, LP-wise, against the final pin set, as
+    :func:`_round_and_fix_ascension` leaves it; returns the solver the
+    refinement tower should use (a second opinion, if the polished pins needed
+    one).
+    """
+    problem = base.problem
+    rounded = pulp.value(problem.objective)
+    if rounded <= relaxed + 1e-3 * abs(relaxed) + 1e-6:
+        return solver
+    pins = {
+        name: problem.constraints.pop(name)
+        for name in base.ephemeral
+        if name.startswith("ascend_pin_")
+    }
+    polished = _step_mip(base, mip_start=True)
+    selections = [pins]
+    if polished is not None and pulp.value(problem.objective) < rounded - 1e-9 * max(
+        1.0, abs(rounded)
+    ):
+        selections.insert(0, polished)
+    # Re-solve the LP against the chosen pins (the MIP overwrote every value).
+    # Hard 0/1 pins can trip HiGHS's false "Unbounded" (see _assert_optimal),
+    # so a polished selection gets the same second opinions. And the MIP's
+    # objective is only as good as its feasibility tolerance: at the fast
+    # endpoint, where the whole objective is ~1e-3, a selection it scored
+    # better has re-solved 20x *worse* once the LP holds every row exactly.
+    # Either way the rounded selection -- which solved a moment ago -- stands.
+    for chosen in selections:
+        for name, constraint in chosen.items():
+            problem.constraints.pop(name, None)
+            problem.addConstraint(constraint, name)
+        problem.solve(solver)
+        try:
+            rescued = _assert_optimal(problem, solver)
+        except ValueError:
+            continue
+        if chosen is pins or pulp.value(problem.objective) < rounded:
+            return rescued
+    return solver
+
+
+def _step_mip(base: _Base, *, mip_start: bool) -> dict[str, pulp.LpConstraint] | None:
+    """Solve ``base`` with every ascension step var binary, under
+    :data:`_POLISH_OPTIONS`; the pin constraints for the selection it found, or
+    ``None`` when it found none. ``mip_start`` seeds the search with the
+    variables' current values. The step vars are continuous again on return,
+    and every variable holds the MIP's values."""
+    problem = base.problem
+    step_vars = [
+        (item, step, var)
+        for item, steps in sorted(base.ascend_y.items())
+        for step, var in steps.items()
+    ]
+    for _, _, var in step_vars:
+        var.cat = pulp.LpInteger
+    problem.solve(
+        FastHiGHS(msg=False, mip_start=mip_start, **_HIGHS_OPTIONS, **_POLISH_OPTIONS)
+    )
+    for _, _, var in step_vars:
+        var.cat = pulp.LpContinuous
+    highs = problem.solverModel
+    from pulp.apis.highs_api import highspy
+
+    if highs.getInfo().primal_solution_status != int(
+        highspy.SolutionStatus.kSolutionStatusFeasible
+    ) or highs.getModelStatus() not in (
+        highspy.HighsModelStatus.kOptimal,
+        highspy.HighsModelStatus.kSolutionLimit,
+    ):
+        return None
+    selection = {}
+    for item, step, var in step_vars:
+        constraint = var == (1 if (var.value() or 0.0) > 0.5 else 0)
+        # See the pj_off gotcha: read the name back after assignment.
+        constraint.name = f"ascend_pin_{item}_{step}"
+        selection[constraint.name] = constraint
+    return selection
 
 
 def _has_integers(base: _Base) -> bool:

@@ -1857,6 +1857,35 @@ def test_minimize_ascension_rounds_to_a_master_not_a_grandmaster_for_a_small_gap
     assert plan.time < timedelta(hours=2)
 
 
+
+def test_minimize_ascension_polish_fixes_a_greedy_rounding_miss(monkeypatch):
+    # 30 AK needs a grandmaster (two masters make only 20), and b's is far
+    # cheaper: 910 units against a's 2030. The relaxation splits the step
+    # across both items and the one-step-at-a-time rounding commits a's
+    # grandmaster first; the polish's MIP search, started from that selection,
+    # finds b's.
+    a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
+    b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
+    spec = ascension.AscensionSpec(
+        candidates=[
+            ascension.StepCandidate("a", 30, 2000, None),
+            ascension.StepCandidate("b", 10, 900, None),
+        ],
+        ak_required=30,
+        chore_rate_per_day=0,
+        megas_required=0,
+    )
+    plan = minimize([a, b], {}, ascension=spec, gold_weight=1e-9)
+    assert plan.ascension.masters == ["b"]
+    assert plan.ascension.grandmasters == ["b"]
+    assert plan.time < timedelta(hours=16)
+
+    # The rounding alone takes a's -- the case the polish is for.
+    monkeypatch.setattr(optimizer, "_polish_ascension", lambda base, solver, relaxed: solver)
+    rounded = minimize([a, b], {}, ascension=spec, gold_weight=1e-9)
+    assert rounded.ascension.grandmasters == ["a"]
+    assert rounded.time > timedelta(hours=30)
+
 def test_minimize_ascension_is_deterministic():
     a = Offer("gather a", "farming", {"a": 1}, time_per_unit=timedelta(minutes=1))
     b = Offer("gather b", "farming", {"b": 1}, time_per_unit=timedelta(minutes=1))
