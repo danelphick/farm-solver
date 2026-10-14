@@ -292,6 +292,42 @@ describe("the timeline page", () => {
     expect(tiers()).toEqual([]);
   });
 
+  // Where the browser can show motion, the toggle glides between the scales
+  // over several redraws -- one <svg> throughout -- and lands on exactly the
+  // chart the instant version draws.
+  test("the scale toggle animates where motion is allowed", async () => {
+    await loadPage({ url: "/timeline?item=Tomato" });
+    const frames = [];
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    vi.stubGlobal("requestAnimationFrame", (cb) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const yLabels = () =>
+      [...document.querySelectorAll("#timeline-chart text[text-anchor='end']")].map(
+        (t) => t.textContent
+      );
+    const before = yLabels();
+
+    document.querySelector("#chart-scale").click();
+    expect(document.querySelector("#chart-scale").textContent).toBe("Zoom to data");
+    expect(yLabels()).toEqual(before);
+
+    const start = performance.now();
+    frames.shift()(start + 200);
+    expect(document.querySelectorAll("#timeline-chart svg")).toHaveLength(1);
+    const middle = yLabels();
+    expect(middle).not.toEqual(before);
+    expect(middle[2]).not.toBe("1.0M");
+
+    frames.shift()(start + 10_000);
+    expect(frames).toHaveLength(0);
+    expect(yLabels()).toEqual(["0", "500k", "1.0M"]);
+    expect(
+      [...document.querySelectorAll("#timeline-chart text.tier-label")].map(
+        (t) => t.textContent
+      )
+    ).toEqual(["GM", "MM"]);
+  });
+
   test("the chosen scale is remembered for the next visit", async () => {
     await loadPage({ url: "/timeline?item=Tomato" });
     document.querySelector("#chart-scale").click();

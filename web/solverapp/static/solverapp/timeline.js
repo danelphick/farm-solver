@@ -244,6 +244,54 @@ export function chartRange(series, scale = "auto") {
     : zoomedRange(series);
 }
 
+// --- The scale animation -----------------------------------------------------
+//
+// Pressing the scale toggle glides the Y range from one scale to the other
+// rather than snapping, so the reader sees where the zoomed window sits inside
+// the tier scale. Each frame is a full chartSvg redraw at an in-between range:
+// the tier lines slide in and out past the plot's edges and the axis figures
+// roll, with nothing extra to keep in step.
+
+const ZOOM_MS = 450;
+
+// The range `t` (0..1, already eased) of the way from `from` to `to`.
+//
+// The span moves GEOMETRICALLY, not linearly: going 0 -> 1M down to a 20k
+// window, a linear span is still 50% of the full range halfway through and
+// does all its visible zooming in the last few frames. A geometric one zooms
+// at a steady rate, the way a camera does. The low edge then moves in step
+// with the span (the same fraction of the way between its ends as the span
+// is), which makes the frame a pure zoom about one fixed point -- and keeps
+// every frame a blend of the two ranges with one weight, so a series that fits
+// both (as it always does: each range is built around the data) fits every
+// frame in between.
+export function zoomStep(from, to, t) {
+  const s0 = from.hi - from.lo;
+  const s1 = to.hi - to.lo;
+  const span = s0 ** (1 - t) * s1 ** t;
+  const u = s0 === s1 ? t : (s0 - span) / (s0 - s1);
+  return {
+    lo: from.lo + (to.lo - from.lo) * u,
+    hi: from.hi + (to.hi - from.hi) * u,
+  };
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
+// Whether to animate at all: not for a reader who asked for reduced motion,
+// and not where there is no matchMedia to ask -- jsdom, which has nothing to
+// show the frames on, and whose page tests read the final chart straight after
+// the click.
+function wantsMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    typeof window.requestAnimationFrame === "function" &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 // --- Point tooltips ----------------------------------------------------------
 //
 // Hovering a point says which snapshot it is: when it was taken and the mastery
@@ -327,11 +375,12 @@ function tooltipMarkup() {
 }
 
 // `series` is history.seriesFor's output (oldest first, at least one point);
-// `scale` is the reader's toggle, passed straight through to chartRange.
-// Pure -- returns markup, touches no DOM -- so timeline.test.js can pin the
-// geometry directly.
-export function chartSvg(series, item, scale = "auto") {
-  const { lo, hi } = chartRange(series, scale);
+// `scale` is the reader's toggle, passed straight through to chartRange;
+// `range` overrides the Y range it picks, which is how the scale animation
+// draws its in-between frames. Pure -- returns markup, touches no DOM -- so
+// timeline.test.js can pin the geometry directly.
+export function chartSvg(series, item, scale = "auto", range = chartRange(series, scale)) {
+  const { lo, hi } = range;
   const left = MARGIN_LEFT;
   const right = CHART_WIDTH - MARGIN_RIGHT;
   const top = MARGIN_TOP;
@@ -686,14 +735,47 @@ function windowed(series) {
   return shown.length ? { key: chartWindow, series: shown } : { key: "all", series };
 }
 
-function renderChart(series, item) {
+// The running scale animation's frame request, and the Y range its last frame
+// drew -- so a redraw mid-glide (another click, a window change, a reload) can
+// cancel it, and a second click can turn back from where the chart actually is
+// rather than jumping to the far end first.
+let zoomFrame = null;
+let drawnRange = null;
+
+// `animate` glides the Y range from the one last drawn (see zoomStep); only the
+// scale toggle asks for it. The tooltip is wired on the final frame alone --
+// each in-between one is replaced before the pointer could use it.
+function renderChart(series, item, { animate = false } = {}) {
   const holder = $("#timeline-chart");
   const canvas = $("#chart-canvas");
   const { key: shownKey, series: shown } = windowed(series);
   renderWindowButtons(series, shownKey);
 
-  canvas.innerHTML = chartSvg(shown, item, chartScale);
-  wireChartTooltip(canvas.querySelector("svg"));
+  if (zoomFrame !== null) cancelAnimationFrame(zoomFrame);
+  zoomFrame = null;
+  const from = drawnRange;
+  const to = chartRange(shown, chartScale);
+  const draw = (range) => {
+    canvas.innerHTML = chartSvg(shown, item, chartScale, range);
+    drawnRange = range;
+  };
+  const finish = () => {
+    zoomFrame = null;
+    draw(to);
+    wireChartTooltip(canvas.querySelector("svg"));
+  };
+  if (animate && from && wantsMotion()) {
+    const start = performance.now();
+    const frame = (now) => {
+      const t = Math.min((now - start) / ZOOM_MS, 1);
+      if (t >= 1) return finish();
+      draw(zoomStep(from, to, easeInOutCubic(t)));
+      zoomFrame = requestAnimationFrame(frame);
+    };
+    zoomFrame = requestAnimationFrame(frame);
+  } else {
+    finish();
+  }
 
   // The button offers the scale you are NOT looking at, so it says what
   // pressing it does rather than what the chart is currently doing.
@@ -1247,7 +1329,7 @@ function init() {
     chartScale =
       resolveScale(windowed(shownSeries).series, chartScale) === "full" ? "zoom" : "full";
     writeUi({ timeline_scale: chartScale });
-    redrawChart();
+    renderChart(shownSeries, $("#timeline-item").value.trim(), { animate: true });
   });
 
   // Delegated on the (stable) group, which renderWindowButtons refills.

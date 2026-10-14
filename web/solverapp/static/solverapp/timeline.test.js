@@ -24,6 +24,7 @@ import {
   tooltipLines,
   transitiveConsumers,
   windowSeries,
+  zoomStep,
 } from "./timeline.js";
 
 const point = (takenAt, progress) => ({
@@ -221,6 +222,40 @@ describe("resolveScale", () => {
   test("an explicit choice wins over the rule", () => {
     expect(resolveScale(wide, "zoom")).toBe("zoom");
     expect(resolveScale(narrow, "full")).toBe("full");
+  });
+});
+
+describe("zoomStep", () => {
+  const full = { lo: 0, hi: 1_000_000 };
+  const zoom = { lo: 400_000, hi: 420_000 };
+
+  test("starts and ends on the two ranges", () => {
+    expect(zoomStep(full, zoom, 0)).toEqual(full);
+    const end = zoomStep(full, zoom, 1);
+    expect(end.lo).toBeCloseTo(400_000);
+    expect(end.hi).toBeCloseTo(420_000);
+  });
+
+  // Geometric, so halfway is the geometric mean of the spans (~141k), not the
+  // arithmetic one (510k) that would leave all the zooming to the last frames.
+  test("zooms at a steady rate", () => {
+    const mid = zoomStep(full, zoom, 0.5);
+    expect(mid.hi - mid.lo).toBeCloseTo(Math.sqrt(1_000_000 * 20_000));
+  });
+
+  test("every frame still holds the data both ranges hold", () => {
+    for (let t = 0; t <= 1; t += 0.1) {
+      const { lo, hi } = zoomStep(zoom, full, t);
+      expect(lo).toBeLessThanOrEqual(400_000 + 1e-6);
+      expect(hi).toBeGreaterThanOrEqual(420_000 - 1e-6);
+    }
+  });
+
+  test("an equal-span move slides linearly", () => {
+    expect(zoomStep({ lo: 0, hi: 10 }, { lo: 10, hi: 20 }, 0.25)).toEqual({
+      lo: 2.5,
+      hi: 12.5,
+    });
   });
 });
 

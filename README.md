@@ -859,7 +859,9 @@ where it stands now, and what it gained over the last week and the last day.
   below that the chart zooms to the data instead, and shows only the tier lines
   that fall inside. The button above the chart's top-right corner switches
   between the two — **Show next tier** for the tier context, **Zoom to data**
-  for the shape. A
+  for the shape — and glides from one to the other, so you can see where the
+  zoomed window sits on the tier scale (it snaps instead if your system asks
+  for reduced motion). A
   zoomed axis is rounded out to tidy bounds — an item running 212,401 → 333,631
   is drawn 210k to 350k — so the labels are figures you can reason about. The
   axis always gives real figures, and the table has the exact numbers.
