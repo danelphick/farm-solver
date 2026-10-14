@@ -31,6 +31,7 @@ import {
   writeUi,
 } from "./settings.js";
 import { tierLabel, tierRank } from "./tiers.js";
+import { solveTimeText } from "./timing.js";
 
 function $(selector) {
   return document.querySelector(selector);
@@ -324,9 +325,7 @@ function renderResult(data) {
   $("#mastery-filter-details").hidden = false;
   renderFiltered();
   const count = loadedRows.length;
-  const timing = data.cached
-    ? `cached (${data.solved_ms} ms)`
-    : `solved in ${data.solved_ms} ms`;
+  const timing = solveTimeText(data);
   setStatus(
     count ? `${count.toLocaleString()} masteries left · ${timing}` : timing,
     "ok"

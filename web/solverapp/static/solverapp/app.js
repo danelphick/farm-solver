@@ -27,6 +27,7 @@ import {
   readSettingsParams,
 } from "./settings.js";
 import { tierLabel } from "./tiers.js";
+import { solveTimeText } from "./timing.js";
 
 const DEBOUNCE_MS = 400;
 
@@ -521,10 +522,7 @@ async function solve() {
 }
 
 function renderResult(data) {
-  setStatus(
-    data.cached ? `cached (${data.solved_ms} ms)` : `solved in ${data.solved_ms} ms`,
-    "ok"
-  );
+  setStatus(solveTimeText(data), "ok");
 
   // DEBUG builds return the equivalent CLI command for the debug popup.
   if (data.debug_command != null) setDebugCommand(data.debug_command);

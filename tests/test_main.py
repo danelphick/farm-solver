@@ -2368,3 +2368,11 @@ def test_sectioned_reporter_renders_each_section_independently():
     crafts_text = reporter.docs["crafts"].render()
     assert crafts_text.splitlines()[0] == "### Required Crafts"
     assert "Board" in crafts_text
+
+
+def test_timing_flag_prints_wall_and_cpu_time_to_stderr(capsys, monkeypatch):
+    monkeypatch.setattr(main, "run", lambda args: 0)
+    assert main.main(["--timing"]) == 0
+    err = capsys.readouterr().err
+    assert err.startswith("Timing: wall ")
+    assert "CPU " in err and "cores on average" in err

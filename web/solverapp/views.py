@@ -20,6 +20,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+import timing
 import webapi
 
 from .cache import CACHE, SOLVE_SEMAPHORE, key_lock
@@ -126,6 +127,13 @@ def _debug_command(args, mastery_text: str, inventory_text: str) -> str | None:
     )
 
 
+def _debug_timing(timer: timing.SolveTimer) -> dict[str, float] | None:
+    """The request's wall-clock and total CPU time (every core: solver threads
+    and the mastery-costs worker processes), or None outside DEBUG -- the
+    status line's debug-only detail."""
+    return timer.stop().as_json() if settings.DEBUG else None
+
+
 def _decode_request(
     request: HttpRequest,
 ) -> tuple[str, str, argparse.Namespace] | JsonResponse:
@@ -166,6 +174,7 @@ def api_solve(request: HttpRequest) -> JsonResponse:
 
     key = webapi.fingerprint(mastery_text, inventory_text, args)
     started = time.monotonic()
+    timer = timing.SolveTimer()
 
     with key_lock(key):
         session = CACHE.get(key)
@@ -239,6 +248,8 @@ def api_solve(request: HttpRequest) -> JsonResponse:
         # The pasted mastery/inventory are dumped to a local temp directory so
         # the command reproduces the exact solve (see webapi.capture_debug_state).
         "debug_command": _debug_command(args, mastery_text, inventory_text),
+        # DEBUG only: wall-clock and total CPU time (see _debug_timing).
+        "timing": _debug_timing(timer),
     })
 
 
@@ -263,6 +274,7 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
 
     key = webapi.mastery_costs_fingerprint(mastery_text, inventory_text, args)
     started = time.monotonic()
+    timer = timing.SolveTimer()
 
     with key_lock(key):
         payload = CACHE.get(key)
@@ -291,6 +303,7 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
         "unmasterable": payload.unmasterable,
         "limited": payload.limited,
         "items": payload.items,
+        "timing": _debug_timing(timer),
     })
 
 
@@ -314,6 +327,7 @@ def api_mastery_cost_tiers(request: HttpRequest) -> JsonResponse:
 
     key = webapi.mastery_cost_tiers_fingerprint(mastery_text, inventory_text, args, item)
     started = time.monotonic()
+    timer = timing.SolveTimer()
 
     with key_lock(key):
         payload = CACHE.get(key)
@@ -339,4 +353,5 @@ def api_mastery_cost_tiers(request: HttpRequest) -> JsonResponse:
         "item": item,
         "rows": payload.rows,
         "limited": payload.limited,
+        "timing": _debug_timing(timer),
     })

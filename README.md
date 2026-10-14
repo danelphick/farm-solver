@@ -59,7 +59,7 @@ python main.py [-t <tower-requirements>] [-l level] [--target tower|N|TN] \
     [--use-pumpkin-juice[=N]] [--mastery-file <file>] [--inventory-file <file>] \
     [--backup-file <file>] \
     [--empty-mastery] [--empty-inventory] [--override-inventory item:amount] \
-    [--format text|markdown|json] [--pager]
+    [--format text|markdown|json] [--pager] [--timing]
 ```
 
 By default it will assume you want to reach the highest possible level, but you can override this with `-l`. Different tower requirements can be passed in with `-t` to be used rather than the builtin ones.
@@ -1092,4 +1092,12 @@ worker processes for its lifetime, at ~50 MB of memory each: size the instance's
 memory for them (one per vCPU, up to 10), or set `FARM_SOLVER_PROCESSES=0` to
 keep the mastery sweep on threads.
 `plans/FASTEST_SOLVE.md` has the measurements.
+
+To see how much CPU a run used, add `--timing`: when it finishes it prints the
+wall-clock time and the total CPU time across every core to stderr, e.g.
+`Timing: wall 2.02s, CPU 5.22s (2.6 cores on average)`. The CPU figure counts the
+solver threads and the mastery-costs worker processes, but not Python start-up
+or the workers' own start-up. A DEBUG build of the web app shows the same CPU
+figure in each page's status line (`solved in 2015 ms · CPU 5,220 ms (2.6
+cores)`); production builds show only the solve time.
 

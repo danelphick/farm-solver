@@ -12,7 +12,7 @@ import textwrap
 from datetime import date
 from typing import ClassVar
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 import main
 import webapi
@@ -76,6 +76,16 @@ class ApiSolveTests(SimpleTestCase):
         self.assertFalse(body["cached"])
         self.assertIn("solution_html", body)
         self.assertIn("Board", body["solution_html"])
+
+    @override_settings(DEBUG=True)
+    def test_debug_builds_report_the_cpu_time(self):
+        timing = self._post({"items": "Board:50000", "plans": 2}).json()["timing"]
+        self.assertEqual(set(timing), {"wall_ms", "cpu_ms", "cores"})
+        self.assertGreater(timing["cpu_ms"], 0)
+
+    @override_settings(DEBUG=False)
+    def test_production_builds_hide_the_cpu_time(self):
+        self.assertIsNone(self._post({"items": "Board:50000", "plans": 2}).json()["timing"])
 
     def test_impact_graph_is_served_as_raw_svg(self):
         # The graph section is an <svg> fragment; it must be served raw, not run
@@ -184,6 +194,15 @@ class ApiMasteryCostsTests(SimpleTestCase):
             set(body["items"][row["item"]]),
             {"categories", "event", "status", "more_tiers"},
         )
+
+    @override_settings(DEBUG=True)
+    def test_debug_builds_report_the_cpu_time(self):
+        timing = self._post({}).json()["timing"]
+        self.assertGreater(timing["cpu_ms"], 0)
+
+    @override_settings(DEBUG=False)
+    def test_production_builds_hide_the_cpu_time(self):
+        self.assertIsNone(self._post({}).json()["timing"])
 
     def _post_tiers(self, item):
         return self.client.post(

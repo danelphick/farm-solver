@@ -20,6 +20,7 @@ import math
 import os
 import sys
 import threading
+import time
 import tomllib
 from collections.abc import Callable, Iterable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -42,6 +43,7 @@ import passive
 import pets
 import report
 import sources
+import timing
 
 
 def parse_target(value: str) -> str | int:
@@ -1207,6 +1209,15 @@ def build_parser() -> argparse.ArgumentParser:
             "stdout is a terminal, or prints the raw Markdown source when "
             "redirected (e.g. to a .md file); json prints one machine-readable "
             "document holding every report section"
+        ),
+    )
+    parser.add_argument(
+        "--timing",
+        action="store_true",
+        help=(
+            "print the run's wall-clock time and its total CPU time across every "
+            "core used (solver threads and --mastery-costs worker processes) to "
+            "stderr when it finishes"
         ),
     )
     parser.add_argument(
@@ -3182,6 +3193,16 @@ def _climb_batch(
     return [_climb(inputs, name, progress, tiers) for name, progress, tiers in jobs]
 
 
+def _climb_batch_timed(
+    inputs: _ClimbInputs, jobs: list[tuple[str, int, list[tuple[int, str]]]]
+) -> tuple[float, list[tuple[list[MasteryCostRow], MasteryNote | None]]]:
+    """:func:`_climb_batch` plus the CPU seconds the worker process spent on it,
+    for the parent to count (see :func:`timing.add_worker_cpu`)."""
+    started = time.process_time()
+    results = _climb_batch(inputs, jobs)
+    return time.process_time() - started, results
+
+
 def _run_climbs(
     inputs: _ClimbInputs,
     jobs: list[tuple[str, int, list[tuple[int, str]]]],
@@ -3266,10 +3287,12 @@ def _climb_processes(
     results: list = [None] * len(jobs)
     try:
         futures = [
-            pool.submit(_climb_batch, inputs, jobs[k::workers]) for k in range(workers)
+            pool.submit(_climb_batch_timed, inputs, jobs[k::workers])
+            for k in range(workers)
         ]
         for k, future in enumerate(futures):
-            results[k::workers] = future.result()
+            cpu, results[k::workers] = future.result()
+            timing.add_worker_cpu(cpu)
     except BrokenProcessPool:
         with _CLIMB_POOL_LOCK:
             if _CLIMB_POOL is not None and _CLIMB_POOL[1] is pool:
@@ -4186,6 +4209,7 @@ def run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    timer = timing.SolveTimer()
     try:
         return run(args)
     except FileNotFoundError as exc:
@@ -4193,6 +4217,9 @@ def main(argv: list[str] | None = None) -> int:
     except (ValueError, NotImplementedError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if args.timing:
+            print(f"Timing: {timer.stop().text()}", file=sys.stderr)
 
 
 if __name__ == "__main__":
