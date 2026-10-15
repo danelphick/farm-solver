@@ -945,3 +945,28 @@ def test_crafting_catalogue_names_everything_it_mentions():
     mentioned.update(item for items in catalogue["uses"].values() for item in items)
     mentioned.update(item for zone in catalogue["zones"] for item in zone["items"])
     assert not mentioned - set(catalogue["names"])
+
+
+def test_render_warns_about_the_paste_on_every_refilter():
+    session = _session(model_calendar=False)
+    session.inventory_warning = "The inventory data looks corrupted"
+    result, _ = webapi.render(session, webapi.params_to_args({"max_gold": "50"}))
+    assert result.warnings[0] == "The inventory data looks corrupted"
+
+
+def test_solve_warns_about_an_inventory_past_the_storehouse():
+    # Two quantities run together on one line: more Board than any storehouse
+    # holds, which also quietly covers the whole goal -- exactly when the
+    # warning matters most.
+    corrupted = _INVENTORY_TEXT.replace("49,420", "49,42049,420")
+    args = webapi.params_to_args({"items": "Board:50000"})
+    session = webapi.solve(_MASTERY_TEXT, corrupted, args)
+    result, _ = webapi.render(session, args)
+    assert len(result.warnings) == 1
+    assert "Board (4,942,049,420)" in result.warnings[0]
+
+
+def test_solve_does_not_flag_an_override_past_the_storehouse():
+    args = webapi.params_to_args({"items": "Board:50000", "override_inventory": "Board:9000000"})
+    session = webapi.solve(_MASTERY_TEXT, _INVENTORY_TEXT, args)
+    assert session.inventory_warning is None

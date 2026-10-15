@@ -3,7 +3,7 @@ import textwrap
 import pytest
 
 from farm_solver import InventoryItem
-from parsing import parse_inventory
+from parsing import inventory_overflows, parse_inventory
 
 # Mirrors the FarmRPG paste: a leading category, items with multi-line
 # descriptions and mastery-status lines, a category that trails an item block,
@@ -125,3 +125,12 @@ def test_lookup_is_case_insensitive():
     inv = parse_inventory(SAMPLE)
     assert inv.amount("BONE BROTH") == 23_805
     assert inv.get("fish AND chips").name == "Fish and Chips"
+
+
+def test_inventory_overflows_lists_only_items_past_the_maximum():
+    inv = parse_inventory(SAMPLE)
+    # Board sits exactly at the maximum (MAX ON HAND), which is not an overflow.
+    assert inventory_overflows(inv, 49_420) == []
+    assert [item.name for item in inventory_overflows(inv, 1_000)] == [
+        "Bone Broth", "Board", "Iron",
+    ]

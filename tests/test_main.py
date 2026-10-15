@@ -27,6 +27,7 @@ from main import (
     cheapest_plan,
     cookie_sets_available,
     haunted_house_note,
+    inventory_overflow_note,
     limit_shortfall,
     parse_gold_budget,
     parse_ignored_goals,
@@ -2447,3 +2448,49 @@ def test_timing_flag_prints_wall_and_cpu_time_to_stderr(capsys, monkeypatch):
     err = capsys.readouterr().err
     assert err.startswith("Timing: wall ")
     assert "CPU " in err and "cores on average" in err
+
+
+def _held(**amounts: int) -> Inventory:
+    return Inventory(items={
+        name.lower(): InventoryItem(name=name, quantity=qty) for name, qty in amounts.items()
+    })
+
+
+def test_inventory_overflow_note_needs_a_storehouse_and_an_overflow():
+    held = _held(Board=60_000)
+    assert inventory_overflow_note(held, {}) is None
+    assert inventory_overflow_note(held, {"storehouse": {"inventory": 60_000}}) is None
+
+
+def test_inventory_overflow_note_names_the_items_and_the_maximum():
+    note = inventory_overflow_note(
+        _held(Board=600_000, Iron=10, Wood=50_001), {"storehouse": {"inventory": 50_000}}
+    )
+    assert "corrupted" in note
+    assert "2 items" in note and "50,000" in note
+    assert "Board (600,000), Wood (50,001)" in note
+    assert "Iron" not in note
+
+
+def test_inventory_overflow_note_caps_the_items_it_names():
+    held = _held(**{f"Item{i}": 10 + i for i in range(8)})
+    note = inventory_overflow_note(held, {"storehouse": {"inventory": 1}})
+    assert "8 items" in note and "Item4 (14) and 3 more" in note
+    assert "Item5" not in note
+
+
+def test_inventory_overflow_note_reads_a_shared_count_as_an_outgrown_storehouse():
+    # Board and Wood both sit at 52,190: the storehouse's real size, past a
+    # stale setting -- not corruption. Iron alone is past even that.
+    held = _held(Board=52_190, Wood=52_190, Stone=100, Iron=9_999_999)
+    note = inventory_overflow_note(held, {"storehouse": {"inventory": 51_580}})
+    assert "corrupted: 1 item held beyond the maximum inventory of 52,190" in note
+    assert "Iron (9,999,999)" in note and "Board" not in note
+    assert "Detected storehouse size increase of 610 not accounted for" in note
+
+    del held.items["iron"]
+    note = inventory_overflow_note(held, {"storehouse": {"inventory": 51_580}})
+    assert note == (
+        "Detected storehouse size increase of 610 not accounted for by daily "
+        "growth. Update storehouse setting to fix this."
+    )

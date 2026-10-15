@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import tomllib
+from collections import Counter
 from collections.abc import Callable, Iterable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
@@ -386,6 +387,60 @@ def haunted_house_note(plan: optimizer.SourcingPlan, start: date) -> str | None:
             f"that, so do the {location} exploring first."
         )
     return note
+
+
+# How many of the over-cap items inventory_overflow_note names before "and N more".
+INVENTORY_OVERFLOWS_NAMED = 5
+
+
+def inventory_overflow_note(
+    inventory: farm_solver.Inventory, cfg: dict
+) -> str | None:
+    """A warning when the pasted inventory holds more of an item than fits, else None.
+
+    The maximum is the storehouse size today (:func:`config.storehouse_size`): a
+    paste can't postdate today and the storehouse only grows, so today's size is
+    the most any genuine paste could show. With no ``[storehouse]`` there is
+    nothing to check against. Meant for the inventory as parsed, before
+    ``--override-inventory`` -- an override is the user's own, possibly
+    hypothetical, amount rather than data that could be corrupted.
+
+    A ``[storehouse]`` that has fallen behind the real one would otherwise read
+    every item held at the limit as corrupted. Those all hold exactly the limit,
+    though, where a corrupted count is a one-off, so a count several items share
+    above the configured size is taken as the real limit: the items past *that*
+    are the corrupted ones, and the stale setting gets a warning of its own.
+    """
+    configured = config.storehouse_size(cfg)
+    if configured is None:
+        return None
+    cap = configured
+    over = parsing.inventory_overflows(inventory, cap)
+    shared = [qty for qty, n in Counter(item.quantity for item in over).items() if n > 1]
+    if shared:
+        cap = max(shared)
+        over = parsing.inventory_overflows(inventory, cap)
+
+    messages = []
+    if over:
+        named = ", ".join(
+            f"{item.name} ({item.quantity:,})"
+            for item in over[:INVENTORY_OVERFLOWS_NAMED]
+        )
+        if len(over) > INVENTORY_OVERFLOWS_NAMED:
+            named += f" and {len(over) - INVENTORY_OVERFLOWS_NAMED} more"
+        count = f"{len(over)} item{'s' if len(over) != 1 else ''}"
+        messages.append(
+            f"The inventory data looks corrupted: {count} held beyond the maximum "
+            f"inventory of {cap:,}, which FarmRPG never allows -- {named}. "
+            "Re-copy the inventory."
+        )
+    if cap > configured:
+        messages.append(
+            f"Detected storehouse size increase of {cap - configured:,} not "
+            "accounted for by daily growth. Update storehouse setting to fix this."
+        )
+    return " ".join(messages) or None
 
 
 # The artifact governing the Cookie interaction with Dewstar bonus crops -- see
@@ -4105,6 +4160,9 @@ def run(args: argparse.Namespace) -> int:
         if backend:
             optimizer.set_solver_backend(backend)
         state = load_game_state(args, cfg, backup)
+        overflow = inventory_overflow_note(state.inventory, cfg)
+        if overflow:
+            reporter.note(overflow)
         if args.override_inventory is not None:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
@@ -4153,6 +4211,9 @@ def run(args: argparse.Namespace) -> int:
         if backend:
             optimizer.set_solver_backend(backend)
         state = load_game_state(args, cfg, backup)
+        overflow = inventory_overflow_note(state.inventory, cfg)
+        if overflow:
+            reporter.note(overflow)
         if args.override_inventory is not None:
             apply_inventory_overrides(
                 state.inventory, parsing.parse_item_amounts(args.override_inventory)
@@ -4231,6 +4292,9 @@ def run(args: argparse.Namespace) -> int:
     # The mastery and inventory files come from the command line, falling back
     # to the [solver] config section -- or the pasted text of a --backup-file.
     state = load_game_state(args, cfg, backup)
+    overflow = inventory_overflow_note(state.inventory, cfg)
+    if overflow:
+        reporter.note(overflow)
     if args.override_inventory is not None:
         apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)

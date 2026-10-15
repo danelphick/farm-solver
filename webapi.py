@@ -722,6 +722,9 @@ class SolveSession:
     frontier: main.FrontierResult
     ctx: main.PlanContextData
     cfg: dict
+    # main.inventory_overflow_note on the paste as parsed (before
+    # --override-inventory), surfaced as a warning on every render of it.
+    inventory_warning: str | None = None
 
 
 @dataclass
@@ -756,26 +759,30 @@ def _empty_plan_context() -> main.PlanContextData:
     )
 
 
-def _nothing_to_source_result(inputs: main.SolveInputs, resolved: bool) -> SolveResult:
+def _nothing_to_source_result(
+    inputs: main.SolveInputs, resolved: bool, warnings: list[str]
+) -> SolveResult:
     reporter = report.SectionedReporter()
     reporter.solution(inputs.solution)  # no plans, so no remainder to report
     reporter.note("Nothing left to source.")
     return SolveResult(
         sections={name: doc.render() for name, doc in reporter.docs.items()},
-        notes=list(reporter.notes), warnings=[], frontier_rows=[],
+        notes=list(reporter.notes), warnings=warnings, frontier_rows=[],
         selected=-1, resolved=resolved, tower_max_level=inputs.requirements.max_level,
     )
 
 
 def _prepare(
     mastery_text: str, inventory_text: str, args: argparse.Namespace
-) -> tuple[dict, farm_solver.GameState]:
+) -> tuple[dict, farm_solver.GameState, str | None]:
     """The config + game state every solve path starts from.
 
     Mirrors main.run's config-load / calendar-strip / crafting-bonus-resolve
-    preamble and its file-loading + override-inventory step (there: load_state
-    on the CLI's files; here: a GameState built directly from request text), so
-    :func:`solve` and :func:`mastery_costs` can never drift apart on it.
+    preamble and its file-loading + overflow-check + override-inventory step
+    (there: load_state on the CLI's files; here: a GameState built directly
+    from request text), so :func:`solve` and :func:`mastery_costs` can never
+    drift apart on it. The third value is main.inventory_overflow_note's
+    warning about the paste, if any.
     """
     cfg = load_web_config()
     main.apply_overrides(cfg, args.override)
@@ -790,11 +797,12 @@ def _prepare(
         masteries=parsing.parse_masteries(mastery_text),
         inventory=parsing.parse_inventory(inventory_text),
     )
+    inventory_warning = main.inventory_overflow_note(state.inventory, cfg)
     if args.override_inventory is not None:
         main.apply_inventory_overrides(
             state.inventory, parsing.parse_item_amounts(args.override_inventory)
         )
-    return cfg, state
+    return cfg, state, inventory_warning
 
 
 def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> SolveSession:
@@ -803,11 +811,13 @@ def solve(mastery_text: str, inventory_text: str, args: argparse.Namespace) -> S
     The :func:`_prepare` preamble followed by the same three solve stages
     build_inputs / solve_frontier / derive_report_inputs main.run itself drives.
     """
-    cfg, state = _prepare(mastery_text, inventory_text, args)
+    cfg, state, inventory_warning = _prepare(mastery_text, inventory_text, args)
     inputs = main.build_inputs(args, cfg, state)
     fr = main.solve_frontier(inputs, args, cfg)
     ctx = main.derive_report_inputs(inputs, fr, args) if fr.plans else _empty_plan_context()
-    return SolveSession(inputs=inputs, frontier=fr, ctx=ctx, cfg=cfg)
+    return SolveSession(
+        inputs=inputs, frontier=fr, ctx=ctx, cfg=cfg, inventory_warning=inventory_warning
+    )
 
 
 @dataclass
@@ -840,7 +850,7 @@ def mastery_costs(
     each item's type/event/obtainability facts, which the page filters every
     section on without a round trip.
     """
-    cfg, state = _prepare(mastery_text, inventory_text, args)
+    cfg, state, _ = _prepare(mastery_text, inventory_text, args)
     return _mastery_costs_payload(main.solve_mastery_costs(args, cfg, state))
 
 
@@ -854,7 +864,7 @@ def mastery_cost_tiers(
     its next one are solved. ``rows`` holds those, and ``limited`` the first one
     that cannot be reached, if any.
     """
-    cfg, state = _prepare(mastery_text, inventory_text, args)
+    cfg, state, _ = _prepare(mastery_text, inventory_text, args)
     return _mastery_costs_payload(
         main.solve_mastery_costs(args, cfg, state, expand_item=item)
     )
@@ -927,9 +937,12 @@ def render(
     # on this field's *unresolved* value; resolving against the cached cfg
     # reproduces the exact float solve() used).
     main.resolve_crafting_bonus(args, session.cfg)
+    # Warnings about the paste itself come first: a corrupted inventory can be
+    # why the plans look the way they do (or why there is nothing to source).
+    paste_warnings = [session.inventory_warning] if session.inventory_warning else []
 
     if not fr.plans:
-        return _nothing_to_source_result(inputs, resolved=False), session
+        return _nothing_to_source_result(inputs, False, paste_warnings), session
 
     time_limit = (
         passive.parse_duration(args.passive_limit)
@@ -961,13 +974,10 @@ def render(
         )
         resolved = True
         if not fr.plans:
-            session = SolveSession(
-                inputs=inputs, frontier=fr, ctx=_empty_plan_context(), cfg=session.cfg
-            )
-            return _nothing_to_source_result(inputs, resolved=True), session
-        session = SolveSession(
-            inputs=inputs, frontier=fr,
-            ctx=main.derive_report_inputs(inputs, fr, args), cfg=session.cfg,
+            session = replace(session, frontier=fr, ctx=_empty_plan_context())
+            return _nothing_to_source_result(inputs, True, paste_warnings), session
+        session = replace(
+            session, frontier=fr, ctx=main.derive_report_inputs(inputs, fr, args)
         )
         within, shown, selected = _refilter(fr)
 
@@ -1003,7 +1013,7 @@ def render(
             f"starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only "
             "for the part of the plan they fall in"
         )
-    warnings = []
+    warnings = list(paste_warnings)
     if not within:
         # Surfaced as a warning only (the client renders notes and warnings into
         # the same area, so adding it to both showed it twice).

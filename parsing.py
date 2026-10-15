@@ -139,6 +139,16 @@ def parse_inventory(text: str) -> Inventory:
     return inventory
 
 
+def inventory_overflows(inventory: Inventory, max_inventory: int) -> list[InventoryItem]:
+    """The items ``inventory`` holds more of than ``max_inventory``, in paste order.
+
+    FarmRPG never lets a count past the storehouse size -- whatever would take
+    it further is voided -- so a paste claiming more is corrupted (a mangled
+    quantity line, two numbers run together) rather than real stock.
+    """
+    return [item for item in inventory.items.values() if item.quantity > max_inventory]
+
+
 # --- Workshop --------------------------------------------------------------
 
 # A material line looks like "5x Wood" or "200x Grapes".
