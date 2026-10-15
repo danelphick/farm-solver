@@ -815,7 +815,10 @@ burst the **same** crop on each of its days, which the per-offer cap forbade.
     (the usual case, and why the user rations it — the model prices juice below the
     future tower levels they save it for) a lower-juice row is same-time-or-slower and
     costlier, i.e. dominated, and pruning would collapse the spread to one plan. It
-    returns one plan per distinct actual juice count, fastest-first. This supersedes
+    returns one plan per distinct actual juice count, most juice first (fastest-first
+    too, since a bigger allowance is never slower -- but a `(time, net gold)` sort
+    scrambled the juice order wherever times tie and juice outvalues its gold-free
+    substitute, so net gold rises with juice). This supersedes
     `_pumpkin_gap_fill` for that call.
   - **`passive`** anchors its breakpoints on the
   **`favour_passive` probe** (built in `frontier` when surplus is priced) and solves

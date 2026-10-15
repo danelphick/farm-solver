@@ -2093,6 +2093,25 @@ def test_spread_pumpkin_juice_keeps_dominated_rows():
     assert [p.cost[1] for p in plans] == sorted(p.cost[1] for p in plans)
 
 
+
+def test_spread_pumpkin_juice_orders_by_juice_when_times_tie():
+    # Held Large Nets make fishing instant and gold-free, but they are worth more
+    # than the juice that replaces them (10 nets = 10 gold of value per 10 It,
+    # against a 5-gold juice), so every cap drinks its whole allowance and at the
+    # same 0 minutes each extra juice *adds* net gold. Sorting fastest-first by
+    # (time, net gold) then read 0, 1, ..., 5 juices -- against the spread's own
+    # most-juice-first order, which the time-ordered rows follow everywhere else.
+    FISH = Offer("fish It", "fishing", {"it": 1}, consumes={"large net": 1}, ln=1)
+    plans = frontier(
+        [FARM_ITEM, FISH], {"It": 50}, prices={"it": 1.0, "large net": 1.0},
+        inventory={"large net": 1000}, pj_gain={"it": 10}, pj_price=5,
+        count=6, spread=SpreadSpec("pumpkin-juice", 0, 5),
+    )
+    assert all(p.time.total_seconds() == 0 for p in plans)
+    counts = [round(sum(p.pumpkin_juices.values())) for p in plans]
+    assert counts == [5, 4, 3, 2, 1, 0]
+    assert [p.cost[1] for p in plans] == sorted((p.cost[1] for p in plans), reverse=True)
+
 def test_spread_pumpkin_juice_range_excludes_out_of_range_endpoints():
     # Feasible max is 5, but a 2:4 request must show only counts inside [2, 4] --
     # the fastest (5-juice) and cheapest (0-juice) endpoints are pinned targets, not

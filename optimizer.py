@@ -3471,8 +3471,12 @@ def _spread(
         # below the future tower levels they are saving it for), a lower-juice plan
         # is same-speed-or-slower *and* costlier, so :func:`_non_dominated` would
         # throw all but the top count away. So this branch skips that prune entirely
-        # and returns one plan per distinct juice count, fastest-first -- the whole
-        # point is to *see* the juice-vs-speed/gold trade the frontier hides.
+        # and returns one plan per distinct juice count, most juice first -- the
+        # whole point is to *see* the juice-vs-speed/gold trade the frontier hides.
+        # That is fastest-first too (a bigger allowance is never slower), but where
+        # times tie it keeps the juice axis in order: a (time, net gold) sort put a
+        # 0m run as 6, 12, 19, 25 juices, ahead of the slower 0-juice row, whenever
+        # juice outvalues its gold-free substitute (net gold then *rises* with it).
         feasible_max = _juice_count(fast)
         lo = 0 if spec.lo is None else max(int(spec.lo), 0)
         hi = feasible_max if spec.hi is None else min(int(spec.hi), feasible_max)
@@ -3488,7 +3492,7 @@ def _spread(
             )
             post(plan)
             by_count.setdefault(_juice_count(plan), plan)  # dedup by *actual* count
-        return sorted(by_count.values(), key=lambda p: p.cost)
+        return [by_count[n] for n in sorted(by_count, reverse=True)]
     elif spec.axis == "passive":
         plans = [fast, cheap]
         for plan in plans:
