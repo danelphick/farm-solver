@@ -184,6 +184,9 @@ const CONFIG_FIELDS = {
       help: "Fishing Trawl perk: +100 fish on top of the base catch." },
     { key: "fishing.use_sea_pincher", label: "Sea Pincher", type: "bool",
       help: "Sea Pincher meal: multiplies the whole catch by 1.1, after the flat bonuses." },
+    { key: "fishing.october_fishing", label: "October tables", type: "choice",
+      options: [["during_event", "During October"], ["on", "On"], ["off", "Off"]],
+      help: "Throughout October, Lake Minerva and Pirate's Cove fish from an alternate table adding the Purple Ghost Crab and Mega Lamprey Shark. During October uses those tables when the plan starts in October; On forces them. The plan assumes the table holds throughout and warns how many October days are left when it relies on one." },
   ],
   // Resource Saver is what a craft yields, and the Mechanical Heart's monthly
   // grants are free consumable supply -- both resource *supply*, so they sit in

@@ -1,3 +1,5 @@
+import pytest
+
 from fishing import (
     DEFAULT_FISHING_CSV,
     SWAMP_PUZZLE_ZONE,
@@ -5,6 +7,7 @@ from fishing import (
     FishingModifiers,
     FishingZone,
     fishing_from_config,
+    flag_only_items,
     read_zones,
 )
 
@@ -95,3 +98,16 @@ def test_with_the_swamp_puzzle_the_sinking_swamp_zone_is_fishable():
         fishing_from_config({}, have_swamp_puzzle=True).zone(SWAMP_PUZZLE_ZONE)
         is not None
     )
+
+
+def test_october_fishing_swaps_in_the_october_tables():
+    usual = fishing_from_config({}).zone("Lake Minerva")
+    october = fishing_from_config({}, october_fishing=True).zone("Lake Minerva")
+    assert "purple ghost crab" not in usual.drop_rates
+    assert "purple ghost crab" in october.drop_rates
+    # 315.45 Torch Fish per 500-fish net.
+    assert october.catch(500)["torch fish"] == pytest.approx(315.45)
+    assert flag_only_items() == {
+        "Lake Minerva": {"purple ghost crab": "Purple Ghost Crab"},
+        "Pirate's Cove": {"mega lamprey shark": "Mega Lamprey Shark"},
+    }

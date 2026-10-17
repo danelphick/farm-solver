@@ -33,6 +33,7 @@ import ascension
 import config
 import crafting
 import crops
+import events
 import exploring
 import farm_solver
 import farming
@@ -304,29 +305,28 @@ def resolve_swamp_puzzle(
     )
 
 
-# The ``[exploring] explore_haunted_house`` modes: force the Halloween event
-# location on, use it only while the event runs, or never use it.
-HAUNTED_HOUSE_MODES = ("on", "during_event", "off")
-DEFAULT_HAUNTED_HOUSE_MODE = "during_event"
+# The modes of a dated-source setting (``[exploring] explore_haunted_house``,
+# ``[fishing] october_fishing``): force the source on, use it only while
+# its window is open, or never use it.
+EVENT_MODES = ("on", "during_event", "off")
+DEFAULT_EVENT_MODE = "during_event"
 
 
-def haunted_house_mode(cfg: dict) -> str:
-    """The ``exploring.explore_haunted_house`` mode, validated.
+def event_mode(cfg: dict, section: str, key: str) -> str:
+    """The ``cfg[section][key]`` event mode (see :data:`EVENT_MODES`), validated.
 
     A TOML boolean is accepted as ``on``/``off``, and ``during event`` /
     ``during-event`` as ``during_event``; anything else is an error rather than
     a silent fallback.
     """
-    setting = cfg.get("exploring", {}).get(
-        "explore_haunted_house", DEFAULT_HAUNTED_HOUSE_MODE
-    )
+    setting = cfg.get(section, {}).get(key, DEFAULT_EVENT_MODE)
     if isinstance(setting, bool):
         return "on" if setting else "off"
     mode = str(setting).strip().lower().replace(" ", "_").replace("-", "_")
-    if mode not in HAUNTED_HOUSE_MODES:
+    if mode not in EVENT_MODES:
         raise ValueError(
-            "exploring.explore_haunted_house must be one of "
-            f"{', '.join(HAUNTED_HOUSE_MODES)}, not {setting!r}"
+            f"{section}.{key} must be one of {', '.join(EVENT_MODES)}, "
+            f"not {setting!r}"
         )
     return mode
 
@@ -338,7 +338,7 @@ def resolve_haunted_house(
 
     ``on`` forces it open (planning for an event or keys you do not have yet)
     and ``off`` closes it. ``during_event`` (the default) opens it only when
-    ``start`` falls inside the event (``exploring.haunted_house_window``) and
+    ``start`` falls inside the Halloween event (``events.halloween_window``) and
     the inventory holds both ``exploring.HAUNTED_HOUSE_ITEMS`` -- with no
     inventory to check (the ``--unobtainable`` report) the date alone decides.
 
@@ -346,15 +346,68 @@ def resolve_haunted_house(
     all the exploring a plan wants there, however long the plan runs, and
     :func:`haunted_house_note` warns how many days are actually left.
     """
-    mode = haunted_house_mode(cfg)
+    mode = event_mode(cfg, "exploring", "explore_haunted_house")
     if mode != "during_event":
         return mode == "on"
-    opens, closes = exploring.haunted_house_window(start.year)
+    opens, closes = events.halloween_window(start.year)
     if not opens <= start <= closes:
         return False
     if inventory is None:
         return True
     return all(inventory.amount(item) > 0 for item in exploring.HAUNTED_HOUSE_ITEMS)
+
+
+def resolve_october_fishing(cfg: dict, start: date) -> bool:
+    """Whether the fishing zones with an October table (``fishing.OCTOBER_FLAG``) use it.
+
+    Throughout October, Lake Minerva and Pirate's Cove each fish from an
+    alternate table with an October-only catch. ``on`` forces those tables,
+    ``off`` keeps the usual ones, and ``during_event`` (the default) uses them
+    when ``start`` is in October. As with the Haunted House the LP assumes the
+    table holds for the whole plan, and :func:`october_fishing_note` warns when
+    the plan relies on it.
+    """
+    mode = event_mode(cfg, "fishing", "october_fishing")
+    if mode != "during_event":
+        return mode == "on"
+    opens, closes = events.october_window(start.year)
+    return opens <= start <= closes
+
+
+def _dated_source_note(
+    what: str, event: str, window: tuple[date, date], setting: str,
+    plan: optimizer.SourcingPlan, start: date,
+) -> str:
+    """The days-left warning for a plan relying on a dated source.
+
+    ``what`` completes "This plan ..." and ``event`` names the window ("the
+    Halloween event"); ``setting`` is the config key that forces it on, named
+    when ``start`` is outside ``window``.
+    """
+    opens, closes = window
+    if not opens <= start <= closes:
+        return (
+            f"This plan {what}, but that is only available during {event} "
+            f"({opens:%d %b} to {closes:%d %b}); it is assumed available because "
+            f"{setting} is \"on\"."
+        )
+    days = (closes - start).days + 1
+    note = (
+        f"This plan {what}, available only during {event}: {days} more "
+        f"day{'s' if days != 1 else ''} this year (until {closes:%d %b}). The plan "
+        "assumes all of it fits in that window."
+    )
+    if plan.time > timedelta(days=days):
+        note += (
+            f" The plan runs {passive.format_duration(plan.time)}, longer than "
+            "that, so do it first."
+        )
+    return note
+
+
+def _draws_at(plan: optimizer.SourcingPlan, names: set[str]) -> list[sources.Draw]:
+    """The plan's draws (with any use) on the offers named ``names``."""
+    return [d for d in plan.draws if d.offer.name in names and d.units > 1e-9]
 
 
 def haunted_house_note(plan: optimizer.SourcingPlan, start: date) -> str | None:
@@ -365,28 +418,52 @@ def haunted_house_note(plan: optimizer.SourcingPlan, start: date) -> str | None:
     long the event actually has left from ``start``.
     """
     location = exploring.HAUNTED_HOUSE_LOCATION
-    names = {f"explore {location}", f"cider {location}"}
-    if not any(d.offer.name in names and d.units > 1e-9 for d in plan.draws):
+    if not _draws_at(plan, {f"explore {location}", f"cider {location}"}):
         return None
-    opens, closes = exploring.haunted_house_window(start.year)
-    if not opens <= start <= closes:
-        return (
-            f"This plan explores the {location}, but that Halloween event only runs "
-            f"{opens:%d %b} to {closes:%d %b} (it is assumed open because "
-            "exploring.explore_haunted_house is \"on\")."
-        )
-    days = (closes - start).days + 1
-    note = (
-        f"This plan explores the {location}, a Halloween event location open only "
-        f"{days} more day{'s' if days != 1 else ''} this year (until {closes:%d %b}); "
-        "the plan assumes all of that exploring fits in that window."
+    return _dated_source_note(
+        f"explores the {location}", "the Halloween event",
+        events.halloween_window(start.year), "exploring.explore_haunted_house",
+        plan, start,
     )
-    if plan.time > timedelta(days=days):
-        note += (
-            f" The plan runs {passive.format_duration(plan.time)}, longer than "
-            f"that, so do the {location} exploring first."
-        )
-    return note
+
+
+def october_fishing_note(
+    plan: optimizer.SourcingPlan, start: date, need: Iterable[str]
+) -> str | None:
+    """A warning when ``plan`` fishes a zone for an October-only catch.
+
+    ``need`` is the plan's lower-cased needed items (``optimizer.plan_balance``).
+    Fishing such a zone for its usual fish needs no warning -- only relying on
+    an item the October table alone drops (the Purple Ghost Crab, the Mega
+    Lamprey Shark) does.
+    """
+    need = set(need)
+    parts = []
+    for zone, items in fishing.flag_only_items().items():
+        wanted = sorted(items[item] for item in need & set(items))
+        if wanted and _draws_at(plan, {f"fish {zone}"}):
+            parts.append(f"{zone} for {', '.join(wanted)}")
+    if not parts:
+        return None
+    return _dated_source_note(
+        f"fishes {' and '.join(parts)}", "October",
+        events.october_window(start.year), "fishing.october_fishing", plan, start,
+    )
+
+
+def dated_source_notes(
+    plan: optimizer.SourcingPlan, inputs: SolveInputs, crafting_bonus: float
+) -> list[str]:
+    """Every dated-source warning for ``plan`` (Haunted House, October fishing)."""
+    need = optimizer.plan_balance(
+        plan, inputs.demand, inputs.recipes, crafting_bonus,
+        inputs.open_flows, inputs.inventory,
+    ).need
+    notes = [
+        haunted_house_note(plan, inputs.start),
+        october_fishing_note(plan, inputs.start, need),
+    ]
+    return [note for note in notes if note]
 
 
 # How many of the over-cap items inventory_overflow_note names before "and N more".
@@ -2068,7 +2145,8 @@ def _build_channel_setup(
     # the one resolved flag gates the fishing zone and the exploring location.
     have_swamp_puzzle = resolve_swamp_puzzle(cfg, state.inventory)
     fish = fishing.fishing_from_config(
-        cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle
+        cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle,
+        october_fishing=resolve_october_fishing(cfg, start),
     )
 
     # Loaded unconditionally (not just for a tower goal): reaching T250 auto-
@@ -2925,6 +3003,8 @@ def item_categories(
     tag((flow.name for flow in sources.sugar_cane_mill_flows()), "Farming")
     for zone in fishing.read_zones(fishing.DEFAULT_FISHING_CSV).values():
         tag(zone.drop_rates, "Fishing")
+        for flagged in zone.flagged_drop_rates.values():
+            tag(flagged, "Fishing")
     for location in exploring.read_locations(exploring.DEFAULT_EXPLORING_CSV).values():
         tag(location.drop_rates, "Exploring")
         for flagged in location.flagged_drop_rates.values():
@@ -4244,7 +4324,8 @@ def run(args: argparse.Namespace) -> int:
     if args.unobtainable:
         have_swamp_puzzle = resolve_swamp_puzzle(cfg)
         fish = fishing.fishing_from_config(
-            cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle
+            cfg.get("fishing", {}), have_swamp_puzzle=have_swamp_puzzle,
+            october_fishing=resolve_october_fishing(cfg, start),
         )
         farm = crops.farm_from_config(
             cfg.get("farming", {}),
@@ -4325,9 +4406,8 @@ def run(args: argparse.Namespace) -> int:
             f"Starting {inputs.start:%d %b %Y}; {' and '.join(dated)} count only for "
             "the part of the plan they fall in."
         )
-    haunted = haunted_house_note(fr.shown[selected], inputs.start)
-    if haunted:
-        reporter.note(haunted)
+    for dated_note in dated_source_notes(fr.shown[selected], inputs, args.crafting_bonus):
+        reporter.note(dated_note)
     if not fr.within:
         reporter.note(
             limit_shortfall(

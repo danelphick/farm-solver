@@ -1,4 +1,4 @@
-Zone,Item,Drop Rate
+Zone,Item,Drop Rate,Flags
 Small Pond,Drum,0.4758
 Small Pond,Yellow Perch,0.47576
 Small Pond,Fish Bones,0.04144
@@ -89,6 +89,13 @@ Lake Minerva,Redgill,0.08078
 Lake Minerva,Flarefin,0.03912
 Lake Minerva,Treasure Key,0.0003802281
 Lake Minerva,Strange Ring,0.0000748783
+Lake Minerva,Torch Fish,0.6309,october
+Lake Minerva,Flamejack,0.2199,october
+Lake Minerva,Redgill,0.10014,october
+Lake Minerva,Flarefin,0.04816,october
+Lake Minerva,Treasure Key,0.0004683841,october
+Lake Minerva,Purple Ghost Crab,0.0003389831,october
+Lake Minerva,Strange Ring,0.0000929800,october
 Large Island,Swordfish,0.24996
 Large Island,Barracuda,0.18666
 Large Island,Sea Catfish,0.15006
@@ -117,6 +124,17 @@ Pirate's Cove,Speckled Grouper,0.08
 Pirate's Cove,Large Chest 03,0.0000874891
 Pirate's Cove,Mystical Chest 02,0.0000851426
 Pirate's Cove,Pirate Hook,0.0000518941
+Pirate's Cove,Purple Butterfly Fish,0.22154,october
+Pirate's Cove,Crab,0.22146,october
+Pirate's Cove,Green Barracuda,0.1552,october
+Pirate's Cove,Mulberry Snapper,0.12002,october
+Pirate's Cove,Jumbo Fish,0.10792,october
+Pirate's Cove,Orcafish,0.08986,october
+Pirate's Cove,Speckled Grouper,0.08282,october
+Pirate's Cove,Mega Lamprey Shark,0.0009852217,october
+Pirate's Cove,Mystical Chest 02,0.0000895255,october
+Pirate's Cove,Large Chest 03,0.0000880282,october
+Pirate's Cove,Pirate Hook,0.0000532340,october
 Sinking Swamp,Slimeback,0.17784
 Sinking Swamp,Splatfish,0.11898
 Sinking Swamp,Bog Barnacle,0.11834

@@ -599,6 +599,8 @@ The consumable channels have their own perk flags; the zones and drop rates come
 have_reinforced_netting = true   # base catch 400 instead of 250
 have_fishing_trawl = true        # +100 fish per net
 use_sea_pincher = true           # then ×1.1
+october_fishing = "during_event" # October's Lake Minerva / Pirate's Cove
+                                  # tables: on / during_event / off (see below)
 
 [exploring]    # how many items one Arnold Palmer yields
 have_lemon_squeezer = true       # base yield 500 instead of 200
@@ -653,6 +655,17 @@ explore_haunted_house = "during_event"  # "on" | "during_event" | "off"
 - `off` never uses it.
 
 The solver does not model the event window itself: when the Haunted House is open it assumes all the exploring a plan wants there fits inside the event, however long the plan runs. When the selected plan explores there it adds a note saying how many days the event has left (and, if the plan runs longer than that, to do the Haunted House exploring first). Its Apple Cider offer needs a `"Haunted House"` entry under `[exploring.effectiveness]`, like any other zone.
+
+#### October fishing tables
+
+Throughout October, **Lake Minerva** and **Pirate's Cove** fish from an alternate drop table that adds an October-only catch — the **Purple Ghost Crab** and the **Mega Lamprey Shark** respectively — and shifts the zone's other rates a little.
+
+```toml
+[fishing]
+october_fishing = "during_event"  # "on" | "during_event" | "off"
+```
+
+The modes work like `explore_haunted_house`: `during_event` (the default) uses the October tables when the plan starts in October, `on` forces them, `off` never uses them. The table in force is assumed to hold for the whole plan; when the selected plan fishes one of those zones for its October-only catch, a note says how many October days are left.
 
 The `[farmhouse]` section is the passive stamina source. The building raises your natural stamina cap by one a day (two with the Mattress Pad perk), so the cap recorded on `registered_on` has grown that much per day since (worked out for the plan's start date, like the storehouse). Each day your actual stamina then rises by `8 × cap`, limited to 500,000 (1,000,000 with the Apple Pie Enthusiast perk) — an automatic daily deposit the plan draws on before eating Apples or drinking Orange Juice for the rest. Stamina is a stat, not a stored good, so the storehouse cap does not apply to it.
 

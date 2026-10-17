@@ -112,6 +112,12 @@ have_fishing_trawl = true
 use_sea_pincher = true
 # The Sinking Swamp fishing zone is gated on the Swamp Puzzle, the same key that
 # gates the exploring location: [exploring] have_swamp_puzzle below.
+# Throughout October, Lake Minerva and Pirate's Cove fish from an alternate
+# table adding an October-only catch (Purple Ghost Crab, Mega Lamprey Shark).
+# "during_event" uses those tables when the plan starts in October; "on" forces
+# them, "off" never uses them. The solver assumes the table holds for the whole
+# plan, and warns how many October days are left when a plan relies on it.
+october_fishing = "during_event"
 
 [exploring]
 have_lemon_squeezer = true

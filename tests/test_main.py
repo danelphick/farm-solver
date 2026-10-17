@@ -29,6 +29,7 @@ from main import (
     haunted_house_note,
     inventory_overflow_note,
     limit_shortfall,
+    october_fishing_note,
     parse_gold_budget,
     parse_ignored_goals,
     parse_target,
@@ -47,6 +48,7 @@ from main import (
     resolve_held_item,
     resolve_mariyas_wheelbarrow,
     resolve_monthly_grants,
+    resolve_october_fishing,
     resolve_pumpkin_juice,
     resolve_scythe_of_dewstar,
     resolve_swamp_puzzle,
@@ -2091,6 +2093,35 @@ def test_haunted_house_note_counts_the_days_left():
 def test_haunted_house_note_outside_the_event():
     note = haunted_house_note(_haunted_plan(1), date(2026, 6, 1))
     assert "13 Oct to 31 Oct" in note
+
+
+def test_resolve_october_fishing_follows_the_month_unless_forced():
+    assert resolve_october_fishing({}, date(2026, 10, 1)) is True
+    assert resolve_october_fishing({}, date(2026, 10, 31)) is True
+    assert resolve_october_fishing({}, date(2026, 11, 1)) is False
+    on = {"fishing": {"october_fishing": "on"}}
+    off = {"fishing": {"october_fishing": "off"}}
+    assert resolve_october_fishing(on, date(2026, 6, 1)) is True
+    assert resolve_october_fishing(off, date(2026, 10, 14)) is False
+    with pytest.raises(ValueError, match="fishing.october_fishing"):
+        resolve_october_fishing({"fishing": {"october_fishing": "x"}}, date(2026, 10, 1))
+
+
+def _minerva_plan(days: float = 1) -> SourcingPlan:
+    offer = Offer(name="fish Lake Minerva", track="fishing", yields={})
+    return SourcingPlan(time=timedelta(days=days), draws=[Draw(offer, 1.0)])
+
+
+def test_october_fishing_note_only_when_the_october_catch_is_needed():
+    start = date(2026, 10, 17)
+    # Fishing Lake Minerva for its usual fish is not October-dependent.
+    assert october_fishing_note(_minerva_plan(), start, {"torch fish"}) is None
+    # Needing the crab without fishing there is not either.
+    assert october_fishing_note(SourcingPlan(), start, {"purple ghost crab"}) is None
+    note = october_fishing_note(_minerva_plan(), start, {"purple ghost crab"})
+    assert "Lake Minerva for Purple Ghost Crab" in note
+    assert "15 more days" in note and "31 Oct" in note
+
 
 
 def test_resolve_scythe_of_dewstar_defaults_off_with_nothing_to_check():

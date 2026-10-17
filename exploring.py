@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field, replace
-from datetime import date
 from pathlib import Path
 
 # The bundled location data, used unless another path is given.
@@ -61,24 +60,13 @@ ACORN_PIE_EXPLORES = 450
 SWAMP_PUZZLE_LOCATION = "Sinking Swamp"
 
 # The Haunted House is a Halloween event location, open only while the event
-# runs and only to a player holding both of HAUNTED_HOUSE_ITEMS. Like the swamp
-# it is dropped outright when unavailable (see :func:`exploring_from_config`);
-# whether it is available is resolved by the caller from the
-# ``[exploring] explore_haunted_house`` mode (see
-# ``main.resolve_haunted_house``). The LP does not model the event window
-# itself -- an open Haunted House is assumed to cover all the exploring a plan
-# wants there, and the report warns how many days are actually left.
+# runs (``events.halloween_window``) and only to a player holding both of
+# HAUNTED_HOUSE_ITEMS. Like the swamp it is dropped outright when unavailable
+# (see :func:`exploring_from_config`); whether it is available is resolved by
+# the caller from the ``[exploring] explore_haunted_house`` mode (see
+# ``main.resolve_haunted_house``).
 HAUNTED_HOUSE_LOCATION = "Haunted House"
 HAUNTED_HOUSE_ITEMS = ("QED Pack", "Jack-o-key")
-# The event's first and last (inclusive) days as (month, day). It opened on
-# 13 October; the 31 October close is expected but not confirmed.
-HAUNTED_HOUSE_OPENS = (10, 13)
-HAUNTED_HOUSE_CLOSES = (10, 31)
-
-
-def haunted_house_window(year: int) -> tuple[date, date]:
-    """The Haunted House event's first and last (inclusive) days in ``year``."""
-    return date(year, *HAUNTED_HOUSE_OPENS), date(year, *HAUNTED_HOUSE_CLOSES)
 
 
 @dataclass

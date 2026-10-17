@@ -915,6 +915,7 @@ Mega Beet
 Mega Beet Seeds
 Mega Cotton
 Mega Cotton Seeds
+Mega Lamprey Shark
 Mega Pine Seeds
 Mega Sunflower
 Mega Sunflower Seeds
@@ -1120,6 +1121,7 @@ Purple Butterfly Fish
 Purple Diary
 Purple Dye
 Purple Flower
+Purple Ghost Crab
 Purple Mushroom
 Purple Ornament
 Purple Parchment
