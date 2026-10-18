@@ -970,3 +970,12 @@ def test_solve_does_not_flag_an_override_past_the_storehouse():
     args = webapi.params_to_args({"items": "Board:50000", "override_inventory": "Board:9000000"})
     session = webapi.solve(_MASTERY_TEXT, _INVENTORY_TEXT, args)
     assert session.inventory_warning is None
+
+
+def test_mastery_costs_warns_about_an_inventory_past_the_storehouse():
+    corrupted = _INVENTORY_TEXT.replace("49,420", "49,42049,420")
+    payload = webapi.mastery_costs(_MASTERY_TEXT, corrupted, webapi.params_to_args({}))
+    assert len(payload.warnings) == 1
+    assert "Board (4,942,049,420)" in payload.warnings[0]
+    clean = webapi.mastery_costs(_MASTERY_TEXT, _INVENTORY_TEXT, webapi.params_to_args({}))
+    assert clean.warnings == []

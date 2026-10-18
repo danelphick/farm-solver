@@ -829,6 +829,8 @@ class MasteryCostsPayload:
     limited: list[dict]  # {item, text}
     # {display name: {categories, event, status}} -- the page's filters
     items: dict[str, dict] = field(default_factory=dict)
+    # About the paste itself (main.inventory_overflow_note), as on the solver page
+    warnings: list[str] = field(default_factory=list)
 
 
 def mastery_costs(
@@ -848,10 +850,14 @@ def mastery_costs(
     carried twice -- preformatted for display and in seconds for that sort. The
     two "cannot" lists carry their item for the same reason: ``items`` holds
     each item's type/event/obtainability facts, which the page filters every
-    section on without a round trip.
+    section on without a round trip. ``warnings`` carries :func:`_prepare`'s
+    warning about the paste, as :func:`render` does for the solver page.
     """
-    cfg, state, _ = _prepare(mastery_text, inventory_text, args)
-    return _mastery_costs_payload(main.solve_mastery_costs(args, cfg, state))
+    cfg, state, inventory_warning = _prepare(mastery_text, inventory_text, args)
+    payload = _mastery_costs_payload(main.solve_mastery_costs(args, cfg, state))
+    if inventory_warning:
+        payload.warnings.append(inventory_warning)
+    return payload
 
 
 def mastery_cost_tiers(
@@ -942,7 +948,7 @@ def render(
     paste_warnings = [session.inventory_warning] if session.inventory_warning else []
 
     if not fr.plans:
-        return _nothing_to_source_result(inputs, False, paste_warnings), session
+        return _nothing_to_source_result(inputs, resolved=False, warnings=paste_warnings), session
 
     time_limit = (
         passive.parse_duration(args.passive_limit)
@@ -975,7 +981,7 @@ def render(
         resolved = True
         if not fr.plans:
             session = replace(session, frontier=fr, ctx=_empty_plan_context())
-            return _nothing_to_source_result(inputs, True, paste_warnings), session
+            return _nothing_to_source_result(inputs, resolved=True, warnings=paste_warnings), session
         session = replace(
             session, frontier=fr, ctx=main.derive_report_inputs(inputs, fr, args)
         )

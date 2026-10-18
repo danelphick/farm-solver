@@ -2525,3 +2525,19 @@ def test_inventory_overflow_note_reads_a_shared_count_as_an_outgrown_storehouse(
         "Detected storehouse size increase of 610 not accounted for by daily "
         "growth. Update storehouse setting to fix this."
     )
+
+
+def test_inventory_overflow_note_offers_a_stale_setting_for_a_lone_near_overflow():
+    # One item just past the setting could be the real limit of a storehouse
+    # that has outgrown it, with nothing else at the limit to show it.
+    note = inventory_overflow_note(_held(Board=52_190), {"storehouse": {"inventory": 51_580}})
+    assert "Board (52,190)" in note
+    assert note.endswith(
+        "Re-copy the inventory -- or, if your storehouse really holds 52,190, "
+        "update the storehouse setting."
+    )
+    # Two quantities run together overshoot far past any real storehouse.
+    note = inventory_overflow_note(
+        _held(Board=5_219_052_190), {"storehouse": {"inventory": 51_580}}
+    )
+    assert note.endswith("Re-copy the inventory.")

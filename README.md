@@ -520,6 +520,8 @@ growth = 20
 
 The solver works out the size today (`inventory + growth × days since updated_on`). Each cycle the output is deposited into the storehouse, which holds at most that size and voids the excess; you then use it before the next cycle. So the effective per-cycle output is `min(production, storehouse size)` — the storehouse caps the per-cycle amount, not the total obtainable over many cycles.
 
+The same size is a sanity check on the pasted inventory. FarmRPG never lets an item's count past the storehouse size, so a paste that claims more is corrupted (typically two quantities run together on one line), and the solver warns, naming the items — as a note on the CLI, and first among the warnings on the web solver and mastery-costs pages. Your `--override-inventory` amounts are never checked: they are yours, not pasted data. If several items share one count above the configured size, that count is taken as your storehouse's real size: only the items past it are reported as corrupted, and a second warning says the setting has fallen behind (a Time Egg, say, grows the storehouse more than `growth` accounts for) — update `inventory` and `updated_on` to the size the game shows. A single item a little past the setting (under twice its size) could be either, so its warning offers both fixes.
+
 ### Trading (gold prices)
 
 The scarce consumables can be bought and sold between players for gold, so an optional `[trading]` section prices them and lets the solver rank plans by the **real gold** each one costs:

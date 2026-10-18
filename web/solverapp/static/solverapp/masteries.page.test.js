@@ -328,6 +328,23 @@ describe("mastery-costs page", () => {
     );
   });
 
+  test("a warning about the paste shows above the table", async () => {
+    await loadPage({
+      state: SAVED,
+      payload: { ...PAYLOAD, warnings: ["The inventory data looks corrupted"] },
+    });
+    const box = document.querySelector("#mastery-warnings");
+    expect(box.hidden).toBe(false);
+    expect(box.querySelector(".warning").textContent).toBe(
+      "The inventory data looks corrupted"
+    );
+  });
+
+  test("no warnings leaves the warning area hidden", async () => {
+    await loadPage({ state: SAVED });
+    expect(document.querySelector("#mastery-warnings").hidden).toBe(true);
+  });
+
   test("an empty 'cannot' list leaves its section hidden", async () => {
     await loadPage({
       state: SAVED,

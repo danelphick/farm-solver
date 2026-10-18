@@ -469,6 +469,13 @@ def dated_source_notes(
 # How many of the over-cap items inventory_overflow_note names before "and N more".
 INVENTORY_OVERFLOWS_NAMED = 5
 
+# An overflow within this factor of the configured storehouse size may be no
+# corruption at all, but the one item held at the limit of a storehouse that has
+# outgrown its setting -- a lone item, so no shared count to read the real limit
+# from. Corruption (two quantities run together, a doubled digit) overshoots by
+# ten times or more.
+PLAUSIBLE_STOREHOUSE_GROWTH = 2
+
 
 def inventory_overflow_note(
     inventory: farm_solver.Inventory, cfg: dict
@@ -487,6 +494,9 @@ def inventory_overflow_note(
     though, where a corrupted count is a one-off, so a count several items share
     above the configured size is taken as the real limit: the items past *that*
     are the corrupted ones, and the stale setting gets a warning of its own.
+    With no shared count, an overflow close enough to the configured size
+    (:data:`PLAUSIBLE_STOREHOUSE_GROWTH`) could still be a lone item at the real
+    limit, so the warning offers updating the setting as well as re-copying.
     """
     configured = config.storehouse_size(cfg)
     if configured is None:
@@ -507,11 +517,18 @@ def inventory_overflow_note(
         if len(over) > INVENTORY_OVERFLOWS_NAMED:
             named += f" and {len(over) - INVENTORY_OVERFLOWS_NAMED} more"
         count = f"{len(over)} item{'s' if len(over) != 1 else ''}"
-        messages.append(
+        message = (
             f"The inventory data looks corrupted: {count} held beyond the maximum "
             f"inventory of {cap:,}, which FarmRPG never allows -- {named}. "
-            "Re-copy the inventory."
+            "Re-copy the inventory"
         )
+        smallest = min(item.quantity for item in over)
+        if cap == configured and smallest <= PLAUSIBLE_STOREHOUSE_GROWTH * configured:
+            message += (
+                f" -- or, if your storehouse really holds {smallest:,}, update "
+                "the storehouse setting"
+            )
+        messages.append(message + ".")
     if cap > configured:
         messages.append(
             f"Detected storehouse size increase of {cap - configured:,} not "
@@ -1855,6 +1872,27 @@ def load_game_state(
             else parsing.parse_inventory(backup.inventory_text)
         ),
     )
+
+
+def load_checked_state(
+    args: argparse.Namespace, cfg: dict, backup: Backup | None, reporter: report.Reporter
+) -> farm_solver.GameState:
+    """:func:`load_game_state`, then ``--override-inventory`` on top.
+
+    In between, :func:`inventory_overflow_note` checks the paste as parsed --
+    before the overrides, which are the user's own amounts rather than data
+    that could be corrupted -- and any warning goes to ``reporter``. Every
+    mode that reads the game state loads it through here.
+    """
+    state = load_game_state(args, cfg, backup)
+    overflow = inventory_overflow_note(state.inventory, cfg)
+    if overflow:
+        reporter.note(overflow)
+    if args.override_inventory is not None:
+        apply_inventory_overrides(
+            state.inventory, parsing.parse_item_amounts(args.override_inventory)
+        )
+    return state
 
 
 def load_state(
@@ -4239,14 +4277,7 @@ def run(args: argparse.Namespace) -> int:
         backend = args.solver or cfg.get("solver", {}).get("backend")
         if backend:
             optimizer.set_solver_backend(backend)
-        state = load_game_state(args, cfg, backup)
-        overflow = inventory_overflow_note(state.inventory, cfg)
-        if overflow:
-            reporter.note(overflow)
-        if args.override_inventory is not None:
-            apply_inventory_overrides(
-                state.inventory, parsing.parse_item_amounts(args.override_inventory)
-            )
+        state = load_checked_state(args, cfg, backup, reporter)
         # Validated against `state` (megas_required_by/mega_count/candidates
         # need it, see _validate_ascend's docstring) -- so this must come
         # after the state load above, unlike every other mode's validation.
@@ -4290,14 +4321,7 @@ def run(args: argparse.Namespace) -> int:
         backend = args.solver or cfg.get("solver", {}).get("backend")
         if backend:
             optimizer.set_solver_backend(backend)
-        state = load_game_state(args, cfg, backup)
-        overflow = inventory_overflow_note(state.inventory, cfg)
-        if overflow:
-            reporter.note(overflow)
-        if args.override_inventory is not None:
-            apply_inventory_overrides(
-                state.inventory, parsing.parse_item_amounts(args.override_inventory)
-            )
+        state = load_checked_state(args, cfg, backup, reporter)
         result = solve_mastery_costs(args, cfg, state)
         reporter.mastery_costs(result, args.sort)
         reporter.finish()
@@ -4372,14 +4396,7 @@ def run(args: argparse.Namespace) -> int:
 
     # The mastery and inventory files come from the command line, falling back
     # to the [solver] config section -- or the pasted text of a --backup-file.
-    state = load_game_state(args, cfg, backup)
-    overflow = inventory_overflow_note(state.inventory, cfg)
-    if overflow:
-        reporter.note(overflow)
-    if args.override_inventory is not None:
-        apply_inventory_overrides(
-            state.inventory, parsing.parse_item_amounts(args.override_inventory)
-        )
+    state = load_checked_state(args, cfg, backup, reporter)
 
     inputs = build_inputs(args, cfg, state)
 

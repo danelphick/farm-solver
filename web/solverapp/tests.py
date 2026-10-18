@@ -188,6 +188,7 @@ class ApiMasteryCostsTests(SimpleTestCase):
         )
         self.assertIn(row["tier"], {"M", "GM", "MM"})
         self.assertIsInstance(body["unmasterable"], list)
+        self.assertIsInstance(body["warnings"], list)
         # The filters' facts: one entry per item, rows included.
         self.assertIn(row["item"], body["items"])
         self.assertEqual(

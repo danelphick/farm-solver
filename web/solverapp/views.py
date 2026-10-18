@@ -265,7 +265,8 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
     its own longer semaphore budget. There is no refilter step: the rows are
     returned structured and the client sorts them itself. The response carries
     both "cannot" lists the sweep collects -- ``unmasterable`` (no source at
-    all) and ``limited`` (sourceable, but not in a tier's quantity).
+    all) and ``limited`` (sourceable, but not in a tier's quantity) -- and any
+    ``warnings`` about the paste itself.
     """
     decoded = _decode_request(request)
     if isinstance(decoded, JsonResponse):
@@ -303,6 +304,7 @@ def api_mastery_costs(request: HttpRequest) -> JsonResponse:
         "unmasterable": payload.unmasterable,
         "limited": payload.limited,
         "items": payload.items,
+        "warnings": payload.warnings,
         "timing": _debug_timing(timer),
     })
 

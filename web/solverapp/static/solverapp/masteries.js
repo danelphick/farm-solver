@@ -324,6 +324,11 @@ function renderResult(data) {
   loadedUnmasterable = data.unmasterable || [];
   loadedLimited = data.limited || [];
   loaded = true;
+  const warnings = data.warnings || [];
+  $("#mastery-warnings").hidden = warnings.length === 0;
+  $("#mastery-warnings").innerHTML = warnings
+    .map((warning) => `<p class="warning">${escapeHtml(warning)}</p>`)
+    .join("");
   $("#mastery-filter-details").hidden = false;
   renderFiltered();
   const count = loadedRows.length;

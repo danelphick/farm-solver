@@ -28,6 +28,10 @@
 {% include "solverapp/_settings.html" %}
 
 <main>
+  <!-- Warnings about the pasted state itself (a corrupted-looking inventory),
+       filled by masteries.js from the response's `warnings`. -->
+  <div id="mastery-warnings" hidden></div>
+
   <div id="mastery-controls" class="mastery-controls" hidden>
     <div class="field-row">
       <label for="self-sourced">
